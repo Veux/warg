@@ -1,181 +1,6 @@
 #pragma once
+#include "Spell.h"
 #include "State.h"
-struct SpellEffect;
-struct BuffDef;
-struct Character;
-
-struct SpellObjectDef
-{
-  std::string name;
-  float32 speed;
-  std::vector<SpellEffect *> effects;
-};
-
-struct SpellObjectInst
-{
-  SpellObjectDef def;
-  Character *caster;
-  Character *target;
-  vec3 pos;
-};
-
-enum SpellTargets
-{
-  Self,
-  Ally,
-  Hostile,
-  Terrain
-};
-
-struct SpellDef
-{
-  std::string name;
-  int mana_cost;
-  float32 range;
-  SpellTargets targets;
-  float32 cooldown;
-  float32 cast_time;
-  std::vector<SpellEffect *> effects;
-};
-
-struct Spell
-{
-  SpellDef *def;
-  float32 cd_remaining;
-};
-
-struct DamageEffect
-{
-  int n;
-  bool pierce_absorb;
-  bool pierce_mod;
-};
-
-struct HealEffect
-{
-  int n;
-};
-
-struct ApplyBuffEffect
-{
-  BuffDef *buff;
-};
-
-struct ApplyDebuffEffect
-{
-  BuffDef *debuff;
-};
-
-struct AoEEffect
-{
-  SpellTargets targets;
-  float32 radius;
-  SpellEffect *effect;
-};
-
-struct ClearDebuffsEffect
-{
-};
-
-struct ObjectLaunchEffect
-{
-  SpellObjectDef *object;
-};
-
-struct InterruptEffect
-{
-  float32 lockout;
-};
-
-enum SpellEffectType
-{
-  Heal,
-  Damage,
-  ApplyBuff,
-  ApplyDebuff,
-  AoE,
-  ClearDebuffs,
-  ObjectLaunch,
-  Interrupt
-};
-
-struct SpellEffect
-{
-  std::string name;
-  SpellEffectType type;
-  union {
-    HealEffect heal;
-    DamageEffect damage;
-    ApplyBuffEffect applybuff;
-    ApplyDebuffEffect applydebuff;
-    AoEEffect aoe;
-    ClearDebuffsEffect cleardebuffs;
-    ObjectLaunchEffect objectlaunch;
-    InterruptEffect interrupt;
-  };
-};
-struct SpellEffectInst
-{
-  SpellEffect def;
-  Character *caster;
-  vec3 pos;
-  Character *target;
-};
-
-struct DamageTakenMod
-{
-  float32 n;
-};
-
-struct SpeedMod
-{
-  float32 m;
-};
-
-struct CastSpeedMod
-{
-  float32 m;
-};
-
-struct SilenceMod
-{
-};
-
-enum CharModType
-{
-  DamageTaken,
-  Speed,
-  CastSpeed,
-  Silence
-};
-
-struct CharMod
-{
-  CharModType type;
-  union {
-    DamageTakenMod damage_taken;
-    SpeedMod speed;
-    CastSpeedMod cast_speed;
-    SilenceMod silence;
-  };
-};
-
-struct BuffDef
-{
-  std::string name;
-  float32 duration;
-  float32 tick_freq;
-  std::vector<SpellEffect *> tick_effects;
-  std::vector<CharMod *> char_mods;
-};
-
-struct Buff
-{
-  BuffDef def;
-  float64 duration;
-  uint32 ticks_left = 0;
-  bool dynamic = false;
-};
 
 struct CharStats
 {
@@ -200,7 +25,7 @@ struct Character
 
   std::string name;
   int team;
-  Character *target = nullptr;
+  int target = -1;
 
   CharStats b_stats, e_stats;
 
@@ -219,7 +44,7 @@ struct Character
   bool casting = false;
   Spell *casting_spell;
   float32 cast_progress = 0;
-  Character *cast_target = nullptr;
+  int cast_target = -1;
 };
 
 struct Warg_State : protected State
@@ -227,13 +52,13 @@ struct Warg_State : protected State
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
   void update();
   void handle_input(State **current_state,
-    std::vector<State *> available_states);
+                    std::vector<State *> available_states);
   vec3 player_pos = vec3(0, 0, 0.5);
   vec3 player_dir = vec3(0, 1, 0);
 
   void add_char(int team, std::string name);
 
-  std::array<Character, 10> chars;
+  std::vector<Character> chars;
   int pc = 0;
 
   std::vector<SpellObjectInst> spell_objs;
@@ -243,14 +68,13 @@ struct Warg_State : protected State
   vec3 spawndir0 = vec3(0, 1, 0);
   vec3 spawndir1 = vec3(0, -1, 0);
 
-  vec3 ground_pos = vec3(8, 11, 0);// -0.1f); ??
+  vec3 ground_pos = vec3(8, 11, 0); // -0.1f); ??
   vec3 ground_dim = vec3(16, 22, 0.05);
   vec3 ground_dir = vec3(0, 1, 0);
   Node_Ptr ground_mesh;
   void add_wall(vec3 p1, vec2 p2, float32 h);
   std::vector<Wall> walls;
   std::vector<Node_Ptr> wall_meshes;
-
 
   std::array<CharMod, 100> char_mods;
   std::array<BuffDef, 100> buffs;

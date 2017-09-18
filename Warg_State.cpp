@@ -11,16 +11,20 @@
 using namespace glm;
 
 static void invoke_spell_effect(SpellEffectInst *i,
-                                std::array<Character, 10> *chars, uint32 nchars,
-                                std::vector<SpellObjectInst> *objs);
-static void cast_spell(Character *caster, Character *target, Spell *spell,
-                       std::array<Character, 10> *chars, uint32 nchars,
-                       std::vector<SpellObjectInst> *objs);
-static void apply_char_mods(Character *c);
-static void release_spell(Character *caster, Character *target, Spell *spell,
-                          std::array<Character, 10> *chars, uint32 nchars,
-                          std::vector<SpellObjectInst> *objs);
-static void move_char(Character *c, vec3 v);
+                                std::vector<Character> &chars, uint32 nchars,
+                                std::vector<SpellObjectInst> &objs);
+static void cast_spell(int caster, int target, Spell *spell,
+                       std::vector<Character> &chars, uint32 nchars,
+                       std::vector<SpellObjectInst> &objs);
+static void apply_char_mods(int c, std::vector<Character> &chars);
+static void release_spell(int caster, int target, Spell *spell,
+                          std::vector<Character> &chars, uint32 nchars,
+                          std::vector<SpellObjectInst> &objs);
+static void move_char(int c, vec3 v, std::vector<Character> &chars);
+static void apply_spell_effects(int caster, int target,
+                                std::vector<SpellEffect *> &effects,
+                                std::vector<Character> &chars, uint32 nchars,
+                                std::vector<SpellObjectInst> &objs);
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
@@ -414,75 +418,72 @@ void Warg_State::handle_input(State **current_state,
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
       {
-        Character *first_lower = nullptr, *first_higher = nullptr;
+        int first_lower = -1, first_higher = -1;
         for (int i = nchars - 1; i >= 0; i--)
         {
           if (chars[i].alive && chars[i].team != chars[pc].team)
           {
-            if (&chars[i] < chars[pc].target)
+            if (i < chars[pc].target)
             {
-              first_lower = &chars[i];
+              first_lower = i;
             }
-            else if (&chars[i] > chars[pc].target)
+            else if (i > chars[pc].target)
             {
-              first_higher = &chars[i];
+              first_higher = i;
             }
           }
         }
 
-        if (first_higher != nullptr)
+        if (first_higher != -1)
         {
           chars[pc].target = first_higher;
         }
-        else if (first_lower != nullptr)
+        else if (first_lower != -1)
         {
           chars[pc].target = first_lower;
         }
-        set_message("Target",
-                    s(chars[pc].name, " targeted ", chars[pc].target->name),
+        set_message("Target", s(chars[pc].name, " targeted ",
+                                chars[chars[pc].target].name),
                     3.0f);
       }
       if (_e.key.keysym.sym == SDLK_1 && !free_cam)
       {
-        cast_spell(&chars[pc], chars[pc].target,
-                   &chars[pc].spellbook["Frostbolt"], &chars, nchars,
-                   &spell_objs);
+        cast_spell(pc, chars[pc].target, &chars[pc].spellbook["Frostbolt"],
+                   chars, nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_2 && !free_cam)
       {
-        Character *target = nullptr;
-        if (!chars[pc].target || chars[pc].team != chars[pc].target->team)
+        int target = -1;
+        if (!chars[pc].target || chars[pc].team != chars[chars[pc].target].team)
         {
-          target = &chars[pc];
+          target = pc;
         }
         else
         {
           target = chars[pc].target;
         }
-        cast_spell(&chars[pc], target, &chars[pc].spellbook["Lesser Heal"],
-                   &chars, nchars, &spell_objs);
+        cast_spell(pc, target, &chars[pc].spellbook["Lesser Heal"], chars,
+                   nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_3 && !free_cam)
       {
-        cast_spell(&chars[pc], chars[pc].target,
-                   &chars[pc].spellbook["Counterspell"], &chars, nchars,
-                   &spell_objs);
+        cast_spell(pc, chars[pc].target, &chars[pc].spellbook["Counterspell"],
+                   chars, nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_4 && !free_cam)
       {
-        cast_spell(&chars[pc], &chars[pc], &chars[pc].spellbook["Ice Block"],
-                   &chars, nchars, &spell_objs);
+        cast_spell(pc, pc, &chars[pc].spellbook["Ice Block"], chars, nchars,
+                   spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_5 && !free_cam)
       {
-        cast_spell(&chars[pc], nullptr,
-                   &chars[pc].spellbook["Arcane Explosion"], &chars, nchars,
-                   &spell_objs);
+        cast_spell(pc, -1, &chars[pc].spellbook["Arcane Explosion"], chars,
+                   nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_6 && !free_cam)
       {
-        cast_spell(&chars[pc], nullptr, &chars[pc].spellbook["Holy Nova"],
-                   &chars, nchars, &spell_objs);
+        cast_spell(pc, -1, &chars[pc].spellbook["Holy Nova"], chars, nchars,
+                   spell_objs);
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
@@ -643,24 +644,24 @@ void Warg_State::handle_input(State **current_state,
     if (is_pressed(SDL_SCANCODE_W))
     {
       vec3 v = vec3(chars[pc].dir.x, chars[pc].dir.y, 0.0f);
-      move_char(&chars[pc], dt * v);
+      move_char(pc, dt * v, chars);
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
       vec3 v = vec3(chars[pc].dir.x, chars[pc].dir.y, 0.0f);
-      move_char(&chars[pc], dt * -v);
+      move_char(pc, dt * -v, chars);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(chars[pc].dir.x, chars[pc].dir.y, 0, 0);
-      move_char(&chars[pc], dt * vec3(r * v));
+      move_char(pc, dt * vec3(r * v), chars);
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(chars[pc].dir.x, chars[pc].dir.y, 0, 0);
-      move_char(&chars[pc], dt * vec3(r * v));
+      move_char(pc, dt * vec3(r * v), chars);
     }
 
     cam.pos = chars[pc].pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
@@ -708,13 +709,13 @@ void Warg_State::handle_input(State **current_state,
   previous_mouse_state = mouse_state;
 }
 
-void apply_spell_effects(Character *caster, Character *target,
-                         std::vector<SpellEffect *> *effects,
-                         std::array<Character, 10> *chars, uint32 nchars,
-                         std::vector<SpellObjectInst> *objs)
+void apply_spell_effects(int caster, int target,
+                         std::vector<SpellEffect *> &effects,
+                         std::vector<Character> &chars, uint32 nchars,
+                         std::vector<SpellObjectInst> &objs)
 {
   SpellEffectInst i;
-  for (auto &e : *effects)
+  for (auto &e : effects)
   {
     i.def = *e;
     i.caster = caster;
@@ -735,14 +736,15 @@ void Warg_State::update()
     c->mesh->orientation =
         angleAxis((float32)atan2(c->dir.y, c->dir.x), vec3(0.f, 0.f, 1.f));
 
-    if (c->target && !c->target->alive)
+    if (c->target >= 0 && !chars[c->target].alive)
     {
-      c->target = nullptr;
+      c->target = -1;
     }
 
     c->atk_cd -= dt;
-    if (c->target && c->target->alive && c->team != c->target->team &&
-        length(c->pos - c->target->pos) <= ATK_RANGE && c->atk_cd <= 0)
+    if (c->target >= 0 && chars[c->target].alive &&
+        c->team != chars[c->target].team &&
+        length(c->pos - chars[c->target].pos) <= ATK_RANGE && c->atk_cd <= 0)
     {
       // int edamage = chars[c.target].take_damage({c.atk_dmg, false, false});
       // c.atk_cd = c.atk_speed;
@@ -750,16 +752,16 @@ void Warg_State::update()
       //           << edamage << " damage" << std::endl;
     }
 
-    for (auto i = c->buffs.begin(); i != c->buffs.end();)
+    for (auto j = c->buffs.begin(); j != c->buffs.end();)
     {
-      auto &b = *i;
+      auto &b = *j;
       BuffDef bdef = b.def;
       b.duration -= dt;
       if (!bdef.tick_effects.empty() &&
           b.duration * bdef.tick_freq < b.ticks_left)
       {
-        apply_spell_effects(nullptr, c, &bdef.tick_effects, &chars, nchars,
-                            &spell_objs);
+        apply_spell_effects(-1, i, bdef.tick_effects, chars, nchars,
+                            spell_objs);
         b.ticks_left--;
       }
       if (b.duration <= 0)
@@ -776,24 +778,24 @@ void Warg_State::update()
             free(cm);
           }
         }
-        i = c->debuffs.erase(i);
+        j = c->debuffs.erase(j);
       }
       else
       {
-        i++;
+        j++;
       }
     }
 
-    for (auto i = c->debuffs.begin(); i != c->debuffs.end();)
+    for (auto j = c->debuffs.begin(); j != c->debuffs.end();)
     {
-      auto &d = *i;
+      auto &d = *j;
       BuffDef ddef = d.def;
       d.duration -= dt;
       if (!ddef.tick_effects.empty() &&
           d.duration * ddef.tick_freq < d.ticks_left)
       {
-        apply_spell_effects(nullptr, c, &ddef.tick_effects, &chars, nchars,
-                            &spell_objs);
+        apply_spell_effects(-1, i, ddef.tick_effects, chars, nchars,
+                            spell_objs);
         d.ticks_left--;
       }
       if (d.duration <= 0)
@@ -810,15 +812,15 @@ void Warg_State::update()
             free(cm);
           }
         }
-        i = c->debuffs.erase(i);
+        j = c->debuffs.erase(j);
       }
       else
       {
-        i++;
+        j++;
       }
     }
 
-    apply_char_mods(c);
+    apply_char_mods(i, chars);
 
     c->mana += c->e_stats.mana_regen * dt;
     if (c->mana > c->mana_max)
@@ -831,8 +833,8 @@ void Warg_State::update()
       c->cast_progress += c->e_stats.cast_speed * dt;
       if (c->cast_progress > c->casting_spell->def->cast_time)
       {
-        release_spell(c, c->cast_target, c->casting_spell, &chars, nchars,
-                      &spell_objs);
+        release_spell(i, c->cast_target, c->casting_spell, chars, nchars,
+                      spell_objs);
         c->cast_progress = 0;
         c->casting = false;
       }
@@ -864,12 +866,13 @@ void Warg_State::update()
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
     auto &o = *i;
-    float32 d = length(o.target->pos - o.pos);
+    float32 d = length(chars[o.target].pos - o.pos);
     if (d < 0.5)
     {
-      set_message(
-          "", o.caster->name + "'s " + o.def.name + " hit " + o.target->name,
-          3.0f);
+      set_message("",
+                  chars[o.caster].name + "'s " + o.def.name + " hit " +
+                      chars[o.target].name,
+                  3.0f);
       for (auto &e : o.def.effects)
       {
         SpellEffectInst i;
@@ -877,13 +880,13 @@ void Warg_State::update()
         i.caster = o.caster;
         i.pos = o.pos;
         i.target = o.target;
-        invoke_spell_effect(&i, &chars, nchars, &spell_objs);
+        invoke_spell_effect(&i, chars, nchars, spell_objs);
       }
       i = spell_objs.erase(i);
     }
     else
     {
-      vec3 a = normalize(o.target->pos - o.pos);
+      vec3 a = normalize(chars[o.target].pos - o.pos);
       a.x *= o.def.speed * dt;
       a.y *= o.def.speed * dt;
       a.z *= o.def.speed * dt;
@@ -977,11 +980,12 @@ void Warg_State::add_char(int team, std::string name)
     c.spellbook[s.def->name] = s;
   }
 
-  chars[nchars++] = c;
+  chars.push_back(c);
+  nchars++;
 }
 
-void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
-                         uint32 nchars, std::vector<SpellObjectInst> *objs)
+void invoke_spell_effect(SpellEffectInst *i, std::vector<Character> &chars,
+                         uint32 nchars, std::vector<SpellObjectInst> &objs)
 {
   ASSERT(i);
   SpellEffect *e = &i->def;
@@ -995,7 +999,7 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
         return;
       }
 
-      Character *c = i->target;
+      Character *c = &chars[i->target];
       HealEffect *h = &e->heal;
 
       if (!c->alive)
@@ -1017,9 +1021,8 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
 
       if (overheal > 0)
       {
-        set_message("",
-                    s(e->name, " healed ", c->name, " for ", effective, " (",
-                      overheal, " overheal)"),
+        set_message("", s(e->name, " healed ", c->name, " for ", effective,
+                          " (", overheal, " overheal)"),
                     3.0f);
       }
       else
@@ -1031,7 +1034,7 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
     }
     case SpellEffectType::Damage:
     {
-      Character *c = i->target;
+      Character *c = &chars[i->target];
       if (!c)
       {
         set_message("Invalid Target", " damage failed: no target", 3.0f);
@@ -1063,9 +1066,8 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
 
       if (overkill > 0)
       {
-        set_message("",
-                    s(e->name, " hit ", c->name, " for ", effective,
-                      " damage (", overkill, " overkill)"),
+        set_message("", s(e->name, " hit ", c->name, " for ", effective,
+                          " damage (", overkill, " overkill)"),
                     3.0f);
       }
       else
@@ -1083,7 +1085,7 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
     }
     case SpellEffectType::ApplyBuff:
     {
-      Character *c = i->target;
+      Character *c = &chars[i->target];
       if (!c)
       {
         set_message("Invalid Target", "buff application failed: no target",
@@ -1098,16 +1100,15 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
       buff.ticks_left =
           static_cast<int>(glm::floor(buffdef->duration * buffdef->tick_freq));
       c->buffs.push_back(buff);
-      set_message("",
-                  s(e->name, " spell effect buff applied ", buffdef->name,
-                    " to ", c->name),
+      set_message("", s(e->name, " spell effect buff applied ", buffdef->name,
+                        " to ", c->name),
                   3.0f);
-      apply_char_mods(c);
+      apply_char_mods(i->target, chars);
       break;
     }
     case SpellEffectType::ApplyDebuff:
     {
-      Character *c = i->target;
+      Character *c = &chars[i->target];
       if (!c)
       {
         set_message("Invalid Target", "debuff application failed: no target",
@@ -1121,35 +1122,35 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
       debuff.ticks_left =
           (uint32)(glm::floor(buffdef->duration * buffdef->tick_freq));
       c->debuffs.push_back(debuff);
-      set_message("",
-                  s(e->name, " spell effect debuff applied ", buffdef->name,
-                    " to ", c->name),
+      set_message("", s(e->name, " spell effect debuff applied ", buffdef->name,
+                        " to ", c->name),
                   3.0f);
-      apply_char_mods(c);
+      apply_char_mods(i->target, chars);
       break;
     }
     case SpellEffectType::AoE:
     {
       for (int j = 0; j < nchars; j++)
       {
-        Character *c = &(*chars)[j];
+        Character *c = &chars[j];
         if (length(c->pos - i->pos) <= e->aoe.radius)
         {
           // bug: doesnt seem to be tracking already-hit characters
-          SpellEffectInst j;
-          j.def = *e->aoe.effect;
-          j.caster = i->caster;
-          j.pos = {0, 0, 0};
-          j.target = c;
+          SpellEffectInst k;
+          k.def = *e->aoe.effect;
+          k.caster = i->caster;
+          k.pos = {0, 0, 0};
+          k.target = j;
 
-          if (c->team == j.caster->team && e->aoe.targets == SpellTargets::Ally)
+          if (c->team == chars[k.caster].team &&
+              e->aoe.targets == SpellTargets::Ally)
           {
-            invoke_spell_effect(&j, chars, nchars, objs);
+            invoke_spell_effect(&k, chars, nchars, objs);
           }
-          else if (c->team != j.caster->team &&
+          else if (c->team != chars[k.caster].team &&
                    e->aoe.targets == SpellTargets::Hostile)
           {
-            invoke_spell_effect(&j, chars, nchars, objs);
+            invoke_spell_effect(&k, chars, nchars, objs);
           }
         }
       }
@@ -1157,7 +1158,7 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
     }
     case SpellEffectType::ClearDebuffs:
     {
-      Character *c = i->target;
+      Character *c = &chars[i->target];
       set_message("", s(i->def.name, " cleared all debuffs from ", c->name),
                   3.0f);
       for (auto &d : c->debuffs)
@@ -1175,7 +1176,7 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
         }
       }
       c->debuffs.clear();
-      apply_char_mods(c);
+      apply_char_mods(i->target, chars);
       break;
     }
     case SpellEffectType::ObjectLaunch:
@@ -1185,16 +1186,16 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
       obji.caster = i->caster;
       obji.target = i->target;
       obji.pos = i->pos;
-      objs->push_back(obji);
+      objs.push_back(obji);
       break;
     }
     case SpellEffectType::Interrupt:
     {
-      Character *c = i->target;
+      Character *c = &chars[i->target];
       c->casting = false;
       c->casting_spell = nullptr;
       c->cast_progress = 0;
-      c->cast_target = nullptr;
+      c->cast_target = -1;
 
       CharMod *silence_charmod = (CharMod *)malloc(sizeof(*silence_charmod));
       silence_charmod->type = CharModType::Silence;
@@ -1211,9 +1212,8 @@ void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
 
       c->debuffs.push_back(silence);
 
-      set_message("",
-                  s(i->caster->name, "'s ", i->def.name, " interrupted ",
-                    c->name, "'s casting"),
+      set_message("", s(chars[i->caster].name, "'s ", i->def.name,
+                        " interrupted ", c->name, "'s casting"),
                   3.0f);
       break;
     }
@@ -1241,8 +1241,9 @@ void apply_char_mod(Character *c, CharMod &m)
   }
 }
 
-void apply_char_mods(Character *c)
+void apply_char_mods(int ci, std::vector<Character> &chars)
 {
+  Character *c = &chars[ci];
   c->e_stats = c->b_stats;
   c->silenced = false;
 
@@ -1262,10 +1263,15 @@ void apply_char_mods(Character *c)
   }
 }
 
-void cast_spell(Character *caster, Character *target, Spell *spell,
-                std::array<Character, 10> *chars, uint32 nchars,
-                std::vector<SpellObjectInst> *objs)
+void cast_spell(int casteri, int targeti, Spell *spell,
+                std::vector<Character> &chars, uint32 nchars,
+                std::vector<SpellObjectInst> &objs)
 {
+  Character *caster = nullptr, *target = nullptr;
+  if (casteri >= 0)
+    caster = &chars[casteri];
+  if (targeti >= 0)
+    target = &chars[targeti];
   if (caster->silenced)
   {
     set_message("Cast failed:", "silenced", 3.0f);
@@ -1273,36 +1279,35 @@ void cast_spell(Character *caster, Character *target, Spell *spell,
   }
   if (spell->cd_remaining > 0)
   {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": on cooldown (", spell->cd_remaining, "s remaining)"),
+    set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                  spell->def->name, ": on cooldown (",
+                                  spell->cd_remaining, "s remaining)"),
                 3.0f);
     return;
   }
   if (caster->gcd > 0)
   {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": on gcd (", caster->gcd, "s remaining)"),
+    set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                  spell->def->name, ": on gcd (", caster->gcd,
+                                  "s remaining)"),
                 3.0f);
     return;
   }
   if (spell->def->mana_cost > caster->mana)
   {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": not enough mana (costs ", spell->def->mana_cost, ", have ",
-                  caster->mana, ")"),
+    set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                  spell->def->name, ": not enough mana (costs ",
+                                  spell->def->mana_cost, ", have ",
+                                  caster->mana, ")"),
                 3.0f);
 
     return;
   }
   if (!target && spell->def->targets != SpellTargets::Terrain)
   {
-    set_message(
-        "Cast failed:",
-        s(caster->name, " failed to cast ", spell->def->name, ": no target"),
-        3.0f);
+    set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                  spell->def->name, ": no target"),
+                3.0f);
     return;
   }
   if (spell->def->targets != SpellTargets::Terrain &&
@@ -1317,9 +1322,8 @@ void cast_spell(Character *caster, Character *target, Spell *spell,
   }
   if (caster->casting)
   {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": already casting"),
+    set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                  spell->def->name, ": already casting"),
                 3.0f);
     return;
   }
@@ -1331,41 +1335,45 @@ void cast_spell(Character *caster, Character *target, Spell *spell,
     caster->cast_progress = 0;
     if (target)
     {
-      caster->cast_target = target;
-      set_message("Begin cast:",
-                  s(caster->name, " begins casting ", spell->def->name, " (",
-                    spell->def->cast_time, "s remaining)"),
+      caster->cast_target = targeti;
+      set_message("Begin cast:", s(caster->name, " begins casting ",
+                                   spell->def->name, " (",
+                                   spell->def->cast_time, "s remaining)"),
                   3.0f);
     }
     else
     {
-      set_message("Begin cast:",
-                  s(caster->name, " begins casting ", spell->def->name, " at ",
-                    target->name, " (", spell->def->cast_time, "s remaining)"),
+      set_message("Begin cast:", s(caster->name, " begins casting ",
+                                   spell->def->name, " at ", target->name, " (",
+                                   spell->def->cast_time, "s remaining)"),
                   3.0f);
     }
   }
   else
   {
-    release_spell(caster, target, spell, chars, nchars, objs);
+    release_spell(casteri, targeti, spell, chars, nchars, objs);
   }
 }
 
-void release_spell(Character *caster, Character *target, Spell *spell,
-                   std::array<Character, 10> *chars, uint32 nchars,
-                   std::vector<SpellObjectInst> *objs)
+void release_spell(int casteri, int targeti, Spell *spell,
+                   std::vector<Character> &chars, uint32 nchars,
+                   std::vector<SpellObjectInst> &objs)
 {
   ASSERT(spell);
   ASSERT(spell->def);
-  ASSERT(chars);
-  ASSERT(objs);
+
+  Character *caster = nullptr, *target = nullptr;
+  if (casteri >= 0)
+    caster = &chars[casteri];
+  if (targeti >= 0)
+    target = &chars[targeti];
 
   if (caster->mana < spell->def->mana_cost)
   {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": not enough mana (costs ", spell->def->mana_cost, ", have ",
-                  caster->mana, ")"),
+    set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                  spell->def->name, ": not enough mana (costs ",
+                                  spell->def->mana_cost, ", have ",
+                                  caster->mana, ")"),
                 3.0f);
     return;
   }
@@ -1385,9 +1393,9 @@ void release_spell(Character *caster, Character *target, Spell *spell,
   {
     if (caster != target)
     {
-      set_message("Cast failed:",
-                  s(caster->name, " failed to cast ", spell->def->name,
-                    ": can only cast at self"),
+      set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                    spell->def->name,
+                                    ": can only cast at self"),
                   3.0f);
       return;
     }
@@ -1399,18 +1407,17 @@ void release_spell(Character *caster, Character *target, Spell *spell,
   {
     if (caster->team != target->team)
     {
-      set_message("Cast failed:",
-                  s(caster->name, " failed to cast ", spell->def->name,
-                    ": can only cast at allies"),
+      set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                    spell->def->name,
+                                    ": can only cast at allies"),
                   3.0f);
       return;
     }
 
-    set_message(
-        "Cast success:",
-        s(caster->name, " casts ", spell->def->name, " at ", target->name),
-        3.0f);
-    apply_spell_effects(caster, target, &(spell->def->effects), chars, nchars,
+    set_message("Cast success:", s(caster->name, " casts ", spell->def->name,
+                                   " at ", target->name),
+                3.0f);
+    apply_spell_effects(casteri, targeti, spell->def->effects, chars, nchars,
                         objs);
   }
 
@@ -1418,17 +1425,16 @@ void release_spell(Character *caster, Character *target, Spell *spell,
   {
     if (caster->team == target->team)
     {
-      set_message("Cast failed:",
-                  s(caster->name, " failed to cast ", spell->def->name,
-                    ": can only cast at hostile targets"),
+      set_message("Cast failed:", s(caster->name, " failed to cast ",
+                                    spell->def->name,
+                                    ": can only cast at hostile targets"),
                   3.0f);
       return;
     }
-    set_message(
-        "Cast success:",
-        s(caster->name, " casts ", spell->def->name, " at ", target->name),
-        3.0f);
-    apply_spell_effects(caster, target, &(spell->def->effects), chars, nchars,
+    set_message("Cast success:", s(caster->name, " casts ", spell->def->name,
+                                   " at ", target->name),
+                3.0f);
+    apply_spell_effects(casteri, targeti, spell->def->effects, chars, nchars,
                         objs);
   }
 
@@ -1436,7 +1442,7 @@ void release_spell(Character *caster, Character *target, Spell *spell,
   {
     set_message("Cast success:", s(caster->name, " casts ", spell->def->name),
                 3.0f);
-    apply_spell_effects(caster, target, &(spell->def->effects), chars, nchars,
+    apply_spell_effects(casteri, targeti, spell->def->effects, chars, nchars,
                         objs);
   }
 
@@ -1451,8 +1457,9 @@ void release_spell(Character *caster, Character *target, Spell *spell,
   spell->cd_remaining = spell->def->cooldown;
 }
 
-void move_char(Character *c, vec3 v)
+void move_char(int ci, vec3 v, std::vector<Character> &chars)
 {
+  Character *c = &chars[ci];
   ASSERT(c);
   if (c->casting)
   {
