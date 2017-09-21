@@ -45,9 +45,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   add_wall({6, 0, 0}, {10, 0}, 10);
   add_wall({10, 0, 0}, {10, 4}, 10);
   add_wall({10, 4, 0}, {16, 4}, 10);
-
   add_wall({14, 4, 0}, {16, 6}, 10);
-
   add_wall({16, 4, 0}, {16, 18}, 10);
   add_wall({16, 18, 0}, {10, 18}, 10);
   add_wall({10, 18, 0}, {10, 22}, 10);
@@ -398,20 +396,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
 void Warg_State::add_char(int team, const char *name)
 {
-  vec3 pos, dir;
-  switch (team)
-  {
-    case 0:
-      pos = client.spawnloc0;
-      dir = client.spawndir0;
-      break;
-    case 1:
-      pos = client.spawnloc1;
-      dir = client.spawndir1;
-      break;
-    default:
-      return;
-  };
+  vec3 pos = spawnpos[team];
+  vec3 dir = spawndir[team];
 
   Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
@@ -456,6 +442,8 @@ void Warg_State::add_char(int team, const char *name)
 
   client.chars.push_back(c);
   client.nchars++;
+  server.chars.push_back(c);
+  server.nchars++;
 
   if (pc < 0)
     pc = 0;
@@ -745,72 +733,60 @@ void Warg_State::handle_input(State **current_state,
     {
       client.chars[pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
     }
+
+    Move_Event *mv;
+    Warg_Event ev;
     if (is_pressed(SDL_SCANCODE_W))
     {
       vec3 v = vec3(client.chars[pc].dir.x, client.chars[pc].dir.y, 0.0f);
-      move_char(pc, dt * v, client.chars);
+
+      mv = (Move_Event *)malloc(sizeof *mv);
+      mv->character = pc;
+      mv->v = dt * v;
+      ev.type = Move;
+      ev.event = mv;
+      server.in.push(ev);
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
       vec3 v = vec3(client.chars[pc].dir.x, client.chars[pc].dir.y, 0.0f);
-      move_char(pc, dt * -v, client.chars);
+
+      mv = (Move_Event *)malloc(sizeof *mv);
+      mv->character = pc;
+      mv->v = dt * -v;
+      ev.type = Move;
+      ev.event = mv;
+      server.in.push(ev);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(client.chars[pc].dir.x, client.chars[pc].dir.y, 0, 0);
-      move_char(pc, dt * vec3(r * v), client.chars);
+
+      mv = (Move_Event *)malloc(sizeof *mv);
+      mv->character = pc;
+      mv->v = dt * vec3(r * v);
+      ev.type = Move;
+      ev.event = mv;
+      server.in.push(ev);
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(client.chars[pc].dir.x, client.chars[pc].dir.y, 0, 0);
-      move_char(pc, dt * vec3(r * v), client.chars);
+
+      mv = (Move_Event *)malloc(sizeof *mv);
+      mv->character = pc;
+      mv->v = dt * vec3(r * v);
+      ev.type = Move;
+      ev.event = mv;
+      server.in.push(ev);
     }
 
     cam.pos =
         client.chars[pc].pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
     cam.dir = -vec3(cam_rel);
-
-    // if (intersects(player_pos, player_body, obstacle_pos, obstacle_body))
-    //   if (!intersects(vec3(player_pos.x, old_pos.y, player_pos.z),
-    //   player_body,
-    //                   obstacle_pos, obstacle_body))
-    //     player_pos.y = old_pos.y;
-    //   else if (!intersects(vec3(old_pos.x, player_pos.y, old_pos.z),
-    //                        player_body, obstacle_pos, obstacle_body))
-    //     player_pos.x = old_pos.x;
-    //   else
-    //     player_pos = old_pos;
-    // else
-    for (auto &wall : walls)
-    {
-      if (intersects(client.chars[pc].pos, client.chars[pc].body, wall))
-      {
-        if (!intersects(
-                vec3(client.chars[pc].pos.x, old_pos.y, client.chars[pc].pos.z),
-                client.chars[pc].body, wall))
-        {
-          client.chars[pc].pos.y = old_pos.y;
-        }
-        else if (!intersects(vec3(old_pos.x, client.chars[pc].pos.y, old_pos.z),
-                             client.chars[pc].body, wall))
-        {
-          client.chars[pc].pos.x = old_pos.x;
-        }
-        else
-        {
-          client.chars[pc].pos = old_pos;
-        }
-      }
-    }
   }
-
-  vec3 falling_pos = client.chars[pc].pos;
-  falling_pos.z -= 5.0 / 60;
-  // if (!intersects(player_pos, player_dim, ground_pos, ground_dim))
-  if (client.chars[pc].pos.z > client.chars[pc].body.h / 2)
-    client.chars[pc].pos = falling_pos;
 
   previous_mouse_state = mouse_state;
 }
@@ -848,6 +824,18 @@ void Warg_State::process_client_events()
         add_char(team, name);
         free(name);
         free(spawn);
+        break;
+      }
+      case CharPos:
+      {
+        CharPos_Event *pos = (CharPos_Event *)ev.event;
+        int chr = pos->character;
+        vec3 p = pos->pos;
+
+        client.chars[chr].pos = p;
+
+        free(pos);
+        break;
       }
       default:
         break;
@@ -860,6 +848,12 @@ void Warg_State::update()
 {
   server.process_events();
   process_client_events();
+
+  if (pc >= 0)
+    set_message(
+        "cmp", s("srv: ", server.chars[pc].pos.x, " ", server.chars[pc].pos.y,
+                 " clt: ", client.chars[pc].pos.x, " ", client.chars[pc].pos.y),
+        10);
 
   for (int i = 0; i < client.nchars; i++)
   {
@@ -1055,6 +1049,8 @@ void Warg_State::add_wall(vec3 p1, vec2 p2, float32 h)
 
   walls.push_back(Wall{p1, p2, h});
   wall_meshes.push_back(mesh);
+
+  server.walls.push_back({p1, p2, h});
 }
 
 void invoke_spell_effect(SpellEffectInst *i, std::vector<Character> &chars,

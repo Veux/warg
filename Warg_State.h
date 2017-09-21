@@ -78,6 +78,9 @@ struct Warg_State : protected State
   std::vector<Wall> walls;
   std::vector<Node_Ptr> wall_meshes;
 
+  vec3 spawnpos[2] = {{8, 2, 0.5f}, {8, 20, 0.5f}};
+  vec3 spawndir[2] = {{0, 1, 0}, {0, -1, 0}};
+
   std::array<CharMod, 100> char_mods;
   std::array<BuffDef, 100> buffs;
   std::array<SpellDef, 100> spells;

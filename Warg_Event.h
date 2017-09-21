@@ -12,10 +12,24 @@ struct CharSpawn_Event
   int team;
 };
 
+struct Move_Event
+{
+  int character;
+  vec3 v;
+};
+
+struct CharPos_Event
+{
+  int character;
+  vec3 pos;
+};
+
 enum Warg_Event_Type
 {
   CharSpawnRequest,
-  CharSpawn
+  CharSpawn,
+  Move,
+  CharPos
 };
 
 struct Warg_Event
