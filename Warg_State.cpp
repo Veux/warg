@@ -355,14 +355,112 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   cs->cast_time = 0;
   cs->effects.push_back(cs_effect);
 
-  add_char(0, "Eirich");
-  add_char(0, "Veuxia");
-  add_char(1, "Selion");
-  add_char(1, "Veuxe");
+  server.out = &client.in;
+
+  CharSpawnRequest_Event *req;
+  Warg_Event ev;
+
+  req = (CharSpawnRequest_Event *)malloc(sizeof *req);
+  req->name = (char *)malloc(strlen("Eirich") + 1);
+  strcpy(req->name, "Eirich");
+  req->team = 0;
+  ev.type = CharSpawnRequest;
+  ev.event = (void *)req;
+  server.in.push(ev);
+
+  req = (CharSpawnRequest_Event *)malloc(sizeof *req);
+  req->name = (char *)malloc(strlen("Eirich") + 1);
+  strcpy(req->name, "Veuxia");
+  req->team = 0;
+  ev.type = CharSpawnRequest;
+  ev.event = (void *)req;
+  server.in.push(ev);
+
+  req = (CharSpawnRequest_Event *)malloc(sizeof *req);
+  req->name = (char *)malloc(strlen("Eirich") + 1);
+  strcpy(req->name, "Selion");
+  req->team = 1;
+  ev.type = CharSpawnRequest;
+  ev.event = (void *)req;
+  server.in.push(ev);
+
+  req = (CharSpawnRequest_Event *)malloc(sizeof *req);
+  req->name = (char *)malloc(strlen("Eirich") + 1);
+  strcpy(req->name, "Vexue");
+  req->team = 1;
+  ev.type = CharSpawnRequest;
+  ev.event = (void *)req;
+  server.in.push(ev);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 }
+
+void Warg_State::add_char(int team, const char *name)
+{
+  vec3 pos, dir;
+  switch (team)
+  {
+    case 0:
+      pos = client.spawnloc0;
+      dir = client.spawndir0;
+      break;
+    case 1:
+      pos = client.spawnloc1;
+      dir = client.spawndir1;
+      break;
+    default:
+      return;
+  };
+
+  Material_Descriptor material;
+  material.albedo = "crate_diffuse.png";
+  material.emissive = "test_emissive.png";
+  material.normal = "test_normal.png";
+  material.roughness = "crate_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "world_origin_distance.frag";
+
+  Character c;
+  c.team = team;
+  c.name = std::string(name);
+  c.pos = pos;
+  c.dir = dir;
+  c.body = {1.f, 0.3f};
+  c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
+  c.hp_max = 100;
+  c.hp = c.hp_max;
+  c.mana_max = 500;
+  c.mana = c.mana_max;
+
+  CharStats s;
+  s.gcd = 1.5;
+  s.speed = 3.0;
+  s.cast_speed = 1;
+  s.hp_regen = 2;
+  s.mana_regen = 10;
+  s.damage_mod = 1;
+  s.atk_dmg = 5;
+  s.atk_speed = 2;
+
+  c.b_stats = s;
+  c.e_stats = s;
+
+  for (int i = 0; i < nspells; i++)
+  {
+    Spell s;
+    s.def = &spells[i];
+    s.cd_remaining = 0;
+    c.spellbook[s.def->name] = s;
+  }
+
+  client.chars.push_back(c);
+  client.nchars++;
+
+  if (pc < 0)
+    pc = 0;
+}
+
 void Warg_State::handle_input(State **current_state,
                               std::vector<State *> available_states)
 {
@@ -407,7 +505,7 @@ void Warg_State::handle_input(State **current_state,
           free_cam = false;
           pc = 0;
         }
-        else if (pc >= nchars - 1)
+        else if (pc >= client.nchars - 1)
         {
           free_cam = true;
         }
@@ -419,15 +517,16 @@ void Warg_State::handle_input(State **current_state,
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
       {
         int first_lower = -1, first_higher = -1;
-        for (int i = nchars - 1; i >= 0; i--)
+        for (int i = client.nchars - 1; i >= 0; i--)
         {
-          if (chars[i].alive && chars[i].team != chars[pc].team)
+          if (client.chars[i].alive &&
+              client.chars[i].team != client.chars[pc].team)
           {
-            if (i < chars[pc].target)
+            if (i < client.chars[pc].target)
             {
               first_lower = i;
             }
-            else if (i > chars[pc].target)
+            else if (i > client.chars[pc].target)
             {
               first_higher = i;
             }
@@ -436,54 +535,57 @@ void Warg_State::handle_input(State **current_state,
 
         if (first_higher != -1)
         {
-          chars[pc].target = first_higher;
+          client.chars[pc].target = first_higher;
         }
         else if (first_lower != -1)
         {
-          chars[pc].target = first_lower;
+          client.chars[pc].target = first_lower;
         }
-        set_message("Target", s(chars[pc].name, " targeted ",
-                                chars[chars[pc].target].name),
+        set_message("Target", s(client.chars[pc].name, " targeted ",
+                                client.chars[client.chars[pc].target].name),
                     3.0f);
       }
       if (_e.key.keysym.sym == SDLK_1 && !free_cam)
       {
-        cast_spell(pc, chars[pc].target, &chars[pc].spellbook["Frostbolt"],
-                   chars, nchars, spell_objs);
+        cast_spell(pc, client.chars[pc].target,
+                   &client.chars[pc].spellbook["Frostbolt"], client.chars,
+                   client.nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_2 && !free_cam)
       {
         int target = -1;
-        if (!chars[pc].target || chars[pc].team != chars[chars[pc].target].team)
+        if (!client.chars[pc].target ||
+            client.chars[pc].team != client.chars[client.chars[pc].target].team)
         {
           target = pc;
         }
         else
         {
-          target = chars[pc].target;
+          target = client.chars[pc].target;
         }
-        cast_spell(pc, target, &chars[pc].spellbook["Lesser Heal"], chars,
-                   nchars, spell_objs);
+        cast_spell(pc, target, &client.chars[pc].spellbook["Lesser Heal"],
+                   client.chars, client.nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_3 && !free_cam)
       {
-        cast_spell(pc, chars[pc].target, &chars[pc].spellbook["Counterspell"],
-                   chars, nchars, spell_objs);
+        cast_spell(pc, client.chars[pc].target,
+                   &client.chars[pc].spellbook["Counterspell"], client.chars,
+                   client.nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_4 && !free_cam)
       {
-        cast_spell(pc, pc, &chars[pc].spellbook["Ice Block"], chars, nchars,
-                   spell_objs);
+        cast_spell(pc, pc, &client.chars[pc].spellbook["Ice Block"],
+                   client.chars, client.nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_5 && !free_cam)
       {
-        cast_spell(pc, -1, &chars[pc].spellbook["Arcane Explosion"], chars,
-                   nchars, spell_objs);
+        cast_spell(pc, -1, &client.chars[pc].spellbook["Arcane Explosion"],
+                   client.chars, client.nchars, spell_objs);
       }
       if (_e.key.keysym.sym == SDLK_6 && !free_cam)
       {
-        cast_spell(pc, -1, &chars[pc].spellbook["Holy Nova"], chars, nchars,
-                   spell_objs);
+        cast_spell(pc, -1, &client.chars[pc].spellbook["Holy Nova"],
+                   client.chars, client.nchars, spell_objs);
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
@@ -530,6 +632,8 @@ void Warg_State::handle_input(State **current_state,
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
+  if (pc < 0)
+    return;
   if (free_cam)
   {
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
@@ -635,36 +739,37 @@ void Warg_State::handle_input(State **current_state,
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
 
-    vec3 old_pos = chars[pc].pos;
+    vec3 old_pos = client.chars[pc].pos;
 
     if (right_button_down)
     {
-      chars[pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
+      client.chars[pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
     }
     if (is_pressed(SDL_SCANCODE_W))
     {
-      vec3 v = vec3(chars[pc].dir.x, chars[pc].dir.y, 0.0f);
-      move_char(pc, dt * v, chars);
+      vec3 v = vec3(client.chars[pc].dir.x, client.chars[pc].dir.y, 0.0f);
+      move_char(pc, dt * v, client.chars);
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
-      vec3 v = vec3(chars[pc].dir.x, chars[pc].dir.y, 0.0f);
-      move_char(pc, dt * -v, chars);
+      vec3 v = vec3(client.chars[pc].dir.x, client.chars[pc].dir.y, 0.0f);
+      move_char(pc, dt * -v, client.chars);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(chars[pc].dir.x, chars[pc].dir.y, 0, 0);
-      move_char(pc, dt * vec3(r * v), chars);
+      vec4 v = vec4(client.chars[pc].dir.x, client.chars[pc].dir.y, 0, 0);
+      move_char(pc, dt * vec3(r * v), client.chars);
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(chars[pc].dir.x, chars[pc].dir.y, 0, 0);
-      move_char(pc, dt * vec3(r * v), chars);
+      vec4 v = vec4(client.chars[pc].dir.x, client.chars[pc].dir.y, 0, 0);
+      move_char(pc, dt * vec3(r * v), client.chars);
     }
 
-    cam.pos = chars[pc].pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
+    cam.pos =
+        client.chars[pc].pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
     cam.dir = -vec3(cam_rel);
 
     // if (intersects(player_pos, player_body, obstacle_pos, obstacle_body))
@@ -680,31 +785,32 @@ void Warg_State::handle_input(State **current_state,
     // else
     for (auto &wall : walls)
     {
-      if (intersects(chars[pc].pos, chars[pc].body, wall))
+      if (intersects(client.chars[pc].pos, client.chars[pc].body, wall))
       {
-        if (!intersects(vec3(chars[pc].pos.x, old_pos.y, chars[pc].pos.z),
-                        chars[pc].body, wall))
+        if (!intersects(
+                vec3(client.chars[pc].pos.x, old_pos.y, client.chars[pc].pos.z),
+                client.chars[pc].body, wall))
         {
-          chars[pc].pos.y = old_pos.y;
+          client.chars[pc].pos.y = old_pos.y;
         }
-        else if (!intersects(vec3(old_pos.x, chars[pc].pos.y, old_pos.z),
-                             chars[pc].body, wall))
+        else if (!intersects(vec3(old_pos.x, client.chars[pc].pos.y, old_pos.z),
+                             client.chars[pc].body, wall))
         {
-          chars[pc].pos.x = old_pos.x;
+          client.chars[pc].pos.x = old_pos.x;
         }
         else
         {
-          chars[pc].pos = old_pos;
+          client.chars[pc].pos = old_pos;
         }
       }
     }
   }
 
-  vec3 falling_pos = chars[pc].pos;
+  vec3 falling_pos = client.chars[pc].pos;
   falling_pos.z -= 5.0 / 60;
   // if (!intersects(player_pos, player_dim, ground_pos, ground_dim))
-  if (chars[pc].pos.z > chars[pc].body.h / 2)
-    chars[pc].pos = falling_pos;
+  if (client.chars[pc].pos.z > client.chars[pc].body.h / 2)
+    client.chars[pc].pos = falling_pos;
 
   previous_mouse_state = mouse_state;
 }
@@ -725,26 +831,55 @@ void apply_spell_effects(int caster, int target,
     invoke_spell_effect(&i, chars, nchars, objs);
   }
 }
+
+void Warg_State::process_client_events()
+{
+  while (!client.in.empty())
+  {
+    Warg_Event ev = client.in.front();
+    switch (ev.type)
+    {
+      case CharSpawn:
+      {
+        CharSpawn_Event *spawn = (CharSpawn_Event *)ev.event;
+        char *name = spawn->name;
+        int team = spawn->team;
+
+        add_char(team, name);
+        free(name);
+        free(spawn);
+      }
+      default:
+        break;
+    }
+    client.in.pop();
+  }
+}
+
 void Warg_State::update()
 {
-  for (int i = 0; i < nchars; i++)
+  server.process_events();
+  process_client_events();
+
+  for (int i = 0; i < client.nchars; i++)
   {
-    Character *c = &chars[i];
+    Character *c = &client.chars[i];
 
     c->mesh->position = c->pos;
     c->mesh->scale = vec3(1.0f);
     c->mesh->orientation =
         angleAxis((float32)atan2(c->dir.y, c->dir.x), vec3(0.f, 0.f, 1.f));
 
-    if (c->target >= 0 && !chars[c->target].alive)
+    if (c->target >= 0 && !client.chars[c->target].alive)
     {
       c->target = -1;
     }
 
     c->atk_cd -= dt;
-    if (c->target >= 0 && chars[c->target].alive &&
-        c->team != chars[c->target].team &&
-        length(c->pos - chars[c->target].pos) <= ATK_RANGE && c->atk_cd <= 0)
+    if (c->target >= 0 && client.chars[c->target].alive &&
+        c->team != client.chars[c->target].team &&
+        length(c->pos - client.chars[c->target].pos) <= ATK_RANGE &&
+        c->atk_cd <= 0)
     {
       // int edamage = chars[c.target].take_damage({c.atk_dmg, false, false});
       // c.atk_cd = c.atk_speed;
@@ -760,8 +895,8 @@ void Warg_State::update()
       if (!bdef.tick_effects.empty() &&
           b.duration * bdef.tick_freq < b.ticks_left)
       {
-        apply_spell_effects(-1, i, bdef.tick_effects, chars, nchars,
-                            spell_objs);
+        apply_spell_effects(-1, i, bdef.tick_effects, client.chars,
+                            client.nchars, spell_objs);
         b.ticks_left--;
       }
       if (b.duration <= 0)
@@ -794,8 +929,8 @@ void Warg_State::update()
       if (!ddef.tick_effects.empty() &&
           d.duration * ddef.tick_freq < d.ticks_left)
       {
-        apply_spell_effects(-1, i, ddef.tick_effects, chars, nchars,
-                            spell_objs);
+        apply_spell_effects(-1, i, ddef.tick_effects, client.chars,
+                            client.nchars, spell_objs);
         d.ticks_left--;
       }
       if (d.duration <= 0)
@@ -820,7 +955,7 @@ void Warg_State::update()
       }
     }
 
-    apply_char_mods(i, chars);
+    apply_char_mods(i, client.chars);
 
     c->mana += c->e_stats.mana_regen * dt;
     if (c->mana > c->mana_max)
@@ -833,8 +968,8 @@ void Warg_State::update()
       c->cast_progress += c->e_stats.cast_speed * dt;
       if (c->cast_progress > c->casting_spell->def->cast_time)
       {
-        release_spell(i, c->cast_target, c->casting_spell, chars, nchars,
-                      spell_objs);
+        release_spell(i, c->cast_target, c->casting_spell, client.chars,
+                      client.nchars, spell_objs);
         c->cast_progress = 0;
         c->casting = false;
       }
@@ -866,12 +1001,12 @@ void Warg_State::update()
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
     auto &o = *i;
-    float32 d = length(chars[o.target].pos - o.pos);
+    float32 d = length(client.chars[o.target].pos - o.pos);
     if (d < 0.5)
     {
       set_message("",
-                  chars[o.caster].name + "'s " + o.def.name + " hit " +
-                      chars[o.target].name,
+                  client.chars[o.caster].name + "'s " + o.def.name + " hit " +
+                      client.chars[o.target].name,
                   3.0f);
       for (auto &e : o.def.effects)
       {
@@ -880,13 +1015,13 @@ void Warg_State::update()
         i.caster = o.caster;
         i.pos = o.pos;
         i.target = o.target;
-        invoke_spell_effect(&i, chars, nchars, spell_objs);
+        invoke_spell_effect(&i, client.chars, client.nchars, spell_objs);
       }
       i = spell_objs.erase(i);
     }
     else
     {
-      vec3 a = normalize(chars[o.target].pos - o.pos);
+      vec3 a = normalize(client.chars[o.target].pos - o.pos);
       a.x *= o.def.speed * dt;
       a.y *= o.def.speed * dt;
       a.z *= o.def.speed * dt;
@@ -920,68 +1055,6 @@ void Warg_State::add_wall(vec3 p1, vec2 p2, float32 h)
 
   walls.push_back(Wall{p1, p2, h});
   wall_meshes.push_back(mesh);
-}
-
-void Warg_State::add_char(int team, std::string name)
-{
-  vec3 pos, dir;
-  switch (team)
-  {
-    case 0:
-      pos = spawnloc0;
-      dir = spawndir0;
-      break;
-    case 1:
-      pos = spawnloc1;
-      dir = spawndir1;
-      break;
-    default:
-      return;
-  };
-
-  Material_Descriptor material;
-  material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
-
-  Character c;
-  c.team = team;
-  c.name = name;
-  c.pos = pos;
-  c.dir = dir;
-  c.body = {1.f, 0.3f};
-  c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
-  c.hp_max = 100;
-  c.hp = c.hp_max;
-  c.mana_max = 500;
-  c.mana = c.mana_max;
-
-  CharStats s;
-  s.gcd = 1.5;
-  s.speed = 3.0;
-  s.cast_speed = 1;
-  s.hp_regen = 2;
-  s.mana_regen = 10;
-  s.damage_mod = 1;
-  s.atk_dmg = 5;
-  s.atk_speed = 2;
-
-  c.b_stats = s;
-  c.e_stats = s;
-
-  for (int i = 0; i < nspells; i++)
-  {
-    Spell s;
-    s.def = &spells[i];
-    s.cd_remaining = 0;
-    c.spellbook[s.def->name] = s;
-  }
-
-  chars.push_back(c);
-  nchars++;
 }
 
 void invoke_spell_effect(SpellEffectInst *i, std::vector<Character> &chars,

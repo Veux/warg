@@ -1,6 +1,10 @@
 #pragma once
 #include "Spell.h"
 #include "State.h"
+#include "Warg_Client.h"
+#include "Warg_Event.h"
+#include "Warg_Server.h"
+#include <queue>
 
 struct CharStats
 {
@@ -53,20 +57,18 @@ struct Warg_State : protected State
   void update();
   void handle_input(State **current_state,
                     std::vector<State *> available_states);
+  void add_char(int team, const char *name);
   vec3 player_pos = vec3(0, 0, 0.5);
   vec3 player_dir = vec3(0, 1, 0);
 
-  void add_char(int team, std::string name);
+  Warg_Server server;
+  Warg_Client client;
 
-  std::vector<Character> chars;
-  int pc = 0;
+  void process_client_events();
+
+  int pc = -1;
 
   std::vector<SpellObjectInst> spell_objs;
-
-  vec3 spawnloc0 = vec3(8, 2, 0.5f);
-  vec3 spawnloc1 = vec3(8, 20, 0.5f);
-  vec3 spawndir0 = vec3(0, 1, 0);
-  vec3 spawndir1 = vec3(0, -1, 0);
 
   vec3 ground_pos = vec3(8, 11, 0); // -0.1f); ??
   vec3 ground_dim = vec3(16, 22, 0.05);
@@ -86,5 +88,4 @@ struct Warg_State : protected State
   uint32 nspell_effects = 0;
   uint32 nspell_objects = 0;
   uint32 nspells = 0;
-  uint32 nchars = 0;
 };
