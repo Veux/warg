@@ -1,8 +1,9 @@
 #pragma once
 
+#include "Globals.h"
+#include "Scene_Graph.h"
 #include <string>
 #include <vector>
-#include "Globals.h"
 
 struct SpellEffect;
 struct BuffDef;
@@ -20,9 +21,10 @@ struct SpellObjectInst
   int caster;
   int target;
   vec3 pos;
+  Node_Ptr mesh;
 };
 
-enum SpellTargets
+enum class SpellTargets
 {
   Self,
   Ally,
@@ -82,7 +84,7 @@ struct ClearDebuffsEffect
 
 struct ObjectLaunchEffect
 {
-  SpellObjectDef *object;
+  int object;
 };
 
 struct InterruptEffect
@@ -90,7 +92,7 @@ struct InterruptEffect
   float32 lockout;
 };
 
-enum SpellEffectType
+enum class SpellEffectType
 {
   Heal,
   Damage,
@@ -117,12 +119,13 @@ struct SpellEffect
     InterruptEffect interrupt;
   };
 };
+
 struct SpellEffectInst
 {
   SpellEffect def;
   int caster;
-  vec3 pos;
   int target;
+  vec3 pos;
 };
 
 struct DamageTakenMod
@@ -144,7 +147,7 @@ struct SilenceMod
 {
 };
 
-enum CharModType
+enum class CharModType
 {
   DamageTaken,
   Speed,
@@ -177,5 +180,16 @@ struct Buff
   BuffDef def;
   float64 duration;
   uint32 ticks_left = 0;
-  bool dynamic = false;
+};
+
+enum class CastErrorType
+{
+  Success,
+  Silenced,
+  GCD,
+  SpellCD,
+  NotEnoughMana,
+  InvalidTarget,
+  OutOfRange,
+  AlreadyCasting
 };
