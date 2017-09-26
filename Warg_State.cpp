@@ -10,21 +10,6 @@
 
 using namespace glm;
 
-static void invoke_spell_effect(SpellEffectInst *i,
-    std::vector<Character> &chars, uint32 nchars,
-    std::vector<SpellObjectInst> &objs);
-static void cast_spell(int caster, int target, Spell *spell,
-    std::vector<Character> &chars, uint32 nchars,
-    std::vector<SpellObjectInst> &objs);
-static void apply_char_mods(int c, std::vector<Character> &chars);
-static void release_spell(int caster, int target, Spell *spell,
-    std::vector<Character> &chars, uint32 nchars,
-    std::vector<SpellObjectInst> &objs);
-static void move_char(int c, vec3 v, std::vector<Character> &chars);
-static void apply_spell_effects(int caster, int target,
-    std::vector<SpellEffect *> &effects, std::vector<Character> &chars,
-    uint32 nchars, std::vector<SpellObjectInst> &objs);
-
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
@@ -368,6 +353,34 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   reset_mouse_delta();
 }
 
+void Warg_State::add_wall(vec3 p1, vec2 p2, float32 h)
+{
+  Material_Descriptor material;
+  material.albedo = "pebbles_diffuse.png";
+  material.emissive = "";
+  material.normal = "pebbles_normal.png";
+  material.roughness = "pebbles_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "world_origin_distance.frag";
+  material.backface_culling = false;
+  material.uv_scale = vec2(2);
+
+  Mesh_Data data;
+  vec3 a, b, c, d;
+  a = p1;
+  b = vec3(p2.x, p2.y, 0);
+  c = vec3(p2.x, p2.y, h);
+  d = vec3(p1.x, p1.y, h);
+
+  add_quad(a, b, c, d, data);
+  auto mesh = scene.add_mesh(data, material, "some wall");
+
+  walls.push_back(Wall{p1, p2, h});
+  wall_meshes.push_back(mesh);
+
+  server.walls.push_back({p1, p2, h});
+}
+
 void Warg_State::add_char(int team, const char *name)
 {
   vec3 pos = spawnpos[team];
@@ -508,50 +521,33 @@ void Warg_State::handle_input(
       }
       if (_e.key.keysym.sym == SDLK_1 && !free_cam)
       {
-        // cast_spell(pc, client.chars[pc].target,
-        //            &client.chars[pc].spellbook["Frostbolt"], client.chars,
-        //            client.nchars, spell_objs);
         server.in.push(cast_event(pc, client.chars[pc].target, "Frostbolt"));
       }
       if (_e.key.keysym.sym == SDLK_2 && !free_cam)
       {
-        int target = -1;
-        if (client.chars[pc].target < 0 ||
-            client.chars[pc].team != client.chars[client.chars[pc].target].team)
-        {
-          target = pc;
-        }
-        else
-        {
-          target = client.chars[pc].target;
-        }
-        // cast_spell(pc, target, &client.chars[pc].spellbook["Lesser Heal"],
-        //     client.chars, client.nchars, spell_objs);
+        int target = (client.chars[pc].target < 0 ||
+                         client.chars[pc].team !=
+                             client.chars[client.chars[pc].target].team)
+                         ? pc
+                         : client.chars[pc].target;
         server.in.push(cast_event(pc, target, "Lesser Heal"));
       }
       if (_e.key.keysym.sym == SDLK_3 && !free_cam)
       {
-        // cast_spell(pc, client.chars[pc].target,
-        //            &client.chars[pc].spellbook["Counterspell"], client.chars,
-        //            client.nchars, spell_objs);
         server.in.push(cast_event(pc, client.chars[pc].target, "Counterspell"));
       }
-      // if (_e.key.keysym.sym == SDLK_4 && !free_cam)
-      // {
-      //   cast_spell(pc, pc, &client.chars[pc].spellbook["Ice Block"],
-      //              client.chars, client.nchars, spell_objs);
-      // }
+      if (_e.key.keysym.sym == SDLK_4 && !free_cam)
+      {
+        server.in.push(cast_event(pc, pc, "Ice Block"));
+      }
       if (_e.key.keysym.sym == SDLK_5 && !free_cam)
       {
-        // cast_spell(pc, -1, &client.chars[pc].spellbook["Arcane Explosion"],
-        //            client.chars, client.nchars, spell_objs);
         server.in.push(cast_event(pc, -1, "Arcane Explosion"));
       }
-      // if (_e.key.keysym.sym == SDLK_6 && !free_cam)
-      // {
-      //   cast_spell(pc, -1, &client.chars[pc].spellbook["Holy Nova"],
-      //              client.chars, client.nchars, spell_objs);
-      // }
+      if (_e.key.keysym.sym == SDLK_6 && !free_cam)
+      {
+        server.in.push(cast_event(pc, -1, "Holy Nova"));
+      }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
@@ -742,22 +738,6 @@ void Warg_State::handle_input(
   previous_mouse_state = mouse_state;
 }
 
-void apply_spell_effects(int caster, int target,
-    std::vector<SpellEffect *> &effects, std::vector<Character> &chars,
-    uint32 nchars, std::vector<SpellObjectInst> &objs)
-{
-  SpellEffectInst i;
-  for (auto &e : effects)
-  {
-    i.def = *e;
-    i.caster = caster;
-    i.pos = chars[caster].pos;
-    i.target = target;
-
-    invoke_spell_effect(&i, chars, nchars, objs);
-  }
-}
-
 void Warg_State::process_client_events()
 {
   while (!client.in.empty())
@@ -927,128 +907,6 @@ void Warg_State::update()
     c->mesh->scale = vec3(1.0f);
     c->mesh->orientation =
         angleAxis((float32)atan2(c->dir.y, c->dir.x), vec3(0.f, 0.f, 1.f));
-
-    c->atk_cd -= dt;
-    if (c->target >= 0 && client.chars[c->target].alive &&
-        c->team != client.chars[c->target].team &&
-        length(c->pos - client.chars[c->target].pos) <= ATK_RANGE &&
-        c->atk_cd <= 0)
-    {
-      // int edamage = chars[c.target].take_damage({c.atk_dmg, false, false});
-      // c.atk_cd = c.atk_speed;
-      // std::cout << c.name << " whacks " << chars[c.target].name << " for "
-      //           << edamage << " damage" << std::endl;
-    }
-
-    for (auto j = c->buffs.begin(); j != c->buffs.end();)
-    {
-      auto &b = *j;
-      BuffDef bdef = b.def;
-      b.duration -= dt;
-      if (!bdef.tick_effects.empty() &&
-          b.duration * bdef.tick_freq < b.ticks_left)
-      {
-        apply_spell_effects(
-            -1, i, bdef.tick_effects, client.chars, client.nchars, spell_objs);
-        b.ticks_left--;
-      }
-      if (b.duration <= 0)
-      {
-        set_message("", s(b.def.name, " falls off ", c->name), 3.0f);
-        // if (b.dynamic)
-        // {
-        //   for (auto &te : b.def.tick_effects)
-        //   {
-        //     free(te);
-        //   }
-        //   for (auto &cm : b.def.char_mods)
-        //   {
-        //     free(cm);
-        //   }
-        // }
-        j = c->debuffs.erase(j);
-      }
-      else
-      {
-        j++;
-      }
-    }
-
-    for (auto j = c->debuffs.begin(); j != c->debuffs.end();)
-    {
-      auto &d = *j;
-      BuffDef ddef = d.def;
-      d.duration -= dt;
-      if (!ddef.tick_effects.empty() &&
-          d.duration * ddef.tick_freq < d.ticks_left)
-      {
-        apply_spell_effects(
-            -1, i, ddef.tick_effects, client.chars, client.nchars, spell_objs);
-        d.ticks_left--;
-      }
-      if (d.duration <= 0)
-      {
-        set_message("", d.def.name + " falls off " + c->name, 3.0f);
-        // if (d.dynamic)
-        // {
-        //   for (auto &te : d.def.tick_effects)
-        //   {
-        //     free(te);
-        //   }
-        //   for (auto &cm : d.def.char_mods)
-        //   {
-        //     free(cm);
-        //   }
-        // }
-        j = c->debuffs.erase(j);
-      }
-      else
-      {
-        j++;
-      }
-    }
-
-    apply_char_mods(i, client.chars);
-
-    c->mana += c->e_stats.mana_regen * dt;
-    if (c->mana > c->mana_max)
-    {
-      c->mana = c->mana_max;
-    }
-
-    if (c->casting)
-    {
-      c->cast_progress += c->e_stats.cast_speed * dt;
-      if (c->cast_progress > c->casting_spell->def->cast_time)
-      {
-        release_spell(i, c->cast_target, c->casting_spell, client.chars,
-            client.nchars, spell_objs);
-        c->cast_progress = 0;
-        c->casting = false;
-      }
-    }
-
-    if (c->gcd > 0)
-    {
-      c->gcd -= dt * c->e_stats.cast_speed;
-      if (c->gcd < 0)
-      {
-        c->gcd = 0;
-      }
-    }
-
-    for (auto &sp : c->spellbook)
-    {
-      auto &s = std::get<1>(sp);
-      if (s.cd_remaining > 0)
-      {
-        s.cd_remaining -= dt;
-      }
-      if (s.cd_remaining < 0)
-      {
-        s.cd_remaining = 0;
-      }
-    }
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
@@ -1061,15 +919,6 @@ void Warg_State::update()
           client.chars[o.caster].name + "'s " + o.def.name + " hit " +
               client.chars[o.target].name,
           3.0f);
-      // for (auto &e : o.def.effects)
-      // {
-      //   SpellEffectInst i;
-      //   i.def = *e;
-      //   i.caster = o.caster;
-      //   i.pos = o.pos;
-      //   i.target = o.target;
-      //   invoke_spell_effect(&i, client.chars, client.nchars, spell_objs);
-      // }
 
       i = spell_objs.erase(i);
     }
@@ -1086,520 +935,4 @@ void Warg_State::update()
       ++i;
     }
   }
-
-  set_message("num spobjs:", s(spell_objs.size()), 10);
-}
-
-void Warg_State::add_wall(vec3 p1, vec2 p2, float32 h)
-{
-  Material_Descriptor material;
-  material.albedo = "pebbles_diffuse.png";
-  material.emissive = "";
-  material.normal = "pebbles_normal.png";
-  material.roughness = "pebbles_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
-  material.backface_culling = false;
-  material.uv_scale = vec2(2);
-
-  Mesh_Data data;
-  vec3 a, b, c, d;
-  a = p1;
-  b = vec3(p2.x, p2.y, 0);
-  c = vec3(p2.x, p2.y, h);
-  d = vec3(p1.x, p1.y, h);
-
-  add_quad(a, b, c, d, data);
-  auto mesh = scene.add_mesh(data, material, "some wall");
-
-  walls.push_back(Wall{p1, p2, h});
-  wall_meshes.push_back(mesh);
-
-  server.walls.push_back({p1, p2, h});
-}
-
-void invoke_spell_effect(SpellEffectInst *i, std::vector<Character> &chars,
-    uint32 nchars, std::vector<SpellObjectInst> &objs)
-{
-  ASSERT(i);
-  SpellEffect *e = &i->def;
-  switch (e->type)
-  {
-    case SpellEffectType::Heal:
-    {
-      if (!i->target)
-      {
-        set_message("Invalid Target", " heal failed: no target", 3.0f);
-        return;
-      }
-
-      Character *c = &chars[i->target];
-      HealEffect *h = &e->heal;
-
-      if (!c->alive)
-      {
-        break;
-      }
-
-      uint32 effective = h->n;
-      uint32 overheal = 0;
-
-      c->hp += effective;
-
-      if (c->hp > c->hp_max)
-      {
-        overheal = c->hp - c->hp_max;
-        effective -= overheal;
-        c->hp = c->hp_max;
-      }
-
-      if (overheal > 0)
-      {
-        set_message("", s(e->name, " healed ", c->name, " for ", effective,
-                            " (", overheal, " overheal)"),
-            3.0f);
-      }
-      else
-      {
-        set_message(
-            "", s(e->name, " healed ", c->name, " for ", effective), 3.0f);
-      }
-      break;
-    }
-    case SpellEffectType::Damage:
-    {
-      Character *c = &chars[i->target];
-      if (!c)
-      {
-        set_message("Invalid Target", " damage failed: no target", 3.0f);
-        return;
-      }
-
-      if (!c->alive)
-      {
-        break;
-      }
-
-      int effective = e->damage.n;
-      int overkill = 0;
-
-      if (!e->damage.pierce_mod)
-      {
-        effective *= c->e_stats.damage_mod;
-      }
-
-      c->hp -= effective;
-
-      if (c->hp < 0)
-      {
-        effective -= 0 - c->hp;
-        overkill = -c->hp;
-        c->hp = 0;
-        c->alive = false;
-      }
-
-      if (overkill > 0)
-      {
-        set_message("", s(e->name, " hit ", c->name, " for ", effective,
-                            " damage (", overkill, " overkill)"),
-            3.0f);
-      }
-      else
-      {
-        set_message("",
-            s(e->name, " hit ", c->name, " for ", effective, " damage"), 3.0f);
-      }
-
-      if (!c->alive)
-      {
-        set_message("", c->name + " has died", 3.0f);
-      }
-      break;
-    }
-    case SpellEffectType::ApplyBuff:
-    {
-      Character *c = &chars[i->target];
-      if (!c)
-      {
-        set_message(
-            "Invalid Target", "buff application failed: no target", 3.0f);
-        return;
-      }
-
-      auto buffdef = e->applybuff.buff;
-      Buff buff;
-      buff.def = *buffdef;
-      buff.duration = buffdef->duration;
-      buff.ticks_left =
-          static_cast<int>(glm::floor(buffdef->duration * buffdef->tick_freq));
-      c->buffs.push_back(buff);
-      set_message("", s(e->name, " spell effect buff applied ", buffdef->name,
-                          " to ", c->name),
-          3.0f);
-      apply_char_mods(i->target, chars);
-      break;
-    }
-    case SpellEffectType::ApplyDebuff:
-    {
-      Character *c = &chars[i->target];
-      if (!c)
-      {
-        set_message(
-            "Invalid Target", "debuff application failed: no target", 3.0f);
-        return;
-      }
-      auto buffdef = e->applydebuff.debuff;
-      Buff debuff;
-      debuff.def = *buffdef;
-      debuff.duration = buffdef->duration;
-      debuff.ticks_left =
-          (uint32)(glm::floor(buffdef->duration * buffdef->tick_freq));
-      c->debuffs.push_back(debuff);
-      set_message("", s(e->name, " spell effect debuff applied ", buffdef->name,
-                          " to ", c->name),
-          3.0f);
-      apply_char_mods(i->target, chars);
-      break;
-    }
-    case SpellEffectType::AoE:
-    {
-      for (int j = 0; j < nchars; j++)
-      {
-        Character *c = &chars[j];
-        if (length(c->pos - i->pos) <= e->aoe.radius)
-        {
-          // bug: doesnt seem to be tracking already-hit characters
-          SpellEffectInst k;
-          k.def = *e->aoe.effect;
-          k.caster = i->caster;
-          k.pos = {0, 0, 0};
-          k.target = j;
-
-          if (c->team == chars[k.caster].team &&
-              e->aoe.targets == SpellTargets::Ally)
-          {
-            invoke_spell_effect(&k, chars, nchars, objs);
-          }
-          else if (c->team != chars[k.caster].team &&
-                   e->aoe.targets == SpellTargets::Hostile)
-          {
-            invoke_spell_effect(&k, chars, nchars, objs);
-          }
-        }
-      }
-      break;
-    }
-    case SpellEffectType::ClearDebuffs:
-    {
-      Character *c = &chars[i->target];
-      set_message(
-          "", s(i->def.name, " cleared all debuffs from ", c->name), 3.0f);
-      // for (auto &d : c->debuffs)
-      // {
-      //   if (d.dynamic)
-      //   {
-      //     for (auto &te : d.def.tick_effects)
-      //     {
-      //       free(te);
-      //     }
-      //     for (auto &cm : d.def.char_mods)
-      //     {
-      //       free(cm);
-      //     }
-      //   }
-      // }
-      c->debuffs.clear();
-      apply_char_mods(i->target, chars);
-      break;
-    }
-    // case SpellEffectType::ObjectLaunch:
-    // {
-    //   SpellObjectInst obji;
-    //   obji.def = *i->def.objectlaunch.object;
-    //   obji.caster = i->caster;
-    //   obji.target = i->target;
-    //   obji.pos = i->pos;
-    //   objs.push_back(obji);
-    //   break;
-    // }
-    case SpellEffectType::Interrupt:
-    {
-      Character *c = &chars[i->target];
-      c->casting = false;
-      c->casting_spell = nullptr;
-      c->cast_progress = 0;
-      c->cast_target = -1;
-
-      // CharMod *silence_charmod = (CharMod *)malloc(sizeof(*silence_charmod));
-      // silence_charmod->type = CharModType::Silence;
-
-      // BuffDef silence_buffdef;
-      // silence_buffdef.name = i->def.name;
-      // silence_buffdef.duration = i->def.interrupt.lockout;
-      // silence_buffdef.char_mods.push_back(silence_charmod);
-
-      // Buff silence;
-      // silence.def = silence_buffdef;
-      // silence.duration = silence.def.duration;
-      // silence.dynamic = true;
-
-      // c->debuffs.push_back(silence);
-
-      set_message("", s(chars[i->caster].name, "'s ", i->def.name,
-                          " interrupted ", c->name, "'s casting"),
-          3.0f);
-      break;
-    }
-    default:
-      break;
-  };
-}
-
-void apply_char_mod(Character *c, CharMod &m)
-{
-  switch (m.type)
-  {
-    case CharModType::DamageTaken:
-      c->e_stats.damage_mod *= m.damage_taken.n;
-      break;
-    case CharModType::Speed:
-      c->e_stats.speed *= m.speed.m;
-      break;
-    case CharModType::CastSpeed:
-      c->e_stats.cast_speed *= m.cast_speed.m;
-    case CharModType::Silence:
-      c->silenced = true;
-    default:
-      break;
-  }
-}
-
-void apply_char_mods(int ci, std::vector<Character> &chars)
-{
-  Character *c = &chars[ci];
-  c->e_stats = c->b_stats;
-  c->silenced = false;
-
-  for (auto &b : c->buffs)
-  {
-    for (auto &m : b.def.char_mods)
-    {
-      apply_char_mod(c, *m);
-    }
-  }
-  for (auto &b : c->debuffs)
-  {
-    for (auto &m : b.def.char_mods)
-    {
-      apply_char_mod(c, *m);
-    }
-  }
-}
-
-void cast_spell(int casteri, int targeti, Spell *spell,
-    std::vector<Character> &chars, uint32 nchars,
-    std::vector<SpellObjectInst> &objs)
-{
-  Character *caster = nullptr, *target = nullptr;
-  if (casteri >= 0)
-    caster = &chars[casteri];
-  if (targeti >= 0)
-    target = &chars[targeti];
-  if (caster->silenced)
-  {
-    set_message("Cast failed:", "silenced", 3.0f);
-    return;
-  }
-  if (spell->cd_remaining > 0)
-  {
-    set_message("Cast failed:", s(caster->name, " failed to cast ",
-                                    spell->def->name, ": on cooldown (",
-                                    spell->cd_remaining, "s remaining)"),
-        3.0f);
-    return;
-  }
-  if (caster->gcd > 0)
-  {
-    set_message(
-        "Cast failed:", s(caster->name, " failed to cast ", spell->def->name,
-                            ": on gcd (", caster->gcd, "s remaining)"),
-        3.0f);
-    return;
-  }
-  if (spell->def->mana_cost > caster->mana)
-  {
-    set_message(
-        "Cast failed:", s(caster->name, " failed to cast ", spell->def->name,
-                            ": not enough mana (costs ", spell->def->mana_cost,
-                            ", have ", caster->mana, ")"),
-        3.0f);
-
-    return;
-  }
-  if (!target && spell->def->targets != SpellTargets::Terrain)
-  {
-    set_message("Cast failed:", s(caster->name, " failed to cast ",
-                                    spell->def->name, ": no target"),
-        3.0f);
-    return;
-  }
-  if (spell->def->targets != SpellTargets::Terrain &&
-      length(caster->pos - target->pos) > spell->def->range)
-  {
-    set_message("Cast failed:",
-        s(caster->name, " failed to cast ", spell->def->name,
-            ": target out of range (spell range is ", spell->def->range,
-            ", target is ", length(caster->pos - target->pos), "m away)"),
-        3.0f);
-    return;
-  }
-  if (caster->casting)
-  {
-    set_message("Cast failed:", s(caster->name, " failed to cast ",
-                                    spell->def->name, ": already casting"),
-        3.0f);
-    return;
-  }
-
-  if (spell->def->cast_time > 0)
-  {
-    caster->casting = true;
-    caster->casting_spell = spell;
-    caster->cast_progress = 0;
-    if (target)
-    {
-      caster->cast_target = targeti;
-      set_message(
-          "Begin cast:", s(caster->name, " begins casting ", spell->def->name,
-                             " (", spell->def->cast_time, "s remaining)"),
-          3.0f);
-    }
-    else
-    {
-      set_message("Begin cast:",
-          s(caster->name, " begins casting ", spell->def->name, " at ",
-              target->name, " (", spell->def->cast_time, "s remaining)"),
-          3.0f);
-    }
-  }
-  else
-  {
-    release_spell(casteri, targeti, spell, chars, nchars, objs);
-  }
-}
-
-void release_spell(int casteri, int targeti, Spell *spell,
-    std::vector<Character> &chars, uint32 nchars,
-    std::vector<SpellObjectInst> &objs)
-{
-  ASSERT(spell);
-  ASSERT(spell->def);
-
-  Character *caster = nullptr, *target = nullptr;
-  if (casteri >= 0)
-    caster = &chars[casteri];
-  if (targeti >= 0)
-    target = &chars[targeti];
-
-  if (caster->mana < spell->def->mana_cost)
-  {
-    set_message(
-        "Cast failed:", s(caster->name, " failed to cast ", spell->def->name,
-                            ": not enough mana (costs ", spell->def->mana_cost,
-                            ", have ", caster->mana, ")"),
-        3.0f);
-    return;
-  }
-
-  if (spell->def->targets != SpellTargets::Terrain &&
-      glm::length(caster->pos - target->pos) > spell->def->range)
-  {
-    set_message("Cast failed:",
-        s(caster->name, " failed to cast ", spell->def->name,
-            ": target out of range (spell range is ", spell->def->range,
-            ", target is ", length(caster->pos - target->pos), "m away)"),
-        3.0f);
-    return;
-  }
-
-  if (spell->def->targets == SpellTargets::Self)
-  {
-    if (caster != target)
-    {
-      set_message(
-          "Cast failed:", s(caster->name, " failed to cast ", spell->def->name,
-                              ": can only cast at self"),
-          3.0f);
-      return;
-    }
-    set_message(
-        "Cast success:", s(caster->name, " casts ", spell->def->name), 3.0f);
-  }
-
-  if (spell->def->targets == SpellTargets::Ally)
-  {
-    if (caster->team != target->team)
-    {
-      set_message(
-          "Cast failed:", s(caster->name, " failed to cast ", spell->def->name,
-                              ": can only cast at allies"),
-          3.0f);
-      return;
-    }
-
-    set_message("Cast success:", s(caster->name, " casts ", spell->def->name,
-                                     " at ", target->name),
-        3.0f);
-    apply_spell_effects(
-        casteri, targeti, spell->def->effects, chars, nchars, objs);
-  }
-
-  if (spell->def->targets == SpellTargets::Hostile)
-  {
-    if (caster->team == target->team)
-    {
-      set_message(
-          "Cast failed:", s(caster->name, " failed to cast ", spell->def->name,
-                              ": can only cast at hostile targets"),
-          3.0f);
-      return;
-    }
-    set_message("Cast success:", s(caster->name, " casts ", spell->def->name,
-                                     " at ", target->name),
-        3.0f);
-    apply_spell_effects(
-        casteri, targeti, spell->def->effects, chars, nchars, objs);
-  }
-
-  if (spell->def->targets == SpellTargets::Terrain)
-  {
-    set_message(
-        "Cast success:", s(caster->name, " casts ", spell->def->name), 3.0f);
-    apply_spell_effects(
-        casteri, targeti, spell->def->effects, chars, nchars, objs);
-  }
-
-  caster->mana -= spell->def->mana_cost;
-  if (caster->mana < 0)
-    caster->mana = 0;
-
-  caster->gcd = spell->def->cast_time < caster->b_stats.gcd
-                    ? caster->b_stats.gcd - spell->def->cast_time
-                    : 0;
-
-  spell->cd_remaining = spell->def->cooldown;
-}
-
-void move_char(int ci, vec3 v, std::vector<Character> &chars)
-{
-  Character *c = &chars[ci];
-  ASSERT(c);
-  if (c->casting)
-  {
-    c->casting = false;
-    c->cast_progress = 0;
-    set_message(
-        "Interrupt:", s(c->name, "'s casting interrupted: moved"), 3.0f);
-  }
-  c->pos += c->e_stats.speed * v;
 }
