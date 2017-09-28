@@ -3,11 +3,50 @@
 #include <cstring>
 #include <memory>
 
+Warg_Server::Warg_Server()
+{
+  map = make_nagrand();
+  sdb = make_spell_db();
+}
+
+void Warg_Server::update(float32 dt)
+{
+  process_events();
+
+  for (int ch = 0; ch < chars.size(); ch++)
+  {
+    update_cast(ch, dt);
+    update_buffs(ch, dt);
+    apply_char_mods(ch);
+    update_target(ch);
+    update_mana(ch);
+
+    push(char_pos_event(ch, chars[ch].pos));
+  }
+
+  for (auto i = spell_objs.begin(); i != spell_objs.end();)
+  {
+    if (update_spell_object(&*i))
+      i = spell_objs.erase(i);
+    else
+      i++;
+  }
+}
+
 void Warg_Server::process_events()
 {
-  while (!in.empty())
+  for (auto &conn : connections)
   {
-    Warg_Event ev = in.front();
+    while (!conn.in->empty())
+    {
+      eq.push(conn.in->front());
+      conn.in->pop();
+    }
+  }
+
+  while (!eq.empty())
+  {
+    Warg_Event ev = eq.front();
     ASSERT(ev.event);
     switch (ev.type)
     {
@@ -24,26 +63,7 @@ void Warg_Server::process_events()
         break;
     }
     free_warg_event(ev);
-    in.pop();
-  }
-
-  for (int ch = 0; ch < chars.size(); ch++)
-  {
-    update_cast(ch, dt);
-    update_buffs(ch, dt);
-    apply_char_mods(ch);
-    update_target(ch);
-    update_mana(ch);
-
-    out->push(char_pos_event(ch, chars[ch].pos));
-  }
-
-  for (auto i = spell_objs.begin(); i != spell_objs.end();)
-  {
-    if (update_spell_object(&*i))
-      i = spell_objs.erase(i);
-    else
-      i++;
+    eq.pop();
   }
 }
 
@@ -108,7 +128,8 @@ void Warg_Server::process_event(CharSpawnRequest_Event *req)
   int team = req->team;
   ASSERT(name);
 
-  out->push(char_spawn_event(name, team));
+  add_char(team, name);
+  push(char_spawn_event(name, team));
 }
 
 void Warg_Server::process_event(Move_Event *mv)
@@ -145,14 +166,14 @@ void Warg_Server::move_char(int ci, vec3 v)
   {
     c->casting = false;
     c->cast_progress = 0;
-    out->push(cast_interrupt_event(ci));
+    push(cast_interrupt_event(ci));
   }
 
   vec3 old_pos = c->pos;
 
   c->pos += c->e_stats.speed * v;
 
-  for (auto &wall : walls)
+  for (auto &wall : map.walls)
     if (intersects(c->pos, c->body, wall))
       if (!intersects(vec3(c->pos.x, old_pos.y, c->pos.z), c->body, wall))
         c->pos.y = old_pos.y;
@@ -175,8 +196,7 @@ void Warg_Server::try_cast_spell(int caster_, int target_, const char *spell_)
 
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
-    out->push(
-        cast_error_event(caster_, target_, spell_, static_cast<int>(err)));
+    push(cast_error_event(caster_, target_, spell_, static_cast<int>(err)));
   else
     cast_spell(caster_, target_, spell);
 }
@@ -206,7 +226,7 @@ void Warg_Server::begin_cast(int caster_, int target_, Spell *spell)
   caster->cast_progress = 0;
   caster->cast_target = target_;
 
-  out->push(cast_begin_event(caster_, target_, spell->def->name.c_str()));
+  push(cast_begin_event(caster_, target_, spell->def->name.c_str()));
 }
 
 void Warg_Server::update_cast(int caster_, float32 dt)
@@ -272,7 +292,7 @@ void Warg_Server::release_spell(int caster_, int target_, Spell *spell)
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
-    out->push(cast_error_event(
+    push(cast_error_event(
         caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
     return;
   }
@@ -364,7 +384,7 @@ void Warg_Server::invoke_spell_effect_apply_buff(SpellEffectInst &effect)
   else
     target->debuffs.push_back(buff);
 
-  out->push(buff_appl_event(effect.target, buff.def.name.c_str()));
+  push(buff_appl_event(effect.target, buff.def.name.c_str()));
 }
 
 void Warg_Server::invoke_spell_effect_clear_debuffs(SpellEffectInst &effect)
@@ -398,7 +418,7 @@ void Warg_Server::invoke_spell_effect_damage(SpellEffectInst &effect)
     target->alive = false;
   }
 
-  out->push(char_hp_event(effect.target, target->hp));
+  push(char_hp_event(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
@@ -421,7 +441,7 @@ void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
     target->hp = target->hp_max;
   }
 
-  out->push(char_hp_event(effect.target, target->hp));
+  push(char_hp_event(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
@@ -437,22 +457,21 @@ void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
   target->cast_progress = 0;
   target->cast_target = -1;
 
-  out->push(cast_interrupt_event(effect.target));
+  push(cast_interrupt_event(effect.target));
 }
 
 void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
 {
-  ASSERT(spell_objects);
-  ASSERT(effect.def.objectlaunch.object < *nspell_objects);
+  ASSERT(effect.def.objectlaunch.object);
 
   SpellObjectInst obji;
-  obji.def = (*spell_objects)[effect.def.objectlaunch.object];
+  obji.def = sdb->objects[effect.def.objectlaunch.object];
   obji.caster = effect.caster;
   obji.target = effect.target;
   obji.pos = effect.pos;
   spell_objs.push_back(obji);
 
-  out->push(object_launch_event(
+  push(object_launch_event(
       effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
 }
 
@@ -546,4 +565,58 @@ void Warg_Server::apply_char_mods(int ch)
   for (auto &b : c->debuffs)
     for (auto &m : b.def.char_mods)
       apply_char_mod(c, *m);
+}
+
+void Warg_Server::add_char(int team, const char *name)
+{
+  ASSERT(0 <= team && team < 2);
+  ASSERT(name);
+
+  Character c;
+  c.team = team;
+  c.name = std::string(name);
+  c.pos = map.spawn_pos[team];
+  c.dir = map.spawn_dir[team];
+  c.body = {1.f, 0.3f};
+  c.hp_max = 100;
+  c.hp = c.hp_max;
+  c.mana_max = 500;
+  c.mana = c.mana_max;
+
+  CharStats s;
+  s.gcd = 1.5;
+  s.speed = 3.0;
+  s.cast_speed = 1;
+  s.hp_regen = 2;
+  s.mana_regen = 10;
+  s.damage_mod = 1;
+  s.atk_dmg = 5;
+  s.atk_speed = 2;
+
+  c.b_stats = s;
+  c.e_stats = s;
+
+  for (int i = 0; i < sdb->spells.size(); i++)
+  {
+    Spell s;
+    s.def = &sdb->spells[i];
+    s.cd_remaining = 0;
+    c.spellbook[s.def->name] = s;
+  }
+
+  chars.push_back(c);
+}
+
+void Warg_Server::connect(
+    std::queue<Warg_Event> *in, std::queue<Warg_Event> *out)
+{
+  connections.push_back({in, out});
+}
+
+void Warg_Server::push(Warg_Event ev)
+{
+  for (auto &conn : connections)
+  {
+    conn.out->push(ev);
+  }
 }

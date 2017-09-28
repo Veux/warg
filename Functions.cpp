@@ -1,4 +1,3 @@
-#pragma once
 #include "Functions.h"
 using namespace glm;
 bool intersects(vec3 pa, vec3 da, vec3 pb, vec3 db)
@@ -61,4 +60,3 @@ bool intersects(vec3 pa, Cylinder ca, Wall w)
 
   return zin && xyin;
 }
-

@@ -1,19 +1,37 @@
 #pragma once
 
+#include "Functions.h"
 #include "Globals.h"
 #include "Warg_Event.h"
 #include <queue>
 
+using std::vector;
+using std::queue;
+using std::unique_ptr;
+
 struct Character;
 struct Wall;
 
+struct Warg_Connection
+{
+  queue<Warg_Event> *in, *out;
+};
+
 struct Warg_Server
 {
+  Warg_Server();
+  void update(float32 dt);
+  void connect(queue<Warg_Event> *in, queue<Warg_Event> *out);
+
+private:
+  void push(Warg_Event ev);
+
   void process_events();
   void process_event(CharSpawnRequest_Event *req);
   void process_event(Move_Event *mv);
   void process_event(Cast_Event *cast);
 
+  void add_char(int team, const char *name);
   void move_char(int ci, vec3 v);
   CastErrorType cast_viable(int caster_, int target_, Spell *spell);
   void try_cast_spell(int caster, int target, const char *spell);
@@ -37,13 +55,11 @@ struct Warg_Server
   bool update_spell_object(SpellObjectInst *so);
   void apply_char_mods(int ch);
 
-  std::queue<Warg_Event> in;
-  std::queue<Warg_Event> *out;
+  queue<Warg_Event> eq;
+  vector<Warg_Connection> connections;
 
-  std::vector<Character> chars;
-  std::vector<Wall> walls;
-  std::vector<SpellObjectInst> spell_objs;
-
-  std::array<SpellObjectDef, 100> *spell_objects;
-  uint32 *nspell_objects = 0;
+  Map map;
+  unique_ptr<SpellDB> sdb;
+  vector<Character> chars;
+  vector<SpellObjectInst> spell_objs;
 };

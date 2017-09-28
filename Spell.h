@@ -193,3 +193,14 @@ enum class CastErrorType
   OutOfRange,
   AlreadyCasting
 };
+
+struct SpellDB
+{
+  std::vector<SpellDef> spells;
+  std::vector<SpellEffect> effects;
+  std::vector<SpellObjectDef> objects;
+  std::vector<BuffDef> buffs;
+  std::vector<CharMod> char_mods;
+};
+
+std::unique_ptr<SpellDB> make_spell_db();
