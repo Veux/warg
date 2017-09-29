@@ -26,6 +26,7 @@ struct Character
 
   vec3 pos;
   vec3 dir;
+  Move_Status move_status = Move_Status::None;
 
   std::string name;
   int team;

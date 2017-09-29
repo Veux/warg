@@ -334,39 +334,20 @@ void Warg_State::handle_input(
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
 
-    vec3 old_pos = client->chars[client->pc].pos;
-
     if (right_button_down)
-    {
-      client->chars[client->pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
-    }
+      out.push(
+          dir_event(client->pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
 
+    int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
-    {
-      vec3 v = vec3(client->chars[client->pc].dir.x,
-          client->chars[client->pc].dir.y, 0.0f);
-      out.push(move_event(client->pc, dt * v));
-    }
+      m |= Move_Status::Forwards;
     if (is_pressed(SDL_SCANCODE_S))
-    {
-      vec3 v = vec3(client->chars[client->pc].dir.x,
-          client->chars[client->pc].dir.y, 0.0f);
-      out.push(move_event(client->pc, dt * -v));
-    }
+      m |= Move_Status::Backwards;
     if (is_pressed(SDL_SCANCODE_A))
-    {
-      mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(client->chars[client->pc].dir.x,
-          client->chars[client->pc].dir.y, 0, 0);
-      out.push(move_event(client->pc, dt * vec3(r * v)));
-    }
+      m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
-    {
-      mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(client->chars[client->pc].dir.x,
-          client->chars[client->pc].dir.y, 0, 0);
-      out.push(move_event(client->pc, dt * vec3(r * v)));
-    }
+      m |= Move_Status::Right;
+	out.push(move_event(client->pc, (Move_Status)m));
 
     cam.pos = client->chars[client->pc].pos +
               vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;

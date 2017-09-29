@@ -15,13 +15,14 @@ void Warg_Server::update(float32 dt)
 
   for (int ch = 0; ch < chars.size(); ch++)
   {
+    move_char(ch, dt);
     update_cast(ch, dt);
     update_buffs(ch, dt);
     apply_char_mods(ch);
     update_target(ch);
     update_mana(ch);
 
-    push(char_pos_event(ch, chars[ch].pos));
+    push(char_pos_event(ch, chars[ch].dir, chars[ch].pos));
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
@@ -56,6 +57,9 @@ void Warg_Server::process_events()
     {
       case Warg_Event_Type::CharSpawnRequest:
         process_event((CharSpawnRequest_Event *)ev.event);
+        break;
+      case Warg_Event_Type::Dir:
+        process_event((Dir_Event *)ev.event);
         break;
       case Warg_Event_Type::Move:
         process_event((Move_Event *)ev.event);
@@ -136,13 +140,18 @@ void Warg_Server::process_event(CharSpawnRequest_Event *req)
   push(char_spawn_event(name, team));
 }
 
+void Warg_Server::process_event(Dir_Event *dir)
+{
+  ASSERT(dir);
+
+  chars[dir->character].dir = dir->dir;
+}
+
 void Warg_Server::process_event(Move_Event *mv)
 {
   ASSERT(mv);
-  int chr = mv->character;
-  vec3 v = mv->v;
 
-  move_char(chr, v);
+  chars[mv->character].move_status = mv->m;
 }
 
 void Warg_Server::process_event(Cast_Event *cast)
@@ -161,11 +170,15 @@ void Warg_Server::process_event(Cast_Event *cast)
   try_cast_spell(ch, target, spell);
 }
 
-void Warg_Server::move_char(int ci, vec3 v)
+void Warg_Server::move_char(int ci, float32 dt)
 {
   ASSERT(0 <= ci < chars.size());
   Character *c = &chars[ci];
   ASSERT(c);
+
+  if (!c->move_status)
+	  return;
+
   if (c->casting)
   {
     c->casting = false;
@@ -173,18 +186,37 @@ void Warg_Server::move_char(int ci, vec3 v)
     push(cast_interrupt_event(ci));
   }
 
-  vec3 old_pos = c->pos;
+  vec3 v;
+  if (c->move_status & Move_Status::Forwards)
+    v += vec3(c->dir.x, c->dir.y, 0);
+  else if (c->move_status & Move_Status::Backwards)
+    v += -vec3(c->dir.x, c->dir.y, 0);
+  if (c->move_status & Move_Status::Left)
+  {
+    mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
+    vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
+    v += vec3(r * v_);
+  }
+  else if (c->move_status & Move_Status::Right)
+  {
+    mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
+    vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
+    v += vec3(r * v_);
+  }
+  v = normalize(v);
 
-  c->pos += c->e_stats.speed * v;
+  vec3 new_pos = c->pos + c->e_stats.speed * v * dt;
 
   for (auto &wall : map.walls)
-    if (intersects(c->pos, c->body, wall))
-      if (!intersects(vec3(c->pos.x, old_pos.y, c->pos.z), c->body, wall))
-        c->pos.y = old_pos.y;
-      else if (!intersects(vec3(old_pos.x, c->pos.y, old_pos.z), c->body, wall))
-        c->pos.x = old_pos.x;
+    if (intersects(new_pos, c->body, wall))
+      if (!intersects(vec3(new_pos.x, c->pos.y, new_pos.z), c->body, wall))
+        new_pos.y = c->pos.y;
+      else if (!intersects(vec3(c->pos.x, new_pos.y, c->pos.z), c->body, wall))
+        new_pos.x = c->pos.x;
       else
-        c->pos = old_pos;
+        new_pos = c->pos;
+
+  c->pos = new_pos;
 }
 
 void Warg_Server::try_cast_spell(int caster_, int target_, const char *spell_)

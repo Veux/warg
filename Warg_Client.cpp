@@ -100,16 +100,22 @@ void Warg_Client::process_events()
 
 void Warg_Client::process_event(CharSpawn_Event *spawn)
 {
+  ASSERT(spawn);
+
   add_char(spawn->team, spawn->name);
 }
 
 void Warg_Client::process_event(CharPos_Event *pos)
 {
+  ASSERT(pos);
+  chars[pos->character].dir = pos->dir;
   chars[pos->character].pos = pos->pos;
 }
 
 void Warg_Client::process_event(CastError_Event *err)
 {
+  ASSERT(err);
+
   std::string msg;
   msg += chars[err->caster].name;
   msg += " failed to cast ";
@@ -151,6 +157,8 @@ void Warg_Client::process_event(CastError_Event *err)
 
 void Warg_Client::process_event(CastBegin_Event *cast)
 {
+  ASSERT(cast);
+
   std::string msg;
   msg += chars[cast->caster].name;
   msg += " begins casting ";
@@ -160,6 +168,8 @@ void Warg_Client::process_event(CastBegin_Event *cast)
 
 void Warg_Client::process_event(CastInterrupt_Event *interrupt)
 {
+  ASSERT(interrupt);
+
   std::string msg;
   msg += chars[interrupt->caster].name;
   msg += "'s casting was interrupted";
@@ -168,6 +178,8 @@ void Warg_Client::process_event(CastInterrupt_Event *interrupt)
 
 void Warg_Client::process_event(CharHP_Event *hpev)
 {
+  ASSERT(hpev);
+
   chars[hpev->character].alive = hpev->hp > 0;
 
   std::string msg;
@@ -179,6 +191,8 @@ void Warg_Client::process_event(CharHP_Event *hpev)
 
 void Warg_Client::process_event(BuffAppl_Event *appl)
 {
+  ASSERT(appl);
+
   std::string msg;
   msg += appl->buff;
   msg += " applied to ";
@@ -188,6 +202,8 @@ void Warg_Client::process_event(BuffAppl_Event *appl)
 
 void Warg_Client::process_event(ObjectLaunch_Event *launch)
 {
+  ASSERT(launch);
+
   Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
   material.emissive = "test_emissive.png";
@@ -220,6 +236,8 @@ void Warg_Client::process_event(ObjectLaunch_Event *launch)
 
 void Warg_Client::add_char(int team, const char *name)
 {
+  ASSERT(name);
+
   vec3 pos = map.spawn_pos[team];
   vec3 dir = map.spawn_dir[team];
 

@@ -35,12 +35,27 @@ Warg_Event char_spawn_event(const char *name, int team)
   return ev;
 }
 
-Warg_Event move_event(int ch, vec3 v)
+Warg_Event dir_event(int ch, vec3 d)
+{
+  Dir_Event *dir;
+  dir = (Dir_Event *)malloc(sizeof *dir);
+  dir->character = ch;
+  dir->dir = d;
+
+  Warg_Event ev;
+  ev.type = Warg_Event_Type::Dir;
+  ev.event = dir;
+  ev.t = get_real_time();
+
+  return ev;
+}
+
+Warg_Event move_event(int ch, Move_Status m)
 {
   Move_Event *mv;
   mv = (Move_Event *)malloc(sizeof *mv);
   mv->character = ch;
-  mv->v = v;
+  mv->m = m;
 
   Warg_Event ev;
   ev.type = Warg_Event_Type::Move;
@@ -50,10 +65,11 @@ Warg_Event move_event(int ch, vec3 v)
   return ev;
 }
 
-Warg_Event char_pos_event(int ch, vec3 pos)
+Warg_Event char_pos_event(int ch, vec3 dir, vec3 pos)
 {
   CharPos_Event *posev = (CharPos_Event *)malloc(sizeof *posev);
   posev->character = ch;
+  posev->dir = dir;
   posev->pos = pos;
 
   Warg_Event ev;
@@ -185,6 +201,8 @@ void free_warg_event(CharSpawnRequest_Event *ev) { free(ev->name); }
 
 void free_warg_event(CharSpawn_Event *ev) { free(ev->name); }
 
+void free_warg_event(Dir_Event *dir) {}
+
 void free_warg_event(Move_Event *ev) {}
 
 void free_warg_event(CharPos_Event *ev) {}
@@ -214,6 +232,9 @@ void free_warg_event(Warg_Event ev)
       break;
     case Warg_Event_Type::CharSpawn:
       free_warg_event((CharSpawn_Event *)ev.event);
+      break;
+    case Warg_Event_Type::Dir:
+      free_warg_event((Dir_Event *)ev.event);
       break;
     case Warg_Event_Type::Move:
       free_warg_event((Move_Event *)ev.event);

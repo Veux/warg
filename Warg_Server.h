@@ -28,11 +28,12 @@ private:
 
   void process_events();
   void process_event(CharSpawnRequest_Event *req);
+  void process_event(Dir_Event *dir);
   void process_event(Move_Event *mv);
   void process_event(Cast_Event *cast);
 
   void add_char(int team, const char *name);
-  void move_char(int ci, vec3 v);
+  void move_char(int ci, float32 dt);
   CastErrorType cast_viable(int caster_, int target_, Spell *spell);
   void try_cast_spell(int caster, int target, const char *spell);
   void cast_spell(int caster, int target, Spell *spell);

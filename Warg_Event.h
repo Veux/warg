@@ -16,15 +16,31 @@ struct CharSpawn_Event
   int team;
 };
 
+enum Move_Status
+{
+  None = 0,
+  Forwards = 1 << 0,
+  Left = 1 << 1,
+  Backwards = 1 << 2,
+  Right = 1 << 3
+};
+
+struct Dir_Event
+{
+  int character;
+  vec3 dir;
+};
+
 struct Move_Event
 {
   int character;
-  vec3 v;
+  Move_Status m;
 };
 
 struct CharPos_Event
 {
   int character;
+  vec3 dir;
   vec3 pos;
 };
 
@@ -84,6 +100,7 @@ enum class Warg_Event_Type
 {
   CharSpawnRequest,
   CharSpawn,
+  Dir,
   Move,
   CharPos,
   Cast,
@@ -105,8 +122,9 @@ struct Warg_Event
 
 Warg_Event char_spawn_request_event(const char *name, int team);
 Warg_Event char_spawn_event(const char *name, int team);
-Warg_Event move_event(int ch, vec3 v);
-Warg_Event char_pos_event(int ch, vec3 pos);
+Warg_Event dir_event(int ch, vec3 dir);
+Warg_Event move_event(int ch, Move_Status m);
+Warg_Event char_pos_event(int ch, vec3 dir, vec3 pos);
 Warg_Event cast_event(int caster, int target, const char *spell);
 Warg_Event cast_error_event(int caster, int target, const char *spell, int err);
 Warg_Event cast_begin_event(int caster, int target, const char *spell);
