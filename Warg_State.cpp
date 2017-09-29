@@ -13,7 +13,10 @@ using namespace glm;
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
-  client.map = make_nagrand();
+  server = std::make_unique<Warg_Server>();
+  server->connect(&out, &in);
+
+  client = std::make_unique<Warg_Client>(&scene, &in);
 
   Material_Descriptor material;
   material.albedo = "pebbles_diffuse.png";
@@ -27,11 +30,11 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   Node_Ptr ground_mesh =
       scene.add_primitive_mesh(plane, "ground_plane", material);
-  ground_mesh->position = client.map.ground_pos;
-  ground_mesh->scale = client.map.ground_dim;
+  ground_mesh->position = client->map.ground_pos;
+  ground_mesh->scale = client->map.ground_dim;
   map_meshes.push_back(ground_mesh);
 
-  for (auto &wall : client.map.walls)
+  for (auto &wall : client->map.walls)
   {
     Mesh_Data data;
     vec3 a, b, c, d;
@@ -54,12 +57,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   light->ambient = 0.02f;
   light->type = omnidirectional;
 
-  client.sdb = make_spell_db();
-  client.set_in_queue(&in);
-
-  server = Warg_Server();
-  server.connect(&out, &in);
-
   out.push(char_spawn_request_event("Eirich", 0));
   out.push(char_spawn_request_event("Veuxia", 0));
   out.push(char_spawn_request_event("Selion", 1));
@@ -67,59 +64,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
-}
-
-void Warg_State::add_char(int team, const char *name)
-{
-  vec3 pos = client.map.spawn_pos[team];
-  vec3 dir = client.map.spawn_dir[team];
-
-  Material_Descriptor material;
-  material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
-
-  Character c;
-  c.team = team;
-  c.name = std::string(name);
-  c.pos = pos;
-  c.dir = dir;
-  c.body = {1.f, 0.3f};
-  c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
-  c.hp_max = 100;
-  c.hp = c.hp_max;
-  c.mana_max = 500;
-  c.mana = c.mana_max;
-
-  CharStats s;
-  s.gcd = 1.5;
-  s.speed = 3.0;
-  s.cast_speed = 1;
-  s.hp_regen = 2;
-  s.mana_regen = 10;
-  s.damage_mod = 1;
-  s.atk_dmg = 5;
-  s.atk_speed = 2;
-
-  c.b_stats = s;
-  c.e_stats = s;
-
-  for (int i = 0; i < client.sdb->spells.size(); i++)
-  {
-    Spell s;
-    s.def = &client.sdb->spells[i];
-    s.cd_remaining = 0;
-    c.spellbook[s.def->name] = s;
-  }
-
-  client.chars.push_back(c);
-  // server.chars.push_back(c);
-
-  if (client.pc < 0)
-    client.pc = 0;
 }
 
 void Warg_State::handle_input(
@@ -164,30 +108,30 @@ void Warg_State::handle_input(
         if (free_cam)
         {
           free_cam = false;
-          client.pc = 0;
+          client->pc = 0;
         }
-        else if (client.pc >= client.chars.size() - 1)
+        else if (client->pc >= client->chars.size() - 1)
         {
           free_cam = true;
         }
         else
         {
-          client.pc += 1;
+          client->pc += 1;
         }
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
       {
         int first_lower = -1, first_higher = -1;
-        for (int i = client.chars.size() - 1; i >= 0; i--)
+        for (int i = client->chars.size() - 1; i >= 0; i--)
         {
-          if (client.chars[i].alive &&
-              client.chars[i].team != client.chars[client.pc].team)
+          if (client->chars[i].alive &&
+              client->chars[i].team != client->chars[client->pc].team)
           {
-            if (i < client.chars[client.pc].target)
+            if (i < client->chars[client->pc].target)
             {
               first_lower = i;
             }
-            else if (i > client.chars[client.pc].target)
+            else if (i > client->chars[client->pc].target)
             {
               first_higher = i;
             }
@@ -196,34 +140,34 @@ void Warg_State::handle_input(
 
         if (first_higher != -1)
         {
-          client.chars[client.pc].target = first_higher;
+          client->chars[client->pc].target = first_higher;
         }
         else if (first_lower != -1)
         {
-          client.chars[client.pc].target = first_lower;
+          client->chars[client->pc].target = first_lower;
         }
         set_message("Target",
-            s(client.chars[client.pc].name, " targeted ",
-                client.chars[client.chars[client.pc].target].name),
+            s(client->chars[client->pc].name, " targeted ",
+                client->chars[client->chars[client->pc].target].name),
             3.0f);
       }
       if (_e.key.keysym.sym == SDLK_1 && !free_cam)
       {
-        out.push(
-            cast_event(client.pc, client.chars[client.pc].target, "Frostbolt"));
+        out.push(cast_event(
+            client->pc, client->chars[client->pc].target, "Frostbolt"));
       }
       // if (_e.key.keysym.sym == SDLK_2 && !free_cam)
       // {
-      //   int target = (client.chars[pc].target < 0 ||
-      //                    client.chars[pc].team !=
-      //                        client.chars[client.chars[pc].target].team)
+      //   int target = (client->chars[pc].target < 0 ||
+      //                    client->chars[pc].team !=
+      //                        client->chars[client->chars[pc].target].team)
       //                    ? pc
-      //                    : client.chars[pc].target;
+      //                    : client->chars[pc].target;
       //   out.push(cast_event(pc, target, "Lesser Heal"));
       // }
       // if (_e.key.keysym.sym == SDLK_3 && !free_cam)
       // {
-      //   out.push(cast_event(pc, client.chars[pc].target,
+      //   out.push(cast_event(pc, client->chars[pc].target,
       //   "Counterspell"));
       // }
       // if (_e.key.keysym.sym == SDLK_4 && !free_cam)
@@ -283,7 +227,7 @@ void Warg_State::handle_input(
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (client.pc < 0)
+  if (client->pc < 0)
     return;
   if (free_cam)
   {
@@ -390,41 +334,41 @@ void Warg_State::handle_input(
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
 
-    vec3 old_pos = client.chars[client.pc].pos;
+    vec3 old_pos = client->chars[client->pc].pos;
 
     if (right_button_down)
     {
-      client.chars[client.pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
+      client->chars[client->pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
     }
 
     if (is_pressed(SDL_SCANCODE_W))
     {
-      vec3 v = vec3(
-          client.chars[client.pc].dir.x, client.chars[client.pc].dir.y, 0.0f);
-      out.push(move_event(client.pc, dt * v));
+      vec3 v = vec3(client->chars[client->pc].dir.x,
+          client->chars[client->pc].dir.y, 0.0f);
+      out.push(move_event(client->pc, dt * v));
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
-      vec3 v = vec3(
-          client.chars[client.pc].dir.x, client.chars[client.pc].dir.y, 0.0f);
-      out.push(move_event(client.pc, dt * -v));
+      vec3 v = vec3(client->chars[client->pc].dir.x,
+          client->chars[client->pc].dir.y, 0.0f);
+      out.push(move_event(client->pc, dt * -v));
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(
-          client.chars[client.pc].dir.x, client.chars[client.pc].dir.y, 0, 0);
-      out.push(move_event(client.pc, dt * vec3(r * v)));
+      vec4 v = vec4(client->chars[client->pc].dir.x,
+          client->chars[client->pc].dir.y, 0, 0);
+      out.push(move_event(client->pc, dt * vec3(r * v)));
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(
-          client.chars[client.pc].dir.x, client.chars[client.pc].dir.y, 0, 0);
-      out.push(move_event(client.pc, dt * vec3(r * v)));
+      vec4 v = vec4(client->chars[client->pc].dir.x,
+          client->chars[client->pc].dir.y, 0, 0);
+      out.push(move_event(client->pc, dt * vec3(r * v)));
     }
 
-    cam.pos = client.chars[client.pc].pos +
+    cam.pos = client->chars[client->pc].pos +
               vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
     cam.dir = -vec3(cam_rel);
   }
@@ -432,203 +376,10 @@ void Warg_State::handle_input(
   previous_mouse_state = mouse_state;
 }
 
-void Warg_State::process_client_events()
-{
-  while (!in.empty())
-  {
-    Warg_Event ev = in.front();
-    switch (ev.type)
-    {
-      case Warg_Event_Type::CharSpawn:
-      {
-        CharSpawn_Event *spawn = (CharSpawn_Event *)ev.event;
-        char *name = spawn->name;
-        int team = spawn->team;
-
-        add_char(team, name);
-        break;
-      }
-      case Warg_Event_Type::CharPos:
-      {
-        CharPos_Event *pos = (CharPos_Event *)ev.event;
-        int chr = pos->character;
-        vec3 p = pos->pos;
-
-        client.chars[chr].pos = p;
-        break;
-      }
-      case Warg_Event_Type::CastError:
-      {
-        CastError_Event *errev = (CastError_Event *)ev.event;
-
-        std::string msg;
-        msg += client.chars[errev->caster].name;
-        msg += " failed to cast ";
-        msg += errev->spell;
-        msg += ": ";
-
-        switch (errev->err)
-        {
-          case (int)CastErrorType::Silenced:
-            msg += "silenced";
-            break;
-          case (int)CastErrorType::GCD:
-            msg += "GCD";
-            break;
-          case (int)CastErrorType::SpellCD:
-            msg += "spell on cooldown";
-            break;
-          case (int)CastErrorType::NotEnoughMana:
-            msg += "not enough mana";
-            break;
-          case (int)CastErrorType::InvalidTarget:
-            msg += "invalid target";
-            break;
-          case (int)CastErrorType::OutOfRange:
-            msg += "out of range";
-            break;
-          case (int)CastErrorType::AlreadyCasting:
-            msg += "already casting";
-            break;
-          case (int)CastErrorType::Success:
-            ASSERT(false);
-            break;
-          default:
-            ASSERT(false);
-        }
-
-        set_message("SpellError:", msg, 10);
-        break;
-      }
-      case Warg_Event_Type::CastBegin:
-      {
-        CastBegin_Event *begin = (CastBegin_Event *)ev.event;
-        std::string msg;
-        msg += client.chars[begin->caster].name;
-        msg += " begins casting ";
-        msg += begin->spell;
-        set_message("CastBegin:", msg, 10);
-        break;
-      }
-      case Warg_Event_Type::CastInterrupt:
-      {
-        CastInterrupt_Event *interrupt = (CastInterrupt_Event *)ev.event;
-        std::string msg;
-        msg += client.chars[interrupt->caster].name;
-        msg += "'s casting was interrupted";
-        set_message("CastInterrupt:", msg, 10);
-        break;
-      }
-      case Warg_Event_Type::CharHP:
-      {
-        CharHP_Event *chhp = (CharHP_Event *)ev.event;
-        client.chars[chhp->character].alive = chhp->hp > 0;
-
-        std::string msg;
-        msg += client.chars[chhp->character].name;
-        msg += "'s HP is ";
-        msg += std::to_string(chhp->hp);
-        set_message("", msg, 10);
-        break;
-      }
-      case Warg_Event_Type::BuffAppl:
-      {
-        BuffAppl_Event *appl = (BuffAppl_Event *)ev.event;
-        std::string msg;
-        msg += appl->buff;
-        msg += " applied to ";
-        msg += client.chars[appl->character].name;
-        set_message("ApplyBuff:", msg, 10);
-        break;
-      }
-      case Warg_Event_Type::ObjectLaunch:
-      {
-        ObjectLaunch_Event *launch = (ObjectLaunch_Event *)ev.event;
-
-        Material_Descriptor material;
-        material.albedo = "crate_diffuse.png";
-        material.emissive = "test_emissive.png";
-        material.normal = "test_normal.png";
-        material.roughness = "crate_roughness.png";
-        material.vertex_shader = "vertex_shader.vert";
-        material.frag_shader = "world_origin_distance.frag";
-
-        SpellObjectInst obji;
-        obji.def = client.sdb->objects[launch->object];
-        obji.caster = launch->caster;
-        obji.target = launch->target;
-        obji.pos = launch->pos;
-        obji.mesh =
-            scene.add_primitive_mesh(cube, "spell_object_cube", material);
-        obji.mesh->scale = vec3(0.4f);
-        client.spell_objs.push_back(obji);
-
-        std::string msg;
-        msg += (0 <= launch->caster && launch->caster < client.chars.size())
-                   ? client.chars[launch->caster].name
-                   : "unknown character";
-        msg += " launched ";
-        msg += client.sdb->objects[launch->object].name;
-        msg += " at ";
-        msg += (0 <= launch->target && launch->target < client.chars.size())
-                   ? client.chars[launch->target].name
-                   : "unknown character";
-        set_message("ObjectLaunch:", msg, 10);
-        break;
-      }
-      default:
-        ASSERT(false);
-        break;
-    }
-    free_warg_event(ev);
-    in.pop();
-  }
-}
-
 void Warg_State::update()
 {
-  server.update(dt);
-  process_client_events();
-
-  for (int i = 0; i < client.chars.size(); i++)
-  {
-    Character *c = &client.chars[i];
-
-    if (!c->alive)
-      c->pos = {-1000, -1000, 0};
-
-    c->mesh->position = c->pos;
-    c->mesh->scale = vec3(1.0f);
-    c->mesh->orientation =
-        angleAxis((float32)atan2(c->dir.y, c->dir.x), vec3(0.f, 0.f, 1.f));
-  }
-
-  for (auto i = client.spell_objs.begin(); i != client.spell_objs.end();)
-  {
-    auto &o = *i;
-    float32 d = length(client.chars[o.target].pos - o.pos);
-    if (d < 0.5)
-    {
-      set_message("object hit",
-          client.chars[o.caster].name + "'s " + o.def.name + " hit " +
-              client.chars[o.target].name,
-          3.0f);
-
-      i = client.spell_objs.erase(i);
-    }
-    else
-    {
-      vec3 a = normalize(client.chars[o.target].pos - o.pos);
-      a.x *= o.def.speed * dt;
-      a.y *= o.def.speed * dt;
-      a.z *= o.def.speed * dt;
-      o.pos += a;
-
-      o.mesh->position = o.pos;
-
-      ++i;
-    }
-  }
+  server->update(dt);
+  client->update(dt);
 }
 
 Map make_nagrand()

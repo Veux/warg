@@ -13,6 +13,7 @@ Warg_Event char_spawn_request_event(const char *name, int team)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CharSpawnRequest;
   ev.event = spawn;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -29,6 +30,7 @@ Warg_Event char_spawn_event(const char *name, int team)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CharSpawn;
   ev.event = spawn;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -43,6 +45,7 @@ Warg_Event move_event(int ch, vec3 v)
   Warg_Event ev;
   ev.type = Warg_Event_Type::Move;
   ev.event = mv;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -56,6 +59,7 @@ Warg_Event char_pos_event(int ch, vec3 pos)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CharPos;
   ev.event = posev;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -73,6 +77,7 @@ Warg_Event cast_event(int caster, int target, const char *spell)
   Warg_Event ev;
   ev.type = Warg_Event_Type::Cast;
   ev.event = cast;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -91,6 +96,7 @@ Warg_Event cast_error_event(int caster, int target, const char *spell, int err)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CastError;
   ev.event = errev;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -108,6 +114,7 @@ Warg_Event cast_begin_event(int caster, int target, const char *spell)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CastBegin;
   ev.event = begin;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -122,6 +129,7 @@ Warg_Event cast_interrupt_event(int caster)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CastInterrupt;
   ev.event = interrupt;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -135,6 +143,7 @@ Warg_Event char_hp_event(int character, int hp)
   Warg_Event ev;
   ev.type = Warg_Event_Type::CharHP;
   ev.event = chhp;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -151,6 +160,7 @@ Warg_Event buff_appl_event(int character, const char *buff)
   Warg_Event ev;
   ev.type = Warg_Event_Type::BuffAppl;
   ev.event = appl;
+  ev.t = get_real_time();
 
   return ev;
 }
@@ -166,6 +176,7 @@ Warg_Event object_launch_event(int object, int caster, int target, vec3 pos)
   Warg_Event ev;
   ev.type = Warg_Event_Type::ObjectLaunch;
   ev.event = launch;
+  ev.t = get_real_time();
 
   return ev;
 }

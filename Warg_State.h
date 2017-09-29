@@ -57,11 +57,9 @@ struct Warg_State : protected State
   void update();
   void handle_input(
       State **current_state, std::vector<State *> available_states);
-  void add_char(int team, const char *name);
-  void process_client_events();
 
-  Warg_Client client;
-  Warg_Server server;
+  std::unique_ptr<Warg_Client> client;
+  std::unique_ptr<Warg_Server> server;
   std::queue<Warg_Event> in, out;
   std::vector<Node_Ptr> map_meshes;
 };

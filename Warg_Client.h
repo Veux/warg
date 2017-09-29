@@ -13,16 +13,11 @@ struct Character;
 
 struct Warg_Client
 {
-  Warg_Client();
+  Warg_Client(Scene_Graph *scene, queue<Warg_Event> *in);
   void update(float32 dt);
-  void set_in_queue(std::queue<Warg_Event> *queue);
-
-  queue<Warg_Event> *in;
 
   Map map;
-  unique_ptr<SpellDB> sdb;
   vector<Character> chars;
-  vector<SpellObjectInst> spell_objs;
   int pc = -1;
 
 private:
@@ -37,4 +32,9 @@ private:
   void process_event(ObjectLaunch_Event *ev);
 
   void add_char(int team, const char *name);
+
+  Scene_Graph *scene;
+  queue<Warg_Event> *in;
+  unique_ptr<SpellDB> sdb;
+  vector<SpellObjectInst> spell_objs;
 };

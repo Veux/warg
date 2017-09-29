@@ -47,6 +47,10 @@ void Warg_Server::process_events()
   while (!eq.empty())
   {
     Warg_Event ev = eq.front();
+
+    if (get_real_time() - ev.t < SIM_LATENCY / 2000.0f)
+      return;
+
     ASSERT(ev.event);
     switch (ev.type)
     {

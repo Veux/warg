@@ -1,5 +1,7 @@
 #pragma once
 
+#define SIM_LATENCY 0
+
 #include "Spell.h"
 
 struct CharSpawnRequest_Event
@@ -98,6 +100,7 @@ struct Warg_Event
 {
   Warg_Event_Type type;
   void *event;
+  float64 t;
 };
 
 Warg_Event char_spawn_request_event(const char *name, int team);
