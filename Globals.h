@@ -125,7 +125,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
   if (!t)
   {
     set_message("",
-                "\nAssertion failed in:" + std::string(file) +
+                "Assertion failed in:" + std::string(file) +
                     "\non line:" + std::to_string(line),
                 1.0);
     std::cout << get_messages();

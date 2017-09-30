@@ -95,18 +95,16 @@ struct Scene_Graph
            const mat4 *import_basis = nullptr);
 
   // traverse the entire graph, computing the final transformation matrices
-  // for each entity, and return all entities flatted into a vector
+  // for each entity, and return all entities flattened into a vector
   // async currently performance bugged on w7
   std::vector<Render_Entity> visit_nodes_async_start();
 
   // traverse the entire graph, computing the final transformation matrices
-  // for each entity, and return all entities flatted into a vector
+  // for each entity, and return all entities flattened into a vector
   std::vector<Render_Entity> visit_nodes_st_start();
 
-  // renderer assumes all active lights are lights [0,light_count)
   Light_Array lights;
 
-  // root node for entire scene graph
   std::shared_ptr<Scene_Graph_Node> root;
 
 private:
