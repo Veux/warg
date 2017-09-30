@@ -30,6 +30,7 @@ private:
   void process_event(CharSpawnRequest_Event *req);
   void process_event(Dir_Event *dir);
   void process_event(Move_Event *mv);
+  void process_event(Jump_Event *jump);
   void process_event(Cast_Event *cast);
 
   void add_char(int team, const char *name);
@@ -38,6 +39,7 @@ private:
   void try_cast_spell(int caster, int target, const char *spell);
   void cast_spell(int caster, int target, Spell *spell);
   void begin_cast(int caster_, int target_, Spell *spell);
+  void interrupt_cast(int caster_);
   void update_cast(int caster_, float32 dt);
   void release_spell(int caster_, int target_, Spell *spell);
   void invoke_spell_effect(SpellEffectInst &effect);
@@ -50,7 +52,8 @@ private:
   void invoke_spell_effect_object_launch(SpellEffectInst &effect);
   void update_buffs(int character, float32 dt);
   void update_target(int ch);
-  void update_mana(int ch);
+  void update_hp(int ch, float32 dt);
+  void update_mana(int ch, float32 dt);
   void update_gcd(int ch, float32 dt);
   void update_cds(int ch, float32 dt);
   bool update_spell_object(SpellObjectInst *so);

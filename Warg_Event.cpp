@@ -65,6 +65,20 @@ Warg_Event move_event(int ch, Move_Status m)
   return ev;
 }
 
+Warg_Event jump_event(int ch)
+{
+  Jump_Event *jump;
+  jump = (Jump_Event *)malloc(sizeof *jump);
+  jump->character = ch;
+
+  Warg_Event ev;
+  ev.type = Warg_Event_Type::Jump;
+  ev.event = jump;
+  ev.t = get_real_time();
+
+  return ev;
+}
+
 Warg_Event char_pos_event(int ch, vec3 dir, vec3 pos)
 {
   CharPos_Event *posev = (CharPos_Event *)malloc(sizeof *posev);
@@ -205,6 +219,8 @@ void free_warg_event(Dir_Event *dir) {}
 
 void free_warg_event(Move_Event *ev) {}
 
+void free_warg_event(Jump_Event *jump) {}
+
 void free_warg_event(CharPos_Event *ev) {}
 
 void free_warg_event(Cast_Event *ev) { free(ev->spell); }
@@ -235,6 +251,9 @@ void free_warg_event(Warg_Event ev)
       break;
     case Warg_Event_Type::Dir:
       free_warg_event((Dir_Event *)ev.event);
+      break;
+    case Warg_Event_Type::Jump:
+      free_warg_event((Jump_Event *)ev.event);
       break;
     case Warg_Event_Type::Move:
       free_warg_event((Move_Event *)ev.event);

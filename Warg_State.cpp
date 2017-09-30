@@ -89,6 +89,10 @@ void Warg_State::handle_input(
         running = false;
         return;
       }
+      if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
+      {
+        out.push(jump_event(client->pc));
+      }
     }
     else if (_e.type == SDL_KEYUP)
     {
@@ -347,7 +351,7 @@ void Warg_State::handle_input(
       m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
-	out.push(move_event(client->pc, (Move_Status)m));
+    out.push(move_event(client->pc, (Move_Status)m));
 
     cam.pos = client->chars[client->pc].pos +
               vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;

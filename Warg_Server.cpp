@@ -16,11 +16,14 @@ void Warg_Server::update(float32 dt)
   for (int ch = 0; ch < chars.size(); ch++)
   {
     move_char(ch, dt);
-    update_cast(ch, dt);
     update_buffs(ch, dt);
     apply_char_mods(ch);
+    update_gcd(ch, dt);
+    update_cds(ch, dt);
+    update_cast(ch, dt);
     update_target(ch);
-    update_mana(ch);
+    update_hp(ch, dt);
+    update_mana(ch, dt);
 
     push(char_pos_event(ch, chars[ch].dir, chars[ch].pos));
   }
@@ -64,6 +67,9 @@ void Warg_Server::process_events()
       case Warg_Event_Type::Move:
         process_event((Move_Event *)ev.event);
         break;
+      case Warg_Event_Type::Jump:
+        process_event((Jump_Event *)ev.event);
+        break;
       case Warg_Event_Type::Cast:
         process_event((Cast_Event *)ev.event);
         break;
@@ -80,7 +86,7 @@ void Warg_Server::update_gcd(int ch, float32 dt)
   ASSERT(0 <= ch && ch < chars.size());
   Character *c = &chars[ch];
 
-  c->gcd -= dt * c->e_stats.cast_speed;
+  c->gcd -= dt;
   if (c->gcd < 0)
     c->gcd = 0;
 }
@@ -150,8 +156,22 @@ void Warg_Server::process_event(Dir_Event *dir)
 void Warg_Server::process_event(Move_Event *mv)
 {
   ASSERT(mv);
+  ASSERT(0 <= mv->character && mv->character < chars.size());
 
   chars[mv->character].move_status = mv->m;
+}
+
+void Warg_Server::process_event(Jump_Event *jump)
+{
+  ASSERT(jump);
+  ASSERT(0 <= jump->character && jump->character < chars.size());
+  Character *c = &chars[jump->character];
+
+  if (c->airborne)
+    return;
+
+  c->vel.z += 3.4;
+  c->airborne = true;
 }
 
 void Warg_Server::process_event(Cast_Event *cast)
@@ -176,43 +196,63 @@ void Warg_Server::move_char(int ci, float32 dt)
   Character *c = &chars[ci];
   ASSERT(c);
 
-  if (!c->move_status)
-	  return;
-
   if (c->casting)
   {
-    c->casting = false;
-    c->cast_progress = 0;
-    push(cast_interrupt_event(ci));
+    interrupt_cast(ci);
   }
 
-  vec3 v;
-  if (c->move_status & Move_Status::Forwards)
-    v += vec3(c->dir.x, c->dir.y, 0);
-  else if (c->move_status & Move_Status::Backwards)
-    v += -vec3(c->dir.x, c->dir.y, 0);
-  if (c->move_status & Move_Status::Left)
-  {
-    mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
-    vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
-    v += vec3(r * v_);
-  }
-  else if (c->move_status & Move_Status::Right)
-  {
-    mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
-    vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
-    v += vec3(r * v_);
-  }
-  v = normalize(v);
+  float32 new_z = c->pos.z + c->vel.z * dt;
 
-  vec3 new_pos = c->pos + c->e_stats.speed * v * dt;
+  if (new_z < 0.5)
+  {
+    new_z = 0.5;
+    c->airborne = false;
+    c->vel.z = 0;
+  }
+
+  if (c->airborne)
+    c->vel.z -= 9.81 * dt;
+
+  if (!c->airborne)
+  {
+    vec3 v = vec3(0);
+    if (c->move_status & Move_Status::Forwards)
+      v += vec3(c->dir.x, c->dir.y, 0);
+    else if (c->move_status & Move_Status::Backwards)
+      v += -vec3(c->dir.x, c->dir.y, 0);
+    if (c->move_status & Move_Status::Left)
+    {
+      mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
+      vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
+      v += vec3(r * v_);
+    }
+    else if (c->move_status & Move_Status::Right)
+    {
+      mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
+      vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
+      v += vec3(r * v_);
+    }
+    if (c->move_status)
+      v = normalize(v);
+    c->vel.x = v.x;
+    c->vel.y = v.y;
+  }
+
+  vec3 new_pos = c->pos + c->e_stats.speed * c->vel * dt;
+  new_pos.z = new_z;
 
   for (auto &wall : map.walls)
     if (intersects(new_pos, c->body, wall))
       if (!intersects(vec3(new_pos.x, c->pos.y, new_pos.z), c->body, wall))
+      {
         new_pos.y = c->pos.y;
+        c->vel.y = 0;
+      }
       else if (!intersects(vec3(c->pos.x, new_pos.y, c->pos.z), c->body, wall))
+      {
         new_pos.x = c->pos.x;
+        c->vel.x = 0;
+      }
       else
         new_pos = c->pos;
 
@@ -261,8 +301,21 @@ void Warg_Server::begin_cast(int caster_, int target_, Spell *spell)
   caster->casting_spell = spell;
   caster->cast_progress = 0;
   caster->cast_target = target_;
+  caster->gcd = caster->e_stats.gcd;
 
   push(cast_begin_event(caster_, target_, spell->def->name.c_str()));
+}
+
+void Warg_Server::interrupt_cast(int ci)
+{
+  ASSERT(0 <= ci && ci < chars.size());
+  Character *c = &chars[ci];
+
+  c->casting = false;
+  c->cast_progress = 0;
+  c->casting_spell = nullptr;
+  c->gcd = 0;
+  push(cast_interrupt_event(ci));
 }
 
 void Warg_Server::update_cast(int caster_, float32 dt)
@@ -343,6 +396,10 @@ void Warg_Server::release_spell(int caster_, int target_, Spell *spell)
 
     invoke_spell_effect(i);
   }
+
+  if (!spell->def->cast_time)
+    caster->gcd = caster->e_stats.gcd;
+  spell->cd_remaining = spell->def->cooldown;
 }
 
 void Warg_Server::invoke_spell_effect(SpellEffectInst &effect)
@@ -560,13 +617,26 @@ void Warg_Server::update_target(int ch)
     c->target = -1;
 }
 
-void Warg_Server::update_mana(int ch)
+void Warg_Server::update_mana(int ch, float32 dt)
 {
   ASSERT(0 <= ch && ch < chars.size());
   Character *c = &chars[ch];
 
+  c->mana += c->e_stats.mana_regen * dt;
+
   if (c->mana > c->mana_max)
     c->mana_max = c->mana_max;
+}
+
+void Warg_Server::update_hp(int ch, float32 dt)
+{
+  ASSERT(0 <= ch && ch < chars.size());
+  Character *c = &chars[ch];
+
+  c->hp += c->e_stats.hp_regen * dt;
+
+  if (c->hp > c->hp_max)
+    c->hp_max = c->hp_max;
 }
 
 void Warg_Server::apply_char_mods(int ch)
@@ -621,7 +691,7 @@ void Warg_Server::add_char(int team, const char *name)
 
   CharStats s;
   s.gcd = 1.5;
-  s.speed = 3.0;
+  s.speed = 4.0;
   s.cast_speed = 1;
   s.hp_regen = 2;
   s.mana_regen = 10;

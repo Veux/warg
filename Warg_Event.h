@@ -37,6 +37,11 @@ struct Move_Event
   Move_Status m;
 };
 
+struct Jump_Event
+{
+  int character;
+};
+
 struct CharPos_Event
 {
   int character;
@@ -102,6 +107,7 @@ enum class Warg_Event_Type
   CharSpawn,
   Dir,
   Move,
+  Jump,
   CharPos,
   Cast,
   CastError,
@@ -124,6 +130,7 @@ Warg_Event char_spawn_request_event(const char *name, int team);
 Warg_Event char_spawn_event(const char *name, int team);
 Warg_Event dir_event(int ch, vec3 dir);
 Warg_Event move_event(int ch, Move_Status m);
+Warg_Event jump_event(int ch);
 Warg_Event char_pos_event(int ch, vec3 dir, vec3 pos);
 Warg_Event cast_event(int caster, int target, const char *spell);
 Warg_Event cast_error_event(int caster, int target, const char *spell, int err);

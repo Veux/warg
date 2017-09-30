@@ -330,7 +330,7 @@ std::unique_ptr<SpellDB> make_spell_db()
   frostbolt_.range = 30;
   frostbolt_.targets = SpellTargets::Hostile;
   frostbolt_.cooldown = 0;
-  frostbolt_.cast_time = 2;
+  frostbolt_.cast_time = 0;
   frostbolt_.effects.push_back(fb_object_launch);
   db->spells.push_back(frostbolt_);
 
