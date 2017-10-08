@@ -238,23 +238,45 @@ void Warg_Server::move_char(int ci, float32 dt)
     c->vel.y = v.y;
   }
 
+  auto mb = [&](vec3 pos) {
+    Barbell b;
+    float32 h = c->body.h;
+    b.r = h * 0.2;
+    b.pq.p = vec3(pos.x, pos.y, pos.z - h * 0.3);
+    b.pq.q = vec3(pos.x, pos.y, pos.z + h * 0.3);
+    return b;
+  };
+
   vec3 new_pos = c->pos + c->e_stats.speed * c->vel * dt;
   new_pos.z = new_z;
 
-  for (auto &wall : map.walls)
-    if (intersects(new_pos, c->body, wall))
-      if (!intersects(vec3(new_pos.x, c->pos.y, new_pos.z), c->body, wall))
+  auto centroid = [](Triangle t) {
+	  return vec3((t.a.x + t.b.x + t.c.x) / 3, (t.a.y + t.b.y + t.c.y) / 3,
+				  (t.a.z + t.b.z + t.c.z) / 3);
+  };
+  auto orient3d = [](
+      vec3 p, Triangle t) {
+	  return dot(t.a - p, cross(t.b - p, t.c - p));
+  };
+
+  for (auto &s : map.surfaces)
+  {
+    if (orient3d(centroid(s) - c->vel, s) > 0)
+      continue;
+    if (intersects(mb(new_pos), s))
+      if (!intersects(mb(vec3(new_pos.x, c->pos.y, new_pos.z)), s))
       {
         new_pos.y = c->pos.y;
         c->vel.y = 0;
       }
-      else if (!intersects(vec3(c->pos.x, new_pos.y, c->pos.z), c->body, wall))
+      else if (!intersects(mb(vec3(c->pos.x, new_pos.y, c->pos.z)), s))
       {
         new_pos.x = c->pos.x;
         c->vel.x = 0;
       }
       else
         new_pos = c->pos;
+  }
 
   c->pos = new_pos;
 }

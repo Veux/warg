@@ -10,7 +10,6 @@ using std::queue;
 using std::unique_ptr;
 
 struct Character;
-struct Wall;
 
 struct Warg_Connection
 {

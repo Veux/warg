@@ -34,14 +34,14 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   ground_mesh->scale = client->map.ground_dim;
   map_meshes.push_back(ground_mesh);
 
-  for (auto &wall : client->map.walls)
+  for (auto &s : client->map.surfaces)
   {
     Mesh_Data data;
     vec3 a, b, c, d;
-    a = wall.p1;
-    b = vec3(wall.p2.x, wall.p2.y, 0);
-    c = vec3(wall.p2.x, wall.p2.y, wall.h);
-    d = vec3(wall.p1.x, wall.p1.y, wall.h);
+    a = s.a;
+    b = s.b;
+    c = s.b;
+    d = s.c;
 
     add_quad(a, b, c, d, data);
     auto mesh = scene.add_mesh(data, material, "some wall");
@@ -367,39 +367,58 @@ void Warg_State::update()
   client->update(dt);
 }
 
+void add_wall(std::vector<Triangle> &surfaces, Wall wall) {
+	Triangle t1, t2;
+
+	t1.a = wall.p1;
+	t1.b = vec3(wall.p2.x, wall.p2.y, t1.a.z);
+	t1.c = vec3(wall.p2.x, wall.p2.y, wall.h);
+	surfaces.push_back(t1);
+
+	t2.a = wall.p1;
+	t2.b = vec3(wall.p2.x, wall.p2.y, wall.h);
+	t2.c = vec3(wall.p1.x, wall.p1.y, wall.h);
+	surfaces.push_back(t2);
+}
+
 Map make_nagrand()
 {
   Map nagrand;
 
-  nagrand.walls.push_back({{0, 8, 0}, {12, 8}, 10});
-  nagrand.walls.push_back({{12, 0, 0}, {12, 8}, 10});
-  nagrand.walls.push_back({{12, 0, 0}, {20, 0}, 10});
-  nagrand.walls.push_back({{20, 0, 0}, {20, 8}, 10});
-  nagrand.walls.push_back({{20, 8, 0}, {32, 8}, 10});
-  nagrand.walls.push_back({{28, 8, 0}, {32, 12}, 10});
-  nagrand.walls.push_back({{32, 8, 0}, {32, 36}, 10});
-  nagrand.walls.push_back({{32, 36, 0}, {20, 36}, 10});
-  nagrand.walls.push_back({{20, 36, 0}, {20, 44}, 10});
-  nagrand.walls.push_back({{20, 44, 0}, {12, 44}, 10});
-  nagrand.walls.push_back({{12, 44, 0}, {12, 36}, 10});
-  nagrand.walls.push_back({{12, 36, 0}, {0, 36}, 10});
-  nagrand.walls.push_back({{0, 36, 0}, {0, 8}, 10});
-  nagrand.walls.push_back({{4, 28, 0}, {4, 32}, 10});
-  nagrand.walls.push_back({{4, 32, 0}, {8, 32}, 10});
-  nagrand.walls.push_back({{8, 32, 0}, {8, 28}, 10});
-  nagrand.walls.push_back({{8, 28, 0}, {4, 28}, 10});
-  nagrand.walls.push_back({{24, 28, 0}, {24, 32}, 10});
-  nagrand.walls.push_back({{24, 32, 0}, {28, 32}, 10});
-  nagrand.walls.push_back({{28, 32, 0}, {28, 28}, 10});
-  nagrand.walls.push_back({{28, 28, 0}, {24, 28}, 10});
-  nagrand.walls.push_back({{24, 16, 0}, {28, 16}, 10});
-  nagrand.walls.push_back({{28, 16, 0}, {28, 12}, 10});
-  nagrand.walls.push_back({{28, 12, 0}, {24, 12}, 10});
-  nagrand.walls.push_back({{24, 12, 0}, {24, 16}, 10});
-  nagrand.walls.push_back({{8, 12, 0}, {8, 16}, 10});
-  nagrand.walls.push_back({{8, 16, 0}, {4, 16}, 10});
-  nagrand.walls.push_back({{4, 16, 0}, {4, 12}, 10});
-  nagrand.walls.push_back({{4, 12, 0}, {8, 12}, 10});
+  nagrand.surfaces.push_back({{13, 8, 0}, {15, 8, 0}, {15, 8, 2}});
+
+  std::vector<Wall> walls;
+  walls.push_back({{12, 8, 0}, {0, 8}, 10});
+  walls.push_back({{12, 0, 0}, {12, 8}, 10});
+  walls.push_back({{20, 0, 0}, {12, 0}, 10});
+  walls.push_back({{20, 8, 0}, {20, 0}, 10});
+  walls.push_back({{32, 8, 0}, {20, 8}, 10});
+  walls.push_back({{32, 12, 0}, {28, 8}, 10});
+  walls.push_back({{32, 36, 0}, {32, 8}, 10});
+  walls.push_back({{20, 36, 0}, {32, 36}, 10});
+  walls.push_back({{20, 44, 0}, {20, 36}, 10});
+  walls.push_back({{12, 44, 0}, {20, 44}, 10});
+  walls.push_back({{12, 36, 0}, {12, 44}, 10});
+  walls.push_back({{0, 36, 0}, {12, 36}, 10});
+  walls.push_back({{0, 8, 0}, {0, 36}, 10});
+  walls.push_back({{4, 32, 0}, {4, 28}, 10});
+  walls.push_back({{8, 32, 0}, {4, 32}, 10});
+  walls.push_back({{8, 28, 0}, {8, 32}, 10});
+  walls.push_back({{4, 28, 0}, {8, 28}, 10});
+  walls.push_back({{24, 32, 0}, {24, 28}, 10});
+  walls.push_back({{28, 32, 0}, {24, 32}, 10});
+  walls.push_back({{28, 28, 0}, {28, 32}, 10});
+  walls.push_back({{24, 28, 0}, {28, 28}, 10});
+  walls.push_back({{28, 16, 0}, {24, 16}, 10});
+  walls.push_back({{28, 12, 0}, {28, 16}, 10});
+  walls.push_back({{24, 12, 0}, {28, 12}, 10});
+  walls.push_back({{24, 16, 0}, {24, 12}, 10});
+  walls.push_back({{8, 12, 0}, {8, 16}, 10});
+  walls.push_back({{8, 16, 0}, {4, 16}, 10});
+  walls.push_back({{4, 16, 0}, {4, 12}, 10});
+  walls.push_back({{4, 12, 0}, {8, 12}, 10});
+  for (auto &w : walls)
+	  add_wall(nagrand.surfaces, w);
 
   nagrand.ground_pos = vec3(16, 22, 0);
   nagrand.ground_dim = vec3(32, 44, 0.05);

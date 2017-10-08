@@ -15,9 +15,31 @@ struct Wall
   float32 h;
 };
 
+struct Triangle
+{
+  vec3 a, b, c;
+};
+
+struct Segment
+{
+  vec3 p, q;
+};
+
+struct Sphere
+{
+  vec3 c;
+  float32 r;
+};
+
+struct Barbell
+{
+	Segment pq;
+	float32 r;
+};
+
 struct Map
 {
-  std::vector<Wall> walls;
+  std::vector<Triangle> surfaces;
   vec3 ground_pos;
   vec3 ground_dir;
   vec3 ground_dim;
@@ -25,6 +47,7 @@ struct Map
   vec3 spawn_dir[2];
 };
 
-bool intersects(vec3 pa, vec3 da, vec3 pb, vec3 db);
-bool intersects(vec3 pa, Cylinder ca, vec3 pb, Cylinder cb);
-bool intersects(vec3 pa, Cylinder ca, Wall w);
+bool intersects(Segment pq, Triangle abc, vec3 &uvw, float32 &t);
+bool intersects(Sphere s, Triangle abc, vec3 &p);
+bool intersects(Barbell b, Triangle abc);
+vec3 closest_point(vec3 p, Triangle abc);
