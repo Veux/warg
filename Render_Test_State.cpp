@@ -22,10 +22,11 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(30);
+  material.casts_shadows = false;
   ground = scene.add_primitive_mesh(plane, "test_entity_plane", material);
   ground->position = {0.0f, 0.0f, 0.0f};
   ground->scale = {40.0f, 40.0f, 1.0f};
-
+  material.casts_shadows = true;
   material.uv_scale = vec2(4);
   sphere = scene.add_aiscene("sphere.obj", nullptr, &material);
 
@@ -330,8 +331,10 @@ void Render_Test_State::update()
   lights[1].color = 320.f * vec3(0.8, 1.0, 0.8);
   lights[1].cone_angle = 0.11; //+ 0.14*sin(current_time);
   lights[1].ambient = 0.01;
+  lights[1].casts_shadows = true;
   cone_light->position = lights[1].position;
   cone_light->scale = vec3(0.2);
+  cone_light->visible = false;
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);

@@ -5,11 +5,9 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
-
 #include "Mesh_Loader.h"
 #include "Render.h"
 #include "Shader.h"
@@ -255,7 +253,7 @@ enum Texture_Location
   normal,
   emissive,
   roughness,
-  s1,s2,s3,s4,s5,s6,s7,s8,s9,s10 //shadow maps
+  s0,s1,s2,s3,s4,s5,s6,s7,s8,s9 //shadow maps
 };
 
 Texture::Texture() { file_path = ERROR_TEXTURE_PATH; }
@@ -671,7 +669,7 @@ void Material::bind()
   else
     glDisable(GL_CULL_FACE);
 
-  albedo.bind("albedo", 0, shader);
+  albedo.bind("albedo", Texture_Location::albedo, shader);
   // specular_color.bind("specular", 1, shader);
   normal.bind("normal", 2, shader);
   emissive.bind("emissive", 3, shader);
@@ -762,15 +760,6 @@ void Render::set_uniform_lights(Shader &shader)
                        lights.lights[i].cone_angle);
     shader.set_uniform((s("lights[", i, "].type")).c_str(),
                        (int32)lights.lights[i].type);
-
-    ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
-    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
-    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
-    ASSERT(MAX_LIGHTS == 10);//reminder to change the Texture_Location::s1...sn enums
-    glActiveTexture(GL_TEXTURE0+(GLuint)Texture_Location::s1 + i);
-
-    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), spotlight_shadow_maps[i].projection_camera);
-    shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(), spotlight_shadow_maps[i].enabled);
   }
   shader.set_uniform("number_of_lights", (int32)lights.light_count);
   shader.set_uniform("additional_ambient", lights.additional_ambient);
@@ -781,10 +770,27 @@ void Render::set_uniform_shadowmaps(Shader& shader)
   for (int i = 0; i < MAX_LIGHTS; ++i)
   {
     ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
-    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
-    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
     ASSERT(MAX_LIGHTS == 10);//reminder to change the Texture_Location::s1...sn enums
-    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s1 + i);
+
+    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
+
+    if (shadow_map->enabled)
+    {//sponge
+      GLuint u = glGetUniformLocation(shader.program->program, "test_shadow_map");
+      glUniform1i(u, 5);
+      glActiveTexture(GL_TEXTURE0 + 5);
+      glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
+    }
+
+
+    string name = s("shadow_maps[", i, "]");
+    GLuint u = glGetUniformLocation(shader.program->program, name.c_str());
+    if (u == -1)
+      continue;
+
+    glUniform1i(u, (GLuint)Texture_Location::s0 + i+1);//sponge +1
+    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i + 1);//sponge +1
+    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
     shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), spotlight_shadow_maps[i].projection_camera);
     shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(), spotlight_shadow_maps[i].enabled);
@@ -808,8 +814,12 @@ void Render::build_shadow_maps()
       continue;
 
     shadow_map->enabled = true;
-
-    glEnable(GL_CULL_FACE);
+    if (shadow_map->size != shadow_map_size)
+    {
+      shadow_map->load(shadow_map_size);
+    }
+    glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
+    glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
@@ -819,9 +829,8 @@ void Render::build_shadow_maps()
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    const vec3 at = light->position + light->direction;
-    const mat4 camera = glm::lookAt(light->position, at, vec3(0, 0, 1));
-    const mat4 projection = glm::perspective(vfov, 1.0f, 0.1f, 1000.f);
+    const mat4 camera = glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
+    const mat4 projection = glm::perspective(radians(90.f), 1.0f, 0.1f, 1000.f);
     shadow_map->projection_camera = projection*camera;
     for (Render_Entity &entity : render_entities)
     {
@@ -839,10 +848,18 @@ void Render::build_shadow_maps()
     }    
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glFinish();
 }
 
 void Render::opaque_pass(float32 time)
 {
+  glViewport(0, 0, size.x, size.y);
+  glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
+  glFramebufferTexture(GL_FRAMEBUFFER, DIFFUSE_TARGET, COLOR_TARGET_TEXTURE, 0);
+
+  glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);
   glCullFace(GL_BACK);
@@ -1018,19 +1035,18 @@ void Render::render(float64 state_time)
 
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;
-  glViewport(0, 0, size.x, size.y);
-  glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
-  glFramebufferTexture(GL_FRAMEBUFFER, DIFFUSE_TARGET, COLOR_TARGET_TEXTURE, 0);
 
-  glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+  set_message("FRAME_START", "");
+  set_message("BUILDING SHADOW MAPS START", "");
   build_shadow_maps();
+  set_message("OPAQUE PASS START", "");
   opaque_pass(time);
   //instance_pass(time);
   //translucent_pass(time);
 
   draw_calls_last_frame = render_entities.size();
+  set_message("COPYING TO SCREEN", "");
+
   mat4 o =
       ortho(0.0f, (float32)window_size.x, 0.0f, (float32)window_size.y, 0.1f,
             100.0f) *
@@ -1133,6 +1149,7 @@ void Render::render(float64 state_time)
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
+    set_message("FRAME END", "");
     glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
@@ -1467,7 +1484,7 @@ FBO_Handle::~FBO_Handle()
   glDeleteFramebuffers(1, &fbo);
 }
 
-Spotlight_Shadow_Map::Spotlight_Shadow_Map(ivec2 size)
+void Spotlight_Shadow_Map::load(ivec2 size)
 {
   const GLenum attachment = GL_COLOR_ATTACHMENT0;
   const GLenum targets[] = { attachment };
@@ -1475,27 +1492,36 @@ Spotlight_Shadow_Map::Spotlight_Shadow_Map(ivec2 size)
   //gen fbo
   glGenFramebuffers(1, &target.fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
-  glDrawBuffers(1, targets);
 
-  //gen actual depth buffer
-  //this might need to use a texture instead of renderbuffer so i can use GL_CLAMP?
-  glGenRenderbuffers(1, &depth.texture);
-  glBindRenderbuffer(GL_RENDERBUFFER, depth.texture);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth.texture);
 
   //gen target depth buffer
   glGenTextures(1, &color.texture);
   glBindTexture(GL_TEXTURE_2D, color.texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);//sponge gl::GL_CLAMP
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);//sponge gl::GL_CLAMP
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
     GL_UNSIGNED_BYTE, 0);
-  glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);  
-  glBindTexture(GL_TEXTURE_2D, 0);
+
+
+  glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);
+  glDrawBuffers(1, targets);
+  //gen actual depth buffer
+  //this might need to use a texture instead of renderbuffer so i can use GL_CLAMP?
+  glGenRenderbuffers(1, &depth.rbo);
+  glBindRenderbuffer(GL_RENDERBUFFER, depth.rbo);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth.rbo);
+  //glBindTexture(GL_TEXTURE_2D, 0);
 
   check_FBO_status();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  this->size = size;
+
+}
+
+RenderBuffer_Handle::~RenderBuffer_Handle()
+{
+  glDeleteRenderbuffers(1, &rbo);
 }

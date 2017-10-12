@@ -31,6 +31,11 @@ struct Texture_Handle
   GLuint texture = 0;
   time_t file_mod_t = 0;
 };
+struct RenderBuffer_Handle
+{
+  ~RenderBuffer_Handle();
+  GLuint rbo = 0;
+};
 struct FBO_Handle
 {
   ~FBO_Handle();
@@ -39,12 +44,13 @@ struct FBO_Handle
 struct Spotlight_Shadow_Map
 {
   Spotlight_Shadow_Map() {};
-  Spotlight_Shadow_Map(ivec2 size);
+  void load(ivec2 size);
   Texture_Handle color;
-  Texture_Handle depth;
+  RenderBuffer_Handle depth;
   FBO_Handle target;
   mat4 projection_camera;
   bool enabled = false;
+  ivec2 size = ivec2(0,0);
 };
 
 
@@ -235,6 +241,7 @@ private:
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
+  ivec2 shadow_map_size = ivec2(2048,2048);
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

@@ -5,7 +5,6 @@
 #include <assimp/scene.h>
 #include <assimp/types.h>
 #include <fstream>
-#include <glbinding/Binding.h>
 #include <glbinding/gl33core/gl.h>
 #include <glm/glm.hpp>
 #include <iostream>
@@ -75,11 +74,9 @@ std::string read_file(const char *path);
 Uint32 string_to_color(std::string color);
 Uint64 dankhash(float32 *data, uint32 size);
 
-void gl_before_check(const glbinding::FunctionCall &f);
-void gl_after_check(const glbinding::FunctionCall &f);
 
 void checkSDLError(int32 line = -1);
-
+void check_gl_error();
 
 // actual program time
 // don't use for game simulation
