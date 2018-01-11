@@ -774,22 +774,13 @@ void Render::set_uniform_shadowmaps(Shader& shader)
 
     Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
 
-    if (shadow_map->enabled)
-    {//sponge
-      GLuint u = glGetUniformLocation(shader.program->program, "test_shadow_map");
-      glUniform1i(u, 5);
-      glActiveTexture(GL_TEXTURE0 + 5);
-      glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
-    }
-
-
     string name = s("shadow_maps[", i, "]");
     GLuint u = glGetUniformLocation(shader.program->program, name.c_str());
-    if (u == -1)
+    if(u == -1)
       continue;
 
-    glUniform1i(u, (GLuint)Texture_Location::s0 + i+1);//sponge +1
-    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i + 1);//sponge +1
+    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
+    glUniform1i(u, (GLuint)Texture_Location::s0 + i);
     glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
     shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), spotlight_shadow_maps[i].projection_camera);

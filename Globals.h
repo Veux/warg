@@ -116,6 +116,7 @@ std::string get_messages();
 // since the last call to this function
 void push_log_to_disk();
 
+std::string get_message_log();
 template <typename T> void _errr(T t, const char *file, uint32 line)
 {
 #ifndef DISABLE_ASSERT
@@ -125,7 +126,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
                 "Assertion failed in:" + std::string(file) +
                     "\non line:" + std::to_string(line),
                 1.0);
-    std::cout << get_messages();
+    std::cout << get_message_log() << std::endl;
     push_log_to_disk();
     throw;
   }
