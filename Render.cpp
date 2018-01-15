@@ -775,6 +775,8 @@ void Render::set_uniform_lights(Shader &shader)
       shader.lights_cache[i].locations.shadow_map_transform =
           glGetUniformLocation(shader.program->program,
                                s("shadow_map_transform[", i, "]").c_str());
+      shader.lights_cache[i].locations.shadow_map = glGetUniformLocation(
+          shader.program->program, s("shadow_maps[", i, "]").c_str());
     }
     shader.light_count_location =
         glGetUniformLocation(shader.program->program, "number_of_lights");
@@ -829,13 +831,16 @@ void Render::set_uniform_lights(Shader &shader)
                   (int32)lights.lights[i].type);
     }
   }
-  if (shader.light_count != (int32)lights.light_count) {
-	  shader.light_count = (int32)lights.light_count;
-	  glUniform1i(shader.light_count_location, (int32)lights.light_count);
+  if (shader.light_count != (int32)lights.light_count)
+  {
+    shader.light_count = (int32)lights.light_count;
+    glUniform1i(shader.light_count_location, (int32)lights.light_count);
   }
-  if (shader.additional_ambient != lights.additional_ambient) {
-	  shader.additional_ambient = lights.additional_ambient;
-	  glUniform3fv(shader.additional_ambient_location, 1, &lights.additional_ambient[0]);
+  if (shader.additional_ambient != lights.additional_ambient)
+  {
+    shader.additional_ambient = lights.additional_ambient;
+    glUniform3fv(shader.additional_ambient_location, 1,
+                 &lights.additional_ambient[0]);
   }
 }
 
@@ -849,13 +854,9 @@ void Render::set_uniform_shadowmaps(Shader &shader)
 
     Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
-    string name = s("shadow_maps[", i, "]");
-    GLuint u = glGetUniformLocation(shader.program->program, name.c_str());
-    if (u == -1)
-      continue;
-
     glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
-    glUniform1i(u, (GLuint)Texture_Location::s0 + i);
+    glUniform1i(shader.lights_cache[i].locations.shadow_map,
+                (GLuint)Texture_Location::s0 + i);
     glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
     mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
@@ -1163,11 +1164,11 @@ void Render::render(float64 state_time)
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, 0);
-    //glFinish(); // intent is to time just the swap itself
+    // glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
-   // glFinish();
+    // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
@@ -1228,12 +1229,12 @@ void Render::render(float64 state_time)
                    GL_UNSIGNED_INT, (void *)0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    //glFinish(); // intent is to time just the swap itself
+    // glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
-   // glFinish();
+    // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
     glBindVertexArray(0);
