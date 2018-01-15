@@ -32,7 +32,7 @@ static GLuint load_shader(const std::string &vertex_path,
   glGetShaderiv(vert_shader, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<GLchar> vertShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(vert_shader, logLength, NULL, &vertShaderError[0]);
-  set_message("Vertex shader compilation result: ", &vertShaderError[0]);
+  set_message(s("Vertex shader ", vertex_path," compilation result: "), &vertShaderError[0]);
 
   set_message("Compiling fragment shader: ", fragment_path);
   set_message("Fragment Shader Source: \n", fs);
@@ -44,7 +44,7 @@ static GLuint load_shader(const std::string &vertex_path,
   glGetShaderiv(frag_shader, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<GLchar> fragShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(frag_shader, logLength, NULL, &fragShaderError[0]);
-  set_message("Fragment shader compilation result: ", &fragShaderError[0]);
+  set_message(s("Fragment shader ", fragment_path," compilation result: "), &fragShaderError[0]);
 
   set_message("Linking shaders", "");
   GLuint program = glCreateProgram();
@@ -57,7 +57,7 @@ static GLuint load_shader(const std::string &vertex_path,
   glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<char> err((logLength > 1) ? logLength : 1);
   glGetProgramInfoLog(program, logLength, NULL, &err[0]);
-  set_message("GL Shader linker output: ", &err[0]);
+  set_message(s("GL Shader linker output for: ", vertex_path, " ", fragment_path), &err[0]);
   glDeleteShader(vert_shader);
   glDeleteShader(frag_shader);
 

@@ -5,7 +5,6 @@
 #include <assimp/scene.h>
 #include <assimp/types.h>
 #include <fstream>
-#include <glbinding/Binding.h>
 #include <glbinding/gl33core/gl.h>
 #include <glm/glm.hpp>
 #include <iostream>
@@ -75,11 +74,9 @@ std::string read_file(const char *path);
 Uint32 string_to_color(std::string color);
 Uint64 dankhash(float32 *data, uint32 size);
 
-void gl_before_check(const glbinding::FunctionCall &f);
-void gl_after_check(const glbinding::FunctionCall &f);
 
 void checkSDLError(int32 line = -1);
-
+void check_gl_error();
 
 // actual program time
 // don't use for game simulation
@@ -119,16 +116,17 @@ std::string get_messages();
 // since the last call to this function
 void push_log_to_disk();
 
+std::string get_message_log();
 template <typename T> void _errr(T t, const char *file, uint32 line)
 {
 #ifndef DISABLE_ASSERT
   if (!t)
   {
     set_message("",
-                "\nAssertion failed in:" + std::string(file) +
+                "Assertion failed in:" + std::string(file) +
                     "\non line:" + std::to_string(line),
                 1.0);
-    std::cout << get_messages();
+    std::cout << get_message_log() << std::endl;
     push_log_to_disk();
     throw;
   }

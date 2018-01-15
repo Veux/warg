@@ -43,6 +43,7 @@ void State::prepare_renderer(double t)
   // Traverse graph nodes and submit to renderer for packing:
   auto render_entities = scene.visit_nodes_st_start();
   renderer.set_render_entities(&render_entities);
+  renderer.set_lights(scene.lights);
   renderer.clear_color = clear_color;
 }
 

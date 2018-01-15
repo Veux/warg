@@ -10,6 +10,47 @@
 #include <sstream>
 #include <stdlib.h>
 
+#include <glbinding/Binding.h>
+
+void gl_before_check(const glbinding::FunctionCall &f)
+{
+  std::string opengl_call = f.function->name();
+  opengl_call += '(';
+  for (size_t i = 0; i < f.parameters.size(); ++i)
+  {
+    opengl_call += f.parameters[i]->asString();
+    if (i < f.parameters.size() - 1)
+      opengl_call += ", ";
+  }
+  opengl_call += ")";
+
+  if (f.returnValue)
+    opengl_call += " Returned: " + f.returnValue->asString();
+
+  set_message("BEFORE OPENGL call: ", opengl_call);
+  check_gl_error();
+}
+void gl_after_check(const glbinding::FunctionCall &f)
+{
+  std::string opengl_call = f.function->name();
+  opengl_call += '(';
+  for (size_t i = 0; i < f.parameters.size(); ++i)
+  {
+    opengl_call += f.parameters[i]->asString();
+    if (i < f.parameters.size() - 1)
+      opengl_call += ", ";
+  }
+  opengl_call += ")";
+
+  if (f.returnValue)
+    opengl_call += " Returned: " + f.returnValue->asString();
+
+  set_message("", opengl_call);
+  check_gl_error();
+}
+
+
+
 int main(int argc, char *argv[])
 {
   SDL_ClearError();
@@ -66,10 +107,10 @@ int main(int argc, char *argv[])
   }
 
   glbinding::Binding::initialize();
-  // glbinding::setCallbackMaskExcept(glbinding::CallbackMask::After |
-  // glbinding::CallbackMask::ParametersAndReturnValue, { "glGetError", "glFlush"
-  // });  glbinding::setBeforeCallback(gl_before_check);
-  // glbinding::setAfterCallback(gl_after_check);
+  glbinding::setCallbackMaskExcept(glbinding::CallbackMask::After |
+  glbinding::CallbackMask::ParametersAndReturnValue, { "glGetError", "glFlush" });  
+  //glbinding::setBeforeCallback(gl_before_check);
+  //glbinding::setAfterCallback(gl_after_check);
 
   glClearColor(0, 0, 0, 1);
   checkSDLError(__LINE__);

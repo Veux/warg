@@ -224,9 +224,6 @@ void Scene_Graph::visit_nodes(const weak_ptr<Scene_Graph_Node> node_ptr,
   const mat4 I = entity->import_basis;
   const mat4 FINAL = STACK * I;
 
-  Light_Array affected_lights;
-  affected_lights = lights;
-  affected_lights.light_count = lights.light_count;
 
   const uint32 num_meshes = entity->model.size();
   for (uint32 i = 0; i < num_meshes; ++i)
@@ -235,7 +232,7 @@ void Scene_Graph::visit_nodes(const weak_ptr<Scene_Graph_Node> node_ptr,
     Material *material_ptr = &entity->model[i].second;
 
     if (entity->visible)
-      accumulator.emplace_back(mesh_ptr, material_ptr, affected_lights, FINAL);
+      accumulator.emplace_back(mesh_ptr, material_ptr, FINAL);
   }
   for (auto i = entity->unowned_children.begin();
        i != entity->unowned_children.end();)
@@ -273,11 +270,6 @@ void Scene_Graph::visit_nodes_locked_accumulator(
   const mat4 I = entity->import_basis;
   const mat4 FINAL = STACK * I;
 
-  // TODO optimize: only set lights that will have a noticable effect
-  Light_Array affected_lights;
-  affected_lights = lights;
-  affected_lights.light_count = lights.light_count;
-
   const int num_meshes = entity->model.size();
   for (int i = 0; i < num_meshes; ++i)
   {
@@ -287,7 +279,7 @@ void Scene_Graph::visit_nodes_locked_accumulator(
     { /*spin*/
     }
     if (entity->visible)
-      accumulator->emplace_back(mesh_ptr, material_ptr, affected_lights, FINAL);
+      accumulator->emplace_back(mesh_ptr, material_ptr, FINAL);
 
     lock->clear();
   }

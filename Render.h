@@ -31,10 +31,35 @@ struct Texture_Handle
   GLuint texture = 0;
   time_t file_mod_t = 0;
 };
+struct RenderBuffer_Handle
+{
+  ~RenderBuffer_Handle();
+  GLuint rbo = 0;
+};
+struct FBO_Handle
+{
+  ~FBO_Handle();
+  GLuint fbo = 0;
+};
+struct Spotlight_Shadow_Map
+{
+  Spotlight_Shadow_Map() {};
+  void load(ivec2 size);
+  Texture_Handle color;
+  RenderBuffer_Handle depth;
+  FBO_Handle target;
+  mat4 projection_camera;
+  bool enabled = false;
+  ivec2 size = ivec2(0,0);
+};
+
+
+
+
 struct Texture
 {
   Texture();
-  Texture(std::string path);
+  Texture(std::string path, bool premul = false);
 
 private:
   friend struct Render;
@@ -45,9 +70,7 @@ private:
   std::string file_path;
 
   GLenum storage_type = GL_RGBA;
-  uint8 alpha_override = 0;
   bool process_premultiply = false;
-  bool process_override_alpha = false;
 };
 struct Mesh_Handle
 {
@@ -96,6 +119,7 @@ struct Material_Descriptor
   uint8 albedo_alpha_override = 0;
   bool backface_culling = true;
   bool uses_transparency = false;
+  bool casts_shadows = true;
   // when adding new things here, be sure to add them in the
   // material constructor override section
 };
@@ -138,6 +162,8 @@ struct Light
   float cone_angle = 1.0f;
   Light_Type type;
   bool operator==(const Light &rhs) const;
+  bool casts_shadows = false;
+private:
 };
 
 struct Light_Array
@@ -153,22 +179,23 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
-  Render_Entity(Mesh *mesh, Material *material, Light_Array lights,
+  Render_Entity(Mesh *mesh, Material *material,
                 mat4 world_to_model);
-  Light_Array lights;
   mat4 transformation;
   Mesh *mesh;
   Material *material;
   std::string name;
   uint32 ID;
+  bool casts_shadows = true;
 };
+
+
 // Similar to Render_Entity, but rendered with instancing
 struct Render_Instance
 {
   Render_Instance() {}
   Mesh *mesh;
   Material *material;
-  Light_Array lights;
   std::vector<mat4> MVP_Matrices;
   std::vector<mat4> Model_Matrices;
 };
@@ -187,19 +214,22 @@ struct Render
   void set_vfov(float32 vfov); // vertical field of view in degrees
   SDL_Window *window;
   void set_render_entities(std::vector<Render_Entity> *entities);
+  void set_lights(Light_Array lights);
   float64 target_frame_time = 1.0 / 60.0;
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
 
 private:
+  Light_Array lights;
+  std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
   std::vector<Render_Entity> previous_render_entities;
   std::vector<Render_Entity> render_entities;
   std::vector<Render_Instance> render_instances;
-
   std::vector<Render_Entity> translucent_entities;
-  // std::vector<Render_Instance> translucent_instances;
-
+  void set_uniform_lights(Shader &shader);
+  void set_uniform_shadowmaps(Shader& shader);
+  void build_shadow_maps();
   void opaque_pass(float32 time);
   void instance_pass(float32 time);
   void translucent_pass(float32 time);
@@ -207,10 +237,11 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
-  float32 render_scale = 0.75f; // supersampling
+  float32 render_scale = 1.0f; 
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
+  ivec2 shadow_map_size = ivec2(4096, 4096);
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

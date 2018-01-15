@@ -22,10 +22,11 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(30);
+  material.casts_shadows = false;
   ground = scene.add_primitive_mesh(plane, "test_entity_plane", material);
   ground->position = {0.0f, 0.0f, 0.0f};
   ground->scale = {40.0f, 40.0f, 1.0f};
-
+  material.casts_shadows = true;
   material.uv_scale = vec2(4);
   sphere = scene.add_aiscene("sphere.obj", nullptr, &material);
 
@@ -36,12 +37,18 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(2);
+  material.albedo_alpha_override = 128;
+  material.uses_transparency = false;
 
   cube_star = scene.add_primitive_mesh(cube, "star", material);
   cube_planet = scene.add_primitive_mesh(cube, "planet", material);
   scene.set_parent(cube_planet, cube_star, false);
   cube_moon = scene.add_primitive_mesh(cube, "moon", material);
   scene.set_parent(cube_moon, cube_planet, false);
+
+
+  material.albedo_alpha_override = 0;
+  material.uses_transparency = false;
 
   cam.phi = .25;
   cam.theta = -1.5f * half_pi<float32>();
@@ -62,6 +69,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   tiger_mat.backface_culling = false;
   tiger = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
 
+  material.casts_shadows = false;
   material.albedo = "color(255,255,255,255)";
   material.emissive = "color(255,255,255,255)";
   cone_light = scene.add_aiscene("sphere.obj", &material);
@@ -323,8 +331,10 @@ void Render_Test_State::update()
   lights[1].color = 320.f * vec3(0.8, 1.0, 0.8);
   lights[1].cone_angle = 0.11; //+ 0.14*sin(current_time);
   lights[1].ambient = 0.01;
+  lights[1].casts_shadows = true;
   cone_light->position = lights[1].position;
   cone_light->scale = vec3(0.2);
+  cone_light->visible = false;
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);

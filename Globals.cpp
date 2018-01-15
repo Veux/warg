@@ -202,44 +202,44 @@ Uint64 dankhash(float32 *data, uint32 size)
   return h + acc;
 }
 
-void _check_gl_error(const char *file, uint32 line)
-{
-  set_message("Checking GL Error in file: ",
-              std::string(file) + " Line: " + std::to_string(line));
-  glFlush();
-  GLenum err = glGetError();
-  glFlush();
-  if (err != GL_NO_ERROR)
-  {
-    std::string error;
-    switch (err)
-    {
-      case GL_INVALID_OPERATION:
-        error = "INVALID_OPERATION";
-        break;
-      case GL_INVALID_ENUM:
-        error = "fileINVALID_ENUM";
-        break;
-      case GL_INVALID_VALUE:
-        error = "INVALID_VALUE";
-        break;
-      case GL_OUT_OF_MEMORY:
-        error = "OUT_OF_MEMORY";
-        break;
-      case GL_INVALID_FRAMEBUFFER_OPERATION:
-        error = "INVALID_FRAMEBUFFER_OPERATION";
-        break;
-    }
-    set_message(
-        "GL ERROR",
-        "GL_" + error + " - " + file + ":" + std::to_string(line) + "\n", 1.0);
-    std::cout << get_messages();
-    push_log_to_disk();
-    throw;
-  }
-  set_message("No GL Error found.", "");
-}
-void _check_gl_error()
+//void _check_gl_error(const char *file, uint32 line)
+//{
+//  set_message("Checking GL Error in file: ",
+//              std::string(file) + " Line: " + std::to_string(line));
+//  glFlush();
+//  GLenum err = glGetError();
+//  glFlush();
+//  if (err != GL_NO_ERROR)
+//  {
+//    std::string error;
+//    switch (err)
+//    {
+//      case GL_INVALID_OPERATION:
+//        error = "INVALID_OPERATION";
+//        break;
+//      case GL_INVALID_ENUM:
+//        error = "fileINVALID_ENUM";
+//        break;
+//      case GL_INVALID_VALUE:
+//        error = "INVALID_VALUE";
+//        break;
+//      case GL_OUT_OF_MEMORY:
+//        error = "OUT_OF_MEMORY";
+//        break;
+//      case GL_INVALID_FRAMEBUFFER_OPERATION:
+//        error = "INVALID_FRAMEBUFFER_OPERATION";
+//        break;
+//    }
+//    set_message(
+//        "GL ERROR",
+//        "GL_" + error + " - " + file + ":" + std::to_string(line) + "\n", 1.0);
+//    std::cout << get_messages();
+//    push_log_to_disk();
+//    throw;
+//  }
+//  set_message("No GL Error found.", "");
+//}
+void check_gl_error()
 {
   glFlush();
   GLenum err = glGetError();
@@ -302,7 +302,10 @@ struct Message
 };
 static std::vector<Message> messages;
 static std::string message_log = "";
-
+std::string get_message_log()
+{
+  return message_log;
+}
 void __set_message(std::string identifier, std::string message,
                   float64 msg_duration, const char *file, uint32 line)
 {
@@ -416,39 +419,3 @@ template <> std::string s<std::string>(std::string value) { return value; }
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
 #define check_gl_error() _check_gl_error()
-void gl_before_check(const glbinding::FunctionCall &f)
-{
-  std::string opengl_call = f.function->name();
-  opengl_call += '(';
-  for (size_t i = 0; i < f.parameters.size(); ++i)
-  {
-    opengl_call += f.parameters[i]->asString();
-    if (i < f.parameters.size() - 1)
-      opengl_call += ", ";
-  }
-  opengl_call += ")";
-
-  if (f.returnValue)
-    opengl_call += " Returned: " + f.returnValue->asString();
-
-  set_message("BEFORE OPENGL call: ", opengl_call);
-  check_gl_error();
-}
-void gl_after_check(const glbinding::FunctionCall &f)
-{
-  std::string opengl_call = f.function->name();
-  opengl_call += '(';
-  for (size_t i = 0; i < f.parameters.size(); ++i)
-  {
-    opengl_call += f.parameters[i]->asString();
-    if (i < f.parameters.size() - 1)
-      opengl_call += ", ";
-  }
-  opengl_call += ")";
-
-  if (f.returnValue)
-    opengl_call += " Returned: " + f.returnValue->asString();
-
-  set_message("", opengl_call);
-  check_gl_error();
-}

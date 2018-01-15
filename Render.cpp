@@ -5,11 +5,9 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
-
 #include "Mesh_Loader.h"
 #include "Render.h"
 #include "Shader.h"
@@ -29,7 +27,7 @@
 #include <vector>
 using namespace glm;
 using namespace std;
-
+using namespace gl33core;
 // our frag shader output attachment points for deferred rendering
 #define DIFFUSE_TARGET GL_COLOR_ATTACHMENT0
 #define DEPTH_TARGET GL_COLOR_ATTACHMENT1
@@ -53,6 +51,7 @@ static GLuint INSTANCE_MODEL_BUFFER = 0; // buffer object holding model matrices
 static Mesh QUAD;
 static Shader TEMPORALAA;
 static Shader PASSTHROUGH;
+static Shader VARIANCE_SHADOW_MAP;
 static bool INIT = false;
 static std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
@@ -84,6 +83,7 @@ void INIT_RENDERER()
   set_message("Creating TXAA and PASSTHROUGH shaders");
   TEMPORALAA = Shader("passthrough.vert", "TemporalAA.frag");
   PASSTHROUGH = Shader("passthrough.vert", "passthrough.frag");
+  VARIANCE_SHADOW_MAP = Shader("passthrough.vert", "variance_shadow_map.frag");
 
   set_message("Initializing instance buffers");
   // instancing MVP Matrix buffer init
@@ -252,7 +252,8 @@ enum Texture_Location
   specular,
   normal,
   emissive,
-  roughness
+  roughness,
+  s0,s1,s2,s3,s4,s5,s6,s7,s8,s9 //shadow maps
 };
 
 Texture::Texture() { file_path = ERROR_TEXTURE_PATH; }
@@ -262,8 +263,9 @@ Texture_Handle::~Texture_Handle()
   glDeleteTextures(1, &texture);
   texture = 0;
 }
-Texture::Texture(std::string path)
+Texture::Texture(std::string path, bool premul)
 {
+  process_premultiply = premul;
   path = fix_filename(path);
   if (path.size() == 0)
   {
@@ -362,16 +364,13 @@ void Texture::load()
     {
       uint32 pixel = data[i];
       uint8 r = (uint8)(0x000000FF & pixel);
-      uint8 g = (uint8)(0x0000FF00 & pixel) >> 8;
-      uint8 b = (uint8)(0x00FF0000 & pixel) >> 16;
-      uint8 a = (uint8)(0xFF000000 & pixel) >> 24;
+      uint8 g = (uint8)((0x0000FF00 & pixel) >> 8);
+      uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
+      uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
 
-      if (process_override_alpha)
-        a = alpha_override;
-
-      r = r * ((float)a / 255);
-      g = g * ((float)a / 255);
-      b = b * ((float)a / 255);
+      r = round(r * ((float)a / 255));
+      g = round(g * ((float)a / 255));
+      b = round(b * ((float)a / 255));
 
       data[i] = (24 << a) | (16 << b) | (8 << g) | r;
     }
@@ -656,7 +655,7 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
 void Material::load(Material_Descriptor m)
 {
   this->m = m;
-  albedo = Texture(m.albedo);
+  albedo = Texture(m.albedo,m.uses_transparency);
   // specular_color = Texture(m.specular);
   normal = Texture(m.normal);
   emissive = Texture(m.emissive);
@@ -670,7 +669,7 @@ void Material::bind()
   else
     glDisable(GL_CULL_FACE);
 
-  albedo.bind("albedo", 0, shader);
+  albedo.bind("albedo", Texture_Location::albedo, shader);
   // specular_color.bind("specular", 1, shader);
   normal.bind("normal", 2, shader);
   emissive.bind("emissive", 3, shader);
@@ -716,11 +715,10 @@ bool Light_Array::operator==(const Light_Array &rhs)
   }
   return true;
 }
-
-Render_Entity::Render_Entity(Mesh *mesh, Material *material, Light_Array lights,
-                             mat4 world_to_model)
-    : mesh(mesh), material(material), lights(lights),
-      transformation(world_to_model)
+Render_Entity::Render_Entity(Mesh *mesh, Material *material,
+  mat4 world_to_model)
+  : mesh(mesh), material(material),
+  transformation(world_to_model)
 {
   ASSERT(mesh);
   ASSERT(material);
@@ -739,7 +737,7 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   FRAME_TIMER.start();
 }
 
-void set_uniform_lights(Shader &shader, Light_Array &lights)
+void Render::set_uniform_lights(Shader &shader)
 {
   ASSERT(lights.lights.size() == MAX_LIGHTS);
   uint32 location = -1;
@@ -767,8 +765,98 @@ void set_uniform_lights(Shader &shader, Light_Array &lights)
   shader.set_uniform("additional_ambient", lights.additional_ambient);
 }
 
+void Render::set_uniform_shadowmaps(Shader& shader)
+{
+  for (int i = 0; i < MAX_LIGHTS; ++i)
+  {
+    ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
+    ASSERT(MAX_LIGHTS == 10);//reminder to change the Texture_Location::s1...sn enums
+
+    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
+
+    string name = s("shadow_maps[", i, "]");
+    GLuint u = glGetUniformLocation(shader.program->program, name.c_str());
+    if(u == -1)
+      continue;
+
+    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
+    glUniform1i(u, (GLuint)Texture_Location::s0 + i);
+    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
+
+    mat4 offset = mat4(
+      0.5, 0.0, 0.0, 0.0,
+      0.0, 0.5, 0.0, 0.0,
+      0.0, 0.0, 0.5, 0.0,
+      0.5, 0.5, 0.5, 1.0
+    );
+    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), offset*spotlight_shadow_maps[i].projection_camera);
+    shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(), spotlight_shadow_maps[i].enabled);
+  }
+}
+
+void Render::build_shadow_maps()
+{
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+  {
+    spotlight_shadow_maps[i].enabled = false;
+  }
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+  {
+    if (i > lights.light_count - 1)
+      return;
+
+    Light* light = &lights.lights[i];
+    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
+    if (light->type != spot || !light->casts_shadows)
+      continue;
+
+    shadow_map->enabled = true;
+    if (shadow_map->size != shadow_map_size)
+    {
+      shadow_map->load(shadow_map_size);
+    }
+    glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
+    glDisable(GL_CULL_FACE);
+    glFrontFace(GL_CW);
+    glCullFace(GL_FRONT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->target.fbo);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    const mat4 camera = glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
+    const mat4 projection = glm::perspective(radians(90.f), 1.0f, 0.1f, 1000.f);
+    shadow_map->projection_camera = projection*camera;
+    for (Render_Entity &entity : render_entities)
+    {
+      if (entity.material->m.casts_shadows)
+      {
+        ASSERT(entity.mesh);
+        int vao = entity.mesh->get_vao();
+        glBindVertexArray(vao);
+        VARIANCE_SHADOW_MAP.use();
+        VARIANCE_SHADOW_MAP.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
+        glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
+          GL_UNSIGNED_INT, nullptr);
+      }
+    }    
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glFinish();
+}
+
 void Render::opaque_pass(float32 time)
 {
+  glViewport(0, 0, size.x, size.y);
+  glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
+  glFramebufferTexture(GL_FRAMEBUFFER, DIFFUSE_TARGET, COLOR_TARGET_TEXTURE, 0);
+
+  glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);
   glCullFace(GL_BACK);
@@ -791,7 +879,8 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", true);
-    set_uniform_lights(shader, entity.lights);
+    set_uniform_lights(shader);
+    set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
                    GL_UNSIGNED_INT, nullptr);
@@ -815,7 +904,7 @@ void Render::instance_pass(float32 time)
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->m.uv_scale);
-    set_uniform_lights(shader, entity.lights);
+    set_uniform_lights(shader);
     //// verify sizes of data, mat4 floats
     ASSERT(entity.Model_Matrices.size() > 0);
     ASSERT(entity.MVP_Matrices.size() == entity.Model_Matrices.size());
@@ -925,7 +1014,8 @@ void Render::translucent_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", false);
-    set_uniform_lights(shader, entity.lights);
+    set_uniform_lights(shader);
+    set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
                    GL_UNSIGNED_INT, nullptr);
@@ -942,18 +1032,18 @@ void Render::render(float64 state_time)
 
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;
-  glViewport(0, 0, size.x, size.y);
-  glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
-  glFramebufferTexture(GL_FRAMEBUFFER, DIFFUSE_TARGET, COLOR_TARGET_TEXTURE, 0);
 
-  glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+  set_message("FRAME_START", "");
+  set_message("BUILDING SHADOW MAPS START", "");
+  build_shadow_maps();
+  set_message("OPAQUE PASS START", "");
   opaque_pass(time);
-  instance_pass(time);
-  translucent_pass(time);
+  //instance_pass(time);
+  //translucent_pass(time);
 
   draw_calls_last_frame = render_entities.size();
+  set_message("COPYING TO SCREEN", "");
+
   mat4 o =
       ortho(0.0f, (float32)window_size.x, 0.0f, (float32)window_size.y, 0.1f,
             100.0f) *
@@ -1056,6 +1146,7 @@ void Render::render(float64 state_time)
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
+    set_message("FRAME END", "");
     glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
@@ -1111,8 +1202,10 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
   previous_render_entities = move(render_entities);
   render_entities.clear();
 
-  std::vector<std::pair<uint32, float32>>
-      index_distances; // for insert sorted, -1 means index-omit
+  //calculate the distance from the camera for each entity at index in new_entities
+  //sort them
+  //split opaque and translucent entities
+  std::vector<std::pair<uint32, float32>> index_distances; // for insert sorted, -1 means index-omit
 
   for (uint32 i = 0; i < new_entities->size(); ++i)
   {
@@ -1150,6 +1243,22 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
       render_entities.push_back((*new_entities)[i.first]);
     }
   }
+}
+
+void Render::set_lights(Light_Array new_lights)
+{
+  lights = new_lights;/*
+
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+  {
+    spotlight_shadow_maps[i].enabled = false;
+    Light* l = &lights.lights[i];
+    if (l->type == spot && l->casts_shadows)
+    {
+      spotlight_shadow_maps[i].enabled = true;
+    }
+  }*/
+
 }
 
 void check_FBO_status()
@@ -1365,4 +1474,51 @@ Mesh_Handle::~Mesh_Handle()
   bitangents_buffer = 0;
   indices_buffer = 0;
   indices_buffer_size = 0;
+}
+
+FBO_Handle::~FBO_Handle()
+{
+  glDeleteFramebuffers(1, &fbo);
+}
+
+void Spotlight_Shadow_Map::load(ivec2 size)
+{
+  const GLenum attachment = GL_COLOR_ATTACHMENT0;
+  const GLenum targets[] = { attachment };
+
+  //gen fbo
+  glGenFramebuffers(1, &target.fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
+
+
+  //gen target depth buffer
+  glGenTextures(1, &color.texture);
+  glBindTexture(GL_TEXTURE_2D, color.texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);//sponge gl::GL_CLAMP
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);//sponge gl::GL_CLAMP
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, 0);
+
+
+  glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);
+  glDrawBuffers(1, targets);
+  //gen actual depth buffer
+  //this might need to use a texture instead of renderbuffer so i can use GL_CLAMP?
+  glGenRenderbuffers(1, &depth.rbo);
+  glBindRenderbuffer(GL_RENDERBUFFER, depth.rbo);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth.rbo);
+  //glBindTexture(GL_TEXTURE_2D, 0);
+
+  check_FBO_status();
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  this->size = size;
+
+}
+
+RenderBuffer_Handle::~RenderBuffer_Handle()
+{
+  glDeleteRenderbuffers(1, &rbo);
 }
