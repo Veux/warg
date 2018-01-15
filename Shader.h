@@ -7,7 +7,8 @@
 using namespace glm;
 struct LightLocations
 {
-  GLint position, direction, color, attenuation, ambient, cone_angle, type;
+  GLint position, direction, color, attenuation, ambient, cone_angle, type,
+      enabled, shadow_map_transform;
 };
 struct LightCache
 {
@@ -15,6 +16,8 @@ struct LightCache
   vec3 position, direction, color, attenuation, ambient;
   float cone_angle;
   int32 type;
+  bool enabled;
+  mat4 shadow_map_transform;
 };
 struct Shader
 {
@@ -45,6 +48,9 @@ struct Shader
   std::unordered_map<std::string, GLint> location_cache;
   LightCache lights_cache[MAX_LIGHTS] = {0};
   bool cache_set = false;
+	int light_count_location, additional_ambient_location;
+  int light_count = 0;
+  vec3 additional_ambient = vec3(0);
 
 private:
   void check_err(GLint loc, const char *name);

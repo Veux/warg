@@ -770,7 +770,16 @@ void Render::set_uniform_lights(Shader &shader)
           shader.program->program, s("lights[", i, "].cone_angle").c_str());
       shader.lights_cache[i].locations.type = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].type").c_str());
+      shader.lights_cache[i].locations.enabled = glGetUniformLocation(
+          shader.program->program, s("shadow_map_enabled[", i, "]").c_str());
+      shader.lights_cache[i].locations.shadow_map_transform =
+          glGetUniformLocation(shader.program->program,
+                               s("shadow_map_transform[", i, "]").c_str());
     }
+    shader.light_count_location =
+        glGetUniformLocation(shader.program->program, "number_of_lights");
+    shader.additional_ambient_location =
+        glGetUniformLocation(shader.program->program, "additional_ambient");
     shader.cache_set = true;
   }
 
@@ -794,7 +803,8 @@ void Render::set_uniform_lights(Shader &shader)
       glUniform3fv(shader.lights_cache[i].locations.color, 1,
                    &lights.lights[i].color[0]);
     }
-    if (shader.lights_cache[i].attenuation[0] != lights.lights[i].attenuation[0])
+    if (shader.lights_cache[i].attenuation[0] !=
+        lights.lights[i].attenuation[0])
     {
       shader.lights_cache[i].attenuation[0] = lights.lights[i].attenuation[0];
       glUniform3fv(shader.lights_cache[i].locations.attenuation, 1,
@@ -819,8 +829,14 @@ void Render::set_uniform_lights(Shader &shader)
                   (int32)lights.lights[i].type);
     }
   }
-  shader.set_uniform("number_of_lights", (int32)lights.light_count);
-  shader.set_uniform("additional_ambient", lights.additional_ambient);
+  if (shader.light_count != (int32)lights.light_count) {
+	  shader.light_count = (int32)lights.light_count;
+	  glUniform1i(shader.light_count_location, (int32)lights.light_count);
+  }
+  if (shader.additional_ambient != lights.additional_ambient) {
+	  shader.additional_ambient = lights.additional_ambient;
+	  glUniform3fv(shader.additional_ambient_location, 1, &lights.additional_ambient[0]);
+  }
 }
 
 void Render::set_uniform_shadowmaps(Shader &shader)
@@ -844,10 +860,20 @@ void Render::set_uniform_shadowmaps(Shader &shader)
 
     mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
                        0.0, 0.5, 0.5, 0.5, 1.0);
-    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(),
-                       offset * spotlight_shadow_maps[i].projection_camera);
-    shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(),
-                       spotlight_shadow_maps[i].enabled);
+    mat4 shadow_map_transform =
+        offset * spotlight_shadow_maps[i].projection_camera;
+    if (shader.lights_cache[i].shadow_map_transform != shadow_map_transform)
+    {
+      shader.lights_cache[i].shadow_map_transform = shadow_map_transform;
+      glUniformMatrix4fv(shader.lights_cache[i].locations.shadow_map_transform,
+                         1, GL_FALSE, &shadow_map_transform[0][0]);
+    }
+    if (shader.lights_cache[i].enabled != spotlight_shadow_maps[i].enabled)
+    {
+      shader.lights_cache[i].enabled = spotlight_shadow_maps[i].enabled;
+      glUniform1i(shader.lights_cache[i].locations.enabled,
+                  (int32)spotlight_shadow_maps[i].enabled);
+    }
   }
 }
 
