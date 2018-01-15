@@ -756,19 +756,19 @@ void Render::set_uniform_lights(Shader &shader)
   {
     for (int i = 0; i < MAX_LIGHTS; ++i)
     {
-      shader.lights_cache[i].position = glGetUniformLocation(
+      shader.lights_cache[i].locations.position = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].position").c_str());
-      shader.lights_cache[i].direction = glGetUniformLocation(
+      shader.lights_cache[i].locations.direction = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].direction").c_str());
-      shader.lights_cache[i].color = glGetUniformLocation(
+      shader.lights_cache[i].locations.color = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].color").c_str());
-      shader.lights_cache[i].attenuation = glGetUniformLocation(
+      shader.lights_cache[i].locations.attenuation = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].attenuation").c_str());
-      shader.lights_cache[i].ambient = glGetUniformLocation(
+      shader.lights_cache[i].locations.ambient = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].ambient").c_str());
-      shader.lights_cache[i].cone_angle = glGetUniformLocation(
+      shader.lights_cache[i].locations.cone_angle = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].cone_angle").c_str());
-      shader.lights_cache[i].type = glGetUniformLocation(
+      shader.lights_cache[i].locations.type = glGetUniformLocation(
           shader.program->program, s("lights[", i, "].type").c_str());
     }
     shader.cache_set = true;
@@ -776,18 +776,48 @@ void Render::set_uniform_lights(Shader &shader)
 
   for (int i = 0; i < MAX_LIGHTS; ++i)
   {
-    glUniform3fv(shader.lights_cache[i].position, 1,
-                 &lights.lights[i].position[0]);
-    glUniform3fv(shader.lights_cache[i].direction, 1,
-                 &lights.lights[i].direction[0]);
-    glUniform3fv(shader.lights_cache[i].color, 1, &lights.lights[i].color[0]);
-    glUniform3fv(shader.lights_cache[i].attenuation, 1,
-                 &lights.lights[i].attenuation[0]);
+    if (shader.lights_cache[i].position[0] != lights.lights[i].position[0])
+    {
+      shader.lights_cache[i].position[0] = lights.lights[i].position[0];
+      glUniform3fv(shader.lights_cache[i].locations.position, 1,
+                   &lights.lights[i].position[0]);
+    }
+    if (shader.lights_cache[i].direction[0] != lights.lights[i].direction[0])
+    {
+      shader.lights_cache[i].direction[0] = lights.lights[i].direction[0];
+      glUniform3fv(shader.lights_cache[i].locations.direction, 1,
+                   &lights.lights[i].direction[0]);
+    }
+    if (shader.lights_cache[i].color[0] != lights.lights[i].color[0])
+    {
+      shader.lights_cache[i].color[0] = lights.lights[i].color[0];
+      glUniform3fv(shader.lights_cache[i].locations.color, 1,
+                   &lights.lights[i].color[0]);
+    }
+    if (shader.lights_cache[i].attenuation[0] != lights.lights[i].attenuation[0])
+    {
+      shader.lights_cache[i].attenuation[0] = lights.lights[i].attenuation[0];
+      glUniform3fv(shader.lights_cache[i].locations.attenuation, 1,
+                   &lights.lights[i].attenuation[0]);
+    }
     vec3 ambient = lights.lights[i].ambient * lights.lights[i].color;
-    glUniform3fv(shader.lights_cache[i].ambient, 1, &ambient[0]);
-    glUniform1fv(shader.lights_cache[i].cone_angle, 1,
-                 &lights.lights[i].cone_angle);
-    glUniform1i(shader.lights_cache[i].type, (int32)lights.lights[i].type);
+    if (shader.lights_cache[i].ambient[0] != ambient[0])
+    {
+      shader.lights_cache[i].ambient[0] = ambient[0];
+      glUniform3fv(shader.lights_cache[i].locations.ambient, 1, &ambient[0]);
+    }
+    if (shader.lights_cache[i].cone_angle != lights.lights[i].cone_angle)
+    {
+      shader.lights_cache[i].cone_angle = lights.lights[i].cone_angle;
+      glUniform1fv(shader.lights_cache[i].locations.cone_angle, 1,
+                   &lights.lights[i].cone_angle);
+    }
+    if (shader.lights_cache[i].type != (int32)lights.lights[i].type)
+    {
+      shader.lights_cache[i].type != (int32)lights.lights[i].type;
+      glUniform1i(shader.lights_cache[i].locations.type,
+                  (int32)lights.lights[i].type);
+    }
   }
   shader.set_uniform("number_of_lights", (int32)lights.light_count);
   shader.set_uniform("additional_ambient", lights.additional_ambient);

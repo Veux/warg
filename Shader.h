@@ -5,9 +5,16 @@
 #include <string>
 #include <unordered_map>
 using namespace glm;
-struct LightCache
+struct LightLocations
 {
   GLint position, direction, color, attenuation, ambient, cone_angle, type;
+};
+struct LightCache
+{
+  LightLocations locations;
+  vec3 position, direction, color, attenuation, ambient;
+  float cone_angle;
+  int32 type;
 };
 struct Shader
 {
