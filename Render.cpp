@@ -774,7 +774,7 @@ void Render::set_uniform_lights(Shader &shader)
     shader.cache_set = true;
   }
 
-  for (int i = 0; i < MAX_LIGHTS; ++i)
+  for (int i = 0; i < lights.light_count; ++i)
   {
     glUniform3fv(shader.lights_cache[i].position, 1,
                  &lights.lights[i].position[0]);
