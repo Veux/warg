@@ -1502,17 +1502,16 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-                  GL_REPEAT); // sponge gl::GL_CLAMP
+    gl::GL_CLAMP);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-                  GL_REPEAT); // sponge gl::GL_CLAMP
+    gl::GL_CLAMP);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, 0);
 
   glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);
   glDrawBuffers(1, targets);
+
   // gen actual depth buffer
-  // this might need to use a texture instead of renderbuffer so i can use
-  // GL_CLAMP?
   glGenRenderbuffers(1, &depth.rbo);
   glBindRenderbuffer(GL_RENDERBUFFER, depth.rbo);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
