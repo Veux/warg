@@ -8,7 +8,7 @@ using namespace glm;
 struct LightLocations
 {
   GLint position, direction, color, attenuation, ambient, cone_angle, type,
-      enabled, shadow_map_transform;
+      enabled, shadow_map_transform, shadow_map;
 };
 struct LightCache
 {
