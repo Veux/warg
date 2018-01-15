@@ -13,6 +13,6 @@ void main()
 	float dy = dFdy(depth);
 	moment2 += 0.25*(dx*dx+dy*dy);
 
-  COLOR = vec2(1000.,0);
-	//COLOR = vec2(moment1,moment2);
+ 
+	COLOR = vec2(moment1,moment2);
 }

@@ -241,7 +241,7 @@ private:
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
-  ivec2 shadow_map_size = ivec2(2048,2048);
+  ivec2 shadow_map_size = ivec2(4096, 4096);
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

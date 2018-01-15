@@ -253,7 +253,16 @@ enum Texture_Location
   normal,
   emissive,
   roughness,
-  s0,s1,s2,s3,s4,s5,s6,s7,s8,s9 //shadow maps
+  s0,
+  s1,
+  s2,
+  s3,
+  s4,
+  s5,
+  s6,
+  s7,
+  s8,
+  s9 // shadow maps
 };
 
 Texture::Texture() { file_path = ERROR_TEXTURE_PATH; }
@@ -655,7 +664,7 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
 void Material::load(Material_Descriptor m)
 {
   this->m = m;
-  albedo = Texture(m.albedo,m.uses_transparency);
+  albedo = Texture(m.albedo, m.uses_transparency);
   // specular_color = Texture(m.specular);
   normal = Texture(m.normal);
   emissive = Texture(m.emissive);
@@ -716,9 +725,8 @@ bool Light_Array::operator==(const Light_Array &rhs)
   return true;
 }
 Render_Entity::Render_Entity(Mesh *mesh, Material *material,
-  mat4 world_to_model)
-  : mesh(mesh), material(material),
-  transformation(world_to_model)
+                             mat4 world_to_model)
+    : mesh(mesh), material(material), transformation(world_to_model)
 {
   ASSERT(mesh);
   ASSERT(material);
@@ -765,26 +773,31 @@ void Render::set_uniform_lights(Shader &shader)
   shader.set_uniform("additional_ambient", lights.additional_ambient);
 }
 
-void Render::set_uniform_shadowmaps(Shader& shader)
+void Render::set_uniform_shadowmaps(Shader &shader)
 {
   for (int i = 0; i < MAX_LIGHTS; ++i)
   {
     ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
-    ASSERT(MAX_LIGHTS == 10);//reminder to change the Texture_Location::s1...sn enums
+    ASSERT(MAX_LIGHTS ==
+           10); // reminder to change the Texture_Location::s1...sn enums
 
-    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
+    Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
     string name = s("shadow_maps[", i, "]");
     GLuint u = glGetUniformLocation(shader.program->program, name.c_str());
-    if(u == -1)
+    if (u == -1)
       continue;
 
     glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
     glUniform1i(u, (GLuint)Texture_Location::s0 + i);
     glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
-    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), spotlight_shadow_maps[i].projection_camera);
-    shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(), spotlight_shadow_maps[i].enabled);
+    mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
+                       0.0, 0.5, 0.5, 0.5, 1.0);
+    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(),
+                       offset * spotlight_shadow_maps[i].projection_camera);
+    shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(),
+                       spotlight_shadow_maps[i].enabled);
   }
 }
 
@@ -799,8 +812,8 @@ void Render::build_shadow_maps()
     if (i > lights.light_count - 1)
       return;
 
-    Light* light = &lights.lights[i];
-    Spotlight_Shadow_Map* shadow_map = &spotlight_shadow_maps[i];
+    Light *light = &lights.lights[i];
+    Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
     if (light->type != spot || !light->casts_shadows)
       continue;
 
@@ -820,9 +833,10 @@ void Render::build_shadow_maps()
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    const mat4 camera = glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
+    const mat4 camera =
+        glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
     const mat4 projection = glm::perspective(radians(90.f), 1.0f, 0.1f, 1000.f);
-    shadow_map->projection_camera = projection*camera;
+    shadow_map->projection_camera = projection * camera;
     for (Render_Entity &entity : render_entities)
     {
       if (entity.material->m.casts_shadows)
@@ -831,12 +845,14 @@ void Render::build_shadow_maps()
         int vao = entity.mesh->get_vao();
         glBindVertexArray(vao);
         VARIANCE_SHADOW_MAP.use();
-        VARIANCE_SHADOW_MAP.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
+        VARIANCE_SHADOW_MAP.set_uniform(
+            "transform", shadow_map->projection_camera * entity.transformation);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
+                     entity.mesh->get_indices_buffer());
         glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
-          GL_UNSIGNED_INT, nullptr);
+                       GL_UNSIGNED_INT, nullptr);
       }
-    }    
+    }
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glFinish();
@@ -1032,8 +1048,8 @@ void Render::render(float64 state_time)
   build_shadow_maps();
   set_message("OPAQUE PASS START", "");
   opaque_pass(time);
-  //instance_pass(time);
-  //translucent_pass(time);
+  // instance_pass(time);
+  // translucent_pass(time);
 
   draw_calls_last_frame = render_entities.size();
   set_message("COPYING TO SCREEN", "");
@@ -1196,10 +1212,10 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
   previous_render_entities = move(render_entities);
   render_entities.clear();
 
-  //calculate the distance from the camera for each entity at index in new_entities
-  //sort them
-  //split opaque and translucent entities
-  std::vector<std::pair<uint32, float32>> index_distances; // for insert sorted, -1 means index-omit
+  // calculate the distance from the camera for each entity at index in
+  // new_entities  sort them  split opaque and translucent entities
+  std::vector<std::pair<uint32, float32>>
+      index_distances; // for insert sorted, -1 means index-omit
 
   for (uint32 i = 0; i < new_entities->size(); ++i)
   {
@@ -1241,18 +1257,17 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
 
 void Render::set_lights(Light_Array new_lights)
 {
-  lights = new_lights;/*
+  lights = new_lights; /*
 
-  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
-  {
-    spotlight_shadow_maps[i].enabled = false;
-    Light* l = &lights.lights[i];
-    if (l->type == spot && l->casts_shadows)
-    {
-      spotlight_shadow_maps[i].enabled = true;
-    }
-  }*/
-
+   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+   {
+     spotlight_shadow_maps[i].enabled = false;
+     Light* l = &lights.lights[i];
+     if (l->type == spot && l->casts_shadows)
+     {
+       spotlight_shadow_maps[i].enabled = true;
+     }
+   }*/
 }
 
 void check_FBO_status()
@@ -1470,49 +1485,43 @@ Mesh_Handle::~Mesh_Handle()
   indices_buffer_size = 0;
 }
 
-FBO_Handle::~FBO_Handle()
-{
-  glDeleteFramebuffers(1, &fbo);
-}
+FBO_Handle::~FBO_Handle() { glDeleteFramebuffers(1, &fbo); }
 
 void Spotlight_Shadow_Map::load(ivec2 size)
 {
   const GLenum attachment = GL_COLOR_ATTACHMENT0;
-  const GLenum targets[] = { attachment };
+  const GLenum targets[] = {attachment};
 
-  //gen fbo
+  // gen fbo
   glGenFramebuffers(1, &target.fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
 
-
-  //gen target depth buffer
+  // gen target depth buffer
   glGenTextures(1, &color.texture);
   glBindTexture(GL_TEXTURE_2D, color.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);//sponge gl::GL_CLAMP
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);//sponge gl::GL_CLAMP
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+    gl::GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+    gl::GL_CLAMP);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
-    GL_UNSIGNED_BYTE, 0);
-
+               GL_UNSIGNED_BYTE, 0);
 
   glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);
   glDrawBuffers(1, targets);
-  //gen actual depth buffer
-  //this might need to use a texture instead of renderbuffer so i can use GL_CLAMP?
+
+  // gen actual depth buffer
   glGenRenderbuffers(1, &depth.rbo);
   glBindRenderbuffer(GL_RENDERBUFFER, depth.rbo);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth.rbo);
-  //glBindTexture(GL_TEXTURE_2D, 0);
+  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                            GL_RENDERBUFFER, depth.rbo);
+  // glBindTexture(GL_TEXTURE_2D, 0);
 
   check_FBO_status();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   this->size = size;
-
 }
 
-RenderBuffer_Handle::~RenderBuffer_Handle()
-{
-  glDeleteRenderbuffers(1, &rbo);
-}
+RenderBuffer_Handle::~RenderBuffer_Handle() { glDeleteRenderbuffers(1, &rbo); }
