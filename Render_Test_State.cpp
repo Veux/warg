@@ -316,7 +316,7 @@ void Render_Test_State::update()
   sphere->scale = vec3(0.4);
 
   auto &lights = scene.lights.lights;
-  scene.lights.light_count = 3;
+  scene.lights.light_count = 4;
 
   lights[0].position = sphere->position;
   lights[0].type = Light_Type::omnidirectional;
@@ -338,14 +338,26 @@ void Render_Test_State::update()
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  lights[2].color = 51.f * vec3(1, 0.05, 1.05);
+  lights[2].color = 151.f * vec3(1, 0.05, 1.05);
   lights[2].type = Light_Type::omnidirectional;
   lights[2].attenuation = vec3(1.0, .7, 1.8);
   lights[2].ambient = 0.0026f;
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
 
-  const vec3 night = vec3(0.05f);
+  lights[3].position =
+    vec3(25 * cos(current_time * 0.272), 25 * sin(current_time * 0.272), 4.25);
+  lights[3].type = Light_Type::spot;
+  lights[3].direction = vec3(0);
+  lights[3].color = 51320.f * vec3(0.28, 0.20, 0.8);
+  lights[3].cone_angle = 0.017; //+ 0.14*sin(current_time);
+  lights[3].ambient = 0.001;
+  lights[3].casts_shadows = true;
+  cone_light->position = lights[1].position;
+  cone_light->scale = vec3(0.2);
+  cone_light->visible = false;
+
+  const vec3 night = vec3(0.015f);
   const vec3 day = vec3(94. / 255., 155. / 255., 1.);
   float32 t1 = sin(current_time / 3);
   t1 = clamp(t1, -1.0f, 1.0f);
