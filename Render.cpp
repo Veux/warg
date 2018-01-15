@@ -783,7 +783,13 @@ void Render::set_uniform_shadowmaps(Shader& shader)
     glUniform1i(u, (GLuint)Texture_Location::s0 + i);
     glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
-    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), spotlight_shadow_maps[i].projection_camera);
+    mat4 offset = mat4(
+      0.5, 0.0, 0.0, 0.0,
+      0.0, 0.5, 0.0, 0.0,
+      0.0, 0.0, 0.5, 0.0,
+      0.5, 0.5, 0.5, 1.0
+    );
+    shader.set_uniform(s("shadow_map_transform[", i, "]").c_str(), offset*spotlight_shadow_maps[i].projection_camera);
     shader.set_uniform(s("shadow_map_enabled[", i, "]").c_str(), spotlight_shadow_maps[i].enabled);
   }
 }
@@ -1489,9 +1495,9 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glGenTextures(1, &color.texture);
   glBindTexture(GL_TEXTURE_2D, color.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);//sponge gl::GL_CLAMP
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);//sponge gl::GL_CLAMP
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);//sponge gl::GL_CLAMP
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);//sponge gl::GL_CLAMP
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
     GL_UNSIGNED_BYTE, 0);
 

@@ -134,15 +134,17 @@ void main()
       }
       if(alpha != 0.0f && shadow_map_enabled[i])
       {
-        vec2 shadow_coord = vec2(shadow_map_coords[i].xy / shadow_map_coords[i].w);
-        float light_visibility = chebyshevUpperBound(shadow_maps[i], shadow_coord, d);
+        const int ci = 1;
+        vec3 shadow_coord = vec3(shadow_map_coords[ci].xyz / shadow_map_coords[ci].w);
+        float light_visibility = 1.0-chebyshevUpperBound(shadow_maps[ci], shadow_coord.xy, shadow_coord.z);
         alpha = alpha * light_visibility;
-        float red_channel = texture2D(shadow_maps[i],vec2(0,0)).r;
-        debug = vec3(red_channel,0,0);
-
-        debug = vec3(texture2D(shadow_maps[i],shadow_coord).r);
-        debug = vec3(shadow_coord,0);
-      }
+       // float red_channel = texture2D(shadow_maps[ci],shadow_coord).r;
+        //debug = vec3(light_visibility,0,0);
+        if(i == 1)
+        {
+        // debug = vec3(shadow_coord,0);
+        } 
+     }
 
     }
     float ldotn = clamp(dot(l, m.normal), 0, 1);
@@ -160,5 +162,5 @@ void main()
     result = debug;
 
 
- ALBEDO = vec4(to_srgb(result),albedo_tex.a);
+ ALBEDO = vec4(to_srgb(result),1); //a was albedo_tex.a
 }
