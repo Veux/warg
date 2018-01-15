@@ -36,7 +36,6 @@ in vec4 shadow_map_coords[MAX_LIGHTS];
 
 layout(location = 0) out vec4 ALBEDO;
 
-
 const float PI = 3.14159265358979f;
 const float gamma = 2.2;
 vec3 to_linear(in vec3 srgb) { return pow(srgb, vec3(gamma)); }
@@ -58,33 +57,30 @@ struct Material
   float shininess;
 };
 
-float chebyshevUpperBound(sampler2D map, vec2 coord, float distance)
+float chebyshevUpperBound(vec2 moments, float distance)
 {
-	// We retrive the two moments previously stored (depth and depth*depth)
-	vec2 moments = texture2D(map,coord.xy).rg;
-	
-	// Surface is fully lit. as the current fragment is before the light occluder
-	if (distance <= moments.x)
-		return 1.0 ;
+  // Surface is fully lit. as the current fragment is before the light occluder
+  if (distance <= moments.x)
+    return 1.0;
 
-	// The fragment is either in shadow or penumbra. We now use chebyshev's upperBound to check
-	// How likely this pixel is to be lit (p_max)
-	float variance = moments.y - (moments.x*moments.x);
-	variance = max(variance,0.00002);
+  // The fragment is either in shadow or penumbra. We now use chebyshev's
+  // upperBound to check How likely this pixel is to be lit (p_max)
+  float variance = moments.y - (moments.x * moments.x);
+  variance = max(variance, 0.00002);
 
-	float d = distance - moments.x;
-	float p_max = variance / (variance + d*d);
+  float d = distance - moments.x;
+  float p_max = variance / (variance + d * d);
 
-	return p_max;
+  return p_max;
 }
 
 void main()
 {
   vec4 albedo_tex = texture2D(albedo, frag_uv).rgba;
 
-  if(discard_over_blend)
+  if (discard_over_blend)
   {
-    if(albedo_tex.a < 0.3)
+    if (albedo_tex.a < 0.3)
       discard;
   }
 
@@ -115,7 +111,8 @@ void main()
     vec3 att = lights[i].attenuation;
     float at = 1.0 / (att.x + (att.y * d) + (att.z * d * d));
     float alpha = 1.0f;
-
+    vec3 shadow_coord = vec3(shadow_map_coords[i].xyz / shadow_map_coords[i].w);
+    vec2 shadow_moments = texture2D(shadow_maps[i], shadow_coord.xy).rg;
     if (lights[i].type == 0)
     { // directional
       l = -lights[i].direction;
@@ -129,28 +126,16 @@ void main()
       alpha = 0.0f;
       if (phi < theta)
       {
-        float edge_softness_distance = 2.3f*theta;
+        float edge_softness_distance = 2.3f * theta;
         alpha = clamp((theta - phi) / edge_softness_distance, 0, 1);
       }
-      if(alpha != 0.0f && shadow_map_enabled[i])
-      {
-        const int ci = 1;
-        vec3 shadow_coord = vec3(shadow_map_coords[ci].xyz / shadow_map_coords[ci].w);
-        float light_visibility = 1.0-chebyshevUpperBound(shadow_maps[ci], shadow_coord.xy, shadow_coord.z);
-        alpha = alpha * light_visibility;
-       // float red_channel = texture2D(shadow_maps[ci],shadow_coord).r;
-        //debug = vec3(light_visibility,0,0);
-        if(i == 1)
-        {
-        // debug = vec3(shadow_coord,0);
-        } 
-     }
-
+      float light_visibility =  1.0 - chebyshevUpperBound(shadow_moments, shadow_coord.z);
+      alpha = alpha * light_visibility;
     }
     float ldotn = clamp(dot(l, m.normal), 0, 1);
     float ec = (8.0f * m.shininess) / (8.0f * PI);
     float specular = ec * pow(max(dot(h, m.normal), 0.0), m.shininess);
-    
+
     vec3 ambient = vec3(lights[i].ambient * at * m.albedo);
     result += ldotn * specular * m.albedo * lights[i].color * at * alpha;
     result += ambient;
@@ -161,6 +146,5 @@ void main()
   if (debug != vec3(-1))
     result = debug;
 
-
- ALBEDO = vec4(to_srgb(result),1); //a was albedo_tex.a
+  ALBEDO = vec4(to_srgb(result), 1); // a was albedo_tex.a
 }
