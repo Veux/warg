@@ -38,6 +38,9 @@ layout(location = 0) out vec4 ALBEDO;
 
 const float PI = 3.14159265358979f;
 const float gamma = 2.2;
+const int max_lights = MAX_LIGHTS;
+vec3[max_lights] shadow_coord_array;
+vec2[max_lights] shadow_moments_array;
 vec3 to_linear(in vec3 srgb) { return pow(srgb, vec3(gamma)); }
 float to_linear(in float srgb) { return pow(srgb, gamma); }
 vec3 to_srgb(in vec3 linear) { return pow(linear, vec3(1. / gamma)); }
@@ -76,6 +79,12 @@ float chebyshevUpperBound(vec2 moments, float distance)
 
 void main()
 {
+  for(int i = 0; i < max_lights; ++i)
+  {
+    shadow_coord_array[i] = vec3(shadow_map_coords[i].xyz / shadow_map_coords[i].w);
+    shadow_moments_array[i] = texture2D(shadow_maps[i], shadow_coord_array[i].xy).rg;
+  }
+
   vec4 albedo_tex = texture2D(albedo, frag_uv).rgba;
 
   if (discard_over_blend)
@@ -111,8 +120,8 @@ void main()
     vec3 att = lights[i].attenuation;
     float at = 1.0 / (att.x + (att.y * d) + (att.z * d * d));
     float alpha = 1.0f;
-    vec3 shadow_coord = vec3(shadow_map_coords[i].xyz / shadow_map_coords[i].w);
-    vec2 shadow_moments = texture2D(shadow_maps[i], shadow_coord.xy).rg;
+    vec3 shadow_coord = shadow_coord_array[i];
+    vec2 shadow_moments = shadow_moments_array[i];
     if (lights[i].type == 0)
     { // directional
       l = -lights[i].direction;
