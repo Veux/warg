@@ -47,7 +47,7 @@ struct Shader
   std::string fs;
   std::unordered_map<std::string, GLint> location_cache;
   LightCache lights_cache[MAX_LIGHTS] = {0};
-  bool cache_set = false;
+  bool light_location_cache_set = false;
 	int light_count_location, additional_ambient_location;
   int light_count = 0;
   vec3 additional_ambient = vec3(0);
