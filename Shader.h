@@ -3,7 +3,12 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 using namespace glm;
+struct LightCache
+{
+  GLint position, direction, color, attenuation, ambient, cone_angle, type;
+};
 struct Shader
 {
   Shader();
@@ -17,6 +22,7 @@ struct Shader
   void set_uniform(const char *name, vec3 &v);
   void set_uniform(const char *name, vec4 &v);
   void set_uniform(const char *name, const mat4 &m);
+  GLint get_uniform_location(const char *name);
 
   void use() const;
 
@@ -29,6 +35,9 @@ struct Shader
   std::shared_ptr<Shader_Handle> program;
   std::string vs;
   std::string fs;
+  std::unordered_map<std::string, GLint> location_cache;
+  LightCache lights_cache[MAX_LIGHTS] = {0};
+  bool cache_set = false;
 
 private:
   void check_err(GLint loc, const char *name);

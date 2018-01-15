@@ -32,7 +32,8 @@ static GLuint load_shader(const std::string &vertex_path,
   glGetShaderiv(vert_shader, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<GLchar> vertShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(vert_shader, logLength, NULL, &vertShaderError[0]);
-  set_message(s("Vertex shader ", vertex_path," compilation result: "), &vertShaderError[0]);
+  set_message(s("Vertex shader ", vertex_path, " compilation result: "),
+              &vertShaderError[0]);
 
   set_message("Compiling fragment shader: ", fragment_path);
   set_message("Fragment Shader Source: \n", fs);
@@ -44,7 +45,8 @@ static GLuint load_shader(const std::string &vertex_path,
   glGetShaderiv(frag_shader, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<GLchar> fragShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(frag_shader, logLength, NULL, &fragShaderError[0]);
-  set_message(s("Fragment shader ", fragment_path," compilation result: "), &fragShaderError[0]);
+  set_message(s("Fragment shader ", fragment_path, " compilation result: "),
+              &fragShaderError[0]);
 
   set_message("Linking shaders", "");
   GLuint program = glCreateProgram();
@@ -57,7 +59,9 @@ static GLuint load_shader(const std::string &vertex_path,
   glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<char> err((logLength > 1) ? logLength : 1);
   glGetProgramInfoLog(program, logLength, NULL, &err[0]);
-  set_message(s("GL Shader linker output for: ", vertex_path, " ", fragment_path), &err[0]);
+  set_message(
+      s("GL Shader linker output for: ", vertex_path, " ", fragment_path),
+      &err[0]);
   glDeleteShader(vert_shader);
   glDeleteShader(frag_shader);
 
@@ -97,48 +101,63 @@ void Shader::load(const std::string &vertex, const std::string &fragment)
 
 void Shader::set_uniform(const char *name, float32 f)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniform1fv(location, 1, &f);
 }
 
 void Shader::set_uniform(const char *name, uint32 i)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniform1ui(location, i);
 }
 void Shader::set_uniform(const char *name, int32 i)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniform1i(location, i);
 }
 
 void Shader::set_uniform(const char *name, glm::vec2 v)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniform2fv(location, 1, &v[0]);
 }
 
 void Shader::set_uniform(const char *name, glm::vec3 &v)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniform3fv(location, 1, &v[0]);
 }
 void Shader::set_uniform(const char *name, glm::vec4 &v)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniform4fv(location, 1, &v[0]);
 }
 void Shader::set_uniform(const char *name, const glm::mat4 &m)
 {
-  GLint location = glGetUniformLocation(program->program, name);
+  GLint location = get_uniform_location(name);
   check_err(location, name);
   glUniformMatrix4fv(location, 1, GL_FALSE, &m[0][0]);
+}
+GLint Shader::get_uniform_location(const char *name)
+{
+  GLint location;
+  auto search = location_cache.find(name);
+  if (search == location_cache.end())
+  {
+    location = glGetUniformLocation(program->program, name);
+    location_cache[name] = location;
+  }
+  else
+  {
+    location = search->second;
+  }
+  return location;
 }
 void Shader::use() const { glUseProgram(program->program); }
 
@@ -155,6 +174,6 @@ void Shader::check_err(GLint loc, const char *name)
 {
   if (loc == -1)
   {
-   // set_message("Shader invalid uniform: ", name);
+    // set_message("Shader invalid uniform: ", name);
   }
 }
