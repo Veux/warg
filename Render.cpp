@@ -752,22 +752,72 @@ void Render::set_uniform_lights(Shader &shader)
   // todo: this is horrible. do something much better than this - precompute
   // all these godawful strings and just select them
 
-  for (int i = 0; i < MAX_LIGHTS; ++i)
+  if (!shader.cache_set)
   {
-    shader.set_uniform((s("lights[", i, "].position")).c_str(),
-                       lights.lights[i].position);
-    shader.set_uniform((s("lights[", i, "].direction")).c_str(),
-                       lights.lights[i].direction);
-    shader.set_uniform((s("lights[", i, "].color")).c_str(),
-                       lights.lights[i].color);
-    shader.set_uniform((s("lights[", i, "].attenuation")).c_str(),
-                       lights.lights[i].attenuation);
+    for (int i = 0; i < MAX_LIGHTS; ++i)
+    {
+      shader.lights_cache[i].locations.position = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].position").c_str());
+      shader.lights_cache[i].locations.direction = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].direction").c_str());
+      shader.lights_cache[i].locations.color = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].color").c_str());
+      shader.lights_cache[i].locations.attenuation = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].attenuation").c_str());
+      shader.lights_cache[i].locations.ambient = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].ambient").c_str());
+      shader.lights_cache[i].locations.cone_angle = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].cone_angle").c_str());
+      shader.lights_cache[i].locations.type = glGetUniformLocation(
+          shader.program->program, s("lights[", i, "].type").c_str());
+    }
+    shader.cache_set = true;
+  }
+
+  for (int i = 0; i < lights.light_count; ++i)
+  {
+    if (shader.lights_cache[i].position[0] != lights.lights[i].position[0])
+    {
+      shader.lights_cache[i].position[0] = lights.lights[i].position[0];
+      glUniform3fv(shader.lights_cache[i].locations.position, 1,
+                   &lights.lights[i].position[0]);
+    }
+    if (shader.lights_cache[i].direction[0] != lights.lights[i].direction[0])
+    {
+      shader.lights_cache[i].direction[0] = lights.lights[i].direction[0];
+      glUniform3fv(shader.lights_cache[i].locations.direction, 1,
+                   &lights.lights[i].direction[0]);
+    }
+    if (shader.lights_cache[i].color[0] != lights.lights[i].color[0])
+    {
+      shader.lights_cache[i].color[0] = lights.lights[i].color[0];
+      glUniform3fv(shader.lights_cache[i].locations.color, 1,
+                   &lights.lights[i].color[0]);
+    }
+    if (shader.lights_cache[i].attenuation[0] != lights.lights[i].attenuation[0])
+    {
+      shader.lights_cache[i].attenuation[0] = lights.lights[i].attenuation[0];
+      glUniform3fv(shader.lights_cache[i].locations.attenuation, 1,
+                   &lights.lights[i].attenuation[0]);
+    }
     vec3 ambient = lights.lights[i].ambient * lights.lights[i].color;
-    shader.set_uniform((s("lights[", i, "].ambient")).c_str(), ambient);
-    shader.set_uniform((s("lights[", i, "].cone_angle")).c_str(),
-                       lights.lights[i].cone_angle);
-    shader.set_uniform((s("lights[", i, "].type")).c_str(),
-                       (int32)lights.lights[i].type);
+    if (shader.lights_cache[i].ambient[0] != ambient[0])
+    {
+      shader.lights_cache[i].ambient[0] = ambient[0];
+      glUniform3fv(shader.lights_cache[i].locations.ambient, 1, &ambient[0]);
+    }
+    if (shader.lights_cache[i].cone_angle != lights.lights[i].cone_angle)
+    {
+      shader.lights_cache[i].cone_angle = lights.lights[i].cone_angle;
+      glUniform1fv(shader.lights_cache[i].locations.cone_angle, 1,
+                   &lights.lights[i].cone_angle);
+    }
+    if (shader.lights_cache[i].type != (int32)lights.lights[i].type)
+    {
+      shader.lights_cache[i].type != (int32)lights.lights[i].type;
+      glUniform1i(shader.lights_cache[i].locations.type,
+                  (int32)lights.lights[i].type);
+    }
   }
   shader.set_uniform("number_of_lights", (int32)lights.light_count);
   shader.set_uniform("additional_ambient", lights.additional_ambient);
@@ -1076,9 +1126,9 @@ void Render::render(float64 state_time)
     GLuint u2 = glGetUniformLocation(TEMPORALAA.program->program, "previous");
     glUniform1i(u2, 1);
     glActiveTexture(GL_TEXTURE0 + 1);
-    glBindTexture(GL_TEXTURE_2D, PREV_COLOR_TARGET_MISSING
-                                     ? COLOR_TARGET_TEXTURE
-                                     : PREV_COLOR_TARGET);
+    glBindTexture(GL_TEXTURE_2D,
+                  PREV_COLOR_TARGET_MISSING ? COLOR_TARGET_TEXTURE
+                                            : PREV_COLOR_TARGET);
     TEMPORALAA.set_uniform("transform", o);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
@@ -1087,11 +1137,11 @@ void Render::render(float64 state_time)
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFinish(); // intent is to time just the swap itself
+    //glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
-    glFinish();
+   // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
@@ -1152,12 +1202,12 @@ void Render::render(float64 state_time)
                    GL_UNSIGNED_INT, (void *)0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFinish(); // intent is to time just the swap itself
+    //glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
-    glFinish();
+   // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
     glBindVertexArray(0);
@@ -1316,9 +1366,10 @@ void Render::init_render_targets()
 {
   set_message("init_render_targets()");
   set_message("Deleting FBO", std::to_string(TARGET_FRAMEBUFFER));
-  set_message("Deleting Textures", std::to_string(COLOR_TARGET_TEXTURE) + " " +
-                                       std::to_string(PREV_COLOR_TARGET) + " " +
-                                       std::to_string(DEPTH_TARGET_TEXTURE));
+  set_message("Deleting Textures",
+              std::to_string(COLOR_TARGET_TEXTURE) + " " +
+                  std::to_string(PREV_COLOR_TARGET) + " " +
+                  std::to_string(DEPTH_TARGET_TEXTURE));
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
@@ -1501,10 +1552,8 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glBindTexture(GL_TEXTURE_2D, color.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-    gl::GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
-    gl::GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, 0);
 

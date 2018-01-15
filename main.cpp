@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
     }
   }
   // 1 vsync, 0 no vsync, -1 late-swap
-  int32 swap = SDL_GL_SetSwapInterval(1);
+  int32 swap = SDL_GL_SetSwapInterval(0);
   if (swap == -1)
   {
     swap = SDL_GL_SetSwapInterval(1);

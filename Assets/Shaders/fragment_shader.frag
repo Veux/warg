@@ -77,13 +77,33 @@ float chebyshevUpperBound(vec2 moments, float distance)
   return p_max;
 }
 
+void autism_init()
+{
+shadow_coord_array[0] = vec3(shadow_map_coords[0].xyz / shadow_map_coords[0].w);
+    shadow_moments_array[0] = texture2D(shadow_maps[0], shadow_coord_array[0].xy).rg;
+shadow_coord_array[1] = vec3(shadow_map_coords[1].xyz / shadow_map_coords[1].w);
+    shadow_moments_array[1] = texture2D(shadow_maps[1], shadow_coord_array[1].xy).rg;
+shadow_coord_array[2] = vec3(shadow_map_coords[2].xyz / shadow_map_coords[2].w);
+    shadow_moments_array[2] = texture2D(shadow_maps[2], shadow_coord_array[2].xy).rg;
+shadow_coord_array[3] = vec3(shadow_map_coords[3].xyz / shadow_map_coords[3].w);
+    shadow_moments_array[3] = texture2D(shadow_maps[3], shadow_coord_array[3].xy).rg;
+shadow_coord_array[4] = vec3(shadow_map_coords[4].xyz / shadow_map_coords[4].w);
+    shadow_moments_array[4] = texture2D(shadow_maps[4], shadow_coord_array[4].xy).rg;
+shadow_coord_array[5] = vec3(shadow_map_coords[5].xyz / shadow_map_coords[5].w);
+    shadow_moments_array[5] = texture2D(shadow_maps[5], shadow_coord_array[5].xy).rg;
+shadow_coord_array[6] = vec3(shadow_map_coords[6].xyz / shadow_map_coords[6].w);
+    shadow_moments_array[6] = texture2D(shadow_maps[6], shadow_coord_array[6].xy).rg;
+shadow_coord_array[7] = vec3(shadow_map_coords[7].xyz / shadow_map_coords[7].w);
+    shadow_moments_array[7] = texture2D(shadow_maps[7], shadow_coord_array[7].xy).rg;
+shadow_coord_array[8] = vec3(shadow_map_coords[8].xyz / shadow_map_coords[8].w);
+    shadow_moments_array[8] = texture2D(shadow_maps[8], shadow_coord_array[8].xy).rg;
+shadow_coord_array[9] = vec3(shadow_map_coords[9].xyz / shadow_map_coords[9].w);
+    shadow_moments_array[9] = texture2D(shadow_maps[9], shadow_coord_array[9].xy).rg;
+}
+
 void main()
 {
-  for(int i = 0; i < max_lights; ++i)
-  {
-    shadow_coord_array[i] = vec3(shadow_map_coords[i].xyz / shadow_map_coords[i].w);
-    shadow_moments_array[i] = texture2D(shadow_maps[i], shadow_coord_array[i].xy).rg;
-  }
+  autism_init();
 
   vec4 albedo_tex = texture2D(albedo, frag_uv).rgba;
 
