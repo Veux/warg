@@ -1137,11 +1137,11 @@ void Render::render(float64 state_time)
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFinish(); // intent is to time just the swap itself
+    //glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
-    glFinish();
+   // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
@@ -1202,12 +1202,12 @@ void Render::render(float64 state_time)
                    GL_UNSIGNED_INT, (void *)0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFinish(); // intent is to time just the swap itself
+    //glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
-    glFinish();
+   // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
     glBindVertexArray(0);
