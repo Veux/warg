@@ -783,7 +783,7 @@ void Render::set_uniform_lights(Shader &shader)
     shader.cache_set = true;
   }
 
-  for (int i = 0; i < MAX_LIGHTS; ++i)
+  for (int i = 0; i < lights.light_count; ++i)
   {
     if (shader.lights_cache[i].position[0] != lights.lights[i].position[0])
     {
@@ -1163,11 +1163,11 @@ void Render::render(float64 state_time)
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFinish(); // intent is to time just the swap itself
+    //glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
-    glFinish();
+   // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
@@ -1228,12 +1228,12 @@ void Render::render(float64 state_time)
                    GL_UNSIGNED_INT, (void *)0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glFinish(); // intent is to time just the swap itself
+    //glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
-    glFinish();
+   // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
     glBindVertexArray(0);
