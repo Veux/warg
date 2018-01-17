@@ -752,7 +752,7 @@ void Render::set_uniform_lights(Shader &shader)
   // todo: this is horrible. do something much better than this - precompute
   // all these godawful strings and just select them
 
-  if (!shader.cache_set)
+  if (!shader.light_location_cache_set)
   {
     for (int i = 0; i < MAX_LIGHTS; ++i)
     {
@@ -782,7 +782,7 @@ void Render::set_uniform_lights(Shader &shader)
         glGetUniformLocation(shader.program->program, "number_of_lights");
     shader.additional_ambient_location =
         glGetUniformLocation(shader.program->program, "additional_ambient");
-    shader.cache_set = true;
+    shader.light_location_cache_set = true;
   }
 
   for (int i = 0; i < lights.light_count; ++i)
