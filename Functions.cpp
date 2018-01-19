@@ -1,38 +1,6 @@
-#pragma once
 #include "Functions.h"
+
 using namespace glm;
-bool intersects(vec3 pa, vec3 da, vec3 pb, vec3 db)
-{
-  float32 axn, axm, ayn, aym, azn, azm, bxn, bxm, byn, bym, bzn, bzm;
-
-  axn = pa.x - 0.5f * da.x;
-  axm = pa.x + 0.5f * da.x;
-  ayn = pa.y - 0.5f * da.y;
-  aym = pa.y + 0.5f * da.y;
-  azn = pa.z - 0.5f * da.z;
-  azm = pa.z + 0.5f * da.z;
-  bxn = pb.x - 0.5f * db.x;
-  bxm = pb.x + 0.5f * db.x;
-  byn = pb.y - 0.5f * db.y;
-  bym = pb.y + 0.5f * db.y;
-  bzn = pb.z - 0.5f * db.z;
-  bzm = pb.z + 0.5f * db.z;
-
-  return (axn <= bxm && axm >= bxn) && (ayn <= bym && aym >= byn) &&
-    (azn <= bzm && azm >= bzn);
-}
-
-bool intersects(vec3 pa, Cylinder ca, vec3 pb, Cylinder cb)
-{
-  bool xyin = distance(vec2(pa.x, pa.y), vec2(pb.x, pb.y)) < (ca.r + cb.r);
-
-  bool zin = (((pa.z + ca.h / 2) >= (pb.z - cb.h / 2)) &&
-    ((pa.z + ca.h / 2) <= (pb.z + cb.h / 2))) ||
-    (((pb.z + cb.h / 2) >= (pa.z - ca.h / 2)) &&
-    ((pb.z + cb.h / 2) <= (pa.z + ca.h / 2)));
-
-  return xyin && zin;
-}
 
 float32 distToSegment(vec2 p, vec2 v, vec2 w)
 {
@@ -43,22 +11,119 @@ float32 distToSegment(vec2 p, vec2 v, vec2 w)
   }
   float32 t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
   t = max((float32)0.0, min((float32)1.0, t));
-  return sqrt(distance(p, vec2{ v.x + t * (w.x - v.x), v.y + t * (w.y - v.y) }));
+  return sqrt(distance(p, vec2{v.x + t * (w.x - v.x), v.y + t * (w.y - v.y)}));
 }
 
-bool intersects(vec3 pa, Cylinder ca, Wall w)
+bool intersects(Segment pq, Triangle abc, vec3 &uvw, float32 &t)
 {
-  // bool zin = (((pa.z + ca.h / 2) >= (pb.z - cb.h / 2)) &&
-  //             ((pa.z + ca.h / 2) <= (pb.z + cb.h / 2))) ||
-  //            (((pb.z + cb.h / 2) >= (pa.z - ca.h / 2)) &&
-  //             ((pb.z + cb.h / 2) <= (pa.z + ca.h / 2)));
-  bool zin = true;
+  float32 &u = uvw.x;
+  float32 &v = uvw.y;
+  float32 &w = uvw.z;
 
-  vec2 p = { pa.x, pa.y };
-  vec2 v = { w.p1.x, w.p1.y };
+  vec3 ab = abc.b - abc.a;
+  vec3 ac = abc.c - abc.a;
+  vec3 qp = pq.p - pq.q;
 
-  bool xyin = distToSegment(p, v, w.p2) < ca.r;
+  vec3 n = cross(ab, ac);
 
-  return zin && xyin;
+  float32 d = dot(qp, n);
+  if (d <= 0.0f)
+    return false;
+
+  vec3 ap = pq.p - abc.a;
+  t = dot(ap, n);
+  if (t < 0.0f)
+    return false;
+  if (t > d)
+    return false;
+
+  vec3 e = cross(qp, ap);
+  v = dot(ac, e);
+  if (v < 0.0f || v > d)
+    return 0;
+  w = -dot(ab, e);
+  if (w < 0.0f || v + w > d)
+    return 0;
+
+  float ood = 1.0f / d;
+  t *= ood;
+  v *= ood;
+  w *= ood;
+  u = 1.0f - v - w;
+  return true;
 }
 
+bool intersects(Sphere s, Triangle abc, vec3 &p)
+{
+  p = closest_point(s.c, abc);
+  vec3 v = p - s.c;
+  return dot(v, v) <= s.r * s.r;
+}
+
+vec3 closest_point(vec3 p, Triangle abc)
+{
+  vec3 &a = abc.a;
+  vec3 &b = abc.b;
+  vec3 &c = abc.c;
+
+  vec3 ab = b - a;
+  vec3 ac = c - a;
+  vec3 bc = c - b;
+
+  float32 snom = dot(p - a, ab);
+  float32 sdenom = dot(p - b, a - b);
+
+  float32 tnom = dot(p - a, ac);
+  float32 tdenom = dot(p - c, a - c);
+
+  if (snom <= 0.0f && tnom <= 0.0f)
+    return abc.a;
+
+  float32 unom = dot(p - b, bc);
+  float32 udenom = dot(p - c, b - c);
+
+  if (sdenom <= 0.0f && unom <= 0.0f)
+    return abc.b;
+  if (tdenom <= 0.0f && udenom <= 0.0f)
+    return abc.c;
+
+  vec3 n = cross(b - a, c - a);
+  float32 vc = dot(n, cross(a - p, b - p));
+  if (vc <= 0.0f && snom >= 0.0f && sdenom >= 0.0f)
+    return a + snom / (snom + sdenom) * ab;
+
+  float32 va = dot(n, cross(b - p, c - p));
+  if (va <= 0.0f && unom >= 0.0f && udenom >= 0.0f)
+    return b + unom / (unom + udenom) * bc;
+
+  float32 vb = dot(n, cross(c - p, a - p));
+
+  if (vb <= 0.0f && tnom >= 0.0f && tdenom >= 0.0f)
+    return a + tnom / (tnom + tdenom) * ac;
+
+  float32 u = va / (va + vb + vc);
+  float32 v = vb / (va + vb + vc);
+  float32 w = 1.0f - u - v;
+  return u * a + v * b + w * c;
+}
+
+bool intersects(Barbell b, Triangle abc) {
+	vec3 v;
+	float32 f;
+
+	if (intersects(b.pq, abc, v, f))
+		return true;
+
+	Sphere s;
+	s.r = b.r;
+
+	s.c = b.pq.p;
+	if (intersects(s, abc, v))
+		return true;
+
+	s.c = b.pq.q;
+	if (intersects(s, abc, v))
+		return true;
+
+	return false;
+}
