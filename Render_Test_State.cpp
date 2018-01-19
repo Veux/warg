@@ -72,7 +72,8 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.casts_shadows = false;
   material.albedo = "color(255,255,255,255)";
   material.emissive = "color(255,255,255,255)";
-  cone_light = scene.add_aiscene("sphere.obj", &material);
+  cone_light1 = scene.add_aiscene("sphere.obj", &material);
+  cone_light2 = scene.add_aiscene("sphere.obj", &material);
   material.albedo = "color(0,0,0,255)";
   material.emissive = "color(255,0,255,255)";
   small_light = scene.add_aiscene("sphere.obj", &material);
@@ -316,7 +317,7 @@ void Render_Test_State::update()
   sphere->scale = vec3(0.4);
 
   auto &lights = scene.lights.lights;
-  scene.lights.light_count = 4;
+  scene.lights.light_count = 3;
 
   lights[0].position = sphere->position;
   lights[0].type = Light_Type::omnidirectional;
@@ -325,37 +326,37 @@ void Render_Test_State::update()
   lights[0].attenuation = vec3(1.0, .22, .2);
 
   lights[1].position =
-      vec3(7 * cos(current_time * .72), 7 * sin(current_time * .72), 6.25);
+      vec3(5 * cos(current_time * .00172), 5 * sin(current_time * .00172),2.525);
   lights[1].type = Light_Type::spot;
   lights[1].direction = vec3(0);
-  lights[1].color = 320.f * vec3(0.8, 1.0, 0.8);
-  lights[1].cone_angle = 0.11; //+ 0.14*sin(current_time);
-  lights[1].ambient = 0.01;
+  lights[1].color = 1820.f * vec3(1.0, 1.0, 1.0);
+  lights[1].cone_angle = 0.151;//+ 0.14*sin(current_time);
+  lights[1].ambient = 0.0001;
   lights[1].casts_shadows = true;
-  cone_light->position = lights[1].position;
-  cone_light->scale = vec3(0.2);
-  cone_light->visible = false;
+  cone_light1->position = lights[1].position + 0.5f*normalize(lights[1].position);
+  cone_light1->scale = vec3(0.2);
+  cone_light1->visible = false;
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  lights[2].color = 151.f * vec3(1, 0.05, 1.05);
+  lights[2].color = 0*151.f * vec3(1, 0.05, 1.05);
   lights[2].type = Light_Type::omnidirectional;
   lights[2].attenuation = vec3(1.0, .7, 1.8);
-  lights[2].ambient = 0.0026f;
+  lights[2].ambient = 0.0001f;
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
 
   lights[3].position =
-    vec3(25 * cos(current_time * 0.272), 25 * sin(current_time * 0.272), 4.25);
+    vec3(25 * cos(current_time * 0.272), 25 * sin(current_time * 0.272), 4.28+sin(current_time)*4.25);
   lights[3].type = Light_Type::spot;
   lights[3].direction = vec3(0);
-  lights[3].color = 51320.f * vec3(0.28, 0.20, 0.8);
+  lights[3].color = 0.f * vec3(0.28, 0.20, 0.8);
   lights[3].cone_angle = 0.017; //+ 0.14*sin(current_time);
-  lights[3].ambient = 0.001;
-  lights[3].casts_shadows = true;
-  cone_light->position = lights[1].position;
-  cone_light->scale = vec3(0.2);
-  cone_light->visible = false;
+  lights[3].ambient = 0.0001;
+  lights[3].casts_shadows = false;
+  cone_light2->position = lights[3].position + 0.5f*normalize(lights[3].position);
+  cone_light2->scale = vec3(0.2);
+  cone_light2->visible = true;
 
   const vec3 night = vec3(0.015f);
   const vec3 day = vec3(94. / 255., 155. / 255., 1.);
@@ -364,5 +365,5 @@ void Render_Test_State::update()
   t1 = (t1 / 2.0f) + 0.5f;
   clear_color = lerp(night, day, t1);
 
-  scene.lights.additional_ambient = t1 * vec3(0.76);
+  scene.lights.additional_ambient = t1 * vec3(0.016);
 }

@@ -900,6 +900,7 @@ void Render::build_shadow_maps()
       shadow_map->load(shadow_map_size);
     }
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
+    //glEnable(GL_CULL_FACE);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_FRONT);
@@ -912,11 +913,11 @@ void Render::build_shadow_maps()
 
     const mat4 camera =
         glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
-    const mat4 projection = glm::perspective(radians(90.f), 1.0f, 0.1f, 1000.f);
+    const mat4 projection = glm::perspective(90.f, 1.0f, 0.001f, 1000.f);
     shadow_map->projection_camera = projection * camera;
     for (Render_Entity &entity : render_entities)
     {
-      if (entity.material->m.casts_shadows)
+      //if (entity.material->m.casts_shadows)
       {
         ASSERT(entity.mesh);
         int vao = entity.mesh->get_vao();
@@ -932,7 +933,6 @@ void Render::build_shadow_maps()
     }
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glFinish();
 }
 
 void Render::opaque_pass(float32 time)
@@ -949,7 +949,7 @@ void Render::opaque_pass(float32 time)
   glCullFace(GL_BACK);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
-
+  //todo: depth pre-pass
   for (Render_Entity &entity : render_entities)
   {
     ASSERT(entity.mesh);
@@ -1579,8 +1579,8 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glBindTexture(GL_TEXTURE_2D, color.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, 0);
 
