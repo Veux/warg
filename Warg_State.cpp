@@ -28,11 +28,11 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   material.backface_culling = false;
   material.uv_scale = vec2(2);
 
-  Node_Ptr ground_mesh =
-      scene.add_primitive_mesh(plane, "ground_plane", material);
-  ground_mesh->position = client->map.ground_pos;
-  ground_mesh->scale = client->map.ground_dim;
-  map_meshes.push_back(ground_mesh);
+  // Node_Ptr ground_mesh =
+  //     scene.add_primitive_mesh(plane, "ground_plane", material);
+  // ground_mesh->position = client->map.ground_pos;
+  // ground_mesh->scale = client->map.ground_dim;
+  // map_meshes.push_back(ground_mesh);
 
   for (auto &s : client->map.surfaces)
   {
@@ -423,11 +423,71 @@ Map make_nagrand()
   nagrand.ground_pos = vec3(16, 22, 0);
   nagrand.ground_dim = vec3(32, 44, 0.05);
   nagrand.ground_dir = vec3(0, 1, 0);
+  nagrand.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
+  nagrand.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
 
-  nagrand.spawn_pos[0] = {16, 4, 0.5f};
-  nagrand.spawn_pos[1] = {16, 40, 0.5f};
+  nagrand.surfaces.push_back({{15, 12, 0}, {17, 12, 0}, {15, 18, 5}});
+  nagrand.surfaces.push_back({{15, 18, 5}, {17, 12, 0}, {17, 18, 5}});
+
+  nagrand.spawn_pos[0] = {16, 4, 5};
+  nagrand.spawn_pos[1] = {16, 40, 5};
   nagrand.spawn_dir[0] = {0, 1, 0};
   nagrand.spawn_dir[1] = {0, -1, 0};
 
   return nagrand;
+}
+
+Map make_blades_edge() {
+  Map blades_edge;
+
+  blades_edge.surfaces.push_back({{13, 8, 0}, {15, 8, 0}, {15, 8, 2}});
+
+  std::vector<Wall> walls;
+  walls.push_back({{12, 8, 0}, {0, 8}, 10});
+  walls.push_back({{12, 0, 0}, {12, 8}, 10});
+  walls.push_back({{20, 0, 0}, {12, 0}, 10});
+  walls.push_back({{20, 8, 0}, {20, 0}, 10});
+  walls.push_back({{32, 8, 0}, {20, 8}, 10});
+  walls.push_back({{32, 12, 0}, {28, 8}, 10});
+  walls.push_back({{32, 36, 0}, {32, 8}, 10});
+  walls.push_back({{20, 36, 0}, {32, 36}, 10});
+  walls.push_back({{20, 44, 0}, {20, 36}, 10});
+  walls.push_back({{12, 44, 0}, {20, 44}, 10});
+  walls.push_back({{12, 36, 0}, {12, 44}, 10});
+  walls.push_back({{0, 36, 0}, {12, 36}, 10});
+  walls.push_back({{0, 8, 0}, {0, 36}, 10});
+  walls.push_back({{4, 32, 0}, {4, 28}, 10});
+  walls.push_back({{8, 32, 0}, {4, 32}, 10});
+  walls.push_back({{8, 28, 0}, {8, 32}, 10});
+  walls.push_back({{4, 28, 0}, {8, 28}, 10});
+  walls.push_back({{24, 32, 0}, {24, 28}, 10});
+  walls.push_back({{28, 32, 0}, {24, 32}, 10});
+  walls.push_back({{28, 28, 0}, {28, 32}, 10});
+  walls.push_back({{24, 28, 0}, {28, 28}, 10});
+  walls.push_back({{28, 16, 0}, {24, 16}, 10});
+  walls.push_back({{28, 12, 0}, {28, 16}, 10});
+  walls.push_back({{24, 12, 0}, {28, 12}, 10});
+  walls.push_back({{24, 16, 0}, {24, 12}, 10});
+  walls.push_back({{8, 12, 0}, {8, 16}, 10});
+  walls.push_back({{8, 16, 0}, {4, 16}, 10});
+  walls.push_back({{4, 16, 0}, {4, 12}, 10});
+  walls.push_back({{4, 12, 0}, {8, 12}, 10});
+  for (auto &w : walls)
+	  add_wall(blades_edge.surfaces, w);
+
+  blades_edge.ground_pos = vec3(16, 22, 0);
+  blades_edge.ground_dim = vec3(32, 44, 0.05);
+  blades_edge.ground_dir = vec3(0, 1, 0);
+  blades_edge.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
+  blades_edge.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
+
+  blades_edge.surfaces.push_back({{15, 12, 0}, {17, 12, 0}, {15, 18, 5}});
+  blades_edge.surfaces.push_back({{15, 18, 5}, {17, 12, 0}, {17, 18, 5}});
+
+  blades_edge.spawn_pos[0] = {16, 4, 5};
+  blades_edge.spawn_pos[1] = {16, 40, 5};
+  blades_edge.spawn_dir[0] = {0, 1, 0};
+  blades_edge.spawn_dir[1] = {0, -1, 0};
+
+  return blades_edge;
 }

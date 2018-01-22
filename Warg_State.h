@@ -1,4 +1,5 @@
 #pragma once
+#include "Physics.h"
 #include "Spell.h"
 #include "State.h"
 #include "Warg_Client.h"
@@ -27,8 +28,10 @@ struct Character
   vec3 pos;
   vec3 dir;
   vec3 vel;
-  bool airborne = false;
+  bool grounded;
   Move_Status move_status = Move_Status::None;
+  Collision_Packet colpkt;
+  int collision_recursion_depth;
 
   std::string name;
   int team;

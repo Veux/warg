@@ -167,11 +167,11 @@ void Warg_Server::process_event(Jump_Event *jump)
   ASSERT(0 <= jump->character && jump->character < chars.size());
   Character *c = &chars[jump->character];
 
-  if (c->airborne)
-    return;
-
-  c->vel.z += 3.4;
-  c->airborne = true;
+  if (c->grounded)
+  {
+    c->vel.z += 4;
+    c->grounded = false;
+  }
 }
 
 void Warg_Server::process_event(Cast_Event *cast)
@@ -190,95 +190,151 @@ void Warg_Server::process_event(Cast_Event *cast)
   try_cast_spell(ch, target, spell);
 }
 
-void Warg_Server::move_char(int ci, float32 dt)
+void Warg_Server::collide_and_slide_char(
+    int ci, const vec3 &vel, const vec3 &gravity)
 {
   ASSERT(0 <= ci < chars.size());
   Character *c = &chars[ci];
   ASSERT(c);
 
-  if (c->casting)
-  {
-    interrupt_cast(ci);
-  }
+  bool found_collision = false;
 
-  float32 new_z = c->pos.z + c->vel.z * dt;
+  c->colpkt.e_radius = vec3(0.3, 0.3, 0.5);
+  c->colpkt.pos_r3 = c->pos;
+  c->colpkt.vel_r3 = vel;
 
-  if (new_z < 0.5)
-  {
-    new_z = 0.5;
-    c->airborne = false;
-    c->vel.z = 0;
-  }
+  vec3 e_space_pos = c->colpkt.pos_r3 / c->colpkt.e_radius;
+  vec3 e_space_vel = c->colpkt.vel_r3 / c->colpkt.e_radius;
 
-  if (c->airborne)
-    c->vel.z -= 9.81 * dt;
+  c->collision_recursion_depth = 0;
 
-  if (!c->airborne)
-  {
-    vec3 v = vec3(0);
-    if (c->move_status & Move_Status::Forwards)
-      v += vec3(c->dir.x, c->dir.y, 0);
-    else if (c->move_status & Move_Status::Backwards)
-      v += -vec3(c->dir.x, c->dir.y, 0);
-    if (c->move_status & Move_Status::Left)
-    {
-      mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
-      vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
-      v += vec3(r * v_);
-    }
-    else if (c->move_status & Move_Status::Right)
-    {
-      mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
-      vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
-      v += vec3(r * v_);
-    }
-    if (c->move_status)
-      v = normalize(v);
-    c->vel.x = v.x;
-    c->vel.y = v.y;
-  }
+  vec3 final_pos = collide_char_with_world(ci, e_space_pos, e_space_vel);
 
-  auto mb = [&](vec3 pos) {
-    Barbell b;
-    float32 h = c->body.h;
-    b.r = h * 0.2;
-    b.pq.p = vec3(pos.x, pos.y, pos.z - h * 0.3);
-    b.pq.q = vec3(pos.x, pos.y, pos.z + h * 0.3);
-    return b;
-  };
+  if (c->colpkt.found_collision)
+	  found_collision = true;
 
-  vec3 new_pos = c->pos + c->e_stats.speed * c->vel * dt;
-  new_pos.z = new_z;
+  c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
+  c->colpkt.vel_r3 = gravity;
 
-  auto centroid = [](Triangle t) {
-	  return vec3((t.a.x + t.b.x + t.c.x) / 3, (t.a.y + t.b.y + t.c.y) / 3,
-				  (t.a.z + t.b.z + t.c.z) / 3);
-  };
-  auto orient3d = [](
-      vec3 p, Triangle t) {
-	  return dot(t.a - p, cross(t.b - p, t.c - p));
-  };
+  e_space_vel = gravity / c->colpkt.e_radius;
+  c->collision_recursion_depth = 0;
+
+  final_pos = collide_char_with_world(ci, final_pos, e_space_vel);
+
+  if (c->colpkt.found_collision)
+	  found_collision = true;
+
+  if (!found_collision)
+	  c->grounded = false;
+
+  final_pos *= c->colpkt.e_radius;
+  c->pos = final_pos;
+}
+
+vec3 Warg_Server::collide_char_with_world(
+    int ci, const vec3 &pos, const vec3 &vel)
+{
+  ASSERT(0 <= ci < chars.size());
+  Character *c = &chars[ci];
+  ASSERT(c);
+
+  float epsilon = 0.005f;
+
+  if (c->collision_recursion_depth > 5)
+    return pos;
+
+  c->colpkt.vel = vel;
+  c->colpkt.vel_normalized = normalize(c->colpkt.vel);
+  c->colpkt.base_point = pos;
+  c->colpkt.found_collision = false;
 
   for (auto &s : map.surfaces)
   {
-    if (orient3d(centroid(s) - c->vel, s) > 0)
-      continue;
-    if (intersects(mb(new_pos), s))
-      if (!intersects(mb(vec3(new_pos.x, c->pos.y, new_pos.z)), s))
-      {
-        new_pos.y = c->pos.y;
-        c->vel.y = 0;
-      }
-      else if (!intersects(mb(vec3(c->pos.x, new_pos.y, c->pos.z)), s))
-      {
-        new_pos.x = c->pos.x;
-        c->vel.x = 0;
-      }
-      else
-        new_pos = c->pos;
+    Triangle t;
+    t.a = s.a / c->colpkt.e_radius;
+    t.b = s.b / c->colpkt.e_radius;
+    t.c = s.c / c->colpkt.e_radius;
+    check_triangle(&c->colpkt, t);
   }
 
-  c->pos = new_pos;
+  if (!c->colpkt.found_collision)
+  {
+    c->grounded = false;
+    return pos + vel;
+  }
+
+  if (normalize(pos - c->colpkt.intersection_point).z > 0.9)
+    c->grounded = true;
+
+  vec3 destination_point = pos + vel;
+  vec3 new_base_point = pos;
+
+  if (c->colpkt.nearest_distance >= epsilon)
+  {
+    vec3 v = vel;
+    v = normalize(v) * (c->colpkt.nearest_distance - epsilon);
+    new_base_point = c->colpkt.base_point + v;
+
+    v = normalize(v);
+    c->colpkt.intersection_point -= epsilon * v;
+  }
+
+  vec3 slide_plane_origin = c->colpkt.intersection_point;
+  vec3 slide_plane_normal = new_base_point - c->colpkt.intersection_point;
+  slide_plane_normal = normalize(slide_plane_normal);
+  Plane sliding_plane = Plane(slide_plane_origin, slide_plane_normal);
+
+  vec3 new_destination_point =
+      destination_point -
+      sliding_plane.signed_distance_to(destination_point) * slide_plane_normal;
+
+  vec3 new_vel_vec = new_destination_point - c->colpkt.intersection_point;
+
+  if (length(new_vel_vec) < epsilon)
+  {
+    return new_base_point;
+  }
+
+  c->collision_recursion_depth++;
+  return collide_char_with_world(ci, new_base_point, new_vel_vec);
+}
+
+void Warg_Server::move_char(int ci, float dt)
+{
+  ASSERT(0 <= ci < chars.size());
+  Character *c = &chars[ci];
+  ASSERT(c);
+
+  vec3 v = vec3(0);
+  if (c->move_status & Move_Status::Forwards)
+    v += vec3(c->dir.x, c->dir.y, 0);
+  else if (c->move_status & Move_Status::Backwards)
+    v += -vec3(c->dir.x, c->dir.y, 0);
+  if (c->move_status & Move_Status::Left)
+  {
+    mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
+    vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
+    v += vec3(r * v_);
+  }
+  else if (c->move_status & Move_Status::Right)
+  {
+    mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
+    vec4 v_ = vec4(c->dir.x, c->dir.y, 0, 0);
+    v += vec3(r * v_);
+  }
+  if (c->move_status)
+  {
+    v = normalize(v);
+    v *= c->e_stats.speed;
+  }
+
+  c->vel.z -= 9.81 * dt;
+  if (c->vel.z < -53)
+    c->vel.z = -53;
+  if (c->grounded)
+    c->vel.z = 0;
+
+  collide_and_slide_char(ci, v * dt, vec3(0, 0, c->vel.z) * dt);
 }
 
 void Warg_Server::try_cast_spell(int caster_, int target_, const char *spell_)

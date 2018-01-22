@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vector>
+#include "Physics.h"
 using namespace glm;
 
 struct Cylinder
@@ -13,11 +14,6 @@ struct Wall
   vec3 p1;
   vec2 p2;
   float32 h;
-};
-
-struct Triangle
-{
-  vec3 a, b, c;
 };
 
 struct Segment
@@ -33,8 +29,8 @@ struct Sphere
 
 struct Barbell
 {
-	Segment pq;
-	float32 r;
+  Segment pq;
+  float32 r;
 };
 
 struct Map
