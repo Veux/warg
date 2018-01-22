@@ -22,7 +22,6 @@ struct CharStats
 
 struct Character
 {
-  Cylinder body;
   Node_Ptr mesh;
 
   vec3 pos;
@@ -70,4 +69,12 @@ struct Warg_State : protected State
   std::vector<Node_Ptr> map_meshes;
 };
 
+struct Wall
+{
+  vec3 p1;
+  vec2 p2;
+  float32 h;
+};
+
 Map make_nagrand();
+Map make_blades_edge();

@@ -5,7 +5,7 @@
 
 Warg_Client::Warg_Client(Scene_Graph *scene_, queue<Warg_Event> *in_)
 {
-  map = make_nagrand();
+  map = make_blades_edge();
   sdb = make_spell_db();
   scene = scene_;
   in = in_;
@@ -254,7 +254,6 @@ void Warg_Client::add_char(int team, const char *name)
   c.name = std::string(name);
   c.pos = pos;
   c.dir = dir;
-  c.body = {1.f, 0.3f};
   c.mesh = scene->add_primitive_mesh(cube, "player_cube", material);
   c.hp_max = 100;
   c.hp = c.hp_max;

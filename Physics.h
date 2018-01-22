@@ -1,5 +1,6 @@
 #pragma once
 #include <glm/glm.hpp>
+#include <vector>
 using namespace glm;
 
 struct Triangle
@@ -24,6 +25,13 @@ struct Plane
 
   bool is_facing(const vec3 &direction) const;
   float signed_distance_to(const vec3 &p) const;
+};
+
+struct Map
+{
+  std::vector<Triangle> surfaces;
+  vec3 spawn_pos[2];
+  vec3 spawn_dir[2];
 };
 
 struct Collision_Packet

@@ -5,7 +5,7 @@
 
 Warg_Server::Warg_Server()
 {
-  map = make_nagrand();
+  map = make_blades_edge();
   sdb = make_spell_db();
 }
 
@@ -761,7 +761,6 @@ void Warg_Server::add_char(int team, const char *name)
   c.name = std::string(name);
   c.pos = map.spawn_pos[team];
   c.dir = map.spawn_dir[team];
-  c.body = {1.f, 0.3f};
   c.hp_max = 100;
   c.hp = c.hp_max;
   c.mana_max = 500;

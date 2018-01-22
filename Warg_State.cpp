@@ -1,5 +1,4 @@
 #include "Warg_State.h"
-#include "Functions.h"
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
@@ -27,12 +26,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   material.frag_shader = "world_origin_distance.frag";
   material.backface_culling = false;
   material.uv_scale = vec2(2);
-
-  // Node_Ptr ground_mesh =
-  //     scene.add_primitive_mesh(plane, "ground_plane", material);
-  // ground_mesh->position = client->map.ground_pos;
-  // ground_mesh->scale = client->map.ground_dim;
-  // map_meshes.push_back(ground_mesh);
 
   for (auto &s : client->map.surfaces)
   {
@@ -385,8 +378,6 @@ Map make_nagrand()
 {
   Map nagrand;
 
-  nagrand.surfaces.push_back({{13, 8, 0}, {15, 8, 0}, {15, 8, 2}});
-
   std::vector<Wall> walls;
   walls.push_back({{12, 8, 0}, {0, 8}, 10});
   walls.push_back({{12, 0, 0}, {12, 8}, 10});
@@ -420,9 +411,6 @@ Map make_nagrand()
   for (auto &w : walls)
 	  add_wall(nagrand.surfaces, w);
 
-  nagrand.ground_pos = vec3(16, 22, 0);
-  nagrand.ground_dim = vec3(32, 44, 0.05);
-  nagrand.ground_dir = vec3(0, 1, 0);
   nagrand.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
   nagrand.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
 
@@ -437,10 +425,9 @@ Map make_nagrand()
   return nagrand;
 }
 
+
 Map make_blades_edge() {
   Map blades_edge;
-
-  blades_edge.surfaces.push_back({{13, 8, 0}, {15, 8, 0}, {15, 8, 2}});
 
   std::vector<Wall> walls;
   walls.push_back({{12, 8, 0}, {0, 8}, 10});
@@ -475,9 +462,6 @@ Map make_blades_edge() {
   for (auto &w : walls)
 	  add_wall(blades_edge.surfaces, w);
 
-  blades_edge.ground_pos = vec3(16, 22, 0);
-  blades_edge.ground_dim = vec3(32, 44, 0.05);
-  blades_edge.ground_dir = vec3(0, 1, 0);
   blades_edge.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
   blades_edge.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
 
