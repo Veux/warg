@@ -569,24 +569,24 @@ Map make_blades_edge() {
   blades_edge.surfaces.push_back({{24.85, 18, 3.7}, {25.15, 21, 3.7}, {25.15, 18, 3.7}});
   blades_edge.surfaces.push_back({{24.85, 18, 3.7}, {24.85, 21, 3.7}, {25.15, 21, 3.7}});
 
-  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 18, 4}, {24.85, 18, 3.7}});
-  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 18, 3.7}, {24.85, 21, 3.7}});
+  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 18, 3.7}, {24.85, 18, 4}});
+  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 21, 3.7}, {24.85, 18, 3.7}});
 
-  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 3.7}, {25.15, 18, 4}});
-  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 21, 3.7}, {25.15, 18, 3.7}});
+  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 4}, {25.15, 18, 3.7}});
+  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 3.7}, {25.15, 21, 3.7}});
 
   // north
-  blades_edge.surfaces.push_back({{24.85, 21, 4}, {25.15, 21, 4}, {25.15, 32, 4}});
-  blades_edge.surfaces.push_back({{24.85, 21, 4}, {25.15, 32, 4}, {24.85, 32, 4}});
+  blades_edge.surfaces.push_back({{24.85, 29, 4}, {25.15, 29, 4}, {25.15, 32, 4}});
+  blades_edge.surfaces.push_back({{24.85, 29, 4}, {25.15, 32, 4}, {24.85, 32, 4}});
 
-  blades_edge.surfaces.push_back({{24.85, 21, 3.7}, {25.15, 32, 3.7}, {25.15, 21, 3.7}});
-  blades_edge.surfaces.push_back({{24.85, 21, 3.7}, {24.85, 32, 3.7}, {25.15, 32, 3.7}});
+  blades_edge.surfaces.push_back({{24.85, 29, 3.7}, {25.15, 32, 3.7}, {25.15, 29, 3.7}});
+  blades_edge.surfaces.push_back({{24.85, 29, 3.7}, {24.85, 32, 3.7}, {25.15, 32, 3.7}});
 
-  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 21, 4}, {24.85, 21, 3.7}});
-  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 21, 3.7}, {24.85, 32, 3.7}});
+  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 29, 3.7}, {24.85, 29, 4}});
+  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 32, 3.7}, {24.85, 29, 3.7}});
 
-  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 21, 3.7}, {25.15, 21, 4}});
-  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 32, 3.7}, {25.15, 21, 3.7}});
+  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 4}, {25.15, 29, 3.7}});
+  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 3.7}, {25.15, 32, 3.7}});
 
   // spawns
   blades_edge.spawn_pos[0] = {5, 5, 5};
