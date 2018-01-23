@@ -33,11 +33,14 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   scene.lights.light_count = 1;
   Light *light = &scene.lights.lights[0];
-  light->position = vec3{0, 0, 10};
-  light->color = 30.0f * vec3(1.0f, 0.93f, 0.92f);
+  light->position = vec3{25, 25, 20};
+  light->color = 1000.0f * vec3(1.0f, 0.93f, 0.92f);
   light->attenuation = vec3(1.0f, .045f, .0075f);
+  light->direction = vec3(0.0f, 0.0f, 0.0f);
   light->ambient = 0.02f;
-  light->type = omnidirectional;
+  light->cone_angle = 0.15f;
+  light->type = spot;
+  light->casts_shadows = false;
 
   out.push(char_spawn_request_event("Eirich", 0));
   out.push(char_spawn_request_event("Veuxia", 0));
@@ -419,9 +422,9 @@ Map make_nagrand()
     c = s.b;
     d = s.c;
 
-    add_quad(a, b, c, d, nagrand.data);
+    add_quad(a, b, c, d, nagrand.mesh);
   }
-  data.unique_identifier = "nagrand_arena_map";
+  nagrand.mesh.unique_identifier = "nagrand_arena_map";
 
   nagrand.material.albedo = "crate_diffuse.png";
   nagrand.material.emissive = "test_emissive.png";
@@ -430,12 +433,12 @@ Map make_nagrand()
   nagrand.material.vertex_shader = "vertex_shader.vert";
   nagrand.material.frag_shader = "world_origin_distance.frag";
 
-  return data;
+  return nagrand;
 }
 
 
 Map make_blades_edge() {
-  Map blades_edge; 
+  Map blades_edge;
 
   // ground
   blades_edge.surfaces.push_back({{0, 0, 0}, {50, 0, 0}, {0, 50, 0}});
@@ -602,7 +605,6 @@ Map make_blades_edge() {
   blades_edge.spawn_dir[0] = {0, 1, 0};
   blades_edge.spawn_dir[1] = {0, -1, 0};
 
-
   for (auto &s : blades_edge.surfaces)
   {
     vec3 a, b, c, d;
@@ -611,15 +613,17 @@ Map make_blades_edge() {
     c = s.b;
     d = s.c;
 
-    add_quad(a, b, c, d, blades_edge.data);
+    add_quad(a, b, c, d, blades_edge.mesh);
   }
-  blades_edge.data.unique_identifier = "blades_edge_map";
+  blades_edge.mesh.unique_identifier = "blades_edge_map";
+  blades_edge.material.backface_culling = false;
 
-  blades_edge.material.albedo = "crate_diffuse.png";
-  blades_edge.material.emissive = "test_emissive.png";
+  blades_edge.material.albedo = "color(239, 221, 111, 255)";
+  blades_edge.material.emissive = "";
   blades_edge.material.normal = "test_normal.png";
-  blades_edge.material.roughness = "crate_roughness.png";
+  blades_edge.material.roughness = "color(100, 100, 100, 255)";
   blades_edge.material.vertex_shader = "vertex_shader.vert";
-  blades_edge.material.frag_shader = "world_origin_distance.frag";
-  return bladdes_edge;
+  blades_edge.material.frag_shader = "fragment_shader.frag";
+  blades_edge.material.casts_shadows = true;
+  return blades_edge;
 }

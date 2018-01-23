@@ -75,16 +75,5 @@ struct Wall
   float32 h;
 };
 
-struct Map
-{
-  Node_Ptr node;
-  Mesh_Data mesh;
-  Material_Descriptor material;
-
-  std::vector<Triangle> surfaces;//trash
-  vec3 spawn_pos[2];
-  vec3 spawn_dir[2];
-};
-
 Map make_nagrand();
 Map make_blades_edge();

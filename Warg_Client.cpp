@@ -5,10 +5,8 @@
 
 Warg_Client::Warg_Client(Scene_Graph *scene_, queue<Warg_Event> *in_)
 {
-  Mesh_Data blades_edge = make_blades_edge();
+  Map blades_edge = make_blades_edge();
 
-  
-  auto mesh = scene.add_mesh(blades_edge, material, "some wall");
   map = make_blades_edge();
   sdb = make_spell_db();
   scene = scene_;
@@ -247,11 +245,11 @@ void Warg_Client::add_char(int team, const char *name)
 
   Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
+  material.emissive = "";
   material.normal = "test_normal.png";
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
+  material.frag_shader = "fragment_shader.frag";
 
   Character c;
   c.team = team;
