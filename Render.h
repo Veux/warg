@@ -122,6 +122,7 @@ struct Mesh
 
 struct Material_Descriptor
 {
+  //solid colors can be specified with "color(r,g,b,a)" uint8 values
   std::string albedo;
   std::string roughness;
   std::string specular;  // specular color for conductors   - unused for now
