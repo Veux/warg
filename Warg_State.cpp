@@ -463,8 +463,8 @@ Map make_blades_edge() {
   blades_edge.surfaces.push_back({{0, 0, 0}, {0, 50, 0}, {0, 50, 10}});
   blades_edge.surfaces.push_back({{0, 0, 0}, {0, 50, 10}, {0, 0, 10}});
 
-  blades_edge.surfaces.push_back({{0, 0, 0}, {10, 0, 10}, {10, 0, 0}});
-  blades_edge.surfaces.push_back({{0, 0, 0}, {0, 0, 10}, {10, 0, 10}});
+  // blades_edge.surfaces.push_back({{0, 0, 0}, {10, 0, 10}, {10, 0, 0}});
+  // blades_edge.surfaces.push_back({{0, 0, 0}, {0, 0, 10}, {10, 0, 10}});
 
   blades_edge.surfaces.push_back({{10, 0, 0}, {10, 0, 10}, {10, 10, 10}});
   blades_edge.surfaces.push_back({{10, 0, 0}, {10, 10, 10}, {10, 10, 0}});
@@ -613,6 +613,13 @@ Map make_blades_edge() {
 
   blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 4}, {25.15, 29, 3.7}});
   blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 3.7}, {25.15, 32, 3.7}});
+
+  // memes
+  blades_edge.surfaces.push_back({{-1000, -1000, -10}, {5000, -1000, -10}, {-1000, 5000, -10}});
+  blades_edge.surfaces.push_back({{5000, 5000, -10}, {-1000, 5000, -10}, {5000, -1000, -10}});
+
+  blades_edge.surfaces.push_back({{0, 0, 0}, {0, -30, -10}, {10, -30, -10}});
+  blades_edge.surfaces.push_back({{0, 0, 0}, {10, -30, -10}, {10, 0, 0}});
 
   // spawns
   blades_edge.spawn_pos[0] = {5, 5, 5};
