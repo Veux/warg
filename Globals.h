@@ -16,13 +16,13 @@ struct aiString;
 
 #define MAX_INSTANCE_COUNT 100
 #define UNIFORM_LIGHT_LOCATION 20
-#define MAX_LIGHTS 10
-#define SHOW_ERROR_TEXTURE 0
+#define MAX_LIGHTS 10  // reminder to change the Texture_Location::s1...sn shadow map enums
 #define DYNAMIC_TEXTURE_RELOADING 1
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define DEBUG 1
 #define ENABLE_ASSERTS 1
 #define INCLUDE_FILE_LINE_IN_LOG 0
+#define MAX_TEXTURE_SAMPLERS 20
 
 struct Warg_State;
 struct Render_Test_State;

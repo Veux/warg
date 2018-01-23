@@ -52,6 +52,11 @@ static Mesh QUAD;
 static Shader TEMPORALAA;
 static Shader PASSTHROUGH;
 static Shader VARIANCE_SHADOW_MAP;
+static Shader GAUSSIAN_BLUR;
+static GLuint SCRATCH_FRAMEBUFFER = 0;
+static GLuint GAUSSIAN_INTERMEDIATE;
+static vec2 CURRENT_GAUSSIAN_SIZE = vec2(0);
+GLenum CURRENT_GAUSSIAN_FORMAT = GL_RGBA;
 static bool INIT = false;
 static std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
@@ -84,6 +89,7 @@ void INIT_RENDERER()
   TEMPORALAA = Shader("passthrough.vert", "TemporalAA.frag");
   PASSTHROUGH = Shader("passthrough.vert", "passthrough.frag");
   VARIANCE_SHADOW_MAP = Shader("passthrough.vert", "variance_shadow_map.frag");
+  GAUSSIAN_BLUR = Shader("passthrough.vert","gaussian_blur.frag");
 
   set_message("Initializing instance buffers");
   // instancing MVP Matrix buffer init
@@ -112,12 +118,13 @@ void CLEANUP_RENDERER()
   TEMPORALAA = Shader();
   PASSTHROUGH = Shader();
 
-  set_message("Deleting FBO, 3 textures, 2 instance buffers:",
-              s(TARGET_FRAMEBUFFER, " ", COLOR_TARGET_TEXTURE, " ",
+  set_message("Deleting 2 FBOs, 3 textures, 2 instance buffers:",
+              s(TARGET_FRAMEBUFFER, " ", SCRATCH_FRAMEBUFFER ,"",COLOR_TARGET_TEXTURE, " ",
                 PREV_COLOR_TARGET, " ", DEPTH_TARGET_TEXTURE, " ",
                 INSTANCE_MVP_BUFFER, " ", INSTANCE_MODEL_BUFFER));
 
   glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
+  glDeleteFramebuffers(1, &SCRATCH_FRAMEBUFFER);
   glDeleteTextures(1, &COLOR_TARGET_TEXTURE);
   glDeleteTextures(1, &PREV_COLOR_TARGET);
   glDeleteRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
@@ -246,24 +253,6 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-enum Texture_Location
-{
-  albedo,
-  specular,
-  normal,
-  emissive,
-  roughness,
-  s0,
-  s1,
-  s2,
-  s3,
-  s4,
-  s5,
-  s6,
-  s7,
-  s8,
-  s9 // shadow maps
-};
 
 Texture::Texture() { file_path = ERROR_TEXTURE_PATH; }
 Texture_Handle::~Texture_Handle()
@@ -278,8 +267,7 @@ Texture::Texture(std::string path, bool premul)
   path = fix_filename(path);
   if (path.size() == 0)
   {
-    file_path = ERROR_TEXTURE_PATH;
-    load();
+    texture = nullptr;
     return;
   }
   if (path.substr(0, 6) == "color(")
@@ -305,15 +293,12 @@ Texture::Texture(std::string path, bool premul)
 
 void Texture::load()
 {
-#if !SHOW_ERROR_TEXTURE
-  if (file_path == ERROR_TEXTURE_PATH || file_path == BASE_TEXTURE_PATH)
-  { // the file path doesnt point to a valid texture, or points to the error
-    // texture
+  if (file_path == "" || file_path == BASE_TEXTURE_PATH)
+  {
     // a null texture here shows as 0,0,0,0 in the shader
     texture = nullptr;
     return;
   }
-#endif
   auto ptr = TEXTURE_CACHE[file_path].lock();
   if (ptr)
   {
@@ -338,7 +323,6 @@ void Texture::load()
     return;
   }
   auto *data = stbi_load(file_path.c_str(), &width, &height, &n, 4);
-
   if (!data)
   { // error loading file...
 #if DYNAMIC_TEXTURE_RELOADING
@@ -348,15 +332,10 @@ void Texture::load()
     return;
 #else
     if (!data)
-    { // no dynamic texture reloading, so log fail and load the error texture
+    {
       set_message("STBI failed to find or load texture: " + file_path);
-      if (file_path == ERROR_TEXTURE_PATH)
-      {
-        texture = nullptr;
-        return;
-      }
-      file_path = ERROR_TEXTURE_PATH;
-      load();
+      file_path = "";
+      texture = nullptr;
       return;
     }
 #endif
@@ -397,16 +376,11 @@ void Texture::load()
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Texture::bind(const char *name, GLuint binding, Shader &shader)
+void Texture::bind(GLuint binding)
 {
 #if DYNAMIC_TEXTURE_RELOADING
   load();
 #endif
-  GLuint u = glGetUniformLocation(shader.program->program, name);
-  if (u == -1)
-    return;
-
-  glUniform1i(u, binding);
   glActiveTexture(GL_TEXTURE0 + (GLuint)binding);
   glBindTexture(GL_TEXTURE_2D, texture ? texture->texture : 0);
 }
@@ -459,15 +433,14 @@ Mesh::Mesh(const aiMesh *aimesh, std::string unique_identifier)
       upload_data(load_mesh(aimesh, unique_identifier));
 }
 
-void Mesh::bind_to_shader(Shader &shader)
+
+
+void Mesh::enable_assign_attributes()
 {
   GLint current_vao;
   glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &current_vao);
-  GLint current_shader;
-  glGetIntegerv(GL_CURRENT_PROGRAM, &current_shader);
   ASSERT(mesh);
   ASSERT(current_vao == mesh->vao);
-  ASSERT(current_shader = shader.program->program);
 
   // int32 loc = glGetAttribLocation(shader.program->program, "position");
   // ASSERT(loc != -1);
@@ -580,6 +553,8 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0],
                GL_STATIC_DRAW);
 
+  enable_assign_attributes();
+
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
   return mesh;
@@ -678,11 +653,10 @@ void Material::bind()
   else
     glDisable(GL_CULL_FACE);
 
-  albedo.bind("albedo", Texture_Location::albedo, shader);
-  // specular_color.bind("specular", 1, shader);
-  normal.bind("normal", 2, shader);
-  emissive.bind("emissive", 3, shader);
-  roughness.bind("roughness", 4, shader);
+  albedo.bind(Texture_Location::albedo);
+  normal.bind(Texture_Location::normal);
+  emissive.bind(Texture_Location::emissive);
+  roughness.bind(Texture_Location::roughness);
 }
 void Material::unbind_textures()
 {
@@ -747,133 +721,100 @@ Render::Render(SDL_Window *window, ivec2 window_size)
 
 void Render::set_uniform_lights(Shader &shader)
 {
-  ASSERT(lights.lights.size() == MAX_LIGHTS);
-  uint32 location = -1;
-  // todo: this is horrible. do something much better than this - precompute
-  // all these godawful strings and just select them
+  for (uint32 i = 0; i < lights.light_count; ++i)
+  {
+    Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i];
+    const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
+    const Light* new_light = lights.lights[i];
 
-  if (!shader.light_location_cache_set)
-  {
-    for (int i = 0; i < MAX_LIGHTS; ++i)
+    if (value_cache->position != new_light->position)
     {
-      shader.lights_cache[i].locations.position = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].position").c_str());
-      shader.lights_cache[i].locations.direction = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].direction").c_str());
-      shader.lights_cache[i].locations.color = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].color").c_str());
-      shader.lights_cache[i].locations.attenuation = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].attenuation").c_str());
-      shader.lights_cache[i].locations.ambient = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].ambient").c_str());
-      shader.lights_cache[i].locations.cone_angle = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].cone_angle").c_str());
-      shader.lights_cache[i].locations.type = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].type").c_str());
-      shader.lights_cache[i].locations.enabled = glGetUniformLocation(
-          shader.program->program, s("shadow_map_enabled[", i, "]").c_str());
-      shader.lights_cache[i].locations.shadow_map_transform =
-          glGetUniformLocation(shader.program->program,
-                               s("shadow_map_transform[", i, "]").c_str());
-      shader.lights_cache[i].locations.shadow_map = glGetUniformLocation(
-          shader.program->program, s("shadow_maps[", i, "]").c_str());
+      value_cache->position = new_light->position;
+      glUniform3fv(location_cache->position, 1, &new_light->position[0]);
     }
-    shader.light_count_location =
-        glGetUniformLocation(shader.program->program, "number_of_lights");
-    shader.additional_ambient_location =
-        glGetUniformLocation(shader.program->program, "additional_ambient");
-    shader.light_location_cache_set = true;
+
+    if (value_cache->direction != new_light->direction)
+    {
+      value_cache->direction = new_light->direction;
+      glUniform3fv(location_cache->direction, 1, &new_light->direction[0]);
+    }
+
+    if (value_cache->color != new_light->color)
+    {
+      value_cache->color = new_light->color;
+      glUniform3fv(location_cache->color, 1, &new_light->color[0]);
+    }
+
+    if (value_cache->attenuation != new_light->attenuation)
+    {
+      value_cache->attenuation = new_light->attenuation;
+      glUniform3fv(location_cache->attenuation, 1, &new_light->attenuation[0]);
+    }
+
+    const vec3 new_ambient = new_light->ambient * new_light->color;
+    if (shader.light_values_cache[i].ambient != new_ambient)
+    {
+      value_cache->ambient = new_ambient;
+      glUniform3fv(location_cache->ambient, 1, &new_ambient[0]);
+    }
+
+    const float new_cone_angle = new_light->cone_angle;
+    if (value_cache->cone_angle != new_cone_angle)
+    {
+      value_cache->cone_angle = new_cone_angle;
+      glUniform1fv(location_cache->cone_angle, 1, &new_cone_angle);
+    }
+
+    const Light_Type new_type = light->type;
+    if (value_cache->type != new_type)
+    {
+      value_cache->type = new_type;
+      glUniform1i(location_cache->type, (int32)new_type);
+    }
   }
 
-  for (int i = 0; i < lights.light_count; ++i)
+  const uint32 new_light_count = lights.light_count;
+  if (shader.program->light_count != new_light_count)
   {
-    if (shader.lights_cache[i].position[0] != lights.lights[i].position[0])
-    {
-      shader.lights_cache[i].position[0] = lights.lights[i].position[0];
-      glUniform3fv(shader.lights_cache[i].locations.position, 1,
-                   &lights.lights[i].position[0]);
-    }
-    if (shader.lights_cache[i].direction[0] != lights.lights[i].direction[0])
-    {
-      shader.lights_cache[i].direction[0] = lights.lights[i].direction[0];
-      glUniform3fv(shader.lights_cache[i].locations.direction, 1,
-                   &lights.lights[i].direction[0]);
-    }
-    if (shader.lights_cache[i].color[0] != lights.lights[i].color[0])
-    {
-      shader.lights_cache[i].color[0] = lights.lights[i].color[0];
-      glUniform3fv(shader.lights_cache[i].locations.color, 1,
-                   &lights.lights[i].color[0]);
-    }
-    if (shader.lights_cache[i].attenuation[0] !=
-        lights.lights[i].attenuation[0])
-    {
-      shader.lights_cache[i].attenuation[0] = lights.lights[i].attenuation[0];
-      glUniform3fv(shader.lights_cache[i].locations.attenuation, 1,
-                   &lights.lights[i].attenuation[0]);
-    }
-    vec3 ambient = lights.lights[i].ambient * lights.lights[i].color;
-    if (shader.lights_cache[i].ambient[0] != ambient[0])
-    {
-      shader.lights_cache[i].ambient[0] = ambient[0];
-      glUniform3fv(shader.lights_cache[i].locations.ambient, 1, &ambient[0]);
-    }
-    if (shader.lights_cache[i].cone_angle != lights.lights[i].cone_angle)
-    {
-      shader.lights_cache[i].cone_angle = lights.lights[i].cone_angle;
-      glUniform1fv(shader.lights_cache[i].locations.cone_angle, 1,
-                   &lights.lights[i].cone_angle);
-    }
-    if (shader.lights_cache[i].type != (int32)lights.lights[i].type)
-    {
-      shader.lights_cache[i].type != (int32)lights.lights[i].type;
-      glUniform1i(shader.lights_cache[i].locations.type,
-                  (int32)lights.lights[i].type);
-    }
+    shader.program->light_count = (int32)lights.light_count;
+    glUniform1i(shader.program->light_count_location, new_light_count);
   }
-  if (shader.light_count != (int32)lights.light_count)
+
+  const vec3 new_ambient = lights.additional_ambient;
+  if (shader.program->additional_ambient != new_ambient)
   {
-    shader.light_count = (int32)lights.light_count;
-    glUniform1i(shader.light_count_location, (int32)lights.light_count);
-  }
-  if (shader.additional_ambient != lights.additional_ambient)
-  {
-    shader.additional_ambient = lights.additional_ambient;
-    glUniform3fv(shader.additional_ambient_location, 1,
-                 &lights.additional_ambient[0]);
+    shader.program->additional_ambient = new_ambient;
+    glUniform3fv(shader.program->additional_ambient_location, 1, &new_ambient[0]);
   }
 }
 
 void Render::set_uniform_shadowmaps(Shader &shader)
 {
+  ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
+ 
   for (int i = 0; i < MAX_LIGHTS; ++i)
   {
-    ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
-    ASSERT(MAX_LIGHTS ==
-           10); // reminder to change the Texture_Location::s1...sn enums
-
-    Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
+    const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
     glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
-    glUniform1i(shader.lights_cache[i].locations.shadow_map,
-                (GLuint)Texture_Location::s0 + i);
     glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
-    mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
+    const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
                        0.0, 0.5, 0.5, 0.5, 1.0);
-    mat4 shadow_map_transform =
-        offset * spotlight_shadow_maps[i].projection_camera;
-    if (shader.lights_cache[i].shadow_map_transform != shadow_map_transform)
+    const mat4 shadow_map_transform = offset * shadow_map->projection_camera;
+
+    const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
+    Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i]; 
+
+    if (value_cache->shadow_map_transform != shadow_map_transform)
     {
-      shader.lights_cache[i].shadow_map_transform = shadow_map_transform;
-      glUniformMatrix4fv(shader.lights_cache[i].locations.shadow_map_transform,
-                         1, GL_FALSE, &shadow_map_transform[0][0]);
+      value_cache->shadow_map_transform = shadow_map_transform;
+      glUniformMatrix4fv(location_cache->shadow_map_transform, 1, GL_FALSE, &shadow_map_transform[0][0]);
     }
-    if (shader.lights_cache[i].enabled != spotlight_shadow_maps[i].enabled)
+    if (value_cache->enabled != shadow_map->enabled)
     {
-      shader.lights_cache[i].enabled = spotlight_shadow_maps[i].enabled;
-      glUniform1i(shader.lights_cache[i].locations.enabled,
-                  (int32)spotlight_shadow_maps[i].enabled);
+      value_cache->enabled = shadow_map->enabled;
+      glUniform1i(location_cache->enabled, (int32)shadow_map->enabled);
     }
   }
 }
@@ -889,9 +830,9 @@ void Render::build_shadow_maps()
     if (i > lights.light_count - 1)
       return;
 
-    Light *light = &lights.lights[i];
+    const Light *light = &lights.lights[i];
     Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
-    if (light->type != spot || !light->casts_shadows)
+    if (light->type != Light_Type::spot || !light->casts_shadows)
       continue;
 
     shadow_map->enabled = true;
@@ -935,6 +876,113 @@ void Render::build_shadow_maps()
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void gaussian_blur(GLuint src, GLuint dst, vec2 dst_size, GLenum dst_format, float radius)
+{
+  if(dst_size != CURRENT_GAUSSIAN_SIZE || CURRENT_GAUSSIAN_FORMAT != dst_format)
+  {
+    glBindTexture(GL_TEXTURE_2D, GAUSSIAN_INTERMEDIATE);
+
+  	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	  glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
+	  glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, dst_size.x, dst_size.y, 0, dst_format,GL_UNSIGNED_BYTE, 0);
+
+    CURRENT_GAUSSIAN_SIZE = dst_size;
+    CURRENT_GAUSSIAN_FORMAT = dst_format;
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER,SCRATCH_FRAMEBUFFER);
+  glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GAUSSIAN_INTERMEDIATE,0);
+
+  glViewport(0,0,dst_size.x,dst_size.y);
+  glDisable(GL_DEPTH_TEST);
+
+  vec2 scale = vec2(1.0/ (dst_size.x * radius),0.0);  
+  mat4 transform =
+      ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f,
+            100.0f) *
+      translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1)) *
+      scale(vec3(dst_size, 1));
+
+  GAUSSIAN_BLUR.use();
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale",scale);
+  //GAUSSIAN_BLUR.set_uniform("source",0);
+  GAUSSIAN_BLUR.set_uniform("transform",transform);
+  glBindTexture(GL_TEXTURE_2D,src);
+  glActiveTexture(GL_TEXTURE0);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),GL_UNSIGNED_INT, (void *)0);
+
+  scale.y = scale.x;
+  scale.x = 0;
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale",scale);
+  glBindTexture(GL_TEXTURE_2D,GAUSSIAN_INTERMEDIATE);
+  glActiveTexture(GL_TEXTURE0);
+  glFramebufferTexture(GL_FRAMEBUFFER,DIFFUSE_TARGET,dst,0);
+
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),GL_UNSIGNED_INT, (void *)0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+  glBindTexture(GL_TEXTURE_2D,0);
+  glEnable(GL_DEPTH_TEST);
+}
+
+//if dst_texture is 0, use main framebuffer
+//shader must use passthrough.vert, and must use texture1, texture2 ... texturen for input texture sampler names
+void run_pixel_shader(Shader* shader, vector<GLuint> src_textures, GLuint dst_texture, ivec2 dst_size, bool clear_dst = false)
+{
+    for(uint32 i = 0; i < src_textures.size();++i)
+    {
+      glActiveTexture(GL_TEXTURE0+i);
+      glBindTexture(GL_TEXTURE_2D,src_textures[i]);
+    }
+    
+    vec2 viewport_size;
+    
+    if(dst_texture == 0)
+    {//render to screen
+      glBindFramebuffer(GL_FRAMEBUFFER,0);
+      size = window_size;
+    }
+    else
+    {//render to dst texture
+      glBindFramebuffer(GL_FRAMEBUFFER,SCRATCH_FRAMEBUFFER);
+      glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,dst_texture,0);
+      size = dst_size;
+    }
+
+    glViewport(0,0,viewport_size.x,viewport_size.y);
+    
+    if(clear_dst)
+    {
+      glClearColor(0,0,0,0);
+      glClear(GL_COLOR_BUFFER_BIT);
+    }
+    
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(QUAD.get_vao());
+    shader->use();
+
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glDisableVertexAttribArray(1); //uv
+    
+
+    mat4 o =
+      ortho(0.0f, (float32)viewport_size.x, 0.0f, (float32)viewport_size.y, 0.1f,
+            100.0f) *
+      translate(vec3(vec2(0.5f * viewport_size.x, 0.5f * viewport_size.y), -1)) *
+      scale(vec3(viewport_size, 1));
+    shader->set_uniform("transform", o);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
+                   GL_UNSIGNED_INT, (void *)0);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 void Render::opaque_pass(float32 time)
 {
   glViewport(0, 0, size.x, size.y);
@@ -958,7 +1006,6 @@ void Render::opaque_pass(float32 time)
     Shader &shader = entity.material->shader;
     shader.use();
     entity.material->bind();
-    entity.mesh->bind_to_shader(shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -978,7 +1025,7 @@ void Render::instance_pass(float32 time)
 {
   for (auto &entity : render_instances)
   {
-    ASSERT(0); // untested
+    ASSERT(0); //untested
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
     glBindVertexArray(vao);
@@ -986,7 +1033,6 @@ void Render::instance_pass(float32 time)
     ASSERT(shader.vs == "instance.vert");
     shader.use();
     entity.material->bind();
-    entity.mesh->bind_to_shader(shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1093,7 +1139,6 @@ void Render::translucent_pass(float32 time)
     Shader &shader = entity.material->shader;
     shader.use();
     entity.material->bind();
-    entity.mesh->bind_to_shader(shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1145,13 +1190,8 @@ void Render::render(float64 state_time)
     glViewport(0, 0, window_size.x, window_size.y);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     TEMPORALAA.use();
-    QUAD.bind_to_shader(TEMPORALAA);
-    GLuint u = glGetUniformLocation(TEMPORALAA.program->program, "current");
-    glUniform1i(u, 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
-    GLuint u2 = glGetUniformLocation(TEMPORALAA.program->program, "previous");
-    glUniform1i(u2, 1);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D,
                   PREV_COLOR_TARGET_MISSING ? COLOR_TARGET_TEXTURE
@@ -1177,14 +1217,12 @@ void Render::render(float64 state_time)
 
     // assign previous_color as the target to overwrite
     glViewport(0, 0, size.x, size.y);
+    //todo: make a framebuffer for each target, rather than swapping textures
     glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                          PREV_COLOR_TARGET, 0);
     PASSTHROUGH.use();
-    QUAD.bind_to_shader(PASSTHROUGH);
     // sample the current color_target as source
-    GLuint u3 = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
-    glUniform1i(u3, Texture_Location::albedo);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
     PASSTHROUGH.set_uniform("transform", o);
@@ -1201,6 +1239,22 @@ void Render::render(float64 state_time)
   }
   else
   {
+    //sponge test blur
+    ASSERT(0);
+    GLuint test_target = 0;
+    glGenTextures(1,&test_target);
+    glBindTexture(GL_TEXTURE_2D,test_target);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,window_size.x,window_size.y,0,GL_RGBA,GL_UNSIGNED_BYTE,0);
+    
+    gaussian_blur(COLOR_TARGET_TEXTURE, test_target, window_size, GL_RGBA, 5.0f);
+
+
+
+
+    ///sponge
+
+
+
     // render to main framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, window_size.x, window_size.y);
@@ -1208,18 +1262,18 @@ void Render::render(float64 state_time)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(QUAD.get_vao());
     PASSTHROUGH.use();
+    QUAD.bind();
+    //glEnableVertexAttribArray(0);
+    //glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
 
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    //glEnableVertexAttribArray(1);
+    //glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
+    //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
 
-    glEnableVertexAttribArray(1);
-    glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
-
-    GLuint loc = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
-    ASSERT(loc != -1);
-    glUniform1i(loc, Texture_Location::albedo);
+   // GLuint loc = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
+   // ASSERT(loc != -1);
+   // glUniform1i(loc, Texture_Location::albedo);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
 
@@ -1392,7 +1446,8 @@ void check_FBO_status()
 void Render::init_render_targets()
 {
   set_message("init_render_targets()");
-  set_message("Deleting FBO", std::to_string(TARGET_FRAMEBUFFER));
+  set_message("Deleting screen FBO", std::to_string(TARGET_FRAMEBUFFER));
+  set_message("Deleting gaussian FBO", std::to_string(SCRATCH_FRAMEBUFFER));
   set_message("Deleting Textures",
               std::to_string(COLOR_TARGET_TEXTURE) + " " +
                   std::to_string(PREV_COLOR_TARGET) + " " +
@@ -1400,9 +1455,11 @@ void Render::init_render_targets()
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
+  glDeleteFramebuffers(1, &SCRATCH_FRAMEBUFFER);
   glDeleteTextures(1, &COLOR_TARGET_TEXTURE);
   glDeleteTextures(1, &PREV_COLOR_TARGET);
   glDeleteRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
+
 
   size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
   glGenFramebuffers(1, &TARGET_FRAMEBUFFER);
@@ -1436,7 +1493,10 @@ void Render::init_render_targets()
 
   PREV_COLOR_TARGET_MISSING = true;
 
-  set_message("Init FBO", s(TARGET_FRAMEBUFFER));
+  glGenFramebuffers(1,&SCRATCH_FRAMEBUFFER);
+
+  set_message("Init screen FBO", s(TARGET_FRAMEBUFFER));
+  set_message("Init gaussian FBO", s(SCRATCH_FRAMEBUFFER));
   set_message("Init Textures",
               s(COLOR_TARGET_TEXTURE) + " " + s(PREV_COLOR_TARGET));
   set_message("Init renderbuffers", s(DEPTH_TARGET_TEXTURE));

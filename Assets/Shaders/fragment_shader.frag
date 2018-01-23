@@ -1,9 +1,9 @@
 #version 330
-uniform sampler2D albedo;
-uniform sampler2D specular;
-uniform sampler2D normal;
-uniform sampler2D emissive;
-uniform sampler2D roughness;
+uniform sampler2D texture0;//albedo
+uniform sampler2D texture1;//specular;
+uniform sampler2D texture2;//normal;
+uniform sampler2D texture3;//emissive;
+uniform sampler2D texture4;//roughness;
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform bool shadow_map_enabled[MAX_LIGHTS];
@@ -34,7 +34,7 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec4 shadow_map_coords[MAX_LIGHTS];
 
-layout(location = 0) out vec4 ALBEDO;
+layout(location = 0) out vec4 RESULT;
 
 const float PI = 3.14159265358979f;
 const float gamma = 2.2;
@@ -62,22 +62,16 @@ struct Material
 
 float chebyshevUpperBound(vec2 moments, float distance)
 {
-  // Surface is fully lit. as the current fragment is before the light occluder
   if (distance <= moments.x)
     return 1.0;
-
-  // The fragment is either in shadow or penumbra. We now use chebyshev's
-  // upperBound to check How likely this pixel is to be lit (p_max)
   float variance = moments.y - (moments.x * moments.x);
-  variance = max(variance, 0.0002);
-
+  variance = max(variance, 0.00002);
   float d = distance - moments.x;
   float p_max = variance / (variance + d * d);
-
   return p_max;
 }
 
-void autism_init()
+void gather_shadow_moments()
 {
 shadow_coord_array[0] = vec3(shadow_map_coords[0].xyz / shadow_map_coords[0].w);
     shadow_moments_array[0] = texture2D(shadow_maps[0], shadow_coord_array[0].xy).rg;
@@ -103,9 +97,9 @@ shadow_coord_array[9] = vec3(shadow_map_coords[9].xyz / shadow_map_coords[9].w);
 
 void main()
 {
-  autism_init();
+  gather_shadow_moments();
 
-  vec4 albedo_tex = texture2D(albedo, frag_uv).rgba;
+  vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
 
   if (discard_over_blend)
   {
@@ -114,11 +108,11 @@ void main()
   }
 
   Material m;
-  m.specular = to_linear(texture2D(specular, frag_uv).rgb);
+  m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
   m.albedo = to_linear(albedo_tex.rgb) / PI;
-  m.emissive = to_linear(texture2D(emissive, frag_uv).rgb);
-  m.shininess = 1.0 + 44 * (1.0 - to_linear(texture2D(roughness, frag_uv).r));
-  vec3 n = texture2D(normal, frag_uv).rgb;
+  m.emissive = to_linear(texture2D(texture3, frag_uv).rgb);
+  m.shininess = 1.0 + 44 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));
+  vec3 n = texture2D(texture2, frag_uv).rgb;
   if (n == vec3(0))
   {
     n = vec3(0, 0, 1);
@@ -128,7 +122,7 @@ void main()
   {
     m.normal = frag_TBN * normalize((n * 2) - 1.0f);
   }
-  vec3 debug = vec3(-1);
+  vec4 debug = vec4(-1);
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -165,7 +159,6 @@ void main()
     float ldotn = clamp(dot(l, m.normal), 0, 1);
     float ec = (8.0f * m.shininess) / (8.0f * PI);
     float specular = ec * pow(max(dot(h, m.normal), 0.0), m.shininess);
-
     vec3 ambient = vec3(lights[i].ambient * at * m.albedo);
     result += ldotn * specular * m.albedo * lights[i].color * at * alpha;
     result += ambient;
@@ -173,8 +166,10 @@ void main()
   result += m.emissive;
   result += additional_ambient * m.albedo;
 
-  if (debug != vec3(-1))
-    result = debug;
-
-  ALBEDO = vec4(to_srgb(result), 1); // a was albedo_tex.a
+  if (debug != vec4(-1))
+  {
+    result = debug.rgb;
+    albedo_tex.a = debug.a;
+  }
+  RESULT = vec4(to_srgb(result), albedo_tex.a);
 }

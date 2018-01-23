@@ -5,19 +5,18 @@
 #include <string>
 #include <unordered_map>
 using namespace glm;
-struct LightLocations
+enum struct Light_Type;
+struct Light_Uniform_Location_Cache
 {
-  GLint position, direction, color, attenuation, ambient, cone_angle, type,
-      enabled, shadow_map_transform, shadow_map;
+  GLint position, direction, color, attenuation, ambient, cone_angle, type, enabled, shadow_map_transform;
 };
-struct LightCache
+struct Light_Uniform_Value_Cache
 {
-  LightLocations locations;
   vec3 position, direction, color, attenuation, ambient;
   float cone_angle;
-  int32 type;
-  bool enabled;
+  Light_Type type;
   mat4 shadow_map_transform;
+  bool enabled;
 };
 struct Shader
 {
@@ -41,16 +40,18 @@ struct Shader
     Shader_Handle(GLuint i);
     ~Shader_Handle();
     GLuint program = 0;
+    std::unordered_map<std::string, GLint> location_cache;
+    Light_Uniform_Value_Cache light_values_cache[MAX_LIGHTS] = {};
+    Light_Uniform_Location_Cache light_locations_cache[MAX_LIGHTS] = {};
+	  GLuint light_count_location, additional_ambient_location;
+    uint32 light_count = 0;
+    vec3 additional_ambient = vec3(0);
+    void set_location_cache();
+    bool light_location_cache_set = false;
   };
   std::shared_ptr<Shader_Handle> program;
   std::string vs;
   std::string fs;
-  std::unordered_map<std::string, GLint> location_cache;
-  LightCache lights_cache[MAX_LIGHTS] = {};
-  bool light_location_cache_set = false;
-	int light_count_location, additional_ambient_location;
-  int light_count = 0;
-  vec3 additional_ambient = vec3(0);
 
 private:
   void check_err(GLint loc, const char *name);

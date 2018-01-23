@@ -74,7 +74,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   light->color = 30.0f * vec3(1.0f, 0.93f, 0.92f);
   light->attenuation = vec3(1.0f, .045f, .0075f);
   light->ambient = 0.02f;
-  light->type = omnidirectional;
+  light->type = Light_Type::omnidirectional;
 
   material.albedo = "crate_diffuse.png";
   material.emissive = "test_emissive.png";

@@ -25,6 +25,26 @@ void INIT_RENDERER();
 void CLEANUP_RENDERER();
 
 using namespace glm;
+
+enum Texture_Location
+{
+  albedo,
+  specular,
+  normal,
+  emissive,
+  roughness,
+  s0,// shadow maps
+  s1,
+  s2,
+  s3,
+  s4,
+  s5,
+  s6,
+  s7,
+  s8,
+  s9 
+};
+
 struct Texture_Handle
 {
   ~Texture_Handle();
@@ -53,25 +73,22 @@ struct Spotlight_Shadow_Map
   ivec2 size = ivec2(0,0);
 };
 
-
-
-
 struct Texture
 {
   Texture();
   Texture(std::string path, bool premul = false);
-
 private:
   friend struct Render;
   friend struct Material;
   void load();
-  void bind(const char *name, GLuint location, Shader &shader);
+  void bind(GLuint texture_unit);
   std::shared_ptr<Texture_Handle> texture;
   std::string file_path;
 
   GLenum storage_type = GL_RGBA;
   bool process_premultiply = false;
 };
+
 struct Mesh_Handle
 {
   ~Mesh_Handle();
@@ -92,7 +109,7 @@ struct Mesh
   Mesh(Mesh_Primitive p, std::string mesh_name);
   Mesh(Mesh_Data mesh_data, std::string mesh_name);
   Mesh(const aiMesh *aimesh, std::string unique_identifier);
-  void bind_to_shader(Shader &shader);
+  void enable_assign_attributes();
   GLuint get_vao() { return mesh->vao; }
   GLuint get_indices_buffer() { return mesh->indices_buffer; }
   GLuint get_indices_buffer_size() { return mesh->indices_buffer_size; }
@@ -145,7 +162,7 @@ private:
   Material_Descriptor m;
 };
 
-enum Light_Type
+enum struct Light_Type
 {
   parallel,
   omnidirectional,
@@ -189,7 +206,6 @@ struct Render_Entity
   bool casts_shadows = true;
 };
 
-
 // Similar to Render_Entity, but rendered with instancing
 struct Render_Instance
 {
@@ -199,6 +215,7 @@ struct Render_Instance
   std::vector<mat4> MVP_Matrices;
   std::vector<mat4> Model_Matrices;
 };
+
 struct Render
 {
   Render(SDL_Window *window, ivec2 window_size);
