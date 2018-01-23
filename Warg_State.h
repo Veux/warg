@@ -66,7 +66,6 @@ struct Warg_State : protected State
   std::unique_ptr<Warg_Client> client;
   std::unique_ptr<Warg_Server> server;
   std::queue<Warg_Event> in, out;
-  std::vector<Node_Ptr> map_meshes;
 };
 
 struct Wall
@@ -74,6 +73,17 @@ struct Wall
   vec3 p1;
   vec2 p2;
   float32 h;
+};
+
+struct Map
+{
+  Node_Ptr node;
+  Mesh_Data mesh;
+  Material_Descriptor material;
+
+  std::vector<Triangle> surfaces;//trash
+  vec3 spawn_pos[2];
+  vec3 spawn_dir[2];
 };
 
 Map make_nagrand();

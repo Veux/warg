@@ -5,6 +5,10 @@
 
 Warg_Client::Warg_Client(Scene_Graph *scene_, queue<Warg_Event> *in_)
 {
+  Mesh_Data blades_edge = make_blades_edge();
+
+  
+  auto mesh = scene.add_mesh(blades_edge, material, "some wall");
   map = make_blades_edge();
   sdb = make_spell_db();
   scene = scene_;

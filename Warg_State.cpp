@@ -27,20 +27,9 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   material.backface_culling = false;
   material.uv_scale = vec2(2);
 
-  for (auto &s : client->map.surfaces)
-  {
-    Mesh_Data data;
-    vec3 a, b, c, d;
-    a = s.a;
-    b = s.b;
-    c = s.b;
-    d = s.c;
 
-    add_quad(a, b, c, d, data);
-    auto mesh = scene.add_mesh(data, material, "some wall");
+  client->map.node = scene.add_mesh(client->map.mesh, client->map.material, "active map");
 
-    map_meshes.push_back(mesh);
-  }
 
   scene.lights.light_count = 1;
   Light *light = &scene.lights.lights[0];
@@ -422,12 +411,31 @@ Map make_nagrand()
   nagrand.spawn_dir[0] = {0, 1, 0};
   nagrand.spawn_dir[1] = {0, -1, 0};
 
-  return nagrand;
+  for (auto &s : nagrand.surfaces)
+  {
+    vec3 a, b, c, d;
+    a = s.a;
+    b = s.b;
+    c = s.b;
+    d = s.c;
+
+    add_quad(a, b, c, d, nagrand.data);
+  }
+  data.unique_identifier = "nagrand_arena_map";
+
+  nagrand.material.albedo = "crate_diffuse.png";
+  nagrand.material.emissive = "test_emissive.png";
+  nagrand.material.normal = "test_normal.png";
+  nagrand.material.roughness = "crate_roughness.png";
+  nagrand.material.vertex_shader = "vertex_shader.vert";
+  nagrand.material.frag_shader = "world_origin_distance.frag";
+
+  return data;
 }
 
 
 Map make_blades_edge() {
-  Map blades_edge;
+  Map blades_edge; 
 
   // ground
   blades_edge.surfaces.push_back({{0, 0, 0}, {50, 0, 0}, {0, 50, 0}});
@@ -594,5 +602,24 @@ Map make_blades_edge() {
   blades_edge.spawn_dir[0] = {0, 1, 0};
   blades_edge.spawn_dir[1] = {0, -1, 0};
 
-  return blades_edge;
+
+  for (auto &s : blades_edge.surfaces)
+  {
+    vec3 a, b, c, d;
+    a = s.a;
+    b = s.b;
+    c = s.b;
+    d = s.c;
+
+    add_quad(a, b, c, d, blades_edge.data);
+  }
+  blades_edge.data.unique_identifier = "blades_edge_map";
+
+  blades_edge.material.albedo = "crate_diffuse.png";
+  blades_edge.material.emissive = "test_emissive.png";
+  blades_edge.material.normal = "test_normal.png";
+  blades_edge.material.roughness = "crate_roughness.png";
+  blades_edge.material.vertex_shader = "vertex_shader.vert";
+  blades_edge.material.frag_shader = "world_origin_distance.frag";
+  return bladdes_edge;
 }
