@@ -338,8 +338,21 @@ void Warg_State::handle_input(
       m |= Move_Status::Right;
     out.push(move_event(client->pc, (Move_Status)m));
 
-    cam.pos = client->chars[client->pc].pos +
-              vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
+    vec3 player_pos = client->chars[client->pc].pos;
+    float effective_zoom = cam.zoom;
+    for (auto &surface : client->map.surfaces)
+    {
+      vec3 intersection_point;
+      bool intersects = ray_intersects_triangle(
+          player_pos, cam_rel, surface, &intersection_point);
+      if (intersects &&
+          length(player_pos - intersection_point) < effective_zoom)
+      {
+        effective_zoom = length(player_pos - intersection_point);
+      }
+    }
+    cam.pos =
+        player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
   }
 

@@ -1,8 +1,8 @@
 #pragma once
-#include <glm/glm.hpp>
-#include <vector>
 #include "Globals.h"
 #include "Scene_Graph.h"
+#include <glm/glm.hpp>
+#include <vector>
 using namespace glm;
 
 struct Triangle
@@ -35,7 +35,7 @@ struct Map
   Mesh_Data mesh;
   Material_Descriptor material;
 
-  std::vector<Triangle> surfaces;//trash
+  std::vector<Triangle> surfaces; // trash
   vec3 spawn_pos[2];
   vec3 spawn_dir[2];
 };
@@ -57,3 +57,6 @@ struct Collision_Packet
 };
 
 bool check_triangle(Collision_Packet *colpkt, Triangle &tri);
+
+bool ray_intersects_triangle(
+    vec3 origin, vec3 dir, Triangle tri, vec3 *intersection_point);

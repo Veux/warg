@@ -292,9 +292,47 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
       colpkt->intersection_point = collision_point;
       colpkt->found_collision = true;
 
-	  return true;
+      return true;
     }
   }
 
   return false;
+}
+
+bool ray_intersects_triangle(
+    vec3 origin, vec3 dir, Triangle tri, vec3 *intersection_point)
+{
+  ASSERT(intersection_point);
+
+  const float epsilon = 0.0000001;
+  vec3 vertex0 = tri.a;
+  vec3 vertex1 = tri.b;
+  vec3 vertex2 = tri.c;
+  vec3 edge1, edge2, h, s, q;
+  float a, f, u, v;
+  edge1 = vertex1 - vertex0;
+  edge2 = vertex2 - vertex0;
+  h = cross(dir, edge2);
+  a = dot(edge1, h);
+  if (a > -epsilon && a < epsilon)
+    return false;
+  f = 1 / a;
+  s = origin - vertex0;
+  u = f * dot(s, h);
+  if (u < 0.0 || u > 1.0)
+    return false;
+  q = cross(s, edge1);
+  v = f * dot(dir, q);
+  if (v < 0.0 || u + v > 1.0)
+    return false;
+  float t = f * dot(edge2, q);
+  if (t > epsilon)
+  {
+    *intersection_point = origin + dir * t;
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
