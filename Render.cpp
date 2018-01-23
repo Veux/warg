@@ -839,18 +839,12 @@ void Render::set_uniform_shadowmaps(Shader &shader)
                        0.0, 0.5, 0.5, 0.5, 1.0);
     mat4 shadow_map_transform =
         offset * spotlight_shadow_maps[i].projection_camera;
-    if (shader.lights_cache[i].shadow_map_transform != shadow_map_transform)
-    {
-      shader.lights_cache[i].shadow_map_transform = shadow_map_transform;
       glUniformMatrix4fv(shader.lights_cache[i].locations.shadow_map_transform,
                          1, GL_FALSE, &shadow_map_transform[0][0]);
-    }
-    if (shader.lights_cache[i].enabled != spotlight_shadow_maps[i].enabled)
-    {
-      shader.lights_cache[i].enabled = spotlight_shadow_maps[i].enabled;
+  
       glUniform1i(shader.lights_cache[i].locations.enabled,
                   (int32)spotlight_shadow_maps[i].enabled);
-    }
+  
   }
 }
 

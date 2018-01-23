@@ -103,6 +103,7 @@ shadow_coord_array[9] = vec3(shadow_map_coords[9].xyz / shadow_map_coords[9].w);
 
 void main()
 {
+  vec3 debug = vec3(-1);
   autism_init();
 
   vec4 albedo_tex = texture2D(albedo, frag_uv).rgba;
@@ -128,7 +129,6 @@ void main()
   {
     m.normal = frag_TBN * normalize((n * 2) - 1.0f);
   }
-  vec3 debug = vec3(-1);
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -159,6 +159,7 @@ void main()
         alpha = clamp((theta - phi) / edge_softness_distance, 0, 1);
       }
       float light_visibility =  1.0 - chebyshevUpperBound(shadow_moments, shadow_coord.z);
+     
       alpha = alpha * light_visibility;
     }
     float ldotn = clamp(dot(l, m.normal), 0, 1);

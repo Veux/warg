@@ -17,6 +17,7 @@ void Warg_Client::update(float32 dt)
 {
   process_events();
 
+
   for (auto &c : chars)
   {
     if (!c.alive)
