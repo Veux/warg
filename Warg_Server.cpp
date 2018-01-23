@@ -197,8 +197,6 @@ void Warg_Server::collide_and_slide_char(
   Character *c = &chars[ci];
   ASSERT(c);
 
-  bool found_collision = false;
-
   c->colpkt.e_radius = vec3(0.3, 0.3, 0.5);
   c->colpkt.pos_r3 = c->pos;
   c->colpkt.vel_r3 = vel;
@@ -210,8 +208,26 @@ void Warg_Server::collide_and_slide_char(
 
   vec3 final_pos = collide_char_with_world(ci, e_space_pos, e_space_vel);
 
-  if (c->colpkt.found_collision)
-	  found_collision = true;
+  if (c->grounded) {
+	  c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
+	  c->colpkt.vel_r3 = vec3(0, 0, -0.5);
+	  c->colpkt.vel = vec3(0, 0, -0.5) / c->colpkt.e_radius;
+	  c->colpkt.vel_normalized = normalize(c->colpkt.vel);
+	  c->colpkt.base_point = final_pos;
+	  c->colpkt.found_collision = false;
+
+	  for (auto &surface : map.surfaces)
+	  {
+		  Triangle t;
+		  t.a = surface.a / c->colpkt.e_radius;
+		  t.b = surface.b / c->colpkt.e_radius;
+		  t.c = surface.c / c->colpkt.e_radius;
+		  check_triangle(&c->colpkt, t);
+	  }
+
+	  if (c->colpkt.found_collision && c->colpkt.nearest_distance > 0.05)
+		  final_pos.z -= c->colpkt.nearest_distance - 0.005;
+  }
 
   c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
   c->colpkt.vel_r3 = gravity;
@@ -221,11 +237,23 @@ void Warg_Server::collide_and_slide_char(
 
   final_pos = collide_char_with_world(ci, final_pos, e_space_vel);
 
-  if (c->colpkt.found_collision)
-	  found_collision = true;
+  c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
+  c->colpkt.vel_r3 = vec3(0, 0, -0.05);
+  c->colpkt.vel = vec3(0, 0, -0.05) / c->colpkt.e_radius;
+  c->colpkt.vel_normalized = normalize(c->colpkt.vel);
+  c->colpkt.base_point = final_pos;
+  c->colpkt.found_collision = false;
 
-  if (!found_collision)
-	  c->grounded = false;
+  for (auto &surface : map.surfaces)
+  {
+	  Triangle t;
+	  t.a = surface.a / c->colpkt.e_radius;
+	  t.b = surface.b / c->colpkt.e_radius;
+	  t.c = surface.c / c->colpkt.e_radius;
+	  check_triangle(&c->colpkt, t);
+  }
+
+  c->grounded = c->colpkt.found_collision && gravity.z <= 0;
 
   final_pos *= c->colpkt.e_radius;
   c->pos = final_pos;
@@ -248,23 +276,20 @@ vec3 Warg_Server::collide_char_with_world(
   c->colpkt.base_point = pos;
   c->colpkt.found_collision = false;
 
-  for (auto &s : map.surfaces)
+  for (auto &surface : map.surfaces)
   {
+	  bool nocol = c->colpkt.found_collision;
     Triangle t;
-    t.a = s.a / c->colpkt.e_radius;
-    t.b = s.b / c->colpkt.e_radius;
-    t.c = s.c / c->colpkt.e_radius;
+    t.a = surface.a / c->colpkt.e_radius;
+    t.b = surface.b / c->colpkt.e_radius;
+    t.c = surface.c / c->colpkt.e_radius;
     check_triangle(&c->colpkt, t);
   }
 
   if (!c->colpkt.found_collision)
   {
-    c->grounded = false;
     return pos + vel;
   }
-
-  if (normalize(pos - c->colpkt.intersection_point).z > 0.9)
-    c->grounded = true;
 
   vec3 destination_point = pos + vel;
   vec3 new_base_point = pos;
