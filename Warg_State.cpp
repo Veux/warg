@@ -17,17 +17,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  Material_Descriptor material;
-  material.albedo = "pebbles_diffuse.png";
-  material.emissive = "";
-  material.normal = "pebbles_normal.png";
-  material.roughness = "pebbles_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
-  material.backface_culling = false;
-  material.uv_scale = vec2(2);
-
-
   client->map.node = scene.add_mesh(client->map.mesh, client->map.material, "active map");
 
 
@@ -37,7 +26,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   light->color = 1000.0f * vec3(1.0f, 0.93f, 0.92f);
   light->attenuation = vec3(1.0f, .045f, .0075f);
   light->direction = vec3(0.0f, 0.0f, 0.0f);
-  light->ambient = 0.02f;
+  light->ambient = 0.0002f;
   light->cone_angle = 0.15f;
   light->type = spot;
   light->casts_shadows = false;
@@ -617,13 +606,13 @@ Map make_blades_edge() {
   }
   blades_edge.mesh.unique_identifier = "blades_edge_map";
   blades_edge.material.backface_culling = false;
-
-  blades_edge.material.albedo = "color(239, 221, 111, 255)";
+  blades_edge.material.albedo = "pebbles_diffuse.png";
   blades_edge.material.emissive = "";
-  blades_edge.material.normal = "test_normal.png";
-  blades_edge.material.roughness = "color(100, 100, 100, 255)";
+  blades_edge.material.normal = "pebbles_normal.png";
+  blades_edge.material.roughness = "pebbles_roughness.png";
   blades_edge.material.vertex_shader = "vertex_shader.vert";
   blades_edge.material.frag_shader = "fragment_shader.frag";
-  blades_edge.material.casts_shadows = true;
+  blades_edge.material.casts_shadows = false;
+  blades_edge.material.uv_scale = vec2(2,2);
   return blades_edge;
 }

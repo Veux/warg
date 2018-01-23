@@ -752,7 +752,7 @@ void Render::set_uniform_lights(Shader &shader)
   // todo: this is horrible. do something much better than this - precompute
   // all these godawful strings and just select them
 
-  if (!shader.light_location_cache_set)
+  if (true)
   {
     for (int i = 0; i < MAX_LIGHTS; ++i)
     {
@@ -787,61 +787,37 @@ void Render::set_uniform_lights(Shader &shader)
 
   for (int i = 0; i < lights.light_count; ++i)
   {
-    if (shader.lights_cache[i].position[0] != lights.lights[i].position[0])
-    {
-      shader.lights_cache[i].position[0] = lights.lights[i].position[0];
+    
       glUniform3fv(shader.lights_cache[i].locations.position, 1,
                    &lights.lights[i].position[0]);
-    }
-    if (shader.lights_cache[i].direction[0] != lights.lights[i].direction[0])
-    {
-      shader.lights_cache[i].direction[0] = lights.lights[i].direction[0];
+      shader.lights_cache[i].direction = lights.lights[i].direction;
       glUniform3fv(shader.lights_cache[i].locations.direction, 1,
                    &lights.lights[i].direction[0]);
-    }
-    if (shader.lights_cache[i].color[0] != lights.lights[i].color[0])
-    {
-      shader.lights_cache[i].color[0] = lights.lights[i].color[0];
+      shader.lights_cache[i].color = lights.lights[i].color;
       glUniform3fv(shader.lights_cache[i].locations.color, 1,
                    &lights.lights[i].color[0]);
-    }
-    if (shader.lights_cache[i].attenuation[0] !=
-        lights.lights[i].attenuation[0])
-    {
-      shader.lights_cache[i].attenuation[0] = lights.lights[i].attenuation[0];
+      shader.lights_cache[i].attenuation = lights.lights[i].attenuation;
       glUniform3fv(shader.lights_cache[i].locations.attenuation, 1,
                    &lights.lights[i].attenuation[0]);
-    }
+
     vec3 ambient = lights.lights[i].ambient * lights.lights[i].color;
-    if (shader.lights_cache[i].ambient[0] != ambient[0])
-    {
-      shader.lights_cache[i].ambient[0] = ambient[0];
+      shader.lights_cache[i].ambient = ambient;
       glUniform3fv(shader.lights_cache[i].locations.ambient, 1, &ambient[0]);
-    }
-    if (shader.lights_cache[i].cone_angle != lights.lights[i].cone_angle)
-    {
+
       shader.lights_cache[i].cone_angle = lights.lights[i].cone_angle;
       glUniform1fv(shader.lights_cache[i].locations.cone_angle, 1,
                    &lights.lights[i].cone_angle);
-    }
-    if (shader.lights_cache[i].type != (int32)lights.lights[i].type)
-    {
+
       shader.lights_cache[i].type != (int32)lights.lights[i].type;
       glUniform1i(shader.lights_cache[i].locations.type,
                   (int32)lights.lights[i].type);
-    }
   }
-  if (shader.light_count != (int32)lights.light_count)
-  {
     shader.light_count = (int32)lights.light_count;
     glUniform1i(shader.light_count_location, (int32)lights.light_count);
-  }
-  if (shader.additional_ambient != lights.additional_ambient)
-  {
+
     shader.additional_ambient = lights.additional_ambient;
     glUniform3fv(shader.additional_ambient_location, 1,
                  &lights.additional_ambient[0]);
-  }
 }
 
 void Render::set_uniform_shadowmaps(Shader &shader)
