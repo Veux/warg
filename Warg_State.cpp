@@ -28,7 +28,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   light->direction = vec3(25.0f, 25.0f, 0.0f);
   light->ambient = 0.001f;
   light->cone_angle = 0.15f;
-  light->type = spot;
+  light->type = Light_Type::spot;
   light->casts_shadows = false;
 
   out.push(char_spawn_request_event("Eirich", 0));
@@ -359,7 +359,7 @@ void Warg_State::update()
   light->direction = client ? client->chars.size()>0 ? client->chars[0].pos : vec3(0) : vec3(0);
   light->ambient = 0.0f;
   light->cone_angle = 0.03f;
-  light->type = spot;
+  light->type = Light_Type::spot;
   light->casts_shadows = false;
 
 
