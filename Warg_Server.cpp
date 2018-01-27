@@ -314,7 +314,7 @@ void Warg_Server::update_colliders()
       vec4 q = vec4(p.x, p.y, p.z, 1.0) * entity.transformation;
       return vec3(q.x, q.y, q.z);
     };
-    auto mesh_data = entity.mesh->mesh->data;
+    auto& mesh_data = entity.mesh->mesh->data;
     for (int i = 0; i < mesh_data.indices.size(); i += 3)
     {
       uint32 a, b, c;
@@ -322,9 +322,9 @@ void Warg_Server::update_colliders()
       b = mesh_data.indices[i + 1];
       c = mesh_data.indices[i + 2];
       Triangle t;
-      t.a = transform(mesh_data.positions[a]);
-      t.c = transform(mesh_data.positions[b]);
-      t.b = transform(mesh_data.positions[c]);
+      t.a = mesh_data.positions[a];
+      t.c = mesh_data.positions[b];
+      t.b = mesh_data.positions[c];
       colliders.push_back(t);
     }
   }
@@ -332,6 +332,7 @@ void Warg_Server::update_colliders()
 
 void Warg_Server::check_collision(Collision_Packet &colpkt)
 {
+  update_colliders();
   for (auto &surface : colliders)
   {
     Triangle t;
