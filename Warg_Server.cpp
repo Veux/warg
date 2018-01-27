@@ -6,6 +6,8 @@
 Warg_Server::Warg_Server()
 {
   map = make_blades_edge();
+  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
+  update_colliders();
   sdb = make_spell_db();
 }
 
@@ -208,25 +210,18 @@ void Warg_Server::collide_and_slide_char(
 
   vec3 final_pos = collide_char_with_world(ci, e_space_pos, e_space_vel);
 
-  if (c->grounded) {
-	  c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
-	  c->colpkt.vel_r3 = vec3(0, 0, -0.5);
-	  c->colpkt.vel = vec3(0, 0, -0.5) / c->colpkt.e_radius;
-	  c->colpkt.vel_normalized = normalize(c->colpkt.vel);
-	  c->colpkt.base_point = final_pos;
-	  c->colpkt.found_collision = false;
+  if (c->grounded)
+  {
+    c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
+    c->colpkt.vel_r3 = vec3(0, 0, -0.5);
+    c->colpkt.vel = vec3(0, 0, -0.5) / c->colpkt.e_radius;
+    c->colpkt.vel_normalized = normalize(c->colpkt.vel);
+    c->colpkt.base_point = final_pos;
+    c->colpkt.found_collision = false;
 
-	  for (auto &surface : map.surfaces)
-	  {
-		  Triangle t;
-		  t.a = surface.a / c->colpkt.e_radius;
-		  t.b = surface.b / c->colpkt.e_radius;
-		  t.c = surface.c / c->colpkt.e_radius;
-		  check_triangle(&c->colpkt, t);
-	  }
-
-	  if (c->colpkt.found_collision && c->colpkt.nearest_distance > 0.05)
-		  final_pos.z -= c->colpkt.nearest_distance - 0.005;
+    check_collision(c->colpkt);
+    if (c->colpkt.found_collision && c->colpkt.nearest_distance > 0.05)
+      final_pos.z -= c->colpkt.nearest_distance - 0.005;
   }
 
   c->colpkt.pos_r3 = final_pos * c->colpkt.e_radius;
@@ -244,14 +239,7 @@ void Warg_Server::collide_and_slide_char(
   c->colpkt.base_point = final_pos;
   c->colpkt.found_collision = false;
 
-  for (auto &surface : map.surfaces)
-  {
-	  Triangle t;
-	  t.a = surface.a / c->colpkt.e_radius;
-	  t.b = surface.b / c->colpkt.e_radius;
-	  t.c = surface.c / c->colpkt.e_radius;
-	  check_triangle(&c->colpkt, t);
-  }
+  check_collision(c->colpkt);
 
   c->grounded = c->colpkt.found_collision && gravity.z <= 0;
 
@@ -276,15 +264,7 @@ vec3 Warg_Server::collide_char_with_world(
   c->colpkt.base_point = pos;
   c->colpkt.found_collision = false;
 
-  for (auto &surface : map.surfaces)
-  {
-	  bool nocol = c->colpkt.found_collision;
-    Triangle t;
-    t.a = surface.a / c->colpkt.e_radius;
-    t.b = surface.b / c->colpkt.e_radius;
-    t.c = surface.c / c->colpkt.e_radius;
-    check_triangle(&c->colpkt, t);
-  }
+  check_collision(c->colpkt);
 
   if (!c->colpkt.found_collision)
   {
@@ -322,6 +302,44 @@ vec3 Warg_Server::collide_char_with_world(
 
   c->collision_recursion_depth++;
   return collide_char_with_world(ci, new_base_point, new_vel_vec);
+}
+
+void Warg_Server::update_colliders()
+{
+  colliders.clear();
+  auto entities = scene.visit_nodes_st_start();
+  for (auto &entity : entities)
+  {
+    auto transform = [&](vec3 p) {
+      vec4 q = vec4(p.x, p.y, p.z, 1.0) * entity.transformation;
+      return vec3(q.x, q.y, q.z);
+    };
+    auto mesh_data = entity.mesh->mesh->data;
+    for (int i = 0; i < mesh_data.indices.size(); i += 3)
+    {
+      uint32 a, b, c;
+      a = mesh_data.indices[i];
+      b = mesh_data.indices[i + 1];
+      c = mesh_data.indices[i + 2];
+      Triangle t;
+      t.a = transform(mesh_data.positions[a]);
+      t.c = transform(mesh_data.positions[b]);
+      t.b = transform(mesh_data.positions[c]);
+      colliders.push_back(t);
+    }
+  }
+}
+
+void Warg_Server::check_collision(Collision_Packet &colpkt)
+{
+  for (auto &surface : colliders)
+  {
+    Triangle t;
+    t.a = surface.a / colpkt.e_radius;
+    t.b = surface.b / colpkt.e_radius;
+    t.c = surface.c / colpkt.e_radius;
+    check_triangle(&colpkt, t);
+  }
 }
 
 void Warg_Server::move_char(int ci, float dt)

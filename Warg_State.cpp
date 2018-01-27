@@ -17,7 +17,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  client->map.node = scene.add_mesh(client->map.mesh, client->map.material, "active map");
+  client->map.node = scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
 
   clear_color = vec3(94. / 255., 155. / 255., 1.);
   scene.lights.light_count = 1;
@@ -455,191 +455,22 @@ Map make_nagrand()
 Map make_blades_edge() {
   Map blades_edge;
 
-  // ground
-  blades_edge.surfaces.push_back({{0, 0, 0}, {50, 0, 0}, {0, 50, 0}});
-  blades_edge.surfaces.push_back({{50, 50, 0}, {0, 50, 0}, {50, 0, 0}});
-
-  // outer walls
-  blades_edge.surfaces.push_back({{0, 0, 0}, {0, 50, 0}, {0, 50, 10}});
-  blades_edge.surfaces.push_back({{0, 0, 0}, {0, 50, 10}, {0, 0, 10}});
-
-  // blades_edge.surfaces.push_back({{0, 0, 0}, {10, 0, 10}, {10, 0, 0}});
-  // blades_edge.surfaces.push_back({{0, 0, 0}, {0, 0, 10}, {10, 0, 10}});
-
-  blades_edge.surfaces.push_back({{10, 0, 0}, {10, 0, 10}, {10, 10, 10}});
-  blades_edge.surfaces.push_back({{10, 0, 0}, {10, 10, 10}, {10, 10, 0}});
-
-  blades_edge.surfaces.push_back({{10, 10, 0}, {50, 10, 10}, {50, 10, 0}});
-  blades_edge.surfaces.push_back({{10, 10, 0}, {10, 10, 10}, {50, 10, 10}});
-
-  blades_edge.surfaces.push_back({{50, 10, 0}, {50, 50, 10}, {50, 50, 0}});
-  blades_edge.surfaces.push_back({{50, 10, 0}, {50, 10, 10}, {50, 50, 10}});
-
-  blades_edge.surfaces.push_back({{50, 50, 0}, {40, 50, 10}, {40, 50, 0}});
-  blades_edge.surfaces.push_back({{50, 50, 0}, {50, 50, 10}, {40, 50, 10}});
-
-  blades_edge.surfaces.push_back({{40, 50, 0}, {40, 40, 10}, {40, 40, 0}});
-  blades_edge.surfaces.push_back({{40, 50, 0}, {40, 50, 10}, {40, 40, 10}});
-
-  blades_edge.surfaces.push_back({{40, 40, 0}, {0, 40, 10}, {0, 40, 0}});
-  blades_edge.surfaces.push_back({{40, 40, 0}, {40, 40, 10}, {0, 40, 10}});
-
-  // ramps
-  // west
-  blades_edge.surfaces.push_back({{0, 15, 0}, {10, 15, 0}, {10, 21, 4}});
-  blades_edge.surfaces.push_back({{0, 15, 0}, {10, 21, 4}, {0, 21, 4}});
-
-  blades_edge.surfaces.push_back({{0, 21, 4}, {10, 21, 4}, {10, 29, 4}});
-  blades_edge.surfaces.push_back({{0, 21, 4}, {10, 29, 4}, {0, 29, 4}});
-
-  blades_edge.surfaces.push_back({{0, 29, 4}, {10, 29, 4}, {10, 35, 0}});
-  blades_edge.surfaces.push_back({{0, 29, 4}, {10, 35, 0}, {0, 35, 0}});
-
-  blades_edge.surfaces.push_back({{10, 15, 0}, {10, 21, 0}, {10, 21, 4}});
-  blades_edge.surfaces.push_back({{10, 21, 0}, {10, 29, 0}, {10, 29, 4}});
-  blades_edge.surfaces.push_back({{10, 21, 0}, {10, 29, 4}, {10, 21, 4}});
-  blades_edge.surfaces.push_back({{10, 29, 0}, {10, 35, 0}, {10, 29, 4}});
-
-  // east
-  blades_edge.surfaces.push_back({{40, 15, 0}, {50, 15, 0}, {50, 21, 4}});
-  blades_edge.surfaces.push_back({{40, 15, 0}, {50, 21, 4}, {40, 21, 4}});
-
-  blades_edge.surfaces.push_back({{40, 21, 4}, {50, 21, 4}, {50, 29, 4}});
-  blades_edge.surfaces.push_back({{40, 21, 4}, {50, 29, 4}, {40, 29, 4}});
-
-  blades_edge.surfaces.push_back({{40, 29, 4}, {50, 29, 4}, {50, 35, 0}});
-  blades_edge.surfaces.push_back({{40, 29, 4}, {50, 35, 0}, {40, 35, 0}});
-
-  blades_edge.surfaces.push_back({{40, 15, 0}, {40, 21, 4}, {40, 21, 0}});
-  blades_edge.surfaces.push_back({{40, 21, 0}, {40, 29, 4}, {40, 29, 0}});
-  blades_edge.surfaces.push_back({{40, 21, 0}, {40, 21, 4}, {40, 29, 4}});
-  blades_edge.surfaces.push_back({{40, 29, 0}, {40, 29, 4}, {40, 35, 0}});
-
-  // platform
-  blades_edge.surfaces.push_back({{10, 21, 4}, {40, 21, 4}, {40, 29, 4}});
-  blades_edge.surfaces.push_back({{10, 21, 4}, {40, 29, 4}, {10, 29, 4}});
-
-  blades_edge.surfaces.push_back({{10, 21, 3.5}, {40, 29, 3.5}, {40, 21, 3.5}});
-  blades_edge.surfaces.push_back({{10, 21, 3.5}, {10, 29, 3.5}, {40, 29, 3.5}});
-
-  blades_edge.surfaces.push_back({{10, 21, 4}, {40, 21, 3.5}, {40, 21, 4}});
-  blades_edge.surfaces.push_back({{10, 21, 4}, {10, 21, 3.5}, {40, 21, 3.5}});
-
-  blades_edge.surfaces.push_back({{10, 29, 4}, {40, 29, 4}, {40, 29, 3.5}});
-  blades_edge.surfaces.push_back({{10, 29, 4}, {40, 29, 3.5}, {10, 29, 3.5}});
-
-  // pillars
-  // south
-  blades_edge.surfaces.push_back({{23.5, 15, 0}, {23.5, 18, 4}, {23.5, 18, 0}});
-  blades_edge.surfaces.push_back({{23.5, 15, 0}, {23.5, 15, 4}, {23.5, 18, 4}});
-
-  blades_edge.surfaces.push_back({{23.5, 15, 0}, {26.5, 15, 0}, {26.5, 15, 4}});
-  blades_edge.surfaces.push_back({{23.5, 15, 0}, {26.5, 15, 4}, {23.5, 15, 4}});
-
-  blades_edge.surfaces.push_back({{26.5, 15, 0}, {26.5, 18, 0}, {26.5, 18, 4}});
-  blades_edge.surfaces.push_back({{26.5, 15, 0}, {26.5, 18, 4}, {26.5, 15, 4}});
-
-  blades_edge.surfaces.push_back({{26.5, 18, 0}, {23.5, 18, 0}, {23.5, 18, 4}});
-  blades_edge.surfaces.push_back({{26.5, 18, 0}, {23.5, 18, 4}, {26.5, 18, 4}});
-
-  blades_edge.surfaces.push_back({{23.5, 15, 4}, {26.5, 15, 4}, {26.5, 18, 4}});
-  blades_edge.surfaces.push_back({{23.5, 15, 4}, {26.5, 18, 4}, {23.5, 18, 4}});
-
-  // north
-  blades_edge.surfaces.push_back({{23.5, 32, 0}, {23.5, 35, 4}, {23.5, 35, 0}});
-  blades_edge.surfaces.push_back({{23.5, 32, 0}, {23.5, 32, 4}, {23.5, 35, 4}});
-
-  blades_edge.surfaces.push_back({{23.5, 32, 0}, {26.5, 32, 0}, {26.5, 32, 4}});
-  blades_edge.surfaces.push_back({{23.5, 32, 0}, {26.5, 32, 4}, {23.5, 32, 4}});
-
-  blades_edge.surfaces.push_back({{26.5, 32, 0}, {26.5, 35, 0}, {26.5, 35, 4}});
-  blades_edge.surfaces.push_back({{26.5, 32, 0}, {26.5, 35, 4}, {26.5, 32, 4}});
-
-  blades_edge.surfaces.push_back({{26.5, 35, 0}, {23.5, 35, 0}, {23.5, 35, 4}});
-  blades_edge.surfaces.push_back({{26.5, 35, 0}, {23.5, 35, 4}, {26.5, 35, 4}});
-
-  blades_edge.surfaces.push_back({{23.5, 32, 4}, {26.5, 32, 4}, {26.5, 35, 4}});
-  blades_edge.surfaces.push_back({{23.5, 32, 4}, {26.5, 35, 4}, {23.5, 35, 4}});
-
-  // west
-  blades_edge.surfaces.push_back({{16, 23.5, 0}, {16, 26.5, 3.5}, {16, 26.5, 0}});
-  blades_edge.surfaces.push_back({{16, 23.5, 0}, {16, 23.5, 3.5}, {16, 26.5, 3.5}});
-
-  blades_edge.surfaces.push_back({{16, 23.5, 0}, {19, 23.5, 0}, {19, 23.5, 3.5}});
-  blades_edge.surfaces.push_back({{16, 23.5, 0}, {19, 23.5, 3.5}, {16, 23.5, 3.5}});
-
-  blades_edge.surfaces.push_back({{19, 23.5, 0}, {19, 26.5, 0}, {19, 26.5, 3.5}});
-  blades_edge.surfaces.push_back({{19, 23.5, 0}, {19, 26.5, 3.5}, {19, 23.5, 3.5}});
-
-  blades_edge.surfaces.push_back({{19, 26.5, 0}, {16, 26.5, 0}, {16, 26.5, 3.5}});
-  blades_edge.surfaces.push_back({{19, 26.5, 0}, {16, 26.5, 3.5}, {19, 26.5, 3.5}});
-
-  // east
-  blades_edge.surfaces.push_back({{31, 23.5, 0}, {31, 26.5, 3.5}, {31, 26.5, 0}});
-  blades_edge.surfaces.push_back({{31, 23.5, 0}, {31, 23.5, 3.5}, {31, 26.5, 3.5}});
-
-  blades_edge.surfaces.push_back({{31, 23.5, 0}, {34, 23.5, 0}, {34, 23.5, 3.5}});
-  blades_edge.surfaces.push_back({{31, 23.5, 0}, {34, 23.5, 3.5}, {31, 23.5, 3.5}});
-
-  blades_edge.surfaces.push_back({{34, 23.5, 0}, {34, 26.5, 0}, {34, 26.5, 3.5}});
-  blades_edge.surfaces.push_back({{34, 23.5, 0}, {34, 26.5, 3.5}, {34, 23.5, 3.5}});
-
-  blades_edge.surfaces.push_back({{34, 26.5, 0}, {31, 26.5, 0}, {31, 26.5, 3.5}});
-  blades_edge.surfaces.push_back({{34, 26.5, 0}, {31, 26.5, 3.5}, {34, 26.5, 3.5}});
-
-  // ropes
-  // south
-  blades_edge.surfaces.push_back({{24.85, 18, 4}, {25.15, 18, 4}, {25.15, 21, 4}});
-  blades_edge.surfaces.push_back({{24.85, 18, 4}, {25.15, 21, 4}, {24.85, 21, 4}});
-
-  blades_edge.surfaces.push_back({{24.85, 18, 3.7}, {25.15, 21, 3.7}, {25.15, 18, 3.7}});
-  blades_edge.surfaces.push_back({{24.85, 18, 3.7}, {24.85, 21, 3.7}, {25.15, 21, 3.7}});
-
-  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 18, 3.7}, {24.85, 18, 4}});
-  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 21, 3.7}, {24.85, 18, 3.7}});
-
-  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 4}, {25.15, 18, 3.7}});
-  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 3.7}, {25.15, 21, 3.7}});
-
-  // north
-  blades_edge.surfaces.push_back({{24.85, 29, 4}, {25.15, 29, 4}, {25.15, 32, 4}});
-  blades_edge.surfaces.push_back({{24.85, 29, 4}, {25.15, 32, 4}, {24.85, 32, 4}});
-
-  blades_edge.surfaces.push_back({{24.85, 29, 3.7}, {25.15, 32, 3.7}, {25.15, 29, 3.7}});
-  blades_edge.surfaces.push_back({{24.85, 29, 3.7}, {24.85, 32, 3.7}, {25.15, 32, 3.7}});
-
-  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 29, 3.7}, {24.85, 29, 4}});
-  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 32, 3.7}, {24.85, 29, 3.7}});
-
-  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 4}, {25.15, 29, 3.7}});
-  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 3.7}, {25.15, 32, 3.7}});
-
-  // memes
-  blades_edge.surfaces.push_back({{-1000, -1000, -10}, {5000, -1000, -10}, {-1000, 5000, -10}});
-  blades_edge.surfaces.push_back({{5000, 5000, -10}, {-1000, 5000, -10}, {5000, -1000, -10}});
-
-  blades_edge.surfaces.push_back({{0, 0, 0}, {0, -30, -10}, {10, -30, -10}});
-  blades_edge.surfaces.push_back({{0, 0, 0}, {10, -30, -10}, {10, 0, 0}});
-
   // spawns
   blades_edge.spawn_pos[0] = {5, 5, 5};
   blades_edge.spawn_pos[1] = {45, 45, 5};
   blades_edge.spawn_dir[0] = {0, 1, 0};
   blades_edge.spawn_dir[1] = {0, -1, 0};
 
-  for (auto &s : blades_edge.surfaces)
-  {
-    add_triangle(s.a, s.c, s.b, blades_edge.mesh);
-  }
   blades_edge.mesh.unique_identifier = "blades_edge_map";
   blades_edge.material.backface_culling = false;
-  blades_edge.material.albedo = "pebbles_diffuse.png";
+  blades_edge.material.albedo = "crate_diffuse.png";
   blades_edge.material.emissive = "";
-  blades_edge.material.normal = "pebbles_normal.png";
-  blades_edge.material.roughness = "pebbles_roughness.png";
+  blades_edge.material.normal = "crate_normal.png";
+  blades_edge.material.roughness = "crate_roughness.png";
   blades_edge.material.vertex_shader = "vertex_shader.vert";
   blades_edge.material.frag_shader = "fragment_shader.frag";
   blades_edge.material.casts_shadows = true;
-  blades_edge.material.uv_scale = vec2(2,2);
+  blades_edge.material.uv_scale = vec2(16);
+
   return blades_edge;
 }

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Globals.h"
-#include "Warg_Event.h"
 #include "Physics.h"
+#include "Warg_Event.h"
 #include <queue>
 
 using std::vector;
@@ -33,9 +33,11 @@ private:
   void process_event(Cast_Event *cast);
 
   void add_char(int team, const char *name);
+  void update_colliders();
   void collide_and_slide_char(int ci, const vec3 &vel, const vec3 &gravity);
   vec3 collide_char_with_world(int ci, const vec3 &pos, const vec3 &vel);
   vec3 sphere_sweep(int ci, vec3 pos, vec3 vel);
+  void check_collision(Collision_Packet &colpkt);
   void move_char(int ci, float32 dt);
   CastErrorType cast_viable(int caster_, int target_, Spell *spell);
   void try_cast_spell(int caster, int target, const char *spell);
@@ -65,6 +67,8 @@ private:
   vector<Warg_Connection> connections;
 
   Map map;
+  Scene_Graph scene;
+  vector<Triangle> colliders;
   unique_ptr<SpellDB> sdb;
   vector<Character> chars;
   vector<SpellObjectInst> spell_objs;
