@@ -7,13 +7,14 @@ Warg_Server::Warg_Server()
 {
   map = make_blades_edge();
   map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
-  update_colliders();
   sdb = make_spell_db();
 }
 
 void Warg_Server::update(float32 dt)
 {
   process_events();
+
+  update_colliders();
 
   for (int ch = 0; ch < chars.size(); ch++)
   {
@@ -314,7 +315,7 @@ void Warg_Server::update_colliders()
       vec4 q = vec4(p.x, p.y, p.z, 1.0) * entity.transformation;
       return vec3(q.x, q.y, q.z);
     };
-    auto& mesh_data = entity.mesh->mesh->data;
+    auto &mesh_data = entity.mesh->mesh->data;
     for (int i = 0; i < mesh_data.indices.size(); i += 3)
     {
       uint32 a, b, c;
@@ -332,7 +333,6 @@ void Warg_Server::update_colliders()
 
 void Warg_Server::check_collision(Collision_Packet &colpkt)
 {
-  update_colliders();
   for (auto &surface : colliders)
   {
     Triangle t;
