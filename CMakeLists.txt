@@ -27,6 +27,7 @@ find_package (OpenGL REQUIRED)
 find_package (glm REQUIRED)
 find_package (GLEW REQUIRED)
 find_package (glbinding REQUIRED)
+find_package (enet REQUIRED)
 
 include_directories (${OpenGL_INCLUDE_DIRS})
 include_directories (${ASSIMP_INCLUDE_DIRS})
@@ -34,6 +35,7 @@ include_directories (${GLM_INCLUDE_DIRS})
 include_directories (${SDL2_INCLUDE_DIRS})
 #include_directories (${GLEW_INCLUDE_DIRS})
 include_directories (${SDL2_IMAGE_INCLUDE_DIRS})
+include_directories (${ENet_INCLUDE_DIRS})
 
 #someone kill me
 if (WIN32)
@@ -47,6 +49,7 @@ target_link_libraries (warg ${SDL2_LIBRARIES})
 target_link_libraries (warg ${SDL2_IMAGE_LIBRARIES})
 target_link_libraries (warg ${ASSIMP_LIBRARIES})
 #target_link_libraries (warg ${GLEW_LIBRARIES})
+target_link_libraries (warg ${ENet_LIBRARIES})
 
 #if (UNIX)
 #i have no idea what this is, but its both adding the include dir and linking, ignore the cmake warning
