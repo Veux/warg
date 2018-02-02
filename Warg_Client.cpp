@@ -17,16 +17,15 @@ void Warg_Client::update(float32 dt)
 {
   process_events();
 
-
   for (auto &c : chars)
   {
     if (!c.alive)
       c.pos = {-1000, -1000, 0};
 
     c.mesh->position = c.pos;
-    c.mesh->scale = vec3(1.0f);
     c.mesh->orientation =
         angleAxis((float32)atan2(c.dir.y, c.dir.x), vec3(0.f, 0.f, 1.f));
+    c.mesh->scale = c.radius * vec3(2);
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)

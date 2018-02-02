@@ -27,6 +27,7 @@ struct Character
   vec3 pos;
   vec3 dir;
   vec3 vel;
+  vec3 radius = vec3(0.8, 0.1, 1);
   bool grounded;
   Move_Status move_status = Move_Status::None;
   Collision_Packet colpkt;
