@@ -332,7 +332,7 @@ void Warg_Server::update_colliders()
 
 void Warg_Server::check_collision(Collision_Packet &colpkt)
 {
-  update_colliders();
+  //update_colliders();
   for (auto &surface : colliders)
   {
     Triangle t;
