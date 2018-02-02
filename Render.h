@@ -65,9 +65,12 @@ struct Spotlight_Shadow_Map
 {
   Spotlight_Shadow_Map() {};
   void load(ivec2 size);
+  void blur(float radius);
   Texture_Handle color;
   RenderBuffer_Handle depth;
   FBO_Handle target;
+  FBO_Handle blurfbo;
+  Texture_Handle blurtex;
   mat4 projection_camera;
   bool enabled = false;
   ivec2 size = ivec2(0,0);
@@ -176,15 +179,23 @@ struct Light
   vec3 direction = vec3(0, 0, 0);
   vec3 color = vec3(1, 1, 1);
   vec3 attenuation = vec3(1, 0.22, 0.2);
-  float ambient = 0.0f;
-  float cone_angle = 1.0f;
+  float ambient = 0.0004f;
+  float cone_angle = .15f;
   Light_Type type;
   bool operator==(const Light &rhs) const;
+
+
   bool casts_shadows = false;
-  float shadow_near_plane = 0.1f;
-  float shadow_far_plane = 1000.f;
-  float max_variance = 0.000001f;
-  float shadow_fov = 90.f;
+  //these take a lot of careful tuning
+  //start with max_variance at 0
+  //near plane as far away, and far plane as close as possible is critical
+  //after that, increase the max_variance up from 0, slowly, right until noise disappears
+  int shadow_blur_iterations = 2;//higher is higher quality, but lower performance
+  float shadow_blur_radius = .5f;//preference
+  float shadow_near_plane = 0.1f;//this should be as far as possible without clipping into geometry
+  float shadow_far_plane = 100.f;//this should be as near as possible without clipping geometry
+  float max_variance = 0.000001f;//this value should be as low as possible without causing float precision noise
+  float shadow_fov = glm::radians(90.f);//this should be as low as possible without causing artifacts around the edge of the light field of view 
 private:
 };
 
@@ -241,7 +252,7 @@ struct Render
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
-
+  static mat4 ortho_projection(ivec2 dst_size);
 private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
@@ -261,12 +272,11 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
-  mat4 ortho_projection(ivec2 dst_size);
   float32 render_scale = 1.0f; 
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
-  ivec2 shadow_map_size = 1*ivec2(2048, 2048);
+  ivec2 shadow_map_size = 2*ivec2(2048, 2048);
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

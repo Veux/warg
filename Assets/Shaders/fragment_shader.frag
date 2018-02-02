@@ -1,12 +1,13 @@
 #version 330
-uniform sampler2D texture0;//albedo
-uniform sampler2D texture1;//specular;
-uniform sampler2D texture2;//normal;
-uniform sampler2D texture3;//emissive;
-uniform sampler2D texture4;//roughness;
+uniform sampler2D texture0; // albedo
+uniform sampler2D texture1; // specular;
+uniform sampler2D texture2; // normal;
+uniform sampler2D texture3; // emissive;
+uniform sampler2D texture4; // roughness;
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
+uniform bool shadow_map_enabled[MAX_LIGHTS];
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
@@ -60,12 +61,12 @@ struct Material
   float shininess;
 };
 
-float chebyshevUpperBound(vec2 moments, float distance)
+float chebyshevUpperBound(vec2 moments, float distance, float max_variance)
 {
   if (distance <= moments.x)
     return 1.0;
   float variance = moments.y - (moments.x * moments.x);
-  variance = max(variance, .000000002);
+  variance = max(variance, max_variance);
   float d = distance - moments.x;
   float p_max = variance / (variance + d * d);
   return p_max;
@@ -73,27 +74,47 @@ float chebyshevUpperBound(vec2 moments, float distance)
 
 void gather_shadow_moments()
 {
-frag_in_shadow_space_postw[0] = vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
-    variance_depth[0] = texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
+  frag_in_shadow_space_postw[0] =
+      vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
+  variance_depth[0] =
+      texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
 
-frag_in_shadow_space_postw[1] = vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
-    variance_depth[1] = texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
-frag_in_shadow_space_postw[2] = vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
-    variance_depth[2] = texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
-frag_in_shadow_space_postw[3] = vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
-    variance_depth[3] = texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
-frag_in_shadow_space_postw[4] = vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
-    variance_depth[4] = texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
-frag_in_shadow_space_postw[5] = vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
-    variance_depth[5] = texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
-frag_in_shadow_space_postw[6] = vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
-    variance_depth[6] = texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
-frag_in_shadow_space_postw[7] = vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
-    variance_depth[7] = texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
-frag_in_shadow_space_postw[8] = vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
-    variance_depth[8] = texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
-frag_in_shadow_space_postw[9] = vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
-    variance_depth[9] = texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
+  frag_in_shadow_space_postw[1] =
+      vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
+  variance_depth[1] =
+      texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
+  frag_in_shadow_space_postw[2] =
+      vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
+  variance_depth[2] =
+      texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
+  frag_in_shadow_space_postw[3] =
+      vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
+  variance_depth[3] =
+      texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
+  frag_in_shadow_space_postw[4] =
+      vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
+  variance_depth[4] =
+      texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
+  frag_in_shadow_space_postw[5] =
+      vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
+  variance_depth[5] =
+      texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
+  frag_in_shadow_space_postw[6] =
+      vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
+  variance_depth[6] =
+      texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
+  frag_in_shadow_space_postw[7] =
+      vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
+  variance_depth[7] =
+      texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
+  frag_in_shadow_space_postw[8] =
+      vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
+  variance_depth[8] =
+      texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
+  frag_in_shadow_space_postw[9] =
+      vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
+  variance_depth[9] =
+      texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
 }
 
 void main()
@@ -136,8 +157,12 @@ void main()
     vec3 att = lights[i].attenuation;
     float at = 1.0 / (att.x + (att.y * d) + (att.z * d * d));
     float alpha = 1.0f;
-    vec3 frag_in_this_light_shadow_space_postw = frag_in_shadow_space_postw[i];
+    float shadow_bias = 0.00003;
+    vec3 frag_in_this_light_shadow_space_postw =
+        frag_in_shadow_space_postw[i] - shadow_bias;
     vec2 shadow_moments = variance_depth[i];
+    float this_map_variance = max_variance[i];
+    bool shadow_map_enabled = shadow_map_enabled[i];
     if (lights[i].type == 0)
     { // directional
       l = -lights[i].direction;
@@ -149,31 +174,30 @@ void main()
       float theta = lights[i].cone_angle;
       float phi = 1.0 - dot(l, dir);
       alpha = 0.0f;
-
-
-      
       if (phi < theta)
       {
         float edge_softness_distance = 2.3f * theta;
         alpha = clamp((theta - phi) / edge_softness_distance, 0, 1);
 
-
-        //float shadow_map_depth = (shadow_moments.r-0.5)*2.0;
-        //float frag_depth_from_light = frag_in_this_light_shadow_space_postw.z;
-       // float light_visibility = float(frag_depth_from_light-0.0000008 < shadow_moments.r);
-        //debug.rgb = vec3(linearize_depth(shadow_map_depth));
-        //debug.rgb = vec3(light_visibility);
-       // debug.a = 1;
-
+        // debug.rgb = vec3(0,1,0);
+        // float shadow_map_depth = (shadow_moments.r-0.5)*2.0;
+        // float frag_depth_from_light =
+        // frag_in_this_light_shadow_space_postw.z;  float light_visibility =
+        // float(frag_depth_from_light-0.0000008 < shadow_moments.r);  debug.rgb =
+        // vec3(linearize_depth(shadow_map_depth));  debug.rgb =
+        // vec3(light_visibility);
       }
-      float light_visibility = chebyshevUpperBound(shadow_moments, frag_in_this_light_shadow_space_postw.z);
-      //vec2 shadow_uv = frag_in_this_light_shadow_space_postw.xy;
-      //debug.rgb = vec3(shadow_uv,0);
-      //debug.rgb = vec3(light_visibility);
-      //debug.a = 1.;
-      alpha = alpha * pow(light_visibility,1.);
-      
-     // 
+      if (true)
+      {
+        float light_visibility = chebyshevUpperBound(shadow_moments,
+            frag_in_this_light_shadow_space_postw.z, this_map_variance);
+        // vec2 shadow_uv = frag_in_this_light_shadow_space_postw.xy;
+        // debug.rgb = vec3(shadow_uv,0);
+        // debug.rgb = vec3(light_visibility);
+        // debug.a = 1.;
+        //  debug.rgb = vec3(shadow_moments.r);
+        alpha = alpha * light_visibility;
+      }
     }
     float ldotn = clamp(dot(l, m.normal), 0, 1);
     float ec = (8.0f * m.shininess) / (8.0f * PI);
@@ -184,10 +208,12 @@ void main()
   }
   result += m.emissive;
   result += additional_ambient * m.albedo;
-  
 
-  //debug.rgb = vec3(texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg,0);
+  //debug.rgb = vec3(texture2D(shadow_maps[1],
+  //frag_in_shadow_space_postw[1].xy).rg,0);  
+  //debug.rgb = m.normal;  
   //debug.a = 1;
+  albedo_tex.a = 1;
   if (debug != vec4(-1))
   {
     result = debug.rgb;

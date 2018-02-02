@@ -785,7 +785,7 @@ void Render::set_uniform_shadowmaps(Shader &shader)
 {
   ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
  
-  for (int i = 0; i < MAX_LIGHTS; ++i)
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
@@ -799,7 +799,7 @@ void Render::set_uniform_shadowmaps(Shader &shader)
     const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
     Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i]; 
 
-    float new_max_variance = lights.lights[i].max_variance;
+    float32 new_max_variance = lights.lights[i].max_variance;
     if (value_cache->max_variance != new_max_variance)
     {
       value_cache->max_variance = new_max_variance;
@@ -809,6 +809,12 @@ void Render::set_uniform_shadowmaps(Shader &shader)
     {
       value_cache->shadow_map_transform = shadow_map_transform;
       glUniformMatrix4fv(location_cache->shadow_map_transform, 1, GL_FALSE, &shadow_map_transform[0][0]);
+    }
+    bool casts_shadows = lights.lights[i].casts_shadows;
+    if (value_cache->shadow_map_enabled != casts_shadows)
+    {
+      value_cache->shadow_map_enabled = casts_shadows;
+      glUniform1i(location_cache->shadow_map_enabled, casts_shadows);
     }
   }
 }
@@ -873,6 +879,12 @@ void Render::build_shadow_maps()
                        GL_UNSIGNED_INT, nullptr);
       }
     }
+
+    for (uint32 i = 0; i < light->shadow_blur_iterations; ++i)
+    {
+      shadow_map->blur(light->shadow_blur_radius);
+    }
+
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -1391,7 +1403,7 @@ void Render::set_camera_gaze(vec3 pos, vec3 p)
 void Render::set_vfov(float32 vfov)
 {
   const float32 aspect = (float32)window_size.x / (float32)window_size.y;
-  const float32 znear = 0.1f;
+  const float32 znear = 0.51f;
   const float32 zfar = 1000;
   projection = glm::perspective(radians(vfov), aspect, znear, zfar);
 }
@@ -1685,28 +1697,59 @@ Mesh_Handle::~Mesh_Handle()
 
 FBO_Handle::~FBO_Handle() { glDeleteFramebuffers(1, &fbo); }
 
+void Spotlight_Shadow_Map::blur(float radius)
+{
+  glBindFramebuffer(GL_FRAMEBUFFER, blurfbo.fbo);
+  glViewport(0, 0, size.x, size.y);
+  glDisable(GL_DEPTH_TEST);
+
+  vec2 gaus_scale = vec2(radius / size.x, 0.0);
+  glBindVertexArray(QUAD.get_vao());
+  GAUSSIAN_BLUR.use();
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale", gaus_scale);
+  GAUSSIAN_BLUR.set_uniform("transform", Render::ortho_projection(size));
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, color.texture);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
+  gaus_scale.y = gaus_scale.x;
+  gaus_scale.x = 0;
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale", gaus_scale);
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, blurtex.texture);
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glEnable(GL_DEPTH_TEST);
+}
+
 void Spotlight_Shadow_Map::load(ivec2 size)
 {
-  const GLenum attachment = GL_COLOR_ATTACHMENT0;
-  const GLenum targets[] = {attachment};
-
-  // gen fbo
+  //target fbo
   glGenFramebuffers(1, &target.fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
 
   // gen target depth buffer
   glGenTextures(1, &color.texture);
-  glBindTexture(GL_TEXTURE_2D, color.texture);//GL_LINEAR_MIPMAP_LINEAR
+  glBindTexture(GL_TEXTURE_2D, color.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, 0);
+
+  //glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
   //glGenerateMipmap(GL_TEXTURE_2D);
 
-  glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);
-  glDrawBuffers(1, targets);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color.texture, 0);
+  glDrawBuffer(GL_COLOR_ATTACHMENT0);
 
   // gen actual depth buffer
   glGenRenderbuffers(1, &depth.rbo);
@@ -1714,10 +1757,33 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                             GL_RENDERBUFFER, depth.rbo);
-  // glBindTexture(GL_TEXTURE_2D, 0);
+
+  //gauss
+  glGenTextures(1, &blurtex.texture);
+  glBindTexture(GL_TEXTURE_2D, blurtex.texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    GL_LINEAR);
+  //glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, 0);
+
+  //glGenerateMipmap(GL_TEXTURE_2D);
+
+  glGenFramebuffers(1, &blurfbo.fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, blurfbo.fbo);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, blurtex.texture,0);
+  glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
 
   check_FBO_status();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
   this->size = size;
 }
 
