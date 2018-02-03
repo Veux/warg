@@ -13,6 +13,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
     const char *address_, const char *char_name, uint8_t team)
     : State(name, window, window_size)
 {
+  local = false;
+
   ASSERT(!enet_initialize());
   clientp = enet_host_create(NULL, 1, 2, 0, 0);
   ASSERT(clientp);
@@ -61,6 +63,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
+  local = true;
+
   server = std::make_unique<Warg_Server>(true);
   server->connect(&out, &in);
   out.push(char_spawn_request_event("Cubeboi", 0));
