@@ -1,6 +1,6 @@
 #version 330
 varying vec4 frag_position;
-layout(location = 0) out vec2 COLOR;
+layout(location = 0) out vec2 out0;
 void main()
 {
 	float depth = frag_position.z / frag_position.w;
@@ -14,5 +14,5 @@ void main()
 	moment2 += 0.25*(dx*dx+dy*dy);
 
  
-	COLOR = vec2(moment1,moment2);
+	out0 = vec2(moment1,moment2);
 }

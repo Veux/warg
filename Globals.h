@@ -16,13 +16,14 @@ struct aiString;
 
 #define MAX_INSTANCE_COUNT 100
 #define UNIFORM_LIGHT_LOCATION 20
-#define MAX_LIGHTS 10
-#define SHOW_ERROR_TEXTURE 0
+#define MAX_LIGHTS 10  // reminder to change the Texture_Location::s1...sn shadow map enums
 #define DYNAMIC_TEXTURE_RELOADING 1
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define DEBUG 1
 #define ENABLE_ASSERTS 1
+#define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 0
 #define INCLUDE_FILE_LINE_IN_LOG 0
+#define MAX_TEXTURE_SAMPLERS 20
 
 struct Warg_State;
 struct Render_Test_State;
@@ -155,3 +156,35 @@ template <typename T, typename... Args> std::string s(T first, Args... args)
 }
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
+
+struct Bezier_Curve
+{
+  Bezier_Curve() {}
+  Bezier_Curve(std::vector<glm::vec4> pts) : points(pts) {}
+  glm::vec4 lerp(float t)
+  {
+    if (remainder.size() == 0)
+    {
+      remainder = points;
+    }
+    if (remainder.size() == 1)
+    {
+      glm::vec4 p = remainder[0];
+      remainder.clear();
+      return p;
+    }
+
+    for (uint32 i = 0; i + 1 < remainder.size(); ++i)
+    {
+      glm::vec4 p = glm::mix(remainder[i], remainder[i + 1], t);
+      remainder[i] = p;
+    }
+    remainder.pop_back();
+
+    return lerp(t);
+  }
+  std::vector<glm::vec4> points;
+
+private:
+  std::vector<glm::vec4> remainder;
+};
