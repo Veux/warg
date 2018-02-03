@@ -79,6 +79,9 @@ void server_main()
 int main(int argc, char *argv[])
 {
   bool client = false;
+  std::string address;
+  std::string char_name;
+  uint8_t team;
 
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
@@ -88,6 +91,18 @@ int main(int argc, char *argv[])
   else if (argc > 1 && std::string(argv[1]) == "--connect")
   {
     client = true;
+
+    if (argc <= 4)
+    {
+		std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
+           "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
+           "127.0.0.1 Warriorguy 0"
+        << std::endl;
+      return 1;
+    }
+    address = argv[2];
+    char_name = argv[3];
+    team = std::stoi(argv[4]);
   }
 
   SDL_ClearError();
@@ -125,8 +140,8 @@ int main(int argc, char *argv[])
   int32 major, minor;
   SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
   SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
-  set_message("OpenGL Version.",
-              std::to_string(major) + " " + std::to_string(minor));
+  set_message(
+      "OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
   if (major <= 3)
   {
     if (major < 3 || minor < 1)
@@ -144,10 +159,12 @@ int main(int argc, char *argv[])
   }
 
   glbinding::Binding::initialize();
-  glbinding::setCallbackMaskExcept(glbinding::CallbackMask::After |
-  glbinding::CallbackMask::ParametersAndReturnValue, { "glGetError", "glFlush" });  
-  //glbinding::setBeforeCallback(gl_before_check);
-  //glbinding::setAfterCallback(gl_after_check);
+  glbinding::setCallbackMaskExcept(
+      glbinding::CallbackMask::After |
+          glbinding::CallbackMask::ParametersAndReturnValue,
+      {"glGetError", "glFlush"});
+  // glbinding::setBeforeCallback(gl_before_check);
+  // glbinding::setAfterCallback(gl_after_check);
 
   glClearColor(0, 0, 0, 1);
   checkSDLError(__LINE__);
@@ -157,9 +174,13 @@ int main(int argc, char *argv[])
   float64 elapsed_time = 0.0;
   INIT_RENDERER();
 
+  Warg_State *game_state;
+  if (client)
+  	  game_state = new Warg_State("Warg", window, window_size, address.c_str(), char_name.c_str(), team);
+  else
+	  game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
-  Warg_State game_state("Game State", window, window_size, !client);
-  states.push_back((State *)&game_state);
+  states.push_back((State *)game_state);
   Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
   State *current_state = &*states[0];
@@ -201,6 +222,7 @@ int main(int argc, char *argv[])
     current_state->render(current_state->current_time);
     current_state->performance_output();
   }
+  delete game_state;
   push_log_to_disk();
   CLEANUP_RENDERER();
   SDL_Quit();

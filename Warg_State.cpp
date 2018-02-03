@@ -9,44 +9,61 @@
 
 using namespace glm;
 
-Warg_State::Warg_State(
-    std::string name, SDL_Window *window, ivec2 window_size, bool local)
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
+    const char *address_, const char *char_name, uint8_t team)
     : State(name, window, window_size)
 {
-  this->local = local;
+  ASSERT(!enet_initialize());
+  clientp = enet_host_create(NULL, 1, 2, 0, 0);
+  ASSERT(clientp);
 
-  if (!local)
-  {
-    ASSERT(!enet_initialize());
-    clientp = enet_host_create(NULL, 1, 2, 0, 0);
-    ASSERT(clientp);
+  ENetAddress address;
+  ENetEvent event;
 
-    ENetAddress address;
-    ENetEvent event;
+  enet_address_set_host(&address, address_);
+  address.port = 1337;
 
-    enet_address_set_host(&address, "localhost");
-    address.port = 1337;
+  serverp = enet_host_connect(clientp, &address, 2, 0);
+  ASSERT(serverp);
 
-    serverp = enet_host_connect(clientp, &address, 2, 0);
-    ASSERT(serverp);
+  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
+         event.type == ENET_EVENT_TYPE_CONNECT);
 
-    ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
-           event.type == ENET_EVENT_TYPE_CONNECT);
+  Buffer b;
+  auto ev = char_spawn_request_event("Eirich", 0);
+  serialize(b, ev);
+  ENetPacket *packet =
+      enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  enet_peer_send(serverp, 0, packet);
+  enet_host_flush(clientp);
 
-    Buffer b;
-    auto ev = char_spawn_request_event("Eirich", 0);
-    serialize(b, ev);
-    ENetPacket *packet = enet_packet_create(
-        &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(serverp, 0, packet);
-    enet_host_flush(clientp);
-  }
-  else
-  {
-    server = std::make_unique<Warg_Server>(true);
-    server->connect(&out, &in);
-    out.push(char_spawn_request_event("Eirich", 0));
-  }
+  client = std::make_unique<Warg_Client>(&scene, &in);
+
+  client->map.node =
+      scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+
+  clear_color = vec3(94. / 255., 155. / 255., 1.);
+  scene.lights.light_count = 1;
+  Light *light = &scene.lights.lights[0];
+  light->position = vec3{25, 25, 200.};
+  light->color = 3000.0f * vec3(1.0f, 0.93f, 0.92f);
+  light->attenuation = vec3(1.0f, .045f, .0075f);
+  light->direction = vec3(25.0f, 25.0f, 0.0f);
+  light->ambient = 0.001f;
+  light->cone_angle = 0.15f;
+  light->type = spot;
+  light->casts_shadows = false;
+
+  SDL_SetRelativeMouseMode(SDL_bool(true));
+  reset_mouse_delta();
+}
+
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
+    : State(name, window, window_size)
+{
+  server = std::make_unique<Warg_Server>(true);
+  server->connect(&out, &in);
+  out.push(char_spawn_request_event("Cubeboi", 0));
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 

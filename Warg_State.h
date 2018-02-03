@@ -58,8 +58,9 @@ struct Character
 
 struct Warg_State : protected State
 {
-  Warg_State(
-      std::string name, SDL_Window *window, ivec2 window_size, bool local);
+  Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
+  Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
+      const char *address, const char *char_name, uint8_t team);
   void update();
   void handle_input(
       State **current_state, std::vector<State *> available_states);
