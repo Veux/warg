@@ -41,6 +41,10 @@ void State::prepare_renderer(double t)
   renderer.set_camera(cam.pos, cam.dir);
 
   // Traverse graph nodes and submit to renderer for packing:
+
+  // TODO: add simple bounding colliders assignable to each node_ptr
+  //       add a node_ptr to render_entity to point back to the owner
+  //       octree for triangle data to optimize collision
   auto render_entities = scene.visit_nodes_st_start();
   renderer.set_render_entities(&render_entities);
   renderer.set_lights(scene.lights);
