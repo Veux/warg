@@ -9,6 +9,60 @@
 #include <assimp/postprocess.h>
  
 
+void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data& mesh)
+{
+  std::vector<vec3> pos =
+  {
+    a, b, c
+  };
+  vec3 atob = b - a;
+  vec3 atoc = c - a;
+  vec3 normal = cross(atoc, atob);
+  std::vector<vec2> uvs =
+  {
+    { 0,0 },{ 0,1 },{ 1,1 }
+  };
+  vec2 atob_uv = vec2(0, 1) - vec2(0, 0);
+  vec2 atoc_uv = vec2(1, 1) - vec2(0, 0);
+  float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
+  vec3 tangent =
+  {
+    t*(atoc_uv.y * atob.x - atob_uv.y * atoc.x),
+    t*(atoc_uv.y * atob.y - atob_uv.y * atoc.y),
+    t*(atoc_uv.y * atob.z - atob_uv.y * atoc.z)
+  };
+  tangent = normalize(tangent);
+  vec3 bitangent =
+  {
+    t*(-atoc_uv.x * atob.x + atob_uv.x * atoc.x),
+    t*(-atoc_uv.x * atob.y + atob_uv.x * atoc.y),
+    t*(-atoc_uv.x * atob.z + atob_uv.x * atoc.z)
+  };
+  bitangent = normalize(bitangent);
+  std::vector<vec3> tan =
+  {
+    tangent,tangent,tangent
+  };
+  std::vector<vec3> bitan =
+  {
+    bitangent,bitangent,bitangent
+  };
+  int32 base = mesh.positions.size();
+  std::vector<int32> ind =
+  {
+    base + 0, base + 1, base + 2
+  };
+  mesh.tangents.insert(mesh.tangents.end(), tan.begin(), tan.end());
+  mesh.bitangents.insert(mesh.bitangents.end(), bitan.begin(), bitan.end());
+  mesh.positions.insert(mesh.positions.end(), pos.begin(), pos.end());
+  for (uint32 i = 0; i < 3; ++i)
+  {
+    mesh.normals.push_back(normal);
+  }
+  mesh.indices.insert(mesh.indices.end(), ind.begin(), ind.end());
+  mesh.texture_coordinates.insert(mesh.texture_coordinates.end(), uvs.begin(), uvs.end());
+}
+
 void add_quad(vec3 a, vec3 b, vec3 c, vec3 d,
 	Mesh_Data& mesh)
 {

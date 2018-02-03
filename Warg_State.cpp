@@ -1,5 +1,4 @@
 #include "Warg_State.h"
-#include "Functions.h"
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
@@ -10,357 +9,32 @@
 
 using namespace glm;
 
-static void invoke_spell_effect(SpellEffectInst *i,
-                                std::array<Character, 10> *chars, uint32 nchars,
-                                std::vector<SpellObjectInst> *objs);
-static void cast_spell(Character *caster, Character *target, Spell *spell,
-                       std::array<Character, 10> *chars, uint32 nchars,
-                       std::vector<SpellObjectInst> *objs);
-static void apply_char_mods(Character *c);
-static void release_spell(Character *caster, Character *target, Spell *spell,
-                          std::array<Character, 10> *chars, uint32 nchars,
-                          std::vector<SpellObjectInst> *objs);
-static void move_char(Character *c, vec3 v);
-
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
-  Material_Descriptor material;
-  material.albedo = "pebbles_diffuse.png";
-  material.emissive = "";
-  material.normal = "pebbles_normal.png";
-  material.roughness = "pebbles_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
+  server = std::make_unique<Warg_Server>();
+  server->connect(&out, &in);
 
-  ground_mesh = scene.add_primitive_mesh(plane, "ground_plane", material);
-  ground_mesh->position = ground_pos;
-  ground_mesh->scale = ground_dim;
-  add_wall({0, 4, 0}, {6, 4}, 10);
-  add_wall({6, 0, 0}, {6, 4}, 10);
-  add_wall({6, 0, 0}, {10, 0}, 10);
-  add_wall({10, 0, 0}, {10, 4}, 10);
-  add_wall({10, 4, 0}, {16, 4}, 10);
+  client = std::make_unique<Warg_Client>(&scene, &in);
 
-  add_wall({14, 4, 0}, {16, 6}, 10);
+  client->map.node = scene.add_mesh(client->map.mesh, client->map.material, "active map");
 
-  add_wall({16, 4, 0}, {16, 18}, 10);
-  add_wall({16, 18, 0}, {10, 18}, 10);
-  add_wall({10, 18, 0}, {10, 22}, 10);
-  add_wall({10, 22, 0}, {6, 22}, 10);
-  add_wall({6, 22, 0}, {6, 18}, 10);
-  add_wall({6, 18, 0}, {0, 18}, 10);
-  add_wall({0, 18, 0}, {0, 4}, 10);
-  add_wall({2, 14, 0}, {2, 16}, 10);
-  add_wall({2, 16, 0}, {4, 16}, 10);
-  add_wall({4, 16, 0}, {4, 14}, 10);
-  add_wall({4, 14, 0}, {2, 14}, 10);
-  add_wall({12, 14, 0}, {12, 16}, 10);
-  add_wall({12, 16, 0}, {14, 16}, 10);
-  add_wall({14, 16, 0}, {14, 14}, 10);
-  add_wall({14, 14, 0}, {12, 14}, 10);
-  add_wall({12, 8, 0}, {14, 8}, 10);
-  add_wall({14, 8, 0}, {14, 6}, 10);
-  add_wall({14, 6, 0}, {12, 6}, 10);
-  add_wall({12, 6, 0}, {12, 8}, 10);
-  add_wall({4, 6, 0}, {4, 8}, 10);
-  add_wall({4, 8, 0}, {2, 8}, 10);
-  add_wall({2, 8, 0}, {2, 6}, 10);
-  add_wall({2, 6, 0}, {4, 6}, 10);
 
-  scene.lights.light_count = 1;
-  Light *light = &scene.lights.lights[0];
-  light->position = vec3{0, 0, 10};
-  light->color = 30.0f * vec3(1.0f, 0.93f, 0.92f);
-  light->attenuation = vec3(1.0f, .045f, .0075f);
-  light->ambient = 0.02f;
-  light->type = omnidirectional;
 
-  material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
 
-  // DIVINE SHIELD
 
-  CharMod *ds_mod = &char_mods[nchar_mods++];
-  ds_mod->type = CharModType::DamageTaken;
-  ds_mod->damage_taken = DamageTakenMod{0};
 
-  BuffDef *ds_buff = &buffs[nbuffs++];
-  ds_buff->name = "DivineShieldBuff";
-  ds_buff->duration = 10;
-  ds_buff->char_mods.push_back(ds_mod);
-
-  SpellEffect *ds_effect = &spell_effects[nspell_effects++];
-  ds_effect->name = "DivineShieldEffect";
-  ds_effect->type = SpellEffectType::ApplyBuff;
-  ds_effect->applybuff.buff = ds_buff;
-
-  SpellDef *ds = &spells[nspells++];
-  ds->name = "Divine Shield";
-  ds->mana_cost = 50;
-  ds->range = -1;
-  ds->targets = SpellTargets::Self;
-  ds->cooldown = 5 * 60;
-  ds->cast_time = 0;
-  ds->effects.push_back(ds_effect);
-
-  // SHADOW WORD: PAIN
-
-  SpellEffect *swp_tick = &spell_effects[nspell_effects++];
-  swp_tick->name = "ShadowWordPainTickEffect";
-  swp_tick->type = SpellEffectType::Damage;
-  swp_tick->damage.n = 5;
-  swp_tick->damage.pierce_absorb = false;
-  swp_tick->damage.pierce_mod = false;
-
-  BuffDef *swp_buff = &buffs[nbuffs++];
-  swp_buff->name = "ShadowWordPainBuff";
-  swp_buff->duration = 5;
-  swp_buff->tick_freq = 1.0 / 3;
-  swp_buff->tick_effects.push_back(swp_tick);
-
-  SpellEffect *swp_effect = &spell_effects[nspell_effects++];
-  swp_effect->name = "ShadowWordPainEffect";
-  swp_effect->type = SpellEffectType::ApplyDebuff;
-  swp_effect->applydebuff.debuff = swp_buff;
-
-  SpellDef *swp = &spells[nspells++];
-  swp->name = "Shadow Word: Pain";
-  swp->mana_cost = 50;
-  swp->range = 30;
-  swp->cooldown = 0;
-  swp->cast_time = 0;
-  swp->targets = SpellTargets::Hostile;
-  swp->effects.push_back(swp_effect);
-
-  // ARCANE EXPLOSION
-
-  SpellEffect *ae_damage = &spell_effects[nspell_effects++];
-  ae_damage->name = "ArcaneExplosionDamageEffect";
-  ae_damage->type = SpellEffectType::Damage;
-  ae_damage->damage.n = 5;
-  ae_damage->damage.pierce_absorb = false;
-  ae_damage->damage.pierce_mod = false;
-
-  SpellEffect *ae_aoe = &spell_effects[nspell_effects++];
-  ae_aoe->name = "ArcaneExplosionAoEEffect";
-  ae_aoe->type = SpellEffectType::AoE;
-  ae_aoe->aoe.targets = SpellTargets::Hostile;
-  ae_aoe->aoe.radius = 8;
-  ae_aoe->aoe.effect = ae_damage;
-
-  SpellDef *ae = &spells[nspells++];
-  ae->name = "Arcane Explosion";
-  ae->mana_cost = 50;
-  ae->range = 0;
-  ae->cooldown = 0;
-  ae->cast_time = 0;
-  ae->targets = SpellTargets::Terrain;
-  ae->effects.push_back(ae_aoe);
-
-  // HOLY NOVA
-
-  SpellEffect *hn_heal = &spell_effects[nspell_effects++];
-  hn_heal->name = "HolyNovaHealEffect";
-  hn_heal->type = SpellEffectType::Heal;
-  hn_heal->heal.n = 10;
-
-  SpellEffect *hn_aoe = &spell_effects[nspell_effects++];
-  hn_aoe->name = "HolyNovaAoEEffect";
-  hn_aoe->type = SpellEffectType::AoE;
-  hn_aoe->aoe.targets = SpellTargets::Ally;
-  hn_aoe->aoe.radius = 8;
-  hn_aoe->aoe.effect = hn_heal;
-
-  SpellDef *hn = &spells[nspells++];
-  hn->name = "Holy Nova";
-  hn->mana_cost = 50;
-  hn->range = 0;
-  hn->targets = SpellTargets::Terrain;
-  hn->cooldown = 0;
-  hn->cast_time = 0;
-  hn->effects.push_back(hn_aoe);
-
-  // SHADOW NOVA
-
-  SpellEffect *shadow_nova_aoe = &spell_effects[nspell_effects++];
-  shadow_nova_aoe->name = "ShadowNovaAoEEffect";
-  shadow_nova_aoe->type = SpellEffectType::AoE;
-  shadow_nova_aoe->aoe.targets = SpellTargets::Hostile;
-  shadow_nova_aoe->aoe.radius = 8;
-  shadow_nova_aoe->aoe.effect = swp_effect;
-
-  SpellDef *shadow_nova = &spells[nspells++];
-  shadow_nova->name = "Shadow Nova";
-  shadow_nova->mana_cost = 50;
-  shadow_nova->range = 0;
-  shadow_nova->targets = SpellTargets::Terrain;
-  shadow_nova->cooldown = 0;
-  shadow_nova->cast_time = 0;
-  shadow_nova->effects.push_back(shadow_nova_aoe);
-
-  // MIND BLAST
-
-  SpellEffect *mb_damage = &spell_effects[nspell_effects++];
-  mb_damage->name = "MindBlastDamageEffect";
-  mb_damage->type = SpellEffectType::Damage;
-  mb_damage->damage.n = 20;
-  mb_damage->damage.pierce_absorb = false;
-  mb_damage->damage.pierce_mod = false;
-
-  SpellDef *mb = &spells[nspells++];
-  mb->name = "Mind Blast";
-  mb->mana_cost = 100;
-  mb->range = 15;
-  mb->targets = SpellTargets::Hostile;
-  mb->cooldown = 6;
-  mb->cast_time = 1.5;
-  mb->effects.push_back(mb_damage);
-
-  // LESSER HEAL
-
-  CharMod *lh_slow_mod = &char_mods[nchar_mods++];
-  lh_slow_mod->type = CharModType::Speed;
-  lh_slow_mod->speed.m = 0.5;
-
-  BuffDef *lh_slow_debuff = &buffs[nbuffs++];
-  lh_slow_debuff->name = "LesserHealSlowDebuff";
-  lh_slow_debuff->duration = 10;
-  lh_slow_debuff->char_mods.push_back(lh_slow_mod);
-
-  SpellEffect *lh_slow_buff_appl = &spell_effects[nspell_effects++];
-  lh_slow_buff_appl->name = "LesserHealSlowEffect";
-  lh_slow_buff_appl->type = SpellEffectType::ApplyDebuff;
-  lh_slow_buff_appl->applydebuff.debuff = lh_slow_debuff;
-
-  SpellEffect *lh_heal = &spell_effects[nspell_effects++];
-  lh_heal->name = "LesserHealHealEffect";
-  lh_heal->type = SpellEffectType::Heal;
-  lh_heal->heal.n = 20;
-
-  SpellDef *lh = &spells[nspells++];
-  lh->name = "Lesser Heal";
-  lh->mana_cost = 50;
-  lh->range = 30;
-  lh->targets = SpellTargets::Ally;
-  lh->cooldown = 0;
-  lh->cast_time = 2;
-  lh->effects.push_back(lh_heal);
-  lh->effects.push_back(lh_slow_buff_appl);
-
-  // ICY VEINS
-
-  CharMod *icy_veins_mod = &char_mods[nchar_mods++];
-  icy_veins_mod->type = CharModType::CastSpeed;
-  icy_veins_mod->cast_speed.m = 3;
-
-  BuffDef *icy_veins_buff = &buffs[nbuffs++];
-  icy_veins_buff->name = "IcyVeinsBuff";
-  icy_veins_buff->duration = 20;
-  icy_veins_buff->char_mods.push_back(icy_veins_mod);
-
-  SpellEffect *icy_veins_buff_appl = &spell_effects[nspell_effects++];
-  icy_veins_buff_appl->name = "IcyVeinsBuffEffect";
-  icy_veins_buff_appl->type = SpellEffectType::ApplyBuff;
-  icy_veins_buff_appl->applybuff.buff = icy_veins_buff;
-
-  SpellDef *icy_veins = &spells[nspells++];
-  icy_veins->name = "Icy Veins";
-  icy_veins->mana_cost = 20;
-  icy_veins->range = 0;
-  icy_veins->targets = SpellTargets::Self;
-  icy_veins->cooldown = 120;
-  icy_veins->cast_time = 0;
-  icy_veins->effects.push_back(icy_veins_buff_appl);
-
-  // ICE BLOCK
-
-  SpellEffect *ib_clear_debuffs_effect = &spell_effects[nspell_effects++];
-  ib_clear_debuffs_effect->name = "IceBlockClearDebuffsEffect";
-  ib_clear_debuffs_effect->type = SpellEffectType::ClearDebuffs;
-
-  SpellDef *ib = &spells[nspells++];
-  ib->name = "Ice Block";
-  ib->mana_cost = 20;
-  ib->range = 0;
-  ib->targets = SpellTargets::Self;
-  ib->cooldown = 120;
-  ib->cast_time = 0;
-  ib->effects.push_back(ib_clear_debuffs_effect);
-
-  // FROSTBOLT
-
-  CharMod *fb_slow = &char_mods[nchar_mods++];
-  fb_slow->type = CharModType::Speed;
-  fb_slow->speed.m = 0.2;
-
-  BuffDef *fb_debuff = &buffs[nbuffs++];
-  fb_debuff->name = "FrostboltSlowDebuff";
-  fb_debuff->duration = 10;
-  fb_debuff->char_mods.push_back(fb_slow);
-
-  SpellEffect *fb_debuff_appl = &spell_effects[nspell_effects++];
-  fb_debuff_appl->name = "FrostboltDebuffApplyEffect";
-  fb_debuff_appl->type = SpellEffectType::ApplyDebuff;
-  fb_debuff_appl->applydebuff.debuff = fb_debuff;
-
-  SpellEffect *fb_damage = &spell_effects[nspell_effects++];
-  fb_damage->name = "FrostboltDamageEffect";
-  fb_damage->type = SpellEffectType::Damage;
-  fb_damage->damage.n = 15;
-  fb_damage->damage.pierce_absorb = false;
-  fb_damage->damage.pierce_mod = false;
-
-  SpellObjectDef *fb_object = &spell_objects[nspell_objects++];
-  fb_object->name = "Frostbolt";
-  fb_object->speed = 30;
-  fb_object->effects.push_back(fb_debuff_appl);
-  fb_object->effects.push_back(fb_damage);
-
-  SpellEffect *fb_object_launch = &spell_effects[nspell_effects++];
-  fb_object_launch->name = "FrostboltObjectLaunchEffect";
-  fb_object_launch->type = SpellEffectType::ObjectLaunch;
-  fb_object_launch->objectlaunch.object = fb_object;
-
-  SpellDef *fb = &spells[nspells++];
-  fb->name = "Frostbolt";
-  fb->mana_cost = 20;
-  fb->range = 30;
-  fb->targets = SpellTargets::Hostile;
-  fb->cooldown = 0;
-  fb->cast_time = 2;
-  fb->effects.push_back(fb_object_launch);
-
-  // COUNTERSPELL
-
-  SpellEffect *cs_effect = &spell_effects[nspell_effects++];
-  cs_effect->name = "Counterspell";
-  cs_effect->type = SpellEffectType::Interrupt;
-  cs_effect->interrupt.lockout = 6;
-
-  SpellDef *cs = &spells[nspells++];
-  cs->name = "Counterspell";
-  cs->mana_cost = 10;
-  cs->range = 30;
-  cs->targets = SpellTargets::Hostile;
-  cs->cooldown = 24;
-  cs->cast_time = 0;
-  cs->effects.push_back(cs_effect);
-
-  add_char(0, "Eirich");
-  add_char(0, "Veuxia");
-  add_char(1, "Selion");
-  add_char(1, "Veuxe");
+  out.push(char_spawn_request_event("Eirich", 0));
+  out.push(char_spawn_request_event("Veuxia", 0));
+  out.push(char_spawn_request_event("Selion", 1));
+  out.push(char_spawn_request_event("Veuxe", 1));
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 }
-void Warg_State::handle_input(State **current_state,
-                              std::vector<State *> available_states)
+
+void Warg_State::handle_input(
+    State **current_state, std::vector<State *> available_states)
 {
   auto is_pressed = [](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
@@ -382,6 +56,10 @@ void Warg_State::handle_input(State **current_state,
         running = false;
         return;
       }
+      if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
+      {
+        out.push(jump_event(client->pc));
+      }
     }
     else if (_e.type == SDL_KEYUP)
     {
@@ -401,89 +79,80 @@ void Warg_State::handle_input(State **current_state,
         if (free_cam)
         {
           free_cam = false;
-          pc = 0;
+          client->pc = 0;
         }
-        else if (pc >= nchars - 1)
+        else if (client->pc >= client->chars.size() - 1)
         {
           free_cam = true;
         }
         else
         {
-          pc += 1;
+          client->pc += 1;
         }
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
       {
-        Character *first_lower = nullptr, *first_higher = nullptr;
-        for (int i = nchars - 1; i >= 0; i--)
+        int first_lower = -1, first_higher = -1;
+        for (int i = client->chars.size() - 1; i >= 0; i--)
         {
-          if (chars[i].alive && chars[i].team != chars[pc].team)
+          if (client->chars[i].alive &&
+              client->chars[i].team != client->chars[client->pc].team)
           {
-            if (&chars[i] < chars[pc].target)
+            if (i < client->chars[client->pc].target)
             {
-              first_lower = &chars[i];
+              first_lower = i;
             }
-            else if (&chars[i] > chars[pc].target)
+            else if (i > client->chars[client->pc].target)
             {
-              first_higher = &chars[i];
+              first_higher = i;
             }
           }
         }
 
-        if (first_higher != nullptr)
+        if (first_higher != -1)
         {
-          chars[pc].target = first_higher;
+          client->chars[client->pc].target = first_higher;
         }
-        else if (first_lower != nullptr)
+        else if (first_lower != -1)
         {
-          chars[pc].target = first_lower;
+          client->chars[client->pc].target = first_lower;
         }
         set_message("Target",
-                    s(chars[pc].name, " targeted ", chars[pc].target->name),
-                    3.0f);
+            s(client->chars[client->pc].name, " targeted ",
+                client->chars[client->chars[client->pc].target].name),
+            3.0f);
       }
       if (_e.key.keysym.sym == SDLK_1 && !free_cam)
       {
-        cast_spell(&chars[pc], chars[pc].target,
-                   &chars[pc].spellbook["Frostbolt"], &chars, nchars,
-                   &spell_objs);
+        out.push(cast_event(
+            client->pc, client->chars[client->pc].target, "Frostbolt"));
       }
-      if (_e.key.keysym.sym == SDLK_2 && !free_cam)
-      {
-        Character *target = nullptr;
-        if (!chars[pc].target || chars[pc].team != chars[pc].target->team)
-        {
-          target = &chars[pc];
-        }
-        else
-        {
-          target = chars[pc].target;
-        }
-        cast_spell(&chars[pc], target, &chars[pc].spellbook["Lesser Heal"],
-                   &chars, nchars, &spell_objs);
-      }
-      if (_e.key.keysym.sym == SDLK_3 && !free_cam)
-      {
-        cast_spell(&chars[pc], chars[pc].target,
-                   &chars[pc].spellbook["Counterspell"], &chars, nchars,
-                   &spell_objs);
-      }
-      if (_e.key.keysym.sym == SDLK_4 && !free_cam)
-      {
-        cast_spell(&chars[pc], &chars[pc], &chars[pc].spellbook["Ice Block"],
-                   &chars, nchars, &spell_objs);
-      }
-      if (_e.key.keysym.sym == SDLK_5 && !free_cam)
-      {
-        cast_spell(&chars[pc], nullptr,
-                   &chars[pc].spellbook["Arcane Explosion"], &chars, nchars,
-                   &spell_objs);
-      }
-      if (_e.key.keysym.sym == SDLK_6 && !free_cam)
-      {
-        cast_spell(&chars[pc], nullptr, &chars[pc].spellbook["Holy Nova"],
-                   &chars, nchars, &spell_objs);
-      }
+      // if (_e.key.keysym.sym == SDLK_2 && !free_cam)
+      // {
+      //   int target = (client->chars[pc].target < 0 ||
+      //                    client->chars[pc].team !=
+      //                        client->chars[client->chars[pc].target].team)
+      //                    ? pc
+      //                    : client->chars[pc].target;
+      //   out.push(cast_event(pc, target, "Lesser Heal"));
+      // }
+      // if (_e.key.keysym.sym == SDLK_3 && !free_cam)
+      // {
+      //   out.push(cast_event(pc, client->chars[pc].target,
+      //   "Counterspell"));
+      // }
+      // if (_e.key.keysym.sym == SDLK_4 && !free_cam)
+      // {
+      //   out.push(cast_event(pc, pc, "Ice Block"));
+      // }
+      // if (_e.key.keysym.sym == SDLK_5 && !free_cam)
+      // {
+      //   out.push(cast_event(pc, -1, "Arcane Explosion"));
+      // }
+      // if (_e.key.keysym.sym == SDLK_6 && !free_cam)
+      // {
+      //   out.push(cast_event(pc, -1, "Holy Nova"));
+      // }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
@@ -529,6 +198,8 @@ void Warg_State::handle_input(State **current_state,
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
+  if (client->pc < 0)
+    return;
   if (free_cam)
   {
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
@@ -634,832 +305,362 @@ void Warg_State::handle_input(State **current_state,
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
 
-    vec3 old_pos = chars[pc].pos;
-
     if (right_button_down)
-    {
-      chars[pc].dir = normalize(-vec3(cam_rel.x, cam_rel.y, 0));
-    }
+      out.push(
+          dir_event(client->pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
+
+    int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
-    {
-      vec3 v = vec3(chars[pc].dir.x, chars[pc].dir.y, 0.0f);
-      move_char(&chars[pc], dt * v);
-    }
+      m |= Move_Status::Forwards;
     if (is_pressed(SDL_SCANCODE_S))
-    {
-      vec3 v = vec3(chars[pc].dir.x, chars[pc].dir.y, 0.0f);
-      move_char(&chars[pc], dt * -v);
-    }
+      m |= Move_Status::Backwards;
     if (is_pressed(SDL_SCANCODE_A))
-    {
-      mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(chars[pc].dir.x, chars[pc].dir.y, 0, 0);
-      move_char(&chars[pc], dt * vec3(r * v));
-    }
+      m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
-    {
-      mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
-      vec4 v = vec4(chars[pc].dir.x, chars[pc].dir.y, 0, 0);
-      move_char(&chars[pc], dt * vec3(r * v));
-    }
+      m |= Move_Status::Right;
+    out.push(move_event(client->pc, (Move_Status)m));
 
-    cam.pos = chars[pc].pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
-    cam.dir = -vec3(cam_rel);
-
-    // if (intersects(player_pos, player_body, obstacle_pos, obstacle_body))
-    //   if (!intersects(vec3(player_pos.x, old_pos.y, player_pos.z),
-    //   player_body,
-    //                   obstacle_pos, obstacle_body))
-    //     player_pos.y = old_pos.y;
-    //   else if (!intersects(vec3(old_pos.x, player_pos.y, old_pos.z),
-    //                        player_body, obstacle_pos, obstacle_body))
-    //     player_pos.x = old_pos.x;
-    //   else
-    //     player_pos = old_pos;
-    // else
-    for (auto &wall : walls)
+    vec3 player_pos = client->chars[client->pc].pos;
+    float effective_zoom = cam.zoom;
+    for (auto &surface : client->map.surfaces)
     {
-      if (intersects(chars[pc].pos, chars[pc].body, wall))
+      vec3 intersection_point;
+      bool intersects = ray_intersects_triangle(
+          player_pos, cam_rel, surface, &intersection_point);
+      if (intersects &&
+          length(player_pos - intersection_point) < effective_zoom)
       {
-        if (!intersects(vec3(chars[pc].pos.x, old_pos.y, chars[pc].pos.z),
-                        chars[pc].body, wall))
-        {
-          chars[pc].pos.y = old_pos.y;
-        }
-        else if (!intersects(vec3(old_pos.x, chars[pc].pos.y, old_pos.z),
-                             chars[pc].body, wall))
-        {
-          chars[pc].pos.x = old_pos.x;
-        }
-        else
-        {
-          chars[pc].pos = old_pos;
-        }
+        effective_zoom = length(player_pos - intersection_point);
       }
     }
+    cam.pos =
+        player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.dir = -vec3(cam_rel);
   }
-
-  vec3 falling_pos = chars[pc].pos;
-  falling_pos.z -= 5.0 / 60;
-  // if (!intersects(player_pos, player_dim, ground_pos, ground_dim))
-  if (chars[pc].pos.z > chars[pc].body.h / 2)
-    chars[pc].pos = falling_pos;
 
   previous_mouse_state = mouse_state;
 }
 
-void apply_spell_effects(Character *caster, Character *target,
-                         std::vector<SpellEffect *> *effects,
-                         std::array<Character, 10> *chars, uint32 nchars,
-                         std::vector<SpellObjectInst> *objs)
-{
-  SpellEffectInst i;
-  for (auto &e : *effects)
-  {
-    i.def = *e;
-    i.caster = caster;
-    i.pos = {0, 0, 0};
-    i.target = target;
-
-    invoke_spell_effect(&i, chars, nchars, objs);
-  }
-}
 void Warg_State::update()
 {
-  for (int i = 0; i < nchars; i++)
-  {
-    Character *c = &chars[i];
+  clear_color = vec3(94. / 255., 155. / 255., 1.);
+  scene.lights.light_count = 2;
 
-    c->mesh->position = c->pos;
-    c->mesh->scale = vec3(1.0f);
-    c->mesh->orientation =
-        angleAxis((float32)atan2(c->dir.y, c->dir.x), vec3(0.f, 0.f, 1.f));
+  Light *light = &scene.lights.lights[0];
 
-    if (c->target && !c->target->alive)
-    {
-      c->target = nullptr;
-    }
+  scene.lights.light_count = 2;
+  light->position = vec3{ 25, 25, 200. };
+  light->color = 3000.0f * vec3(1.0f, 0.93f, 0.92f);
+  light->attenuation = vec3(1.0f, .045f, .0075f);
+  light->ambient = 0.001f;
+  light->cone_angle = 0.15f;
+  light->type = Light_Type::spot;
+  light->casts_shadows = true;
+  //there was a divide by 0 here, a camera can't point exactly straight down
+  light->direction = vec3(25.01f, 25.0f, 0.0f);
+  //see Render.h for what these are for:
+  light->shadow_blur_iterations = 6;
+  light->shadow_blur_radius = 1.25005f;
+  light->max_variance = 0.0000002;
+  light->shadow_near_plane = 180.f;
+  light->shadow_far_plane = 500.f;
+  light->shadow_fov = radians(90.f);
 
-    c->atk_cd -= dt;
-    if (c->target && c->target->alive && c->team != c->target->team &&
-        length(c->pos - c->target->pos) <= ATK_RANGE && c->atk_cd <= 0)
-    {
-      // int edamage = chars[c.target].take_damage({c.atk_dmg, false, false});
-      // c.atk_cd = c.atk_speed;
-      // std::cout << c.name << " whacks " << chars[c.target].name << " for "
-      //           << edamage << " damage" << std::endl;
-    }
+  light = &scene.lights.lights[1];
 
-    for (auto i = c->buffs.begin(); i != c->buffs.end();)
-    {
-      auto &b = *i;
-      BuffDef bdef = b.def;
-      b.duration -= dt;
-      if (!bdef.tick_effects.empty() &&
-          b.duration * bdef.tick_freq < b.ticks_left)
-      {
-        apply_spell_effects(nullptr, c, &bdef.tick_effects, &chars, nchars,
-                            &spell_objs);
-        b.ticks_left--;
-      }
-      if (b.duration <= 0)
-      {
-        set_message("", s(b.def.name, " falls off ", c->name), 3.0f);
-        if (b.dynamic)
-        {
-          for (auto &te : b.def.tick_effects)
-          {
-            free(te);
-          }
-          for (auto &cm : b.def.char_mods)
-          {
-            free(cm);
-          }
-        }
-        i = c->debuffs.erase(i);
-      }
-      else
-      {
-        i++;
-      }
-    }
+  light->position = vec3{ 25, 25, 20.10 };
+  light->color = 600.0f * vec3(1.f+sin(current_time*1.35), 1.f+cos(current_time*1.12), 1.f+sin(current_time*.9));
+  light->attenuation = vec3(1.0f, .045f, .0075f);
+  light->direction = client ? client->chars.size()>0 ? client->chars[0].pos : vec3(0) : vec3(0);
+  light->ambient = 0.0f;
+  light->cone_angle = 0.03f;
+  light->type = Light_Type::spot;
+  light->casts_shadows = true;
+  //see Render.h for what these are for:
+  light->shadow_blur_iterations = 3;
+  light->shadow_blur_radius = 0.45005f;
+  light->max_variance = 0.00000003;
+  light->shadow_near_plane = 5.51f;
+  light->shadow_far_plane = 80.f;
+  light->shadow_fov = radians(40.f);
 
-    for (auto i = c->debuffs.begin(); i != c->debuffs.end();)
-    {
-      auto &d = *i;
-      BuffDef ddef = d.def;
-      d.duration -= dt;
-      if (!ddef.tick_effects.empty() &&
-          d.duration * ddef.tick_freq < d.ticks_left)
-      {
-        apply_spell_effects(nullptr, c, &ddef.tick_effects, &chars, nchars,
-                            &spell_objs);
-        d.ticks_left--;
-      }
-      if (d.duration <= 0)
-      {
-        set_message("", d.def.name + " falls off " + c->name, 3.0f);
-        if (d.dynamic)
-        {
-          for (auto &te : d.def.tick_effects)
-          {
-            free(te);
-          }
-          for (auto &cm : d.def.char_mods)
-          {
-            free(cm);
-          }
-        }
-        i = c->debuffs.erase(i);
-      }
-      else
-      {
-        i++;
-      }
-    }
-
-    apply_char_mods(c);
-
-    c->mana += c->e_stats.mana_regen * dt;
-    if (c->mana > c->mana_max)
-    {
-      c->mana = c->mana_max;
-    }
-
-    if (c->casting)
-    {
-      c->cast_progress += c->e_stats.cast_speed * dt;
-      if (c->cast_progress > c->casting_spell->def->cast_time)
-      {
-        release_spell(c, c->cast_target, c->casting_spell, &chars, nchars,
-                      &spell_objs);
-        c->cast_progress = 0;
-        c->casting = false;
-      }
-    }
-
-    if (c->gcd > 0)
-    {
-      c->gcd -= dt * c->e_stats.cast_speed;
-      if (c->gcd < 0)
-      {
-        c->gcd = 0;
-      }
-    }
-
-    for (auto &sp : c->spellbook)
-    {
-      auto &s = std::get<1>(sp);
-      if (s.cd_remaining > 0)
-      {
-        s.cd_remaining -= dt;
-      }
-      if (s.cd_remaining < 0)
-      {
-        s.cd_remaining = 0;
-      }
-    }
-  }
-
-  for (auto i = spell_objs.begin(); i != spell_objs.end();)
-  {
-    auto &o = *i;
-    float32 d = length(o.target->pos - o.pos);
-    if (d < 0.5)
-    {
-      set_message(
-          "", o.caster->name + "'s " + o.def.name + " hit " + o.target->name,
-          3.0f);
-      for (auto &e : o.def.effects)
-      {
-        SpellEffectInst i;
-        i.def = *e;
-        i.caster = o.caster;
-        i.pos = o.pos;
-        i.target = o.target;
-        invoke_spell_effect(&i, &chars, nchars, &spell_objs);
-      }
-      i = spell_objs.erase(i);
-    }
-    else
-    {
-      vec3 a = normalize(o.target->pos - o.pos);
-      a.x *= o.def.speed * dt;
-      a.y *= o.def.speed * dt;
-      a.z *= o.def.speed * dt;
-      o.pos += a;
-      ++i;
-    }
-  }
+  server->update(dt);
+  client->update(dt);
 }
 
-void Warg_State::add_wall(vec3 p1, vec2 p2, float32 h)
-{
-  Material_Descriptor material;
-  material.albedo = "pebbles_diffuse.png";
-  material.emissive = "";
-  material.normal = "pebbles_normal.png";
-  material.roughness = "pebbles_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
-  material.backface_culling = false;
-  material.uv_scale = vec2(2);
+void add_wall(std::vector<Triangle> &surfaces, Wall wall) {
+	Triangle t1, t2;
 
-  Mesh_Data data;
-  vec3 a, b, c, d;
-  a = p1;
-  b = vec3(p2.x, p2.y, 0);
-  c = vec3(p2.x, p2.y, h);
-  d = vec3(p1.x, p1.y, h);
+	t1.a = wall.p1;
+	t1.b = vec3(wall.p2.x, wall.p2.y, t1.a.z);
+	t1.c = vec3(wall.p2.x, wall.p2.y, wall.h);
+	surfaces.push_back(t1);
 
-  add_quad(a, b, c, d, data);
-  auto mesh = scene.add_mesh(data, material, "some wall");
-
-  walls.push_back(Wall{p1, p2, h});
-  wall_meshes.push_back(mesh);
+	t2.a = wall.p1;
+	t2.b = vec3(wall.p2.x, wall.p2.y, wall.h);
+	t2.c = vec3(wall.p1.x, wall.p1.y, wall.h);
+	surfaces.push_back(t2);
 }
 
-void Warg_State::add_char(int team, std::string name)
+Map make_nagrand()
 {
-  vec3 pos, dir;
-  switch (team)
+  Map nagrand;
+
+  std::vector<Wall> walls;
+  walls.push_back({{12, 8, 0}, {0, 8}, 10});
+  walls.push_back({{12, 0, 0}, {12, 8}, 10});
+  walls.push_back({{20, 0, 0}, {12, 0}, 10});
+  walls.push_back({{20, 8, 0}, {20, 0}, 10});
+  walls.push_back({{32, 8, 0}, {20, 8}, 10});
+  walls.push_back({{32, 12, 0}, {28, 8}, 10});
+  walls.push_back({{32, 36, 0}, {32, 8}, 10});
+  walls.push_back({{20, 36, 0}, {32, 36}, 10});
+  walls.push_back({{20, 44, 0}, {20, 36}, 10});
+  walls.push_back({{12, 44, 0}, {20, 44}, 10});
+  walls.push_back({{12, 36, 0}, {12, 44}, 10});
+  walls.push_back({{0, 36, 0}, {12, 36}, 10});
+  walls.push_back({{0, 8, 0}, {0, 36}, 10});
+  walls.push_back({{4, 32, 0}, {4, 28}, 10});
+  walls.push_back({{8, 32, 0}, {4, 32}, 10});
+  walls.push_back({{8, 28, 0}, {8, 32}, 10});
+  walls.push_back({{4, 28, 0}, {8, 28}, 10});
+  walls.push_back({{24, 32, 0}, {24, 28}, 10});
+  walls.push_back({{28, 32, 0}, {24, 32}, 10});
+  walls.push_back({{28, 28, 0}, {28, 32}, 10});
+  walls.push_back({{24, 28, 0}, {28, 28}, 10});
+  walls.push_back({{28, 16, 0}, {24, 16}, 10});
+  walls.push_back({{28, 12, 0}, {28, 16}, 10});
+  walls.push_back({{24, 12, 0}, {28, 12}, 10});
+  walls.push_back({{24, 16, 0}, {24, 12}, 10});
+  walls.push_back({{8, 12, 0}, {8, 16}, 10});
+  walls.push_back({{8, 16, 0}, {4, 16}, 10});
+  walls.push_back({{4, 16, 0}, {4, 12}, 10});
+  walls.push_back({{4, 12, 0}, {8, 12}, 10});
+  for (auto &w : walls)
+	  add_wall(nagrand.surfaces, w);
+
+  nagrand.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
+  nagrand.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
+
+  nagrand.surfaces.push_back({{15, 12, 0}, {17, 12, 0}, {15, 18, 5}});
+  nagrand.surfaces.push_back({{15, 18, 5}, {17, 12, 0}, {17, 18, 5}});
+
+  nagrand.spawn_pos[0] = {16, 4, 5};
+  nagrand.spawn_pos[1] = {16, 40, 5};
+  nagrand.spawn_dir[0] = {0, 1, 0};
+  nagrand.spawn_dir[1] = {0, -1, 0};
+
+  for (auto &s : nagrand.surfaces)
   {
-    case 0:
-      pos = spawnloc0;
-      dir = spawndir0;
-      break;
-    case 1:
-      pos = spawnloc1;
-      dir = spawndir1;
-      break;
-    default:
-      return;
-  };
+    vec3 a, b, c, d;
+    a = s.a;
+    b = s.b;
+    c = s.b;
+    d = s.c;
 
-  Material_Descriptor material;
-  material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
-
-  Character c;
-  c.team = team;
-  c.name = name;
-  c.pos = pos;
-  c.dir = dir;
-  c.body = {1.f, 0.3f};
-  c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
-  c.hp_max = 100;
-  c.hp = c.hp_max;
-  c.mana_max = 500;
-  c.mana = c.mana_max;
-
-  CharStats s;
-  s.gcd = 1.5;
-  s.speed = 3.0;
-  s.cast_speed = 1;
-  s.hp_regen = 2;
-  s.mana_regen = 10;
-  s.damage_mod = 1;
-  s.atk_dmg = 5;
-  s.atk_speed = 2;
-
-  c.b_stats = s;
-  c.e_stats = s;
-
-  for (int i = 0; i < nspells; i++)
-  {
-    Spell s;
-    s.def = &spells[i];
-    s.cd_remaining = 0;
-    c.spellbook[s.def->name] = s;
+    add_quad(a, b, c, d, nagrand.mesh);
   }
+  nagrand.mesh.unique_identifier = "nagrand_arena_map";
 
-  chars[nchars++] = c;
+  nagrand.material.albedo = "crate_diffuse.png";
+  nagrand.material.emissive = "test_emissive.png";
+  nagrand.material.normal = "test_normal.png";
+  nagrand.material.roughness = "crate_roughness.png";
+  nagrand.material.vertex_shader = "vertex_shader.vert";
+  nagrand.material.frag_shader = "world_origin_distance.frag";
+
+  return nagrand;
 }
 
-void invoke_spell_effect(SpellEffectInst *i, std::array<Character, 10> *chars,
-                         uint32 nchars, std::vector<SpellObjectInst> *objs)
-{
-  ASSERT(i);
-  SpellEffect *e = &i->def;
-  switch (e->type)
+
+Map make_blades_edge() {
+  Map blades_edge;
+
+  // ground
+  blades_edge.surfaces.push_back({{0, 0, 0}, {50, 0, 0}, {0, 50, 0}});
+  blades_edge.surfaces.push_back({{50, 50, 0}, {0, 50, 0}, {50, 0, 0}});
+
+  // outer walls
+  blades_edge.surfaces.push_back({{0, 0, 0}, {0, 50, 0}, {0, 50, 10}});
+  blades_edge.surfaces.push_back({{0, 0, 0}, {0, 50, 10}, {0, 0, 10}});
+
+  // blades_edge.surfaces.push_back({{0, 0, 0}, {10, 0, 10}, {10, 0, 0}});
+  // blades_edge.surfaces.push_back({{0, 0, 0}, {0, 0, 10}, {10, 0, 10}});
+
+  blades_edge.surfaces.push_back({{10, 0, 0}, {10, 0, 10}, {10, 10, 10}});
+  blades_edge.surfaces.push_back({{10, 0, 0}, {10, 10, 10}, {10, 10, 0}});
+
+  blades_edge.surfaces.push_back({{10, 10, 0}, {50, 10, 10}, {50, 10, 0}});
+  blades_edge.surfaces.push_back({{10, 10, 0}, {10, 10, 10}, {50, 10, 10}});
+
+  blades_edge.surfaces.push_back({{50, 10, 0}, {50, 50, 10}, {50, 50, 0}});
+  blades_edge.surfaces.push_back({{50, 10, 0}, {50, 10, 10}, {50, 50, 10}});
+
+  blades_edge.surfaces.push_back({{50, 50, 0}, {40, 50, 10}, {40, 50, 0}});
+  blades_edge.surfaces.push_back({{50, 50, 0}, {50, 50, 10}, {40, 50, 10}});
+
+  blades_edge.surfaces.push_back({{40, 50, 0}, {40, 40, 10}, {40, 40, 0}});
+  blades_edge.surfaces.push_back({{40, 50, 0}, {40, 50, 10}, {40, 40, 10}});
+
+  blades_edge.surfaces.push_back({{40, 40, 0}, {0, 40, 10}, {0, 40, 0}});
+  blades_edge.surfaces.push_back({{40, 40, 0}, {40, 40, 10}, {0, 40, 10}});
+
+  // ramps
+  // west
+  blades_edge.surfaces.push_back({{0, 15, 0}, {10, 15, 0}, {10, 21, 4}});
+  blades_edge.surfaces.push_back({{0, 15, 0}, {10, 21, 4}, {0, 21, 4}});
+
+  blades_edge.surfaces.push_back({{0, 21, 4}, {10, 21, 4}, {10, 29, 4}});
+  blades_edge.surfaces.push_back({{0, 21, 4}, {10, 29, 4}, {0, 29, 4}});
+
+  blades_edge.surfaces.push_back({{0, 29, 4}, {10, 29, 4}, {10, 35, 0}});
+  blades_edge.surfaces.push_back({{0, 29, 4}, {10, 35, 0}, {0, 35, 0}});
+
+  blades_edge.surfaces.push_back({{10, 15, 0}, {10, 21, 0}, {10, 21, 4}});
+  blades_edge.surfaces.push_back({{10, 21, 0}, {10, 29, 0}, {10, 29, 4}});
+  blades_edge.surfaces.push_back({{10, 21, 0}, {10, 29, 4}, {10, 21, 4}});
+  blades_edge.surfaces.push_back({{10, 29, 0}, {10, 35, 0}, {10, 29, 4}});
+
+  // east
+  blades_edge.surfaces.push_back({{40, 15, 0}, {50, 15, 0}, {50, 21, 4}});
+  blades_edge.surfaces.push_back({{40, 15, 0}, {50, 21, 4}, {40, 21, 4}});
+
+  blades_edge.surfaces.push_back({{40, 21, 4}, {50, 21, 4}, {50, 29, 4}});
+  blades_edge.surfaces.push_back({{40, 21, 4}, {50, 29, 4}, {40, 29, 4}});
+
+  blades_edge.surfaces.push_back({{40, 29, 4}, {50, 29, 4}, {50, 35, 0}});
+  blades_edge.surfaces.push_back({{40, 29, 4}, {50, 35, 0}, {40, 35, 0}});
+
+  blades_edge.surfaces.push_back({{40, 15, 0}, {40, 21, 4}, {40, 21, 0}});
+  blades_edge.surfaces.push_back({{40, 21, 0}, {40, 29, 4}, {40, 29, 0}});
+  blades_edge.surfaces.push_back({{40, 21, 0}, {40, 21, 4}, {40, 29, 4}});
+  blades_edge.surfaces.push_back({{40, 29, 0}, {40, 29, 4}, {40, 35, 0}});
+
+  // platform
+  blades_edge.surfaces.push_back({{10, 21, 4}, {40, 21, 4}, {40, 29, 4}});
+  blades_edge.surfaces.push_back({{10, 21, 4}, {40, 29, 4}, {10, 29, 4}});
+
+  blades_edge.surfaces.push_back({{10, 21, 3.5}, {40, 29, 3.5}, {40, 21, 3.5}});
+  blades_edge.surfaces.push_back({{10, 21, 3.5}, {10, 29, 3.5}, {40, 29, 3.5}});
+
+  blades_edge.surfaces.push_back({{10, 21, 4}, {40, 21, 3.5}, {40, 21, 4}});
+  blades_edge.surfaces.push_back({{10, 21, 4}, {10, 21, 3.5}, {40, 21, 3.5}});
+
+  blades_edge.surfaces.push_back({{10, 29, 4}, {40, 29, 4}, {40, 29, 3.5}});
+  blades_edge.surfaces.push_back({{10, 29, 4}, {40, 29, 3.5}, {10, 29, 3.5}});
+
+  // pillars
+  // south
+  blades_edge.surfaces.push_back({{23.5, 15, 0}, {23.5, 18, 4}, {23.5, 18, 0}});
+  blades_edge.surfaces.push_back({{23.5, 15, 0}, {23.5, 15, 4}, {23.5, 18, 4}});
+
+  blades_edge.surfaces.push_back({{23.5, 15, 0}, {26.5, 15, 0}, {26.5, 15, 4}});
+  blades_edge.surfaces.push_back({{23.5, 15, 0}, {26.5, 15, 4}, {23.5, 15, 4}});
+
+  blades_edge.surfaces.push_back({{26.5, 15, 0}, {26.5, 18, 0}, {26.5, 18, 4}});
+  blades_edge.surfaces.push_back({{26.5, 15, 0}, {26.5, 18, 4}, {26.5, 15, 4}});
+
+  blades_edge.surfaces.push_back({{26.5, 18, 0}, {23.5, 18, 0}, {23.5, 18, 4}});
+  blades_edge.surfaces.push_back({{26.5, 18, 0}, {23.5, 18, 4}, {26.5, 18, 4}});
+
+  blades_edge.surfaces.push_back({{23.5, 15, 4}, {26.5, 15, 4}, {26.5, 18, 4}});
+  blades_edge.surfaces.push_back({{23.5, 15, 4}, {26.5, 18, 4}, {23.5, 18, 4}});
+
+  // north
+  blades_edge.surfaces.push_back({{23.5, 32, 0}, {23.5, 35, 4}, {23.5, 35, 0}});
+  blades_edge.surfaces.push_back({{23.5, 32, 0}, {23.5, 32, 4}, {23.5, 35, 4}});
+
+  blades_edge.surfaces.push_back({{23.5, 32, 0}, {26.5, 32, 0}, {26.5, 32, 4}});
+  blades_edge.surfaces.push_back({{23.5, 32, 0}, {26.5, 32, 4}, {23.5, 32, 4}});
+
+  blades_edge.surfaces.push_back({{26.5, 32, 0}, {26.5, 35, 0}, {26.5, 35, 4}});
+  blades_edge.surfaces.push_back({{26.5, 32, 0}, {26.5, 35, 4}, {26.5, 32, 4}});
+
+  blades_edge.surfaces.push_back({{26.5, 35, 0}, {23.5, 35, 0}, {23.5, 35, 4}});
+  blades_edge.surfaces.push_back({{26.5, 35, 0}, {23.5, 35, 4}, {26.5, 35, 4}});
+
+  blades_edge.surfaces.push_back({{23.5, 32, 4}, {26.5, 32, 4}, {26.5, 35, 4}});
+  blades_edge.surfaces.push_back({{23.5, 32, 4}, {26.5, 35, 4}, {23.5, 35, 4}});
+
+  // west
+  blades_edge.surfaces.push_back({{16, 23.5, 0}, {16, 26.5, 3.5}, {16, 26.5, 0}});
+  blades_edge.surfaces.push_back({{16, 23.5, 0}, {16, 23.5, 3.5}, {16, 26.5, 3.5}});
+
+  blades_edge.surfaces.push_back({{16, 23.5, 0}, {19, 23.5, 0}, {19, 23.5, 3.5}});
+  blades_edge.surfaces.push_back({{16, 23.5, 0}, {19, 23.5, 3.5}, {16, 23.5, 3.5}});
+
+  blades_edge.surfaces.push_back({{19, 23.5, 0}, {19, 26.5, 0}, {19, 26.5, 3.5}});
+  blades_edge.surfaces.push_back({{19, 23.5, 0}, {19, 26.5, 3.5}, {19, 23.5, 3.5}});
+
+  blades_edge.surfaces.push_back({{19, 26.5, 0}, {16, 26.5, 0}, {16, 26.5, 3.5}});
+  blades_edge.surfaces.push_back({{19, 26.5, 0}, {16, 26.5, 3.5}, {19, 26.5, 3.5}});
+
+  // east
+  blades_edge.surfaces.push_back({{31, 23.5, 0}, {31, 26.5, 3.5}, {31, 26.5, 0}});
+  blades_edge.surfaces.push_back({{31, 23.5, 0}, {31, 23.5, 3.5}, {31, 26.5, 3.5}});
+
+  blades_edge.surfaces.push_back({{31, 23.5, 0}, {34, 23.5, 0}, {34, 23.5, 3.5}});
+  blades_edge.surfaces.push_back({{31, 23.5, 0}, {34, 23.5, 3.5}, {31, 23.5, 3.5}});
+
+  blades_edge.surfaces.push_back({{34, 23.5, 0}, {34, 26.5, 0}, {34, 26.5, 3.5}});
+  blades_edge.surfaces.push_back({{34, 23.5, 0}, {34, 26.5, 3.5}, {34, 23.5, 3.5}});
+
+  blades_edge.surfaces.push_back({{34, 26.5, 0}, {31, 26.5, 0}, {31, 26.5, 3.5}});
+  blades_edge.surfaces.push_back({{34, 26.5, 0}, {31, 26.5, 3.5}, {34, 26.5, 3.5}});
+
+  // ropes
+  // south
+  blades_edge.surfaces.push_back({{24.85, 18, 4}, {25.15, 18, 4}, {25.15, 21, 4}});
+  blades_edge.surfaces.push_back({{24.85, 18, 4}, {25.15, 21, 4}, {24.85, 21, 4}});
+
+  blades_edge.surfaces.push_back({{24.85, 18, 3.7}, {25.15, 21, 3.7}, {25.15, 18, 3.7}});
+  blades_edge.surfaces.push_back({{24.85, 18, 3.7}, {24.85, 21, 3.7}, {25.15, 21, 3.7}});
+
+  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 18, 3.7}, {24.85, 18, 4}});
+  blades_edge.surfaces.push_back({{24.85, 21, 4}, {24.85, 21, 3.7}, {24.85, 18, 3.7}});
+
+  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 4}, {25.15, 18, 3.7}});
+  blades_edge.surfaces.push_back({{25.15, 21, 4}, {25.15, 18, 3.7}, {25.15, 21, 3.7}});
+
+  // north
+  blades_edge.surfaces.push_back({{24.85, 29, 4}, {25.15, 29, 4}, {25.15, 32, 4}});
+  blades_edge.surfaces.push_back({{24.85, 29, 4}, {25.15, 32, 4}, {24.85, 32, 4}});
+
+  blades_edge.surfaces.push_back({{24.85, 29, 3.7}, {25.15, 32, 3.7}, {25.15, 29, 3.7}});
+  blades_edge.surfaces.push_back({{24.85, 29, 3.7}, {24.85, 32, 3.7}, {25.15, 32, 3.7}});
+
+  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 29, 3.7}, {24.85, 29, 4}});
+  blades_edge.surfaces.push_back({{24.85, 32, 4}, {24.85, 32, 3.7}, {24.85, 29, 3.7}});
+
+  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 4}, {25.15, 29, 3.7}});
+  blades_edge.surfaces.push_back({{25.15, 32, 4}, {25.15, 29, 3.7}, {25.15, 32, 3.7}});
+
+  // memes
+  blades_edge.surfaces.push_back({{-1000, -1000, -10}, {5000, -1000, -10}, {-1000, 5000, -10}});
+  blades_edge.surfaces.push_back({{5000, 5000, -10}, {-1000, 5000, -10}, {5000, -1000, -10}});
+
+  blades_edge.surfaces.push_back({{0, 0, 0}, {0, -30, -10}, {10, -30, -10}});
+  blades_edge.surfaces.push_back({{0, 0, 0}, {10, -30, -10}, {10, 0, 0}});
+
+  // spawns
+  blades_edge.spawn_pos[0] = {5, 5, 5};
+  blades_edge.spawn_pos[1] = {45, 45, 5};
+  blades_edge.spawn_dir[0] = {0, 1, 0};
+  blades_edge.spawn_dir[1] = {0, -1, 0};
+
+  for (auto &s : blades_edge.surfaces)
   {
-    case SpellEffectType::Heal:
-    {
-      if (!i->target)
-      {
-        set_message("Invalid Target", " heal failed: no target", 3.0f);
-        return;
-      }
-
-      Character *c = i->target;
-      HealEffect *h = &e->heal;
-
-      if (!c->alive)
-      {
-        break;
-      }
-
-      uint32 effective = h->n;
-      uint32 overheal = 0;
-
-      c->hp += effective;
-
-      if (c->hp > c->hp_max)
-      {
-        overheal = c->hp - c->hp_max;
-        effective -= overheal;
-        c->hp = c->hp_max;
-      }
-
-      if (overheal > 0)
-      {
-        set_message("",
-                    s(e->name, " healed ", c->name, " for ", effective, " (",
-                      overheal, " overheal)"),
-                    3.0f);
-      }
-      else
-      {
-        set_message("", s(e->name, " healed ", c->name, " for ", effective),
-                    3.0f);
-      }
-      break;
-    }
-    case SpellEffectType::Damage:
-    {
-      Character *c = i->target;
-      if (!c)
-      {
-        set_message("Invalid Target", " damage failed: no target", 3.0f);
-        return;
-      }
-
-      if (!c->alive)
-      {
-        break;
-      }
-
-      int effective = e->damage.n;
-      int overkill = 0;
-
-      if (!e->damage.pierce_mod)
-      {
-        effective *= c->e_stats.damage_mod;
-      }
-
-      c->hp -= effective;
-
-      if (c->hp < 0)
-      {
-        effective -= 0 - c->hp;
-        overkill = -c->hp;
-        c->hp = 0;
-        c->alive = false;
-      }
-
-      if (overkill > 0)
-      {
-        set_message("",
-                    s(e->name, " hit ", c->name, " for ", effective,
-                      " damage (", overkill, " overkill)"),
-                    3.0f);
-      }
-      else
-      {
-        set_message("",
-                    s(e->name, " hit ", c->name, " for ", effective, " damage"),
-                    3.0f);
-      }
-
-      if (!c->alive)
-      {
-        set_message("", c->name + " has died", 3.0f);
-      }
-      break;
-    }
-    case SpellEffectType::ApplyBuff:
-    {
-      Character *c = i->target;
-      if (!c)
-      {
-        set_message("Invalid Target", "buff application failed: no target",
-                    3.0f);
-        return;
-      }
-
-      auto buffdef = e->applybuff.buff;
-      Buff buff;
-      buff.def = *buffdef;
-      buff.duration = buffdef->duration;
-      buff.ticks_left =
-          static_cast<int>(glm::floor(buffdef->duration * buffdef->tick_freq));
-      c->buffs.push_back(buff);
-      set_message("",
-                  s(e->name, " spell effect buff applied ", buffdef->name,
-                    " to ", c->name),
-                  3.0f);
-      apply_char_mods(c);
-      break;
-    }
-    case SpellEffectType::ApplyDebuff:
-    {
-      Character *c = i->target;
-      if (!c)
-      {
-        set_message("Invalid Target", "debuff application failed: no target",
-                    3.0f);
-        return;
-      }
-      auto buffdef = e->applydebuff.debuff;
-      Buff debuff;
-      debuff.def = *buffdef;
-      debuff.duration = buffdef->duration;
-      debuff.ticks_left =
-          (uint32)(glm::floor(buffdef->duration * buffdef->tick_freq));
-      c->debuffs.push_back(debuff);
-      set_message("",
-                  s(e->name, " spell effect debuff applied ", buffdef->name,
-                    " to ", c->name),
-                  3.0f);
-      apply_char_mods(c);
-      break;
-    }
-    case SpellEffectType::AoE:
-    {
-      for (int j = 0; j < nchars; j++)
-      {
-        Character *c = &(*chars)[j];
-        if (length(c->pos - i->pos) <= e->aoe.radius)
-        {
-          // bug: doesnt seem to be tracking already-hit characters
-          SpellEffectInst j;
-          j.def = *e->aoe.effect;
-          j.caster = i->caster;
-          j.pos = {0, 0, 0};
-          j.target = c;
-
-          if (c->team == j.caster->team && e->aoe.targets == SpellTargets::Ally)
-          {
-            invoke_spell_effect(&j, chars, nchars, objs);
-          }
-          else if (c->team != j.caster->team &&
-                   e->aoe.targets == SpellTargets::Hostile)
-          {
-            invoke_spell_effect(&j, chars, nchars, objs);
-          }
-        }
-      }
-      break;
-    }
-    case SpellEffectType::ClearDebuffs:
-    {
-      Character *c = i->target;
-      set_message("", s(i->def.name, " cleared all debuffs from ", c->name),
-                  3.0f);
-      for (auto &d : c->debuffs)
-      {
-        if (d.dynamic)
-        {
-          for (auto &te : d.def.tick_effects)
-          {
-            free(te);
-          }
-          for (auto &cm : d.def.char_mods)
-          {
-            free(cm);
-          }
-        }
-      }
-      c->debuffs.clear();
-      apply_char_mods(c);
-      break;
-    }
-    case SpellEffectType::ObjectLaunch:
-    {
-      SpellObjectInst obji;
-      obji.def = *i->def.objectlaunch.object;
-      obji.caster = i->caster;
-      obji.target = i->target;
-      obji.pos = i->pos;
-      objs->push_back(obji);
-      break;
-    }
-    case SpellEffectType::Interrupt:
-    {
-      Character *c = i->target;
-      c->casting = false;
-      c->casting_spell = nullptr;
-      c->cast_progress = 0;
-      c->cast_target = nullptr;
-
-      CharMod *silence_charmod = (CharMod *)malloc(sizeof(*silence_charmod));
-      silence_charmod->type = CharModType::Silence;
-
-      BuffDef silence_buffdef;
-      silence_buffdef.name = i->def.name;
-      silence_buffdef.duration = i->def.interrupt.lockout;
-      silence_buffdef.char_mods.push_back(silence_charmod);
-
-      Buff silence;
-      silence.def = silence_buffdef;
-      silence.duration = silence.def.duration;
-      silence.dynamic = true;
-
-      c->debuffs.push_back(silence);
-
-      set_message("",
-                  s(i->caster->name, "'s ", i->def.name, " interrupted ",
-                    c->name, "'s casting"),
-                  3.0f);
-      break;
-    }
-    default:
-      break;
-  };
-}
-
-void apply_char_mod(Character *c, CharMod &m)
-{
-  switch (m.type)
-  {
-    case CharModType::DamageTaken:
-      c->e_stats.damage_mod *= m.damage_taken.n;
-      break;
-    case CharModType::Speed:
-      c->e_stats.speed *= m.speed.m;
-      break;
-    case CharModType::CastSpeed:
-      c->e_stats.cast_speed *= m.cast_speed.m;
-    case CharModType::Silence:
-      c->silenced = true;
-    default:
-      break;
+    add_triangle(s.a, s.c, s.b, blades_edge.mesh);
   }
-}
-
-void apply_char_mods(Character *c)
-{
-  c->e_stats = c->b_stats;
-  c->silenced = false;
-
-  for (auto &b : c->buffs)
-  {
-    for (auto &m : b.def.char_mods)
-    {
-      apply_char_mod(c, *m);
-    }
-  }
-  for (auto &b : c->debuffs)
-  {
-    for (auto &m : b.def.char_mods)
-    {
-      apply_char_mod(c, *m);
-    }
-  }
-}
-
-void cast_spell(Character *caster, Character *target, Spell *spell,
-                std::array<Character, 10> *chars, uint32 nchars,
-                std::vector<SpellObjectInst> *objs)
-{
-  if (caster->silenced)
-  {
-    set_message("Cast failed:", "silenced", 3.0f);
-    return;
-  }
-  if (spell->cd_remaining > 0)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": on cooldown (", spell->cd_remaining, "s remaining)"),
-                3.0f);
-    return;
-  }
-  if (caster->gcd > 0)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": on gcd (", caster->gcd, "s remaining)"),
-                3.0f);
-    return;
-  }
-  if (spell->def->mana_cost > caster->mana)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": not enough mana (costs ", spell->def->mana_cost, ", have ",
-                  caster->mana, ")"),
-                3.0f);
-
-    return;
-  }
-  if (!target && spell->def->targets != SpellTargets::Terrain)
-  {
-    set_message(
-        "Cast failed:",
-        s(caster->name, " failed to cast ", spell->def->name, ": no target"),
-        3.0f);
-    return;
-  }
-  if (spell->def->targets != SpellTargets::Terrain &&
-      length(caster->pos - target->pos) > spell->def->range)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": target out of range (spell range is ", spell->def->range,
-                  ", target is ", length(caster->pos - target->pos), "m away)"),
-                3.0f);
-    return;
-  }
-  if (caster->casting)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": already casting"),
-                3.0f);
-    return;
-  }
-
-  if (spell->def->cast_time > 0)
-  {
-    caster->casting = true;
-    caster->casting_spell = spell;
-    caster->cast_progress = 0;
-    if (target)
-    {
-      caster->cast_target = target;
-      set_message("Begin cast:",
-                  s(caster->name, " begins casting ", spell->def->name, " (",
-                    spell->def->cast_time, "s remaining)"),
-                  3.0f);
-    }
-    else
-    {
-      set_message("Begin cast:",
-                  s(caster->name, " begins casting ", spell->def->name, " at ",
-                    target->name, " (", spell->def->cast_time, "s remaining)"),
-                  3.0f);
-    }
-  }
-  else
-  {
-    release_spell(caster, target, spell, chars, nchars, objs);
-  }
-}
-
-void release_spell(Character *caster, Character *target, Spell *spell,
-                   std::array<Character, 10> *chars, uint32 nchars,
-                   std::vector<SpellObjectInst> *objs)
-{
-  ASSERT(spell);
-  ASSERT(spell->def);
-  ASSERT(chars);
-  ASSERT(objs);
-
-  if (caster->mana < spell->def->mana_cost)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": not enough mana (costs ", spell->def->mana_cost, ", have ",
-                  caster->mana, ")"),
-                3.0f);
-    return;
-  }
-
-  if (spell->def->targets != SpellTargets::Terrain &&
-      glm::length(caster->pos - target->pos) > spell->def->range)
-  {
-    set_message("Cast failed:",
-                s(caster->name, " failed to cast ", spell->def->name,
-                  ": target out of range (spell range is ", spell->def->range,
-                  ", target is ", length(caster->pos - target->pos), "m away)"),
-                3.0f);
-    return;
-  }
-
-  if (spell->def->targets == SpellTargets::Self)
-  {
-    if (caster != target)
-    {
-      set_message("Cast failed:",
-                  s(caster->name, " failed to cast ", spell->def->name,
-                    ": can only cast at self"),
-                  3.0f);
-      return;
-    }
-    set_message("Cast success:", s(caster->name, " casts ", spell->def->name),
-                3.0f);
-  }
-
-  if (spell->def->targets == SpellTargets::Ally)
-  {
-    if (caster->team != target->team)
-    {
-      set_message("Cast failed:",
-                  s(caster->name, " failed to cast ", spell->def->name,
-                    ": can only cast at allies"),
-                  3.0f);
-      return;
-    }
-
-    set_message(
-        "Cast success:",
-        s(caster->name, " casts ", spell->def->name, " at ", target->name),
-        3.0f);
-    apply_spell_effects(caster, target, &(spell->def->effects), chars, nchars,
-                        objs);
-  }
-
-  if (spell->def->targets == SpellTargets::Hostile)
-  {
-    if (caster->team == target->team)
-    {
-      set_message("Cast failed:",
-                  s(caster->name, " failed to cast ", spell->def->name,
-                    ": can only cast at hostile targets"),
-                  3.0f);
-      return;
-    }
-    set_message(
-        "Cast success:",
-        s(caster->name, " casts ", spell->def->name, " at ", target->name),
-        3.0f);
-    apply_spell_effects(caster, target, &(spell->def->effects), chars, nchars,
-                        objs);
-  }
-
-  if (spell->def->targets == SpellTargets::Terrain)
-  {
-    set_message("Cast success:", s(caster->name, " casts ", spell->def->name),
-                3.0f);
-    apply_spell_effects(caster, target, &(spell->def->effects), chars, nchars,
-                        objs);
-  }
-
-  caster->mana -= spell->def->mana_cost;
-  if (caster->mana < 0)
-    caster->mana = 0;
-
-  caster->gcd = spell->def->cast_time < caster->b_stats.gcd
-                    ? caster->b_stats.gcd - spell->def->cast_time
-                    : 0;
-
-  spell->cd_remaining = spell->def->cooldown;
-}
-
-void move_char(Character *c, vec3 v)
-{
-  ASSERT(c);
-  if (c->casting)
-  {
-    c->casting = false;
-    c->cast_progress = 0;
-    set_message("Interrupt:", s(c->name, "'s casting interrupted: moved"),
-                3.0f);
-  }
-  c->pos += c->e_stats.speed * v;
+  blades_edge.mesh.unique_identifier = "blades_edge_map";
+  blades_edge.material.backface_culling = false;
+  blades_edge.material.albedo = "pebbles_diffuse.png";
+  blades_edge.material.emissive = "";
+  blades_edge.material.normal = "pebbles_normal.png";
+  blades_edge.material.roughness = "pebbles_roughness.png";
+  blades_edge.material.vertex_shader = "vertex_shader.vert";
+  blades_edge.material.frag_shader = "fragment_shader.frag";
+  blades_edge.material.casts_shadows = true;
+  blades_edge.material.uv_scale = vec2(2,2);
+  return blades_edge;
 }

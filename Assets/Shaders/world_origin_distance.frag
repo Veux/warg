@@ -1,9 +1,4 @@
 #version 330
-uniform sampler2D albedo;
-uniform sampler2D specular;
-uniform sampler2D normal;
-uniform sampler2D emissive;
-uniform sampler2D roughness;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
@@ -28,7 +23,7 @@ uniform uint number_of_lights;
 in vec3 frag_world_position;
 in mat3 frag_TBN;
 in vec2 frag_uv;
-layout(location = 0) out vec4 ALBEDO;
+layout(location = 0) out vec4 out0;
 #define gamma 2.2
 
 float linearize_depth(float depth)
@@ -56,5 +51,5 @@ void main()
     color += 0.5f*vec3(1.000f+sin(time*10)*dist);
   }
 
-  ALBEDO = vec4(to_srgb(color), 1);
+  out0 = vec4(to_srgb(color), 1);
 }

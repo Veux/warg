@@ -25,6 +25,26 @@ void INIT_RENDERER();
 void CLEANUP_RENDERER();
 
 using namespace glm;
+
+enum Texture_Location
+{
+  albedo,
+  specular,
+  normal,
+  emissive,
+  roughness,
+  s0,// shadow maps
+  s1,
+  s2,
+  s3,
+  s4,
+  s5,
+  s6,
+  s7,
+  s8,
+  s9 
+};
+
 struct Texture_Handle
 {
   ~Texture_Handle();
@@ -45,33 +65,33 @@ struct Spotlight_Shadow_Map
 {
   Spotlight_Shadow_Map() {};
   void load(ivec2 size);
+  void blur(float radius);
   Texture_Handle color;
   RenderBuffer_Handle depth;
   FBO_Handle target;
+  FBO_Handle blurfbo;
+  Texture_Handle blurtex;
   mat4 projection_camera;
   bool enabled = false;
   ivec2 size = ivec2(0,0);
 };
 
-
-
-
 struct Texture
 {
   Texture();
   Texture(std::string path, bool premul = false);
-
 private:
   friend struct Render;
   friend struct Material;
   void load();
-  void bind(const char *name, GLuint location, Shader &shader);
+  void bind(GLuint texture_unit);
   std::shared_ptr<Texture_Handle> texture;
   std::string file_path;
 
   GLenum storage_type = GL_RGBA;
   bool process_premultiply = false;
 };
+
 struct Mesh_Handle
 {
   ~Mesh_Handle();
@@ -83,6 +103,7 @@ struct Mesh_Handle
   GLuint bitangents_buffer = 0;
   GLuint indices_buffer = 0;
   GLuint indices_buffer_size = 0;
+  void enable_assign_attributes();
   Mesh_Data data;
 };
 
@@ -92,7 +113,6 @@ struct Mesh
   Mesh(Mesh_Primitive p, std::string mesh_name);
   Mesh(Mesh_Data mesh_data, std::string mesh_name);
   Mesh(const aiMesh *aimesh, std::string unique_identifier);
-  void bind_to_shader(Shader &shader);
   GLuint get_vao() { return mesh->vao; }
   GLuint get_indices_buffer() { return mesh->indices_buffer; }
   GLuint get_indices_buffer_size() { return mesh->indices_buffer_size; }
@@ -105,6 +125,7 @@ struct Mesh
 
 struct Material_Descriptor
 {
+  //solid colors can be specified with "color(r,g,b,a)" uint8 values
   std::string albedo;
   std::string roughness;
   std::string specular;  // specular color for conductors   - unused for now
@@ -145,7 +166,7 @@ private:
   Material_Descriptor m;
 };
 
-enum Light_Type
+enum struct Light_Type
 {
   parallel,
   omnidirectional,
@@ -158,11 +179,23 @@ struct Light
   vec3 direction = vec3(0, 0, 0);
   vec3 color = vec3(1, 1, 1);
   vec3 attenuation = vec3(1, 0.22, 0.2);
-  float ambient = 0.0f;
-  float cone_angle = 1.0f;
+  float ambient = 0.0004f;
+  float cone_angle = .15f;
   Light_Type type;
   bool operator==(const Light &rhs) const;
+
+
   bool casts_shadows = false;
+  //these take a lot of careful tuning
+  //start with max_variance at 0
+  //near plane as far away, and far plane as close as possible is critical
+  //after that, increase the max_variance up from 0, slowly, right until noise disappears
+  int shadow_blur_iterations = 2;//higher is higher quality, but lower performance
+  float shadow_blur_radius = .5f;//preference
+  float shadow_near_plane = 0.1f;//this should be as far as possible without clipping into geometry
+  float shadow_far_plane = 100.f;//this should be as near as possible without clipping geometry
+  float max_variance = 0.000001f;//this value should be as low as possible without causing float precision noise
+  float shadow_fov = glm::radians(90.f);//this should be as low as possible without causing artifacts around the edge of the light field of view 
 private:
 };
 
@@ -189,7 +222,6 @@ struct Render_Entity
   bool casts_shadows = true;
 };
 
-
 // Similar to Render_Entity, but rendered with instancing
 struct Render_Instance
 {
@@ -199,6 +231,7 @@ struct Render_Instance
   std::vector<mat4> MVP_Matrices;
   std::vector<mat4> Model_Matrices;
 };
+
 struct Render
 {
   Render(SDL_Window *window, ivec2 window_size);
@@ -219,7 +252,7 @@ struct Render
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
-
+  static mat4 ortho_projection(ivec2 dst_size);
 private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
@@ -230,6 +263,8 @@ private:
   void set_uniform_lights(Shader &shader);
   void set_uniform_shadowmaps(Shader& shader);
   void build_shadow_maps();
+  void run_pixel_shader(Shader* shader, std::vector<GLuint> src_textures, GLuint dst_texture, ivec2 dst_size, bool clear_dst = false);
+  void gaussian_blur(GLuint src, GLuint dst, ivec2 dst_size, GLenum dst_format, float radius);
   void opaque_pass(float32 time);
   void instance_pass(float32 time);
   void translucent_pass(float32 time);
@@ -241,7 +276,7 @@ private:
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
-  ivec2 shadow_map_size = ivec2(2048, 2048);
+  ivec2 shadow_map_size = 2*ivec2(2048, 2048);
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

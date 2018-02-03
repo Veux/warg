@@ -1,5 +1,4 @@
 #pragma once
-#include "Functions.h"
 #include "Render.h"
 #include "Scene_Graph.h"
 #include <array>
@@ -45,6 +44,3 @@ protected:
 private:
   SDL_Window *window = nullptr;
 };
-
-
-
