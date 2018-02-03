@@ -24,7 +24,7 @@ void Warg_Client::update(float32 dt)
 
     c.mesh->position = c.pos;
     c.mesh->orientation =
-        angleAxis((float32)atan2(c.dir.y, c.dir.x), vec3(0.f, 0.f, 1.f));
+        angleAxis((float32)atan2(c.dir.y, c.dir.x)-half_pi<float32>(), vec3(0.f, 0.f, 1.f));
     c.mesh->scale = c.radius * vec3(2);
   }
 
