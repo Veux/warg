@@ -9,15 +9,49 @@
 
 using namespace glm;
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
+Warg_State::Warg_State(
+    std::string name, SDL_Window *window, ivec2 window_size, bool local)
     : State(name, window, window_size)
 {
-  server = std::make_unique<Warg_Server>();
-  server->connect(&out, &in);
+  this->local = local;
+
+  if (!local)
+  {
+    ASSERT(!enet_initialize());
+    clientp = enet_host_create(NULL, 1, 2, 0, 0);
+    ASSERT(clientp);
+
+    ENetAddress address;
+    ENetEvent event;
+
+    enet_address_set_host(&address, "localhost");
+    address.port = 1337;
+
+    serverp = enet_host_connect(clientp, &address, 2, 0);
+    ASSERT(serverp);
+
+    ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
+           event.type == ENET_EVENT_TYPE_CONNECT);
+
+    Buffer b;
+    auto ev = char_spawn_request_event("Eirich", 0);
+    serialize(b, ev);
+    ENetPacket *packet = enet_packet_create(
+        &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+    enet_peer_send(serverp, 0, packet);
+    enet_host_flush(clientp);
+  }
+  else
+  {
+    server = std::make_unique<Warg_Server>(true);
+    server->connect(&out, &in);
+    out.push(char_spawn_request_event("Eirich", 0));
+  }
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  client->map.node = scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+  client->map.node =
+      scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
 
   clear_color = vec3(94. / 255., 155. / 255., 1.);
   scene.lights.light_count = 1;
@@ -30,11 +64,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   light->cone_angle = 0.15f;
   light->type = spot;
   light->casts_shadows = false;
-
-  out.push(char_spawn_request_event("Eirich", 0));
-  out.push(char_spawn_request_event("Veuxia", 0));
-  out.push(char_spawn_request_event("Selion", 1));
-  out.push(char_spawn_request_event("Veuxe", 1));
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
@@ -70,70 +99,72 @@ void Warg_State::handle_input(
     }
     else if (_e.type == SDL_KEYUP)
     {
-
-      if (_e.key.keysym.sym == SDLK_F1)
+      if (local)
       {
-        *current_state = &*available_states[0];
-        return;
-      }
-      if (_e.key.keysym.sym == SDLK_F2)
-      {
-        *current_state = &*available_states[1];
-        return;
-      }
-      if (_e.key.keysym.sym == SDLK_F5)
-      {
-        if (free_cam)
+        if (_e.key.keysym.sym == SDLK_F1)
         {
-          free_cam = false;
-          client->pc = 0;
+          *current_state = &*available_states[0];
+          return;
         }
-        else if (client->pc >= client->chars.size() - 1)
+        if (_e.key.keysym.sym == SDLK_F2)
         {
-          free_cam = true;
+          *current_state = &*available_states[1];
+          return;
         }
-        else
+        if (_e.key.keysym.sym == SDLK_F5)
         {
-          client->pc += 1;
-        }
-      }
-      if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
-      {
-        int first_lower = -1, first_higher = -1;
-        for (int i = client->chars.size() - 1; i >= 0; i--)
-        {
-          if (client->chars[i].alive &&
-              client->chars[i].team != client->chars[client->pc].team)
+          if (free_cam)
           {
-            if (i < client->chars[client->pc].target)
-            {
-              first_lower = i;
-            }
-            else if (i > client->chars[client->pc].target)
-            {
-              first_higher = i;
-            }
+            free_cam = false;
+            client->pc = 0;
+          }
+          else if (client->pc >= client->chars.size() - 1)
+          {
+            free_cam = true;
+          }
+          else
+          {
+            client->pc += 1;
           }
         }
+      }
+      // if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
+      // {
+      //   int first_lower = -1, first_higher = -1;
+      //   for (int i = client->chars.size() - 1; i >= 0; i--)
+      //   {
+      //     if (client->chars[i].alive &&
+      //         client->chars[i].team != client->chars[client->pc].team)
+      //     {
+      //       if (i < client->chars[client->pc].target)
+      //       {
+      //         first_lower = i;
+      //       }
+      //       else if (i > client->chars[client->pc].target)
+      //       {
+      //         first_higher = i;
+      //       }
+      //     }
+      //   }
 
-        if (first_higher != -1)
-        {
-          client->chars[client->pc].target = first_higher;
-        }
-        else if (first_lower != -1)
-        {
-          client->chars[client->pc].target = first_lower;
-        }
-        set_message("Target",
-            s(client->chars[client->pc].name, " targeted ",
-                client->chars[client->chars[client->pc].target].name),
-            3.0f);
-      }
-      if (_e.key.keysym.sym == SDLK_1 && !free_cam)
-      {
-        out.push(cast_event(
-            client->pc, client->chars[client->pc].target, "Frostbolt"));
-      }
+      //   if (first_higher != -1)
+      //   {
+      //     client->chars[client->pc].target = first_higher;
+      //   }
+      //   else if (first_lower != -1)
+      //   {
+      //     client->chars[client->pc].target = first_lower;
+      //   }
+      //   set_message("Target",
+      //       s(client->chars[client->pc].name, " targeted ",
+      //           client->chars[client->chars[client->pc].target].name),
+      //       3.0f);
+      // }
+      // if (_e.key.keysym.sym == SDLK_1 && !free_cam)
+      // {
+      //   out.push(cast_event(
+      //       client->pc, client->chars[client->pc].target, "Frostbolt"));
+      // }
       // if (_e.key.keysym.sym == SDLK_2 && !free_cam)
       // {
       //   int target = (client->chars[pc].target < 0 ||
@@ -327,6 +358,7 @@ void Warg_State::handle_input(
       m |= Move_Status::Right;
     out.push(move_event(client->pc, (Move_Status)m));
 
+    ASSERT(client->pc >= 0 && client->chars.count(client->pc));
     vec3 player_pos = client->chars[client->pc].pos;
     float effective_zoom = cam.zoom;
     for (auto &surface : client->map.surfaces)
@@ -340,8 +372,8 @@ void Warg_State::handle_input(
         effective_zoom = length(player_pos - intersection_point);
       }
     }
-    cam.pos =
-        player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.pos = player_pos +
+              vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
   }
 
@@ -350,35 +382,90 @@ void Warg_State::handle_input(
 
 void Warg_State::update()
 {
-  //meme
-  scene.lights.light_count = 2;
-  Light *light = &scene.lights.lights[1];
-  light->position = vec3{ 25, 25, 10.10 };
-  light->color = 600.0f * vec3(1.f+sin(current_time*1.35), 1.f+cos(current_time*1.12), 1.f+sin(current_time*.9));
-  light->attenuation = vec3(1.0f, .045f, .0075f);
-  light->direction = client ? client->chars.size()>0 ? client->chars[0].pos : vec3(0) : vec3(0);
-  light->ambient = 0.0f;
-  light->cone_angle = 0.03f;
-  light->type = spot;
-  light->casts_shadows = false;
+  // meme
+  if (client->pc >= 0)
+  {
+    ASSERT(client->chars.count(client->pc));
+    scene.lights.light_count = 2;
+    Light *light = &scene.lights.lights[1];
+    light->position = vec3{25, 25, 10.10};
+    light->color = 600.0f * vec3(1.f + sin(current_time * 1.35),
+                                1.f + cos(current_time * 1.12),
+                                1.f + sin(current_time * .9));
+    light->attenuation = vec3(1.0f, .045f, .0075f);
+    light->direction =
+        client
+            ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
+            : vec3(0);
+    light->ambient = 0.0f;
+    light->cone_angle = 0.03f;
+    light->type = spot;
+    light->casts_shadows = false;
+  }
 
+  if (local)
+  {
+    server->update(dt);
+    client->update(dt);
+  }
+  else
+  {
+    ENetEvent event;
+    while (enet_host_service(clientp, &event, 0) > 0)
+    {
+      switch (event.type)
+      {
+        case ENET_EVENT_TYPE_NONE:
+          break;
+        case ENET_EVENT_TYPE_CONNECT:
+          break;
+        case ENET_EVENT_TYPE_RECEIVE:
+        {
+          Buffer b;
+          b.insert((void *)event.packet->data, event.packet->dataLength);
+          auto ev = deserialize_event(b);
+          in.push(ev);
+          break;
+        }
+        case ENET_EVENT_TYPE_DISCONNECT:
+          break;
+        default:
+          break;
+      }
+    }
 
-  server->update(dt);
-  client->update(dt);
+    client->update(dt);
+
+    while (!out.empty())
+    {
+      Warg_Event ev = out.front();
+
+      Buffer b;
+      serialize(b, ev);
+      ENetPacket *packet = enet_packet_create(
+          &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+      enet_peer_send(serverp, 0, packet);
+      enet_host_flush(clientp);
+      free_warg_event(ev);
+
+      out.pop();
+    }
+  }
 }
 
-void add_wall(std::vector<Triangle> &surfaces, Wall wall) {
-	Triangle t1, t2;
+void add_wall(std::vector<Triangle> &surfaces, Wall wall)
+{
+  Triangle t1, t2;
 
-	t1.a = wall.p1;
-	t1.b = vec3(wall.p2.x, wall.p2.y, t1.a.z);
-	t1.c = vec3(wall.p2.x, wall.p2.y, wall.h);
-	surfaces.push_back(t1);
+  t1.a = wall.p1;
+  t1.b = vec3(wall.p2.x, wall.p2.y, t1.a.z);
+  t1.c = vec3(wall.p2.x, wall.p2.y, wall.h);
+  surfaces.push_back(t1);
 
-	t2.a = wall.p1;
-	t2.b = vec3(wall.p2.x, wall.p2.y, wall.h);
-	t2.c = vec3(wall.p1.x, wall.p1.y, wall.h);
-	surfaces.push_back(t2);
+  t2.a = wall.p1;
+  t2.b = vec3(wall.p2.x, wall.p2.y, wall.h);
+  t2.c = vec3(wall.p1.x, wall.p1.y, wall.h);
+  surfaces.push_back(t2);
 }
 
 Map make_nagrand()
@@ -416,7 +503,7 @@ Map make_nagrand()
   walls.push_back({{4, 16, 0}, {4, 12}, 10});
   walls.push_back({{4, 12, 0}, {8, 12}, 10});
   for (auto &w : walls)
-	  add_wall(nagrand.surfaces, w);
+    add_wall(nagrand.surfaces, w);
 
   nagrand.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
   nagrand.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
@@ -451,8 +538,8 @@ Map make_nagrand()
   return nagrand;
 }
 
-
-Map make_blades_edge() {
+Map make_blades_edge()
+{
   Map blades_edge;
 
   // spawns

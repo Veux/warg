@@ -1,11 +1,12 @@
 #include "Globals.h"
 #include "Render.h"
-#include "State.h"
-#include "Warg_State.h"
 #include "Render_Test_State.h"
+#include "State.h"
 #include "Timer.h"
+#include "Warg_State.h"
 #include <SDL2/SDL.h>
 #undef main
+#include <enet/enet.h>
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
@@ -49,10 +50,46 @@ void gl_after_check(const glbinding::FunctionCall &f)
   check_gl_error();
 }
 
+void server_main()
+{
+  ASSERT(!enet_initialize());
 
+  auto warg_server = std::make_unique<Warg_Server>(false);
+
+  float64 current_time = get_real_time();
+  float64 last_time = 0.0;
+  float64 elapsed_time = 0.0;
+  float64 dt = 1.0 / 30.0;
+  while (true)
+  {
+    const float64 time = get_real_time();
+    elapsed_time = time - current_time;
+    last_time = current_time;
+    while (current_time + dt < last_time + elapsed_time)
+    {
+      current_time += dt;
+      warg_server->update(dt);
+    }
+  }
+
+  // enet_host_destroy(warg_server->server());
+  enet_deinitialize();
+}
 
 int main(int argc, char *argv[])
 {
+  bool client = false;
+
+  if (argc > 1 && std::string(argv[1]) == "--server")
+  {
+    server_main();
+    return 0;
+  }
+  else if (argc > 1 && std::string(argv[1]) == "--connect")
+  {
+    client = true;
+  }
+
   SDL_ClearError();
   generator.seed(1234);
   SDL_Init(SDL_INIT_EVERYTHING);
@@ -121,7 +158,7 @@ int main(int argc, char *argv[])
   INIT_RENDERER();
 
   std::vector<State *> states;
-  Warg_State game_state("Game State", window, window_size);
+  Warg_State game_state("Game State", window, window_size, !client);
   states.push_back((State *)&game_state);
   Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
