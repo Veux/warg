@@ -349,39 +349,39 @@ void Warg_State::update()
   Light *light = &scene.lights.lights[0];
 
   scene.lights.light_count = 2;
-  light->position = vec3{ 25, 25, 200. };
-  light->color = 3000.0f * vec3(1.0f, 0.93f, 0.92f);
+  light->position = vec3{ 13.5f, 17.5f, 17.f };
+  light->color = 1000.0f * vec3(1.0f, 0.93f, 0.92f);
   light->attenuation = vec3(1.0f, .045f, .0075f);
-  light->ambient = 0.001f;
-  light->cone_angle = 0.15f;
+  light->ambient = 0.0005f;
+  light->cone_angle = 0.45f;
   light->type = Light_Type::spot;
   light->casts_shadows = true;
   //there was a divide by 0 here, a camera can't point exactly straight down
-  light->direction = vec3(25.01f, 25.0f, 0.0f);
+  light->direction = vec3(.501f, .20f, 0.0f);
   //see Render.h for what these are for:
   light->shadow_blur_iterations = 6;
   light->shadow_blur_radius = 1.25005f;
-  light->max_variance = 0.0000002;
-  light->shadow_near_plane = 180.f;
-  light->shadow_far_plane = 500.f;
+  light->max_variance = 0.00000004;
+  light->shadow_near_plane = 5.f;
+  light->shadow_far_plane = 100.f;
   light->shadow_fov = radians(90.f);
 
   light = &scene.lights.lights[1];
 
-  light->position = vec3{ 25, 25, 20.10 };
+  light->position = vec3{ .5, .2, 10.10 };
   light->color = 600.0f * vec3(1.f+sin(current_time*1.35), 1.f+cos(current_time*1.12), 1.f+sin(current_time*.9));
   light->attenuation = vec3(1.0f, .045f, .0075f);
   light->direction = client ? client->chars.size()>0 ? client->chars[0].pos : vec3(0) : vec3(0);
   light->ambient = 0.0f;
-  light->cone_angle = 0.03f;
+  light->cone_angle = 0.012f;
   light->type = Light_Type::spot;
   light->casts_shadows = true;
   //see Render.h for what these are for:
   light->shadow_blur_iterations = 3;
-  light->shadow_blur_radius = 0.45005f;
+  light->shadow_blur_radius = 3.45005f;
   light->max_variance = 0.00000003;
-  light->shadow_near_plane = 5.51f;
-  light->shadow_far_plane = 80.f;
+  light->shadow_near_plane = 4.51f;
+  light->shadow_far_plane = 50.f;
   light->shadow_fov = radians(40.f);
 
   server->update(dt);
