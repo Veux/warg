@@ -100,6 +100,7 @@ struct Mesh_Handle
   GLuint bitangents_buffer = 0;
   GLuint indices_buffer = 0;
   GLuint indices_buffer_size = 0;
+  void enable_assign_attributes();
   Mesh_Data data;
 };
 
@@ -109,7 +110,6 @@ struct Mesh
   Mesh(Mesh_Primitive p, std::string mesh_name);
   Mesh(Mesh_Data mesh_data, std::string mesh_name);
   Mesh(const aiMesh *aimesh, std::string unique_identifier);
-  void enable_assign_attributes();
   GLuint get_vao() { return mesh->vao; }
   GLuint get_indices_buffer() { return mesh->indices_buffer; }
   GLuint get_indices_buffer_size() { return mesh->indices_buffer_size; }
@@ -181,6 +181,10 @@ struct Light
   Light_Type type;
   bool operator==(const Light &rhs) const;
   bool casts_shadows = false;
+  float shadow_near_plane = 0.1f;
+  float shadow_far_plane = 1000.f;
+  float max_variance = 0.000001f;
+  float shadow_fov = 90.f;
 private:
 };
 
@@ -248,6 +252,8 @@ private:
   void set_uniform_lights(Shader &shader);
   void set_uniform_shadowmaps(Shader& shader);
   void build_shadow_maps();
+  void run_pixel_shader(Shader* shader, std::vector<GLuint> src_textures, GLuint dst_texture, ivec2 dst_size, bool clear_dst = false);
+  void gaussian_blur(GLuint src, GLuint dst, ivec2 dst_size, GLenum dst_format, float radius);
   void opaque_pass(float32 time);
   void instance_pass(float32 time);
   void translucent_pass(float32 time);
@@ -255,11 +261,12 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
+  mat4 ortho_projection(ivec2 dst_size);
   float32 render_scale = 1.0f; 
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
-  ivec2 shadow_map_size = ivec2(2048, 2048);
+  ivec2 shadow_map_size = 1*ivec2(2048, 2048);
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

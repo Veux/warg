@@ -108,10 +108,11 @@ int main(int argc, char *argv[])
 
   glbinding::Binding::initialize();
   glbinding::setCallbackMaskExcept(glbinding::CallbackMask::After |
-  glbinding::CallbackMask::ParametersAndReturnValue, { "glGetError", "glFlush" });  
-  //glbinding::setBeforeCallback(gl_before_check);
-  //glbinding::setAfterCallback(gl_after_check);
-
+  glbinding::CallbackMask::ParametersAndReturnValue, { "glGetError", "glFlush" });
+#if ENABLE_OPENGL_ERROR_CATCHING_AND_LOG
+  glbinding::setBeforeCallback(gl_before_check);
+  glbinding::setAfterCallback(gl_after_check);
+#endif
   glClearColor(0, 0, 0, 1);
   checkSDLError(__LINE__);
 

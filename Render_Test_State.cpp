@@ -26,6 +26,17 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   ground = scene.add_primitive_mesh(plane, "test_entity_plane", material);
   ground->position = {0.0f, 0.0f, 0.0f};
   ground->scale = {40.0f, 40.0f, 1.0f};
+
+
+
+  Material_Descriptor sky_mat;
+  sky_mat.backface_culling = false;
+  sky_mat.albedo = "skybox.jpg";
+  sky_mat.vertex_shader = "vertex_shader.vert";
+  sky_mat.frag_shader = "passthrough.frag";
+  sky_sphere = scene.add_aiscene("sphere.obj", &sky_mat);
+
+
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
   sphere = scene.add_aiscene("sphere.obj", nullptr, &material);
@@ -39,6 +50,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.uv_scale = vec2(2);
   material.albedo_alpha_override = 128;
   material.uses_transparency = false;
+  material.casts_shadows = true;
 
   cube_star = scene.add_primitive_mesh(cube, "star", material);
   cube_planet = scene.add_primitive_mesh(cube, "planet", material);
@@ -68,15 +80,19 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   Material_Descriptor tiger_mat;
   tiger_mat.backface_culling = false;
   tiger = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+  tiger->position = vec3(-3, -3, 0);
 
   material.casts_shadows = false;
   material.albedo = "color(255,255,255,255)";
   material.emissive = "color(255,255,255,255)";
   cone_light1 = scene.add_aiscene("sphere.obj", &material);
+  cone_light1->name = "biglight";
+
   cone_light2 = scene.add_aiscene("sphere.obj", &material);
   material.albedo = "color(0,0,0,255)";
   material.emissive = "color(255,0,255,255)";
   small_light = scene.add_aiscene("sphere.obj", &material);
+
 }
 
 void Render_Test_State::handle_input(State **current_state,
@@ -278,16 +294,16 @@ void Render_Test_State::handle_input(State **current_state,
 void Render_Test_State::update()
 {
 
-  const float32 height = 3.25;
+  const float32 height = 1.25;
 
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
-  cube_star->position = vec3(10 * cos(current_time / 10.f), 0, height);
+  cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
   const float32 anglestar = wrap_to_range(pi<float32>() * sin(current_time / 2),
                                           0, 2 * pi<float32>());
-  cube_star->visible = sin(current_time * 1.2) > -.25;
+  //cube_star->visible = sin(current_time * 1.2) > -.25;
   cube_star->propagate_visibility = true;
-  // star->orientation = angleAxis(anglestar,
-  // normalize(vec3(cos(current_time*.2), sin(current_time*.2), 1)));
+  cube_star->orientation = angleAxis(anglestar,
+   normalize(vec3(cos(current_time*.2), sin(current_time*.2), 1)));
 
   const float32 planet_scale = 0.35;
   const float32 planet_distance = 4;
@@ -316,8 +332,13 @@ void Render_Test_State::update()
   sphere->position = vec3(-3, 3, 1.5);
   sphere->scale = vec3(0.4);
 
+  sky_sphere->scale = vec3(500);
+  sky_sphere->position = vec3(0, 0, -250);
+
+
+
   auto &lights = scene.lights.lights;
-  scene.lights.light_count = 3;
+  scene.lights.light_count = 2;
 
   lights[0].position = sphere->position;
   lights[0].type = Light_Type::omnidirectional;
@@ -326,16 +347,19 @@ void Render_Test_State::update()
   lights[0].attenuation = vec3(1.0, .22, .2);
 
   lights[1].position =
-      vec3(5 * cos(current_time * .00172), 5 * sin(current_time * .00172),2.525);
+      vec3(20 * cos(current_time * .0172), 20 * sin(current_time * .0172),7.);
   lights[1].type = Light_Type::spot;
   lights[1].direction = vec3(0);
-  lights[1].color = 1820.f * vec3(1.0, 1.0, 1.0);
-  lights[1].cone_angle = 0.151;//+ 0.14*sin(current_time);
+  lights[1].color = 10320.f * vec3(1.0, 1.0, 1.0);
+  lights[1].cone_angle = 0.051;//+ 0.14*sin(current_time);
   lights[1].ambient = 0.0001;
   lights[1].casts_shadows = true;
+  lights[1].max_variance = 0.000001;
+  lights[1].shadow_near_plane = 5.f;
+  lights[1].shadow_fov = 0.55f;//radians(45+sin(current_time)*45.f);
   cone_light1->position = lights[1].position + 0.5f*normalize(lights[1].position);
-  cone_light1->scale = vec3(0.2);
-  cone_light1->visible = false;
+  cone_light1->scale = vec3(4.);
+  cone_light1->visible = true;
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);

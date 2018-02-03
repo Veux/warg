@@ -8,7 +8,7 @@ using namespace glm;
 enum struct Light_Type;
 struct Light_Uniform_Location_Cache
 {
-  GLint position, direction, color, attenuation, ambient, cone_angle, type, enabled, shadow_map_transform;
+  GLint position, direction, color, attenuation, ambient, cone_angle, type, shadow_map_transform, max_variance;
 };
 struct Light_Uniform_Value_Cache
 {
@@ -16,7 +16,8 @@ struct Light_Uniform_Value_Cache
   float cone_angle;
   Light_Type type;
   mat4 shadow_map_transform;
-  bool enabled;
+  float max_variance;
+  bool shadow_enabled;
 };
 struct Shader
 {
@@ -31,7 +32,6 @@ struct Shader
   void set_uniform(const char *name, vec3 &v);
   void set_uniform(const char *name, vec4 &v);
   void set_uniform(const char *name, const mat4 &m);
-  GLint get_uniform_location(const char *name);
 
   void use() const;
 
@@ -39,6 +39,7 @@ struct Shader
   {
     Shader_Handle(GLuint i);
     ~Shader_Handle();
+    GLint get_uniform_location(const char *name);
     GLuint program = 0;
     std::unordered_map<std::string, GLint> location_cache;
     Light_Uniform_Value_Cache light_values_cache[MAX_LIGHTS] = {};
@@ -48,6 +49,9 @@ struct Shader
     vec3 additional_ambient = vec3(0);
     void set_location_cache();
     bool light_location_cache_set = false;
+
+    std::string vs;
+    std::string fs;
   };
   std::shared_ptr<Shader_Handle> program;
   std::string vs;

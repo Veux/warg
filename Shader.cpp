@@ -93,80 +93,75 @@ void Shader::load(const std::string &vertex, const std::string &fragment)
   auto ptr = cache[key].lock();
   if (!ptr)
   {
-    ptr = std::make_shared<Shader_Handle>(load_shader(vertex, fragment));
+    program = ptr = std::make_shared<Shader_Handle>(load_shader(vertex, fragment));
     cache[key] = ptr;
-    set_message("Assigning texture units to shader samplers");
-    for(uint32 i = 0; i < MAX_TEXTURE_SAMPLERS; ++i)
-    {
-      set_uniform(s("texture",i).c_str(),i);
-    }
-    for(uint32 i = 0; i < MAX_LIGHTS; ++i)
-    {
-      set_uniform(s("shadow_maps[",i,"]").c_str(),(GLuint)Texture_Location::s0 + i);
-    }
     set_message("Caching light uniform locations");
-    ptr->set_location_cache();
+    program->vs = vs = std::string(vertex);
+    program->fs = fs = std::string(fragment);
+    use();
+    program->set_location_cache();
   }
-  program = ptr;
-  vs = std::string(vertex);
-  fs = std::string(fragment);
-
-
+  else
+  {
+    program = ptr;
+    program->vs = vs = std::string(vertex);
+    program->fs = fs = std::string(fragment);
+  }  
 }
 
 void Shader::set_uniform(const char *name, float32 f)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform1fv(location, 1, &f);
 }
 
 void Shader::set_uniform(const char *name, uint32 i)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform1ui(location, i);
 }
 void Shader::set_uniform(const char *name, int32 i)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform1i(location, i);
 }
 
 void Shader::set_uniform(const char *name, glm::vec2 v)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform2fv(location, 1, &v[0]);
 }
 
 void Shader::set_uniform(const char *name, glm::vec3 &v)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform3fv(location, 1, &v[0]);
 }
 void Shader::set_uniform(const char *name, glm::vec4 &v)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform4fv(location, 1, &v[0]);
 }
 void Shader::set_uniform(const char *name, const glm::mat4 &m)
 {
-  GLint location = get_uniform_location(name);
+  GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniformMatrix4fv(location, 1, GL_FALSE, &m[0][0]);
 }
-GLint Shader::get_uniform_location(const char *name)
+GLint Shader::Shader_Handle::get_uniform_location(const char *name)
 {
   GLint location;
-  auto search = program->location_cache.find(name);
-  if (search == program->location_cache.end())
+  auto search = location_cache.find(name);
+  if (search == location_cache.end())
   {
-    location = glGetUniformLocation(program->program, name);
-    program->location_cache[name] = location;
+    location = glGetUniformLocation(program, name);
+    location_cache[name] = location;
   }
   else
   {
@@ -189,34 +184,62 @@ void Shader::check_err(GLint loc, const char *name)
 {
   if (loc == -1)
   {
-    set_message("Shader invalid uniform: ", name);
+   // set_message("Shader invalid uniform: ", name);
   }
 }
 
 void Shader::Shader_Handle::set_location_cache()
 {
+#ifdef DEBUG
+  GLint id;
+  glGetIntegerv(GL_CURRENT_PROGRAM, &id);
+  ASSERT(id == program);
+#endif
+  set_message(s("Shader: ", vs, fs));
+  set_message("Assigning texture units to shader samplers");
+  std::string str;
+  for (uint32 i = 0; i < MAX_TEXTURE_SAMPLERS; ++i)
+  {
+    str = s("texture", i);
+    GLint locationc = get_uniform_location(str.c_str());
+    GLint location = glGetUniformLocation(program, str.c_str());
+    ASSERT(location == locationc);
+    set_message(s("Assigning sampler uniform name: ", str, " with location: ", location, " to texture unit: ", i));
+    glUniform1i(location, i);
+  }
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+  {
+    str = s("shadow_maps[", i, "]");
+    GLint locationc = get_uniform_location(str.c_str());
+
+    GLint location = glGetUniformLocation(program, str.c_str());
+
+    ASSERT(location == locationc);
+
+    set_message(s("Assigning sampler uniform name: ", str, " with location: ", location, " to texture unit: ", (GLuint)Texture_Location::s0 + i));
+    glUniform1i(location, (GLuint)Texture_Location::s0 + i);
+  }
+
   if(light_location_cache_set)
   return;
 
     for (int i = 0; i < MAX_LIGHTS; ++i)
     {
-      light_location_cache[i].position = glGetUniformLocation(
+      light_locations_cache[i].position = glGetUniformLocation(
           program, s("lights[", i, "].position").c_str());
-      light_location_cache[i].direction = glGetUniformLocation(
+      light_locations_cache[i].direction = glGetUniformLocation(
           program, s("lights[", i, "].direction").c_str());
-      light_location_cache[i].color = glGetUniformLocation(
+      light_locations_cache[i].color = glGetUniformLocation(
           program, s("lights[", i, "].color").c_str());
-      light_location_cache[i].attenuation = glGetUniformLocation(
+      light_locations_cache[i].attenuation = glGetUniformLocation(
           program, s("lights[", i, "].attenuation").c_str());
-      light_location_cache[i].ambient = glGetUniformLocation(
+      light_locations_cache[i].ambient = glGetUniformLocation(
           program, s("lights[", i, "].ambient").c_str());
-      light_location_cache[i].cone_angle = glGetUniformLocation(
+      light_locations_cache[i].cone_angle = glGetUniformLocation(
           program, s("lights[", i, "].cone_angle").c_str());
-      light_location_cache[i].type = glGetUniformLocation(
+      light_locations_cache[i].type = glGetUniformLocation(
           program, s("lights[", i, "].type").c_str());
-      light_location_cache[i].enabled = glGetUniformLocation(
-          program, s("shadow_map_enabled[", i, "]").c_str());
-      light_location_cache[i].shadow_map_transform =
+      light_locations_cache[i].shadow_map_transform =
           glGetUniformLocation(program,
                                s("shadow_map_transform[", i, "]").c_str());
     }

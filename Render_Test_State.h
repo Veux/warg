@@ -12,6 +12,7 @@ struct Render_Test_State : protected State
   vec3 player_dir = vec3(0, 1, 0);
 
   Node_Ptr ground;
+  Node_Ptr sky_sphere;
   Node_Ptr cube_star;
   Node_Ptr cube_planet;
   Node_Ptr cube_moon;
