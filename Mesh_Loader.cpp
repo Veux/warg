@@ -286,10 +286,16 @@ Mesh_Data load_mesh(const aiMesh* aimesh, std::string unique_identifier)
   for (uint32 i = 0; i < aimesh->mNumFaces; i++)
   {
     aiFace face = aimesh->mFaces[i];
-    ASSERT(face.mNumIndices == 3);//triangles only, use aiProcess_Triangulate
-    for (GLuint j = 0; j < 3; j++)
+    if (face.mNumIndices == 3)
     {
-      data.indices.push_back(face.mIndices[j]);
+      for (GLuint j = 0; j < 3; j++)
+      {
+        data.indices.push_back(face.mIndices[j]);
+      }
+    }
+    else
+    {
+      set_message("non-triangle warning", "", 5);
     }
   }
   return data;
