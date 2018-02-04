@@ -39,10 +39,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
   enet_peer_send(serverp, 0, packet);
   enet_host_flush(clientp);
 
-  client = std::make_unique<Warg_Client>(&scene, &in);
+  Map blades_edge = make_blades_edge();
 
-  client->map.node =
-      scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+  map = make_blades_edge();
+  sdb = make_spell_db();
+
+  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
 
   clear_color = vec3(94. / 255., 155. / 255., 1.);
   scene.lights.light_count = 1;
@@ -69,10 +71,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   server->connect(&out, &in);
   out.push(char_spawn_request_event("Cubeboi", 0));
 
-  client = std::make_unique<Warg_Client>(&scene, &in);
+  Map blades_edge = make_blades_edge();
 
-  client->map.node =
-      scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+  map = make_blades_edge();
+  sdb = make_spell_db();
+
+  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
@@ -103,7 +107,7 @@ void Warg_State::handle_input(
       }
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
-        out.push(jump_event(client->pc));
+        out.push(jump_event(pc));
       }
     }
     else if (_e.type == SDL_KEYUP)
@@ -125,15 +129,15 @@ void Warg_State::handle_input(
           if (free_cam)
           {
             free_cam = false;
-            client->pc = 0;
+            pc = 0;
           }
-          else if (client->pc >= client->chars.size() - 1)
+          else if (pc >= chars.size() - 1)
           {
             free_cam = true;
           }
           else
           {
-            client->pc += 1;
+            pc += 1;
           }
         }
       }
@@ -245,7 +249,7 @@ void Warg_State::handle_input(
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (client->pc < 0)
+  if (pc < 0)
     return;
   if (free_cam)
   {
@@ -353,8 +357,7 @@ void Warg_State::handle_input(
     cam_rel = normalize(ry * cam_rel);
 
     if (right_button_down)
-      out.push(
-          dir_event(client->pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
+      out.push(dir_event(pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -365,12 +368,12 @@ void Warg_State::handle_input(
       m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
-    out.push(move_event(client->pc, (Move_Status)m));
+    out.push(move_event(pc, (Move_Status)m));
 
-    ASSERT(client->pc >= 0 && client->chars.count(client->pc));
-    vec3 player_pos = client->chars[client->pc].pos;
+    ASSERT(pc >= 0 && chars.count(pc));
+    vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
-    for (auto &surface : client->map.surfaces)
+    for (auto &surface : map.surfaces)
     {
       vec3 intersection_point;
       bool intersects = ray_intersects_triangle(
@@ -389,41 +392,131 @@ void Warg_State::handle_input(
   previous_mouse_state = mouse_state;
 }
 
+void Warg_State::process_packets()
+{
+  ENetEvent event;
+  while (enet_host_service(clientp, &event, 0) > 0)
+  {
+    switch (event.type)
+    {
+      case ENET_EVENT_TYPE_NONE:
+        break;
+      case ENET_EVENT_TYPE_CONNECT:
+        break;
+      case ENET_EVENT_TYPE_RECEIVE:
+      {
+        Buffer b;
+        b.insert((void *)event.packet->data, event.packet->dataLength);
+        auto ev = deserialize_event(b);
+        in.push(ev);
+        break;
+      }
+      case ENET_EVENT_TYPE_DISCONNECT:
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+void Warg_State::process_events()
+{
+  while (!in.empty())
+  {
+    Warg_Event ev = in.front();
+
+    if (get_real_time() - ev.t < SIM_LATENCY / 2000.0f)
+      return;
+
+    ASSERT(ev.event);
+    switch (ev.type)
+    {
+      case Warg_Event_Type::CharSpawn:
+        process_event((CharSpawn_Event *)ev.event);
+        break;
+      case Warg_Event_Type::PlayerControl:
+        process_event((PlayerControl_Event *)ev.event);
+        break;
+      case Warg_Event_Type::CharPos:
+        process_event((CharPos_Event *)ev.event);
+        break;
+      case Warg_Event_Type::CastError:
+        process_event((CastError_Event *)ev.event);
+        break;
+      case Warg_Event_Type::CastBegin:
+        process_event((CastBegin_Event *)ev.event);
+        break;
+      case Warg_Event_Type::CastInterrupt:
+        process_event((CastInterrupt_Event *)ev.event);
+        break;
+      case Warg_Event_Type::CharHP:
+        process_event((CharHP_Event *)ev.event);
+        break;
+      case Warg_Event_Type::BuffAppl:
+        process_event((BuffAppl_Event *)ev.event);
+        break;
+      case Warg_Event_Type::ObjectLaunch:
+        process_event((ObjectLaunch_Event *)ev.event);
+        break;
+      default:
+        break;
+    }
+    free_warg_event(ev);
+    in.pop();
+  }
+}
+
 void Warg_State::update()
 {
+  if (!local)
+    process_packets();
+  process_events();
+
+  for (auto &c_ : chars)
+  {
+    auto &c = c_.second;
+    if (!c.alive)
+      c.pos = {-1000, -1000, 0};
+    c.mesh->position = c.pos;
+    c.mesh->orientation =
+        angleAxis((float32)atan2(c.dir.y, c.dir.x) - half_pi<float32>(),
+            vec3(0.f, 0.f, 1.f));
+    c.mesh->scale = c.radius * vec3(2);
+  }
+
+  for (auto i = spell_objs.begin(); i != spell_objs.end();)
+  {
+    auto &o = *i;
+    float32 d = length(chars[o.target].pos - o.pos);
+    if (d < 0.5)
+    {
+      set_message("object hit",
+          chars[o.caster].name + "'s " + o.def.name + " hit " +
+              chars[o.target].name,
+          3.0f);
+
+      i = spell_objs.erase(i);
+    }
+    else
+    {
+      vec3 a = normalize(chars[o.target].pos - o.pos);
+      a.x *= o.def.speed * dt;
+      a.y *= o.def.speed * dt;
+      a.z *= o.def.speed * dt;
+      o.pos += a;
+
+      o.mesh->position = o.pos;
+
+      ++i;
+    }
+  }
+
   if (local)
   {
     server->update(dt);
-    client->update(dt);
   }
   else
   {
-    ENetEvent event;
-    while (enet_host_service(clientp, &event, 0) > 0)
-    {
-      switch (event.type)
-      {
-        case ENET_EVENT_TYPE_NONE:
-          break;
-        case ENET_EVENT_TYPE_CONNECT:
-          break;
-        case ENET_EVENT_TYPE_RECEIVE:
-        {
-          Buffer b;
-          b.insert((void *)event.packet->data, event.packet->dataLength);
-          auto ev = deserialize_event(b);
-          in.push(ev);
-          break;
-        }
-        case ENET_EVENT_TYPE_DISCONNECT:
-          break;
-        default:
-          break;
-      }
-    }
-
-    client->update(dt);
-
     while (!out.empty())
     {
       Warg_Event ev = out.front();
@@ -441,9 +534,9 @@ void Warg_State::update()
   }
 
   // meme
-  if (client->pc >= 0)
+  if (pc >= 0)
   {
-    ASSERT(client->chars.count(client->pc));
+    ASSERT(chars.count(pc));
 
     clear_color = vec3(94. / 255., 155. / 255., 1.);
     scene.lights.light_count = 2;
@@ -475,10 +568,7 @@ void Warg_State::update()
                                 1.f + cos(current_time * 1.12),
                                 1.f + sin(current_time * .9));
     light->attenuation = vec3(1.0f, .045f, .0075f);
-    light->direction =
-        client
-            ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
-            : vec3(0);
+    light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
     light->ambient = 0.0f;
     light->cone_angle = 0.012f;
     light->type = Light_Type::spot;
@@ -491,6 +581,207 @@ void Warg_State::update()
     light->shadow_far_plane = 50.f;
     light->shadow_fov = radians(40.f);
   }
+}
+
+void Warg_State::process_event(CharSpawn_Event *spawn)
+{
+  ASSERT(spawn);
+
+  add_char(spawn->id, spawn->team, spawn->name);
+}
+
+void Warg_State::process_event(PlayerControl_Event *ev)
+{
+  ASSERT(pc);
+
+  pc = ev->character;
+}
+
+void Warg_State::process_event(CharPos_Event *pos)
+{
+  ASSERT(pos);
+  ASSERT(pos->character >= 0 && chars.count(pos->character));
+  chars[pos->character].dir = pos->dir;
+  chars[pos->character].pos = pos->pos;
+}
+
+void Warg_State::process_event(CastError_Event *err)
+{
+  ASSERT(err);
+  ASSERT(err->caster >= 0 && chars.count(err->caster));
+
+  std::string msg;
+  msg += chars[err->caster].name;
+  msg += " failed to cast ";
+  msg += err->spell;
+  msg += ": ";
+
+  switch (err->err)
+  {
+    case (int)CastErrorType::Silenced:
+      msg += "silenced";
+      break;
+    case (int)CastErrorType::GCD:
+      msg += "GCD";
+      break;
+    case (int)CastErrorType::SpellCD:
+      msg += "spell on cooldown";
+      break;
+    case (int)CastErrorType::NotEnoughMana:
+      msg += "not enough mana";
+      break;
+    case (int)CastErrorType::InvalidTarget:
+      msg += "invalid target";
+      break;
+    case (int)CastErrorType::OutOfRange:
+      msg += "out of range";
+      break;
+    case (int)CastErrorType::AlreadyCasting:
+      msg += "already casting";
+      break;
+    case (int)CastErrorType::Success:
+      ASSERT(false);
+      break;
+    default:
+      ASSERT(false);
+  }
+
+  set_message("SpellError:", msg, 10);
+}
+
+void Warg_State::process_event(CastBegin_Event *cast)
+{
+  ASSERT(cast);
+  ASSERT(cast->caster >= 0 && chars.count(cast->caster));
+
+  std::string msg;
+  msg += chars[cast->caster].name;
+  msg += " begins casting ";
+  msg += cast->spell;
+  set_message("CastBegin:", msg, 10);
+}
+
+void Warg_State::process_event(CastInterrupt_Event *interrupt)
+{
+  ASSERT(interrupt);
+  ASSERT(interrupt->caster >= 0 && chars.count(interrupt->caster));
+
+  std::string msg;
+  msg += chars[interrupt->caster].name;
+  msg += "'s casting was interrupted";
+  set_message("CastInterrupt:", msg, 10);
+}
+
+void Warg_State::process_event(CharHP_Event *hpev)
+{
+  ASSERT(hpev);
+  ASSERT(hpev->character >= 0 && chars.count(hpev->character));
+
+  chars[hpev->character].alive = hpev->hp > 0;
+
+  std::string msg;
+  msg += chars[hpev->character].name;
+  msg += "'s HP is ";
+  msg += std::to_string(hpev->hp);
+  set_message("", msg, 10);
+}
+
+void Warg_State::process_event(BuffAppl_Event *appl)
+{
+  ASSERT(appl);
+  ASSERT(appl->character >= 0 && chars.count(appl->character));
+
+  std::string msg;
+  msg += appl->buff;
+  msg += " applied to ";
+  msg += chars[appl->character].name;
+  set_message("ApplyBuff:", msg, 10);
+}
+
+void Warg_State::process_event(ObjectLaunch_Event *launch)
+{
+  ASSERT(launch);
+  ASSERT(launch->caster >= 0 && chars.count(launch->caster));
+  ASSERT(launch->target >= 0 && chars.count(launch->target));
+
+  Material_Descriptor material;
+  material.albedo = "crate_diffuse.png";
+  material.emissive = "test_emissive.png";
+  material.normal = "test_normal.png";
+  material.roughness = "crate_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "world_origin_distance.frag";
+
+  SpellObjectInst obji;
+  obji.def = sdb->objects[launch->object];
+  obji.caster = launch->caster;
+  obji.target = launch->target;
+  obji.pos = launch->pos;
+  obji.mesh = scene.add_primitive_mesh(cube, "spell_object_cube", material);
+  obji.mesh->scale = vec3(0.4f);
+  spell_objs.push_back(obji);
+
+  std::string msg;
+  msg += (0 <= launch->caster && launch->caster < chars.size())
+             ? chars[launch->caster].name
+             : "unknown character";
+  msg += " launched ";
+  msg += sdb->objects[launch->object].name;
+  msg += " at ";
+  msg += (0 <= launch->target && launch->target < chars.size())
+             ? chars[launch->target].name
+             : "unknown character";
+  set_message("ObjectLaunch:", msg, 10);
+}
+
+void Warg_State::add_char(UID id, int team, const char *name)
+{
+  ASSERT(name);
+
+  vec3 pos = map.spawn_pos[team];
+  vec3 dir = map.spawn_dir[team];
+
+  Material_Descriptor material;
+  material.albedo = "crate_diffuse.png";
+  material.emissive = "";
+  material.normal = "test_normal.png";
+  material.roughness = "crate_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+
+  Character c;
+  c.team = team;
+  c.name = std::string(name);
+  c.pos = pos;
+  c.dir = dir;
+  c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
+  c.hp_max = 100;
+  c.hp = c.hp_max;
+  c.mana_max = 500;
+  c.mana = c.mana_max;
+
+  CharStats s;
+  s.gcd = 1.5;
+  s.speed = 4.0;
+  s.cast_speed = 1;
+  s.hp_regen = 2;
+  s.mana_regen = 10;
+  s.damage_mod = 1;
+  s.atk_dmg = 5;
+  s.atk_speed = 2;
+
+  c.b_stats = s;
+  c.e_stats = s;
+
+  for (int i = 0; i < sdb->spells.size(); i++)
+  {
+    Spell s;
+    s.def = &sdb->spells[i];
+    s.cd_remaining = 0;
+    c.spellbook[s.def->name] = s;
+  }
+
+  chars[id] = c;
 }
 
 void add_wall(std::vector<Triangle> &surfaces, Wall wall)

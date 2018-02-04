@@ -65,13 +65,29 @@ struct Warg_State : protected State
   void update();
   void handle_input(
       State **current_state, std::vector<State *> available_states);
+  void process_packets();
+  void process_events();
+  void process_event(CharSpawn_Event *ev);
+  void process_event(PlayerControl_Event *ev);
+  void process_event(CharPos_Event *ev);
+  void process_event(CastError_Event *ev);
+  void process_event(CastBegin_Event *ev);
+  void process_event(CastInterrupt_Event *ev);
+  void process_event(CharHP_Event *ev);
+  void process_event(BuffAppl_Event *ev);
+  void process_event(ObjectLaunch_Event *ev);
+  void add_char(UID id, int team, const char *name);
 
-  std::unique_ptr<Warg_Client> client;
   std::unique_ptr<Warg_Server> server;
   std::queue<Warg_Event> in, out;
   bool local;
   ENetPeer *serverp;
   ENetHost *clientp;
+  Map map;
+  std::map<UID, Character> chars;
+  UID pc = -1;
+  unique_ptr<SpellDB> sdb;
+  vector<SpellObjectInst> spell_objs;
 };
 
 struct Wall
