@@ -52,10 +52,18 @@ static Mesh QUAD;
 static Shader TEMPORALAA;
 static Shader PASSTHROUGH;
 static Shader VARIANCE_SHADOW_MAP;
+static Shader GAUSSIAN_BLUR;
+static GLuint SCRATCH_FRAMEBUFFER = 0;
+static GLuint GAUSSIAN_INTERMEDIATE;
+static ivec2 CURRENT_GAUSSIAN_SIZE = vec2(0);
+GLenum CURRENT_GAUSSIAN_FORMAT = GL_RGBA;
 static bool INIT = false;
 static std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
     TEXTURE_CACHE;
+
+  
+void check_FBO_status();
 
 void INIT_RENDERER()
 {
@@ -84,6 +92,7 @@ void INIT_RENDERER()
   TEMPORALAA = Shader("passthrough.vert", "TemporalAA.frag");
   PASSTHROUGH = Shader("passthrough.vert", "passthrough.frag");
   VARIANCE_SHADOW_MAP = Shader("passthrough.vert", "variance_shadow_map.frag");
+  GAUSSIAN_BLUR = Shader("passthrough.vert","gaussian_blur.frag");
 
   set_message("Initializing instance buffers");
   // instancing MVP Matrix buffer init
@@ -112,14 +121,16 @@ void CLEANUP_RENDERER()
   TEMPORALAA = Shader();
   PASSTHROUGH = Shader();
 
-  set_message("Deleting FBO, 3 textures, 2 instance buffers:",
-              s(TARGET_FRAMEBUFFER, " ", COLOR_TARGET_TEXTURE, " ",
+  set_message("Deleting 2 FBOs, 3 textures, 2 instance buffers:",
+              s(TARGET_FRAMEBUFFER, " ", SCRATCH_FRAMEBUFFER ,"",COLOR_TARGET_TEXTURE, " ",
                 PREV_COLOR_TARGET, " ", DEPTH_TARGET_TEXTURE, " ",
                 INSTANCE_MVP_BUFFER, " ", INSTANCE_MODEL_BUFFER));
 
   glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
+  glDeleteFramebuffers(1, &SCRATCH_FRAMEBUFFER);
   glDeleteTextures(1, &COLOR_TARGET_TEXTURE);
   glDeleteTextures(1, &PREV_COLOR_TARGET);
+  glDeleteTextures(1,&GAUSSIAN_INTERMEDIATE);
   glDeleteRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
   glDeleteBuffers(1, &INSTANCE_MVP_BUFFER);
   glDeleteBuffers(1, &INSTANCE_MODEL_BUFFER);
@@ -246,24 +257,6 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-enum Texture_Location
-{
-  albedo,
-  specular,
-  normal,
-  emissive,
-  roughness,
-  s0,
-  s1,
-  s2,
-  s3,
-  s4,
-  s5,
-  s6,
-  s7,
-  s8,
-  s9 // shadow maps
-};
 
 Texture::Texture() { file_path = ERROR_TEXTURE_PATH; }
 Texture_Handle::~Texture_Handle()
@@ -278,8 +271,7 @@ Texture::Texture(std::string path, bool premul)
   path = fix_filename(path);
   if (path.size() == 0)
   {
-    file_path = ERROR_TEXTURE_PATH;
-    load();
+    texture = nullptr;
     return;
   }
   if (path.substr(0, 6) == "color(")
@@ -305,15 +297,12 @@ Texture::Texture(std::string path, bool premul)
 
 void Texture::load()
 {
-#if !SHOW_ERROR_TEXTURE
-  if (file_path == ERROR_TEXTURE_PATH || file_path == BASE_TEXTURE_PATH)
-  { // the file path doesnt point to a valid texture, or points to the error
-    // texture
+  if (file_path == "" || file_path == BASE_TEXTURE_PATH)
+  {
     // a null texture here shows as 0,0,0,0 in the shader
     texture = nullptr;
     return;
   }
-#endif
   auto ptr = TEXTURE_CACHE[file_path].lock();
   if (ptr)
   {
@@ -338,7 +327,6 @@ void Texture::load()
     return;
   }
   auto *data = stbi_load(file_path.c_str(), &width, &height, &n, 4);
-
   if (!data)
   { // error loading file...
 #if DYNAMIC_TEXTURE_RELOADING
@@ -348,15 +336,10 @@ void Texture::load()
     return;
 #else
     if (!data)
-    { // no dynamic texture reloading, so log fail and load the error texture
+    {
       set_message("STBI failed to find or load texture: " + file_path);
-      if (file_path == ERROR_TEXTURE_PATH)
-      {
-        texture = nullptr;
-        return;
-      }
-      file_path = ERROR_TEXTURE_PATH;
-      load();
+      file_path = "";
+      texture = nullptr;
       return;
     }
 #endif
@@ -397,17 +380,13 @@ void Texture::load()
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Texture::bind(const char *name, GLuint binding, Shader &shader)
+void Texture::bind(GLuint binding)
 {
 #if DYNAMIC_TEXTURE_RELOADING
   load();
 #endif
-  GLuint u = glGetUniformLocation(shader.program->program, name);
-  if (u == -1)
-    return;
-
-  glUniform1i(u, binding);
-  glActiveTexture(GL_TEXTURE0 + (GLuint)binding);
+  //set_message(s("binding texture: ",this->file_path," handle:", texture ? texture->texture : 0," to unit:", binding));
+  glActiveTexture(GL_TEXTURE0 + binding);
   glBindTexture(GL_TEXTURE_2D, texture ? texture->texture : 0);
 }
 
@@ -424,6 +403,7 @@ Mesh::Mesh(Mesh_Primitive p, std::string mesh_name) : name(mesh_name)
   }
   set_message("caching mesh with uid: ", unique_identifier);
   MESH_CACHE[unique_identifier] = mesh = upload_data(load_mesh(p));
+  mesh->enable_assign_attributes();
 }
 Mesh::Mesh(Mesh_Data data, std::string mesh_name) : name(mesh_name)
 {
@@ -431,6 +411,7 @@ Mesh::Mesh(Mesh_Data data, std::string mesh_name) : name(mesh_name)
   if (unique_identifier == "NULL")
   { // lets not cache custom meshes thx
     mesh = upload_data(data);
+    mesh->enable_assign_attributes();
     return;
   }
   auto ptr = MESH_CACHE[unique_identifier].lock();
@@ -442,6 +423,7 @@ Mesh::Mesh(Mesh_Data data, std::string mesh_name) : name(mesh_name)
   }
   set_message("caching mesh with uid: ", unique_identifier);
   MESH_CACHE[unique_identifier] = mesh = upload_data(data);
+  mesh->enable_assign_attributes();
 }
 Mesh::Mesh(const aiMesh *aimesh, std::string unique_identifier)
 {
@@ -456,52 +438,36 @@ Mesh::Mesh(const aiMesh *aimesh, std::string unique_identifier)
   }
   set_message("caching mesh with uid: ", unique_identifier);
   MESH_CACHE[unique_identifier] = mesh =
-      upload_data(load_mesh(aimesh, unique_identifier));
+      upload_data(load_mesh(aimesh, unique_identifier));  
+      mesh->enable_assign_attributes();
 }
 
-void Mesh::bind_to_shader(Shader &shader)
-{
-  GLint current_vao;
-  glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &current_vao);
-  GLint current_shader;
-  glGetIntegerv(GL_CURRENT_PROGRAM, &current_shader);
-  ASSERT(mesh);
-  ASSERT(current_vao == mesh->vao);
-  ASSERT(current_shader = shader.program->program);
 
-  // int32 loc = glGetAttribLocation(shader.program->program, "position");
-  // ASSERT(loc != -1);
+
+void Mesh_Handle::enable_assign_attributes()
+{
+  ASSERT(vao);
+  glBindVertexArray(vao);
+
   uint32 loc = 0;
   glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->position_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
   glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-
-  // loc = glGetAttribLocation(shader.program->program, "normal");
-  // ASSERT(loc != -1);
   loc = 1;
   glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->normal_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
   glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-
-  // loc = glGetAttribLocation(shader.program->program, "uv");
-  // ASSERT(loc != -1);
   loc = 2;
   glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->uv_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
   glVertexAttribPointer(loc, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
-
-  // loc = glGetAttribLocation(shader.program->program, "tangent");
-  // ASSERT(loc != -1);
   loc = 3;
   glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->tangents_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
   glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-
-  // loc = glGetAttribLocation(shader.program->program, "bitangent");
-  // ASSERT(loc != -1);
   loc = 4;
   glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->bitangents_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
   glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
 }
 
@@ -658,6 +624,8 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
     m.frag_shader = material_override->frag_shader;
     m.backface_culling = material_override->backface_culling;
     m.uv_scale = material_override->uv_scale;
+    m.uses_transparency = material_override->uses_transparency;
+    m.casts_shadows = material_override->casts_shadows;
   }
   load(m);
 }
@@ -678,11 +646,10 @@ void Material::bind()
   else
     glDisable(GL_CULL_FACE);
 
-  albedo.bind("albedo", Texture_Location::albedo, shader);
-  // specular_color.bind("specular", 1, shader);
-  normal.bind("normal", 2, shader);
-  emissive.bind("emissive", 3, shader);
-  roughness.bind("roughness", 4, shader);
+  albedo.bind(Texture_Location::albedo);
+  normal.bind(Texture_Location::normal);
+  emissive.bind(Texture_Location::emissive);
+  roughness.bind(Texture_Location::roughness);
 }
 void Material::unbind_textures()
 {
@@ -747,107 +714,117 @@ Render::Render(SDL_Window *window, ivec2 window_size)
 
 void Render::set_uniform_lights(Shader &shader)
 {
-  ASSERT(lights.lights.size() == MAX_LIGHTS);
-  uint32 location = -1;
-  // todo: this is horrible. do something much better than this - precompute
-  // all these godawful strings and just select them
-
-  if (true)
+  for (uint32 i = 0; i < lights.light_count; ++i)
   {
-    for (int i = 0; i < MAX_LIGHTS; ++i)
+    Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i];
+    const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
+    const Light* new_light = &lights.lights[i];
+
+    if (value_cache->position != new_light->position)
     {
-      shader.lights_cache[i].locations.position = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].position").c_str());
-      shader.lights_cache[i].locations.direction = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].direction").c_str());
-      shader.lights_cache[i].locations.color = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].color").c_str());
-      shader.lights_cache[i].locations.attenuation = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].attenuation").c_str());
-      shader.lights_cache[i].locations.ambient = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].ambient").c_str());
-      shader.lights_cache[i].locations.cone_angle = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].cone_angle").c_str());
-      shader.lights_cache[i].locations.type = glGetUniformLocation(
-          shader.program->program, s("lights[", i, "].type").c_str());
-      shader.lights_cache[i].locations.enabled = glGetUniformLocation(
-          shader.program->program, s("shadow_map_enabled[", i, "]").c_str());
-      shader.lights_cache[i].locations.shadow_map_transform =
-          glGetUniformLocation(shader.program->program,
-                               s("shadow_map_transform[", i, "]").c_str());
-      shader.lights_cache[i].locations.shadow_map = glGetUniformLocation(
-          shader.program->program, s("shadow_maps[", i, "]").c_str());
+      value_cache->position = new_light->position;
+      glUniform3fv(location_cache->position, 1, &new_light->position[0]);
     }
-    shader.light_count_location =
-        glGetUniformLocation(shader.program->program, "number_of_lights");
-    shader.additional_ambient_location =
-        glGetUniformLocation(shader.program->program, "additional_ambient");
-    shader.light_location_cache_set = true;
+
+    if (value_cache->direction != new_light->direction)
+    {
+      value_cache->direction = new_light->direction;
+      glUniform3fv(location_cache->direction, 1, &new_light->direction[0]);
+    }
+
+    if (value_cache->color != new_light->color)
+    {
+      value_cache->color = new_light->color;
+      glUniform3fv(location_cache->color, 1, &new_light->color[0]);
+    }
+
+    if (value_cache->attenuation != new_light->attenuation)
+    {
+      value_cache->attenuation = new_light->attenuation;
+      glUniform3fv(location_cache->attenuation, 1, &new_light->attenuation[0]);
+    }
+
+    const vec3 new_ambient = new_light->ambient * new_light->color;
+    if (shader.program->light_values_cache[i].ambient != new_ambient)
+    {
+      value_cache->ambient = new_ambient;
+      glUniform3fv(location_cache->ambient, 1, &new_ambient[0]);
+    }
+
+    const float new_cone_angle = new_light->cone_angle;
+    if (value_cache->cone_angle != new_cone_angle)
+    {
+      value_cache->cone_angle = new_cone_angle;
+      glUniform1fv(location_cache->cone_angle, 1, &new_cone_angle);
+    }
+
+    const Light_Type new_type = new_light->type;
+    if (value_cache->type != new_type)
+    {
+      value_cache->type = new_type;
+      glUniform1i(location_cache->type, (int32)new_type);
+    }
   }
 
-  for (int i = 0; i < lights.light_count; ++i)
+  const uint32 new_light_count = lights.light_count;
+  if (shader.program->light_count != new_light_count)
   {
-    
-      glUniform3fv(shader.lights_cache[i].locations.position, 1,
-                   &lights.lights[i].position[0]);
-      shader.lights_cache[i].direction = lights.lights[i].direction;
-      glUniform3fv(shader.lights_cache[i].locations.direction, 1,
-                   &lights.lights[i].direction[0]);
-      shader.lights_cache[i].color = lights.lights[i].color;
-      glUniform3fv(shader.lights_cache[i].locations.color, 1,
-                   &lights.lights[i].color[0]);
-      shader.lights_cache[i].attenuation = lights.lights[i].attenuation;
-      glUniform3fv(shader.lights_cache[i].locations.attenuation, 1,
-                   &lights.lights[i].attenuation[0]);
-
-    vec3 ambient = lights.lights[i].ambient * lights.lights[i].color;
-      shader.lights_cache[i].ambient = ambient;
-      glUniform3fv(shader.lights_cache[i].locations.ambient, 1, &ambient[0]);
-
-      shader.lights_cache[i].cone_angle = lights.lights[i].cone_angle;
-      glUniform1fv(shader.lights_cache[i].locations.cone_angle, 1,
-                   &lights.lights[i].cone_angle);
-
-      shader.lights_cache[i].type != (int32)lights.lights[i].type;
-      glUniform1i(shader.lights_cache[i].locations.type,
-                  (int32)lights.lights[i].type);
+    shader.program->light_count = (int32)lights.light_count;
+    glUniform1i(shader.program->light_count_location, new_light_count);
   }
-    shader.light_count = (int32)lights.light_count;
-    glUniform1i(shader.light_count_location, (int32)lights.light_count);
 
-    shader.additional_ambient = lights.additional_ambient;
-    glUniform3fv(shader.additional_ambient_location, 1,
-                 &lights.additional_ambient[0]);
+  const vec3 new_ambient = lights.additional_ambient;
+  if (shader.program->additional_ambient != new_ambient)
+  {
+    shader.program->additional_ambient = new_ambient;
+    glUniform3fv(shader.program->additional_ambient_location, 1, &new_ambient[0]);
+  }
 }
 
 void Render::set_uniform_shadowmaps(Shader &shader)
 {
-  for (int i = 0; i < MAX_LIGHTS; ++i)
+  ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
+ 
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
-    ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
-    ASSERT(MAX_LIGHTS ==
-           10); // reminder to change the Texture_Location::s1...sn enums
-
-    Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
+    const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
     glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
-    glUniform1i(shader.lights_cache[i].locations.shadow_map,
-                (GLuint)Texture_Location::s0 + i);
     glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
 
-    mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
+    const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
                        0.0, 0.5, 0.5, 0.5, 1.0);
-    mat4 shadow_map_transform =
-        offset * spotlight_shadow_maps[i].projection_camera;
-      glUniformMatrix4fv(shader.lights_cache[i].locations.shadow_map_transform,
-                         1, GL_FALSE, &shadow_map_transform[0][0]);
-  
-      glUniform1i(shader.lights_cache[i].locations.enabled,
-                  (int32)spotlight_shadow_maps[i].enabled);
-  
+    const mat4 shadow_map_transform = offset * shadow_map->projection_camera;
+
+    const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
+    Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i]; 
+
+    float32 new_max_variance = lights.lights[i].max_variance;
+    if (value_cache->max_variance != new_max_variance)
+    {
+      value_cache->max_variance = new_max_variance;
+      glUniform1f(location_cache->max_variance,new_max_variance);
+    }
+    if (value_cache->shadow_map_transform != shadow_map_transform)
+    {
+      value_cache->shadow_map_transform = shadow_map_transform;
+      glUniformMatrix4fv(location_cache->shadow_map_transform, 1, GL_FALSE, &shadow_map_transform[0][0]);
+    }
+    bool casts_shadows = lights.lights[i].casts_shadows;
+    if (value_cache->shadow_map_enabled != casts_shadows)
+    {
+      value_cache->shadow_map_enabled = casts_shadows;
+      glUniform1i(location_cache->shadow_map_enabled, casts_shadows);
+    }
   }
 }
 
+mat4 Render::ortho_projection(ivec2 dst_size)
+{
+  return ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f, 100.0f) *
+    translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1)) *
+    scale(vec3(dst_size, 1));
+}
 void Render::build_shadow_maps()
 {
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
@@ -859,9 +836,9 @@ void Render::build_shadow_maps()
     if (i > lights.light_count - 1)
       return;
 
-    Light *light = &lights.lights[i];
+    const Light *light = &lights.lights[i];
     Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
-    if (light->type != spot || !light->casts_shadows)
+    if (light->type != Light_Type::spot || !light->casts_shadows)
       continue;
 
     shadow_map->enabled = true;
@@ -870,6 +847,7 @@ void Render::build_shadow_maps()
       shadow_map->load(shadow_map_size);
     }
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
+   // glEnable(GL_CULL_FACE);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_FRONT);
@@ -882,11 +860,12 @@ void Render::build_shadow_maps()
 
     const mat4 camera =
         glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
-    const mat4 projection = glm::perspective(radians(90.f), 1.0f, 0.1f, 1000.f);
+    const mat4 projection = glm::perspective(light->shadow_fov, 1.0f, light->shadow_near_plane, light->shadow_far_plane);
     shadow_map->projection_camera = projection * camera;
     for (Render_Entity &entity : render_entities)
     {
-      if (entity.material->m.casts_shadows)
+      set_message(s("entity name: ",entity.name," casts shadows: ",entity.material->m.casts_shadows));
+       if (entity.material->m.casts_shadows)
       {
         ASSERT(entity.mesh);
         int vao = entity.mesh->get_vao();
@@ -900,9 +879,121 @@ void Render::build_shadow_maps()
                        GL_UNSIGNED_INT, nullptr);
       }
     }
+
+    for (uint32 i = 0; i < light->shadow_blur_iterations; ++i)
+    {
+      shadow_map->blur(light->shadow_blur_radius);
+    }
+
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glFinish();
+}
+
+void Render::gaussian_blur(GLuint src, GLuint dst, ivec2 dst_size, GLenum dst_format, float radius)
+{
+  if(dst_size != CURRENT_GAUSSIAN_SIZE || CURRENT_GAUSSIAN_FORMAT != dst_format)
+  {
+    glBindTexture(GL_TEXTURE_2D, GAUSSIAN_INTERMEDIATE);
+
+  	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
+	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D, 0, dst_format, dst_size.x, dst_size.y, 0, dst_format,GL_UNSIGNED_BYTE, 0);
+
+    CURRENT_GAUSSIAN_SIZE = dst_size;
+    CURRENT_GAUSSIAN_FORMAT = dst_format;
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, SCRATCH_FRAMEBUFFER);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GAUSSIAN_INTERMEDIATE, 0);
+  check_FBO_status();
+
+  glViewport(0,0,dst_size.x,dst_size.y);
+  glDisable(GL_DEPTH_TEST);
+
+  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+
+  vec2 gaus_scale = vec2(radius / dst_size.x ,0.0);
+  glBindVertexArray(QUAD.get_vao());
+  GAUSSIAN_BLUR.use();
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale",gaus_scale);
+  GAUSSIAN_BLUR.set_uniform("transform",ortho_projection(dst_size));
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D,src);
+
+  glEnableVertexAttribArray(0);
+  glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+  glEnableVertexAttribArray(1);
+  glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),GL_UNSIGNED_INT, (void *)0);
+
+  gaus_scale.y = gaus_scale.x;
+  gaus_scale.x = 0;
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale",gaus_scale);
+
+  glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,dst,0);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D,GAUSSIAN_INTERMEDIATE);
+  check_FBO_status();
+
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),GL_UNSIGNED_INT, (void *)0);
+
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 0, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER,0);
+  glBindTexture(GL_TEXTURE_2D,0);
+  glEnable(GL_DEPTH_TEST);
+}
+
+//if dst_texture is 0, use main framebuffer
+//shader must use passthrough.vert, and must use texture1, texture2 ... texturen for input texture sampler names
+void Render::run_pixel_shader(Shader* shader, vector<GLuint> src_textures, GLuint dst_texture, ivec2 dst_size, bool clear_dst)
+{
+    for(uint32 i = 0; i < src_textures.size();++i)
+    {
+      glActiveTexture(GL_TEXTURE0+i);
+      glBindTexture(GL_TEXTURE_2D,src_textures[i]);
+    }
+    
+    ivec2 viewport_size;
+    
+    if(dst_texture == 0)
+    {//render to screen
+      glBindFramebuffer(GL_FRAMEBUFFER,0);
+      viewport_size = window_size;
+    }
+    else
+    {//render to dst texture
+      glBindFramebuffer(GL_FRAMEBUFFER,SCRATCH_FRAMEBUFFER);
+      glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,dst_texture,0);
+      viewport_size = dst_size;
+    }
+
+    glViewport(0,0,viewport_size.x,viewport_size.y);
+    
+    if(clear_dst)
+    {
+      glClearColor(0,0,0,0);
+      glClear(GL_COLOR_BUFFER_BIT);
+    }
+    
+    glDisable(GL_DEPTH_TEST);
+    glBindVertexArray(QUAD.get_vao());
+    shader->use();
+
+
+   // glEnableVertexAttribArray(0); 
+   // glEnableVertexAttribArray(1);
+    
+
+    shader->set_uniform("transform", ortho_projection(viewport_size));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
+                   GL_UNSIGNED_INT, (void *)0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void Render::opaque_pass(float32 time)
@@ -919,16 +1010,16 @@ void Render::opaque_pass(float32 time)
   glCullFace(GL_BACK);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
-
+  //todo: depth pre-pass
   for (Render_Entity &entity : render_entities)
   {
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
+    //set_message(s("binding vao:", vao));
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     shader.use();
     entity.material->bind();
-    entity.mesh->bind_to_shader(shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -941,6 +1032,7 @@ void Render::opaque_pass(float32 time)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
                    GL_UNSIGNED_INT, nullptr);
+    entity.material->unbind_textures();
   }
 }
 
@@ -948,7 +1040,7 @@ void Render::instance_pass(float32 time)
 {
   for (auto &entity : render_instances)
   {
-    ASSERT(0); // untested
+    ASSERT(0); //disables vertex attribs, so non instanced draw calls will need to re-enable and re-point
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
     glBindVertexArray(vao);
@@ -956,7 +1048,6 @@ void Render::instance_pass(float32 time)
     ASSERT(shader.vs == "instance.vert");
     shader.use();
     entity.material->bind();
-    entity.mesh->bind_to_shader(shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1063,7 +1154,6 @@ void Render::translucent_pass(float32 time)
     Shader &shader = entity.material->shader;
     shader.use();
     entity.material->bind();
-    entity.mesh->bind_to_shader(shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1101,11 +1191,6 @@ void Render::render(float64 state_time)
   draw_calls_last_frame = render_entities.size();
   set_message("COPYING TO SCREEN", "");
 
-  mat4 o =
-      ortho(0.0f, (float32)window_size.x, 0.0f, (float32)window_size.y, 0.1f,
-            100.0f) *
-      translate(vec3(vec2(0.5f * window_size.x, 0.5f * window_size.y), -1)) *
-      scale(vec3(window_size, 1));
   if (use_txaa)
   {
     // TODO: implement motion vector vertex attribute
@@ -1115,18 +1200,13 @@ void Render::render(float64 state_time)
     glViewport(0, 0, window_size.x, window_size.y);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     TEMPORALAA.use();
-    QUAD.bind_to_shader(TEMPORALAA);
-    GLuint u = glGetUniformLocation(TEMPORALAA.program->program, "current");
-    glUniform1i(u, 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
-    GLuint u2 = glGetUniformLocation(TEMPORALAA.program->program, "previous");
-    glUniform1i(u2, 1);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D,
                   PREV_COLOR_TARGET_MISSING ? COLOR_TARGET_TEXTURE
                                             : PREV_COLOR_TARGET);
-    TEMPORALAA.set_uniform("transform", o);
+    TEMPORALAA.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
                    GL_UNSIGNED_INT, (void *)0);
@@ -1147,17 +1227,15 @@ void Render::render(float64 state_time)
 
     // assign previous_color as the target to overwrite
     glViewport(0, 0, size.x, size.y);
+    //todo: make a framebuffer for each target, rather than swapping textures
     glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                          PREV_COLOR_TARGET, 0);
     PASSTHROUGH.use();
-    QUAD.bind_to_shader(PASSTHROUGH);
     // sample the current color_target as source
-    GLuint u3 = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
-    glUniform1i(u3, Texture_Location::albedo);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
-    PASSTHROUGH.set_uniform("transform", o);
+    PASSTHROUGH.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
                    GL_UNSIGNED_INT, (void *)0);
@@ -1171,6 +1249,47 @@ void Render::render(float64 state_time)
   }
   else
   {
+    //sponge test blur
+    static bool first = true;
+    static GLuint test_target1 = 0;
+    static GLuint test_target2 = 0;
+    if (first)
+    {
+      glGenTextures(1, &test_target1);
+      glGenTextures(1, &test_target2);
+
+      first = false;
+
+      glBindTexture(GL_TEXTURE_2D, test_target1);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, window_size.x, window_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+
+      glBindTexture(GL_TEXTURE_2D, test_target2);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, window_size.x, window_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    }
+
+    float radius = 0;
+    gaussian_blur(COLOR_TARGET_TEXTURE, test_target2, window_size, GL_RGBA, radius);
+
+    gaussian_blur(test_target2, test_target1, window_size, GL_RGBA, radius);
+
+    gaussian_blur(test_target1, test_target2, window_size, GL_RGBA, radius);
+
+    gaussian_blur(test_target2, test_target1, window_size, GL_RGBA, radius);
+
+    gaussian_blur(test_target1, test_target2, window_size, GL_RGBA, radius);
+
+    gaussian_blur(test_target2, test_target1, window_size, GL_RGBA, radius);
+
+
+  
     // render to main framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, window_size.x, window_size.y);
@@ -1178,22 +1297,56 @@ void Render::render(float64 state_time)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(QUAD.get_vao());
     PASSTHROUGH.use();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, test_target1);
 
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-
     glEnableVertexAttribArray(1);
     glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
 
-    GLuint loc = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
-    ASSERT(loc != -1);
-    glUniform1i(loc, Texture_Location::albedo);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
+    PASSTHROUGH.set_uniform("transform", ortho_projection(window_size));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    FRAME_TIMER.stop();
+    SWAP_TIMER.start();
+    SDL_GL_SwapWindow(window);
+    set_message("FRAME END", "");
+    SWAP_TIMER.stop();
+    FRAME_TIMER.start();
+    glBindVertexArray(0);
+
+    #if 0
+    ///sponge
+
+
+
+    // render to main framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, window_size.x, window_size.y);
+    glClearColor(1, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glBindVertexArray(QUAD.get_vao());
+    PASSTHROUGH.use();
+    //glEnableVertexAttribArray(0);
+    //glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+
+    //glEnableVertexAttribArray(1);
+    //glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
+    //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
+
+   // GLuint loc = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
+   // ASSERT(loc != -1);
+   // glUniform1i(loc, Texture_Location::albedo);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
 
-    PASSTHROUGH.set_uniform("transform", o);
+    PASSTHROUGH.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
                    GL_UNSIGNED_INT, (void *)0);
@@ -1210,6 +1363,7 @@ void Render::render(float64 state_time)
     glBindVertexArray(0);
     // set_message("Swap complete... Saving default framebuffer");
     // save_and_log_screen();
+    #endif
   }
   frame_count += 1;
 }
@@ -1249,7 +1403,7 @@ void Render::set_camera_gaze(vec3 pos, vec3 p)
 void Render::set_vfov(float32 vfov)
 {
   const float32 aspect = (float32)window_size.x / (float32)window_size.y;
-  const float32 znear = 0.1f;
+  const float32 znear = 0.51f;
   const float32 zfar = 1000;
   projection = glm::perspective(radians(vfov), aspect, znear, zfar);
 }
@@ -1362,7 +1516,8 @@ void check_FBO_status()
 void Render::init_render_targets()
 {
   set_message("init_render_targets()");
-  set_message("Deleting FBO", std::to_string(TARGET_FRAMEBUFFER));
+  set_message("Deleting screen FBO", std::to_string(TARGET_FRAMEBUFFER));
+  set_message("Deleting gaussian FBO", std::to_string(SCRATCH_FRAMEBUFFER));
   set_message("Deleting Textures",
               std::to_string(COLOR_TARGET_TEXTURE) + " " +
                   std::to_string(PREV_COLOR_TARGET) + " " +
@@ -1370,9 +1525,13 @@ void Render::init_render_targets()
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
+  glDeleteFramebuffers(1, &SCRATCH_FRAMEBUFFER);
   glDeleteTextures(1, &COLOR_TARGET_TEXTURE);
   glDeleteTextures(1, &PREV_COLOR_TARGET);
   glDeleteRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
+  glDeleteTextures(1,&GAUSSIAN_INTERMEDIATE);
+
+  glGenTextures(1,&GAUSSIAN_INTERMEDIATE);
 
   size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
   glGenFramebuffers(1, &TARGET_FRAMEBUFFER);
@@ -1406,7 +1565,10 @@ void Render::init_render_targets()
 
   PREV_COLOR_TARGET_MISSING = true;
 
-  set_message("Init FBO", s(TARGET_FRAMEBUFFER));
+  glGenFramebuffers(1,&SCRATCH_FRAMEBUFFER);
+
+  set_message("Init screen FBO", s(TARGET_FRAMEBUFFER));
+  set_message("Init gaussian FBO", s(SCRATCH_FRAMEBUFFER));
   set_message("Init Textures",
               s(COLOR_TARGET_TEXTURE) + " " + s(PREV_COLOR_TARGET));
   set_message("Init renderbuffers", s(DEPTH_TARGET_TEXTURE));
@@ -1535,12 +1697,40 @@ Mesh_Handle::~Mesh_Handle()
 
 FBO_Handle::~FBO_Handle() { glDeleteFramebuffers(1, &fbo); }
 
+void Spotlight_Shadow_Map::blur(float radius)
+{
+  glBindFramebuffer(GL_FRAMEBUFFER, blurfbo.fbo);
+  glViewport(0, 0, size.x, size.y);
+  glDisable(GL_DEPTH_TEST);
+
+  vec2 gaus_scale = vec2(radius / size.x, 0.0);
+  glBindVertexArray(QUAD.get_vao());
+  GAUSSIAN_BLUR.use();
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale", gaus_scale);
+  GAUSSIAN_BLUR.set_uniform("transform", Render::ortho_projection(size));
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, color.texture);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
+  gaus_scale.y = gaus_scale.x;
+  gaus_scale.x = 0;
+  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale", gaus_scale);
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, blurtex.texture);
+  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glEnable(GL_DEPTH_TEST);
+}
+
 void Spotlight_Shadow_Map::load(ivec2 size)
 {
-  const GLenum attachment = GL_COLOR_ATTACHMENT0;
-  const GLenum targets[] = {attachment};
-
-  // gen fbo
+  //target fbo
   glGenFramebuffers(1, &target.fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
 
@@ -1548,14 +1738,18 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glGenTextures(1, &color.texture);
   glBindTexture(GL_TEXTURE_2D, color.texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, 0);
 
-  glFramebufferTexture(GL_FRAMEBUFFER, attachment, color.texture, 0);
-  glDrawBuffers(1, targets);
+  //glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+  //glGenerateMipmap(GL_TEXTURE_2D);
+
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color.texture, 0);
+  glDrawBuffer(GL_COLOR_ATTACHMENT0);
 
   // gen actual depth buffer
   glGenRenderbuffers(1, &depth.rbo);
@@ -1563,10 +1757,33 @@ void Spotlight_Shadow_Map::load(ivec2 size)
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                             GL_RENDERBUFFER, depth.rbo);
-  // glBindTexture(GL_TEXTURE_2D, 0);
+
+  //gauss
+  glGenTextures(1, &blurtex.texture);
+  glBindTexture(GL_TEXTURE_2D, blurtex.texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+    GL_LINEAR);
+  //glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, 0);
+
+  //glGenerateMipmap(GL_TEXTURE_2D);
+
+  glGenFramebuffers(1, &blurfbo.fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, blurfbo.fbo);
+  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, blurtex.texture,0);
+  glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
 
   check_FBO_status();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
   this->size = size;
 }
 

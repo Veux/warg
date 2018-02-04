@@ -9,6 +9,7 @@ out vec4 frag_position;
 void main()
 {
   frag_uv = uv;
-  gl_Position = transform * vec4(position, 1);
-  frag_position = gl_Position;
+  vec4 pos = transform * vec4(position, 1);
+  gl_Position = pos;
+  frag_position = pos;
 }

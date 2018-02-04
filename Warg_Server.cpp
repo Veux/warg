@@ -292,7 +292,7 @@ void Warg_Server::collide_and_slide_char(
   Character *c = &chars[ci];
   ASSERT(c);
 
-  c->colpkt.e_radius = vec3(0.3, 0.3, 0.5);
+  c->colpkt.e_radius = c->radius;
   c->colpkt.pos_r3 = c->pos;
   c->colpkt.vel_r3 = vel;
 

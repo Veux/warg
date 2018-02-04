@@ -279,7 +279,7 @@ void checkSDLError(int32 line)
     set_message("SDL Error:", err);
     if (line != -1)
       set_message("SDL Error line: ", std::to_string(line));
-    SDL_ClearError();
+    // ASSERT(0);
   }
 #endif
 }

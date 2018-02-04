@@ -19,7 +19,7 @@ layout(location = 4) in vec3 bitangent;
 out vec3 frag_world_position;
 out mat3 frag_TBN;
 out vec2 frag_uv;
-out vec4 shadow_map_coords[MAX_LIGHTS];
+out vec4 frag_in_shadow_space[MAX_LIGHTS];
 void main()
 {
   vec3 t = normalize(Model * vec4(tangent, 0)).xyz;
@@ -31,7 +31,7 @@ void main()
 
   for(int i = 0; i < MAX_LIGHTS; ++i)
   {
-    shadow_map_coords[i] = shadow_map_transform[i] * Model * vec4(position, 1);
+    frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position, 1);
   }
   gl_Position = txaa_jitter* MVP * vec4(position, 1);
 }
