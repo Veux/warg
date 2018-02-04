@@ -1,8 +1,9 @@
 #pragma once
 
 #include "Globals.h"
-#include "Warg_Event.h"
 #include "Physics.h"
+#include "Warg_Event.h"
+#include <map>
 #include <queue>
 
 using std::queue;
@@ -17,12 +18,13 @@ struct Warg_Client
   void update(float32 dt);
 
   Map map;
-  vector<Character> chars;
-  int pc = -1;
+  std::map<UID, Character> chars;
+  UID pc = -1;
 
 private:
   void process_events();
   void process_event(CharSpawn_Event *ev);
+  void process_event(PlayerControl_Event *ev);
   void process_event(CharPos_Event *ev);
   void process_event(CastError_Event *ev);
   void process_event(CastBegin_Event *ev);
@@ -31,7 +33,7 @@ private:
   void process_event(BuffAppl_Event *ev);
   void process_event(ObjectLaunch_Event *ev);
 
-  void add_char(int team, const char *name);
+  void add_char(UID id, int team, const char *name);
 
   Scene_Graph *scene;
   queue<Warg_Event> *in;

@@ -60,6 +60,8 @@ struct Character
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
+  Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
+      const char *address, const char *char_name, uint8_t team);
   void update();
   void handle_input(
       State **current_state, std::vector<State *> available_states);
@@ -67,6 +69,9 @@ struct Warg_State : protected State
   std::unique_ptr<Warg_Client> client;
   std::unique_ptr<Warg_Server> server;
   std::queue<Warg_Event> in, out;
+  bool local;
+  ENetPeer *serverp;
+  ENetHost *clientp;
 };
 
 struct Wall

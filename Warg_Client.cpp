@@ -17,11 +17,11 @@ void Warg_Client::update(float32 dt)
 {
   process_events();
 
-  for (auto &c : chars)
+  for (auto &c_ : chars)
   {
+    auto &c = c_.second;
     if (!c.alive)
       c.pos = {-1000, -1000, 0};
-
     c.mesh->position = c.pos;
     c.mesh->orientation =
         angleAxis((float32)atan2(c.dir.y, c.dir.x)-half_pi<float32>(), vec3(0.f, 0.f, 1.f));
@@ -71,6 +71,9 @@ void Warg_Client::process_events()
       case Warg_Event_Type::CharSpawn:
         process_event((CharSpawn_Event *)ev.event);
         break;
+      case Warg_Event_Type::PlayerControl:
+        process_event((PlayerControl_Event *)ev.event);
+        break;
       case Warg_Event_Type::CharPos:
         process_event((CharPos_Event *)ev.event);
         break;
@@ -104,12 +107,20 @@ void Warg_Client::process_event(CharSpawn_Event *spawn)
 {
   ASSERT(spawn);
 
-  add_char(spawn->team, spawn->name);
+  add_char(spawn->id, spawn->team, spawn->name);
+}
+
+void Warg_Client::process_event(PlayerControl_Event *ev)
+{
+  ASSERT(pc);
+
+  pc = ev->character;
 }
 
 void Warg_Client::process_event(CharPos_Event *pos)
 {
   ASSERT(pos);
+  ASSERT(pos->character >= 0 && chars.count(pos->character));
   chars[pos->character].dir = pos->dir;
   chars[pos->character].pos = pos->pos;
 }
@@ -117,6 +128,7 @@ void Warg_Client::process_event(CharPos_Event *pos)
 void Warg_Client::process_event(CastError_Event *err)
 {
   ASSERT(err);
+  ASSERT(err->caster >= 0 && chars.count(err->caster));
 
   std::string msg;
   msg += chars[err->caster].name;
@@ -160,6 +172,7 @@ void Warg_Client::process_event(CastError_Event *err)
 void Warg_Client::process_event(CastBegin_Event *cast)
 {
   ASSERT(cast);
+  ASSERT(cast->caster >= 0 && chars.count(cast->caster));
 
   std::string msg;
   msg += chars[cast->caster].name;
@@ -171,6 +184,7 @@ void Warg_Client::process_event(CastBegin_Event *cast)
 void Warg_Client::process_event(CastInterrupt_Event *interrupt)
 {
   ASSERT(interrupt);
+  ASSERT(interrupt->caster >= 0 && chars.count(interrupt->caster));
 
   std::string msg;
   msg += chars[interrupt->caster].name;
@@ -181,6 +195,7 @@ void Warg_Client::process_event(CastInterrupt_Event *interrupt)
 void Warg_Client::process_event(CharHP_Event *hpev)
 {
   ASSERT(hpev);
+  ASSERT(hpev->character >= 0 && chars.count(hpev->character));
 
   chars[hpev->character].alive = hpev->hp > 0;
 
@@ -194,6 +209,7 @@ void Warg_Client::process_event(CharHP_Event *hpev)
 void Warg_Client::process_event(BuffAppl_Event *appl)
 {
   ASSERT(appl);
+  ASSERT(appl->character >= 0 && chars.count(appl->character));
 
   std::string msg;
   msg += appl->buff;
@@ -205,6 +221,8 @@ void Warg_Client::process_event(BuffAppl_Event *appl)
 void Warg_Client::process_event(ObjectLaunch_Event *launch)
 {
   ASSERT(launch);
+  ASSERT(launch->caster >= 0 && chars.count(launch->caster));
+  ASSERT(launch->target >= 0 && chars.count(launch->target));
 
   Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
@@ -236,7 +254,7 @@ void Warg_Client::process_event(ObjectLaunch_Event *launch)
   set_message("ObjectLaunch:", msg, 10);
 }
 
-void Warg_Client::add_char(int team, const char *name)
+void Warg_Client::add_char(UID id, int team, const char *name)
 {
   ASSERT(name);
 
@@ -283,8 +301,5 @@ void Warg_Client::add_char(int team, const char *name)
     c.spellbook[s.def->name] = s;
   }
 
-  chars.push_back(c);
-
-  if (pc < 0)
-    pc = 0;
+  chars[id] = c;
 }

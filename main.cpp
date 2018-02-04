@@ -1,11 +1,12 @@
 #include "Globals.h"
 #include "Render.h"
-#include "State.h"
-#include "Warg_State.h"
 #include "Render_Test_State.h"
+#include "State.h"
 #include "Timer.h"
+#include "Warg_State.h"
 #include <SDL2/SDL.h>
 #undef main
+#include <enet/enet.h>
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
@@ -49,10 +50,61 @@ void gl_after_check(const glbinding::FunctionCall &f)
   check_gl_error();
 }
 
+void server_main()
+{
+  ASSERT(!enet_initialize());
 
+  auto warg_server = std::make_unique<Warg_Server>(false);
+
+  float64 current_time = get_real_time();
+  float64 last_time = 0.0;
+  float64 elapsed_time = 0.0;
+  float64 dt = 1.0 / 30.0;
+  while (true)
+  {
+    const float64 time = get_real_time();
+    elapsed_time = time - current_time;
+    last_time = current_time;
+    while (current_time + dt < last_time + elapsed_time)
+    {
+      current_time += dt;
+      warg_server->update(dt);
+    }
+  }
+
+  // enet_host_destroy(warg_server->server());
+  enet_deinitialize();
+}
 
 int main(int argc, char *argv[])
 {
+  bool client = false;
+  std::string address;
+  std::string char_name;
+  uint8_t team;
+
+  if (argc > 1 && std::string(argv[1]) == "--server")
+  {
+    server_main();
+    return 0;
+  }
+  else if (argc > 1 && std::string(argv[1]) == "--connect")
+  {
+    client = true;
+
+    if (argc <= 4)
+    {
+		std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
+           "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
+           "127.0.0.1 Warriorguy 0"
+        << std::endl;
+      return 1;
+    }
+    address = argv[2];
+    char_name = argv[3];
+    team = std::stoi(argv[4]);
+  }
+
   SDL_ClearError();
   generator.seed(1234);
   SDL_Init(SDL_INIT_EVERYTHING);
@@ -88,8 +140,8 @@ int main(int argc, char *argv[])
   int32 major, minor;
   SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
   SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
-  set_message("OpenGL Version.",
-              std::to_string(major) + " " + std::to_string(minor));
+  set_message(
+      "OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
   if (major <= 3)
   {
     if (major < 3 || minor < 1)
@@ -121,9 +173,13 @@ int main(int argc, char *argv[])
   float64 elapsed_time = 0.0;
   INIT_RENDERER();
 
+  Warg_State *game_state;
+  if (client)
+  	  game_state = new Warg_State("Warg", window, window_size, address.c_str(), char_name.c_str(), team);
+  else
+	  game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
-  Warg_State game_state("Game State", window, window_size);
-  states.push_back((State *)&game_state);
+  states.push_back((State *)game_state);
   Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
   State *current_state = &*states[0];
@@ -165,6 +221,7 @@ int main(int argc, char *argv[])
     current_state->render(current_state->current_time);
     current_state->performance_output();
   }
+  delete game_state;
   push_log_to_disk();
   CLEANUP_RENDERER();
   SDL_Quit();

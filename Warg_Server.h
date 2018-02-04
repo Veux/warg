@@ -3,6 +3,8 @@
 #include "Globals.h"
 #include "Physics.h"
 #include "Warg_Event.h"
+#include <enet/enet.h>
+#include <map>
 #include <queue>
 
 using std::vector;
@@ -11,28 +13,34 @@ using std::unique_ptr;
 
 struct Character;
 
-struct Warg_Connection
+struct Warg_Peer
 {
+  ENetPeer *peer;
   queue<Warg_Event> *in, *out;
+  UID character = -1;
 };
 
 struct Warg_Server
 {
-  Warg_Server();
+  Warg_Server(bool local);
   void update(float32 dt);
   void connect(queue<Warg_Event> *in, queue<Warg_Event> *out);
 
 private:
   void push(Warg_Event ev);
+  void send_event(Warg_Peer &p, Warg_Event ev);
+  void send_events();
+  void process_packets();
 
+  void process_event(Warg_Event ev);
   void process_events();
-  void process_event(CharSpawnRequest_Event *req);
-  void process_event(Dir_Event *dir);
-  void process_event(Move_Event *mv);
-  void process_event(Jump_Event *jump);
-  void process_event(Cast_Event *cast);
+  void process_char_spawn_request_event(Warg_Event ev);
+  void process_dir_event(Warg_Event ev);
+  void process_move_event(Warg_Event ev);
+  void process_jump_event(Warg_Event ev);
+  void process_cast_event(Warg_Event ev);
 
-  void add_char(int team, const char *name);
+  UID add_char(int team, const char *name);
   void update_colliders();
   void collide_and_slide_char(int ci, const vec3 &vel, const vec3 &gravity);
   vec3 collide_char_with_world(int ci, const vec3 &pos, const vec3 &vel);
@@ -64,12 +72,15 @@ private:
   void apply_char_mods(int ch);
 
   queue<Warg_Event> eq;
-  vector<Warg_Connection> connections;
+  vector<Warg_Event> tick_events;
+  std::map<UID, Warg_Peer> peers;
+  ENetHost *server;
+  bool local = true;
 
   Map map;
   Scene_Graph scene;
   vector<Triangle> colliders;
   unique_ptr<SpellDB> sdb;
-  vector<Character> chars;
+  std::map<UID, Character> chars;
   vector<SpellObjectInst> spell_objs;
 };

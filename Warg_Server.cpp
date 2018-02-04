@@ -3,31 +3,98 @@
 #include <cstring>
 #include <memory>
 
-Warg_Server::Warg_Server()
+Warg_Server::Warg_Server(bool local)
 {
+  this->local = local;
+  if (!local)
+  {
+    ENetAddress address;
+    address.host = ENET_HOST_ANY;
+    address.port = 1337;
+
+    server = enet_host_create(&address, 32, 2, 0, 0);
+    ASSERT(server);
+  }
   map = make_blades_edge();
-  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
-  update_colliders();
+  if (local)
+  {
+    map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
+    update_colliders();
+  }
+  else
+  {
+    colliders.push_back({{-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0}});
+    colliders.push_back({{-1000, -1000, 0}, {1000, 1000, 0}, {-1000, 1000, 0}});
+  }
   sdb = make_spell_db();
+}
+
+void Warg_Server::process_packets()
+{
+  ASSERT(server);
+
+  ENetEvent event;
+  while (enet_host_service(server, &event, 0) > 0)
+  {
+    switch (event.type)
+    {
+      case ENET_EVENT_TYPE_NONE:
+        break;
+      case ENET_EVENT_TYPE_CONNECT:
+      {
+        UID id = uid();
+        peers[id] = {event.peer, nullptr, nullptr, -1};
+
+        for (auto &c : chars)
+          send_event(peers[id],
+              char_spawn_event(c.first, c.second.name.c_str(), c.second.team));
+        break;
+      }
+      case ENET_EVENT_TYPE_RECEIVE:
+      {
+        Buffer b;
+        b.insert((void *)event.packet->data, event.packet->dataLength);
+        auto ev = deserialize_event(b);
+        ev.peer = -1;
+        for (auto &p : peers)
+        {
+          if (p.second.peer == event.peer)
+            ev.peer = p.first;
+        }
+		ASSERT(ev.peer >= 0);
+        process_event(ev);
+        break;
+      }
+      case ENET_EVENT_TYPE_DISCONNECT:
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 void Warg_Server::update(float32 dt)
 {
-  process_events();
+  if (!local)
+    process_packets();
+  else
+    process_events();
 
-  for (int ch = 0; ch < chars.size(); ch++)
+  for (auto &c : chars)
   {
-    move_char(ch, dt);
-    update_buffs(ch, dt);
-    apply_char_mods(ch);
-    update_gcd(ch, dt);
-    update_cds(ch, dt);
-    update_cast(ch, dt);
-    update_target(ch);
-    update_hp(ch, dt);
-    update_mana(ch, dt);
+    auto &cid = c.first;
+    auto &ch = c.second;
 
-    push(char_pos_event(ch, chars[ch].dir, chars[ch].pos));
+    move_char(cid, dt);
+    update_buffs(cid, dt);
+    apply_char_mods(cid);
+    update_gcd(cid, dt);
+    update_cds(cid, dt);
+    update_cast(cid, dt);
+    update_target(cid);
+    update_hp(cid, dt);
+    update_mana(cid, dt);
+    push(char_pos_event(cid, ch.dir, ch.pos));
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
@@ -37,55 +104,57 @@ void Warg_Server::update(float32 dt)
     else
       i++;
   }
+
+  send_events();
+}
+
+void Warg_Server::process_event(Warg_Event ev)
+{
+  ASSERT(ev.event);
+  switch (ev.type)
+  {
+    case Warg_Event_Type::CharSpawnRequest:
+      process_char_spawn_request_event(ev);
+      break;
+    case Warg_Event_Type::Dir:
+      process_dir_event(ev);
+      break;
+    case Warg_Event_Type::Move:
+      process_move_event(ev);
+      break;
+    case Warg_Event_Type::Jump:
+      process_jump_event(ev);
+      break;
+    case Warg_Event_Type::Cast:
+      process_cast_event(ev);
+      break;
+    default:
+      break;
+  }
+  free_warg_event(ev);
 }
 
 void Warg_Server::process_events()
 {
-  for (auto &conn : connections)
+  for (auto &peer : peers)
   {
-    while (!conn.in->empty())
+    auto &p = peer.second;
+    ASSERT(p.in);
+    while (!p.in->empty())
     {
-      eq.push(conn.in->front());
-      conn.in->pop();
+      auto &ev = p.in->front();
+      if (get_real_time() - ev.t < SIM_LATENCY / 2000.0f)
+        return;
+      ev.peer = peer.first;
+      process_event(ev);
+      p.in->pop();
     }
-  }
-
-  while (!eq.empty())
-  {
-    Warg_Event ev = eq.front();
-
-    if (get_real_time() - ev.t < SIM_LATENCY / 2000.0f)
-      return;
-
-    ASSERT(ev.event);
-    switch (ev.type)
-    {
-      case Warg_Event_Type::CharSpawnRequest:
-        process_event((CharSpawnRequest_Event *)ev.event);
-        break;
-      case Warg_Event_Type::Dir:
-        process_event((Dir_Event *)ev.event);
-        break;
-      case Warg_Event_Type::Move:
-        process_event((Move_Event *)ev.event);
-        break;
-      case Warg_Event_Type::Jump:
-        process_event((Jump_Event *)ev.event);
-        break;
-      case Warg_Event_Type::Cast:
-        process_event((Cast_Event *)ev.event);
-        break;
-      default:
-        break;
-    }
-    free_warg_event(ev);
-    eq.pop();
   }
 }
 
 void Warg_Server::update_gcd(int ch, float32 dt)
 {
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
   Character *c = &chars[ch];
 
   c->gcd -= dt;
@@ -95,7 +164,7 @@ void Warg_Server::update_gcd(int ch, float32 dt)
 
 void Warg_Server::update_cds(int ch, float32 dt)
 {
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
   Character *c = &chars[ch];
 
   for (auto &s_ : c->spellbook)
@@ -110,7 +179,7 @@ void Warg_Server::update_cds(int ch, float32 dt)
 
 bool Warg_Server::update_spell_object(SpellObjectInst *so)
 {
-  ASSERT(0 <= so->target && so->target < chars.size());
+  ASSERT(so->target >= 0 && chars.count(so->target));
   Character *target = &chars[so->target];
 
   float d = length(target->pos - so->pos);
@@ -137,37 +206,58 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
   return false;
 }
 
-void Warg_Server::process_event(CharSpawnRequest_Event *req)
+void Warg_Server::process_char_spawn_request_event(Warg_Event ev)
 {
-  ASSERT(req);
+  ASSERT(ev.type == Warg_Event_Type::CharSpawnRequest);
+  ASSERT(ev.event);
+
+  CharSpawnRequest_Event *req = (CharSpawnRequest_Event *)ev.event;
+
   char *name = req->name;
   int team = req->team;
   ASSERT(name);
 
-  add_char(team, name);
-  push(char_spawn_event(name, team));
+  UID ci = add_char(team, name);
+  ASSERT(ev.peer >= 0 && peers.count(ev.peer));
+  peers[ev.peer].character = ci;
+
+  send_event(peers[ev.peer], player_control_event(ci));
+  push(char_spawn_event(ci, name, team));
 }
 
-void Warg_Server::process_event(Dir_Event *dir)
+void Warg_Server::process_dir_event(Warg_Event ev)
 {
-  ASSERT(dir);
+  ASSERT(ev.type == Warg_Event_Type::Dir);
+  ASSERT(ev.event);
+
+  Dir_Event *dir = (Dir_Event *)ev.event;
 
   chars[dir->character].dir = dir->dir;
 }
 
-void Warg_Server::process_event(Move_Event *mv)
+void Warg_Server::process_move_event(Warg_Event ev)
 {
-  ASSERT(mv);
-  ASSERT(0 <= mv->character && mv->character < chars.size());
+  ASSERT(ev.type == Warg_Event_Type::Move);
+  ASSERT(ev.event);
+
+  Move_Event *mv = (Move_Event *)ev.event;
+
+  ASSERT(mv->character >= 0 && chars.count(mv->character));
 
   chars[mv->character].move_status = mv->m;
 }
 
-void Warg_Server::process_event(Jump_Event *jump)
+void Warg_Server::process_jump_event(Warg_Event ev)
 {
+  ASSERT(ev.type == Warg_Event_Type::Jump);
+  ASSERT(ev.event);
+
+  Jump_Event *jump = (Jump_Event *)ev.event;
+  UID character = peers[ev.peer].character;
+
   ASSERT(jump);
-  ASSERT(0 <= jump->character && jump->character < chars.size());
-  Character *c = &chars[jump->character];
+  ASSERT(0 <= character && chars.count(character));
+  Character *c = &chars[character];
 
   if (c->grounded)
   {
@@ -176,12 +266,15 @@ void Warg_Server::process_event(Jump_Event *jump)
   }
 }
 
-void Warg_Server::process_event(Cast_Event *cast)
+void Warg_Server::process_cast_event(Warg_Event ev)
 {
-  ASSERT(cast);
+  ASSERT(ev.type == Warg_Event_Type::Cast);
+  ASSERT(ev.event);
+
+  Cast_Event *cast = (Cast_Event *)ev.event;
 
   int ch = cast->character;
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
 
   int target = cast->target;
   ASSERT(target < (int)chars.size());
@@ -195,7 +288,7 @@ void Warg_Server::process_event(Cast_Event *cast)
 void Warg_Server::collide_and_slide_char(
     int ci, const vec3 &vel, const vec3 &gravity)
 {
-  ASSERT(0 <= ci < chars.size());
+  ASSERT(ci >= 0 && chars.count(ci));
   Character *c = &chars[ci];
   ASSERT(c);
 
@@ -250,7 +343,7 @@ void Warg_Server::collide_and_slide_char(
 vec3 Warg_Server::collide_char_with_world(
     int ci, const vec3 &pos, const vec3 &vel)
 {
-  ASSERT(0 <= ci < chars.size());
+  ASSERT(ci >= 0 && chars.count(ci));
   Character *c = &chars[ci];
   ASSERT(c);
 
@@ -314,7 +407,7 @@ void Warg_Server::update_colliders()
       vec4 q = vec4(p.x, p.y, p.z, 1.0) * entity.transformation;
       return vec3(q.x, q.y, q.z);
     };
-    auto& mesh_data = entity.mesh->mesh->data;
+    auto &mesh_data = entity.mesh->mesh->data;
     for (int i = 0; i < mesh_data.indices.size(); i += 3)
     {
       uint32 a, b, c;
@@ -332,7 +425,6 @@ void Warg_Server::update_colliders()
 
 void Warg_Server::check_collision(Collision_Packet &colpkt)
 {
-  //update_colliders();
   for (auto &surface : colliders)
   {
     Triangle t;
@@ -345,7 +437,7 @@ void Warg_Server::check_collision(Collision_Packet &colpkt)
 
 void Warg_Server::move_char(int ci, float dt)
 {
-  ASSERT(0 <= ci < chars.size());
+  ASSERT(ci >= 0 && chars.count(ci));
   Character *c = &chars[ci];
   ASSERT(c);
 
@@ -430,7 +522,7 @@ void Warg_Server::begin_cast(int caster_, int target_, Spell *spell)
 
 void Warg_Server::interrupt_cast(int ci)
 {
-  ASSERT(0 <= ci && ci < chars.size());
+  ASSERT(ci >= 0 && chars.count(ci));
   Character *c = &chars[ci];
 
   c->casting = false;
@@ -442,7 +534,7 @@ void Warg_Server::interrupt_cast(int ci)
 
 void Warg_Server::update_cast(int caster_, float32 dt)
 {
-  ASSERT(0 <= caster_ && caster_ < chars.size());
+  ASSERT(caster_ >= 0 && chars.count(caster_));
   Character *caster = &chars[caster_];
 
   if (!caster->casting)
@@ -692,7 +784,7 @@ void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
 
 void Warg_Server::update_buffs(int character, float32 dt)
 {
-  ASSERT(0 <= character && character < chars.size());
+  ASSERT(character >= 0 && chars.count(character));
   Character *ch = &chars[character];
 
   auto update_buffs_ = [&](std::vector<Buff> &buffs) {
@@ -726,7 +818,7 @@ void Warg_Server::update_buffs(int character, float32 dt)
 
 void Warg_Server::update_target(int ch)
 {
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
   Character *c = &chars[ch];
 
   if (c->target < 0)
@@ -741,7 +833,7 @@ void Warg_Server::update_target(int ch)
 
 void Warg_Server::update_mana(int ch, float32 dt)
 {
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
   Character *c = &chars[ch];
 
   c->mana += c->e_stats.mana_regen * dt;
@@ -752,7 +844,7 @@ void Warg_Server::update_mana(int ch, float32 dt)
 
 void Warg_Server::update_hp(int ch, float32 dt)
 {
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
   Character *c = &chars[ch];
 
   c->hp += c->e_stats.hp_regen * dt;
@@ -763,7 +855,7 @@ void Warg_Server::update_hp(int ch, float32 dt)
 
 void Warg_Server::apply_char_mods(int ch)
 {
-  ASSERT(0 <= ch && ch < chars.size());
+  ASSERT(ch >= 0 && chars.count(ch));
   Character *c = &chars[ch];
 
   c->e_stats = c->b_stats;
@@ -795,7 +887,7 @@ void Warg_Server::apply_char_mods(int ch)
       apply_char_mod(c, *m);
 }
 
-void Warg_Server::add_char(int team, const char *name)
+UID Warg_Server::add_char(int team, const char *name)
 {
   ASSERT(0 <= team && team < 2);
   ASSERT(name);
@@ -831,19 +923,43 @@ void Warg_Server::add_char(int team, const char *name)
     c.spellbook[s.def->name] = s;
   }
 
-  chars.push_back(c);
+  UID id = uid();
+  chars[id] = c;
+
+  return id;
 }
 
 void Warg_Server::connect(
     std::queue<Warg_Event> *in, std::queue<Warg_Event> *out)
 {
-  connections.push_back({in, out});
+  peers[uid()] = {nullptr, in, out, -1};
 }
 
-void Warg_Server::push(Warg_Event ev)
+void Warg_Server::push(Warg_Event ev) { tick_events.push_back(ev); }
+
+void Warg_Server::send_event(Warg_Peer &p, Warg_Event ev)
 {
-  for (auto &conn : connections)
+  if (local)
   {
-    conn.out->push(ev);
+    ASSERT(p.out);
+    p.out->push(ev);
   }
+  else
+  {
+    ASSERT(p.peer);
+    Buffer b;
+    serialize(b, ev);
+    ENetPacket *packet = enet_packet_create(
+        &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+    enet_peer_send(p.peer, 0, packet);
+    enet_host_flush(server);
+  }
+}
+
+void Warg_Server::send_events()
+{
+  for (auto &p : peers)
+    for (auto &ev : tick_events)
+      send_event(p.second, ev);
+  tick_events.clear();
 }
