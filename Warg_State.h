@@ -2,7 +2,6 @@
 #include "Physics.h"
 #include "Spell.h"
 #include "State.h"
-#include "Warg_Client.h"
 #include "Warg_Event.h"
 #include "Warg_Server.h"
 #include <queue>
