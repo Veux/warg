@@ -16,17 +16,17 @@ Warg_Server::Warg_Server(bool local)
     ASSERT(server);
   }
   map = make_blades_edge();
-  if (local)
-  {
+  // if (local)
+  // {
     map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
     update_colliders();
-  }
-  else
-  {
-    colliders.push_back({{-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0}});
-    colliders.push_back({{-1000, -1000, 0}, {1000, 1000, 0}, {-1000, 1000, 0}});
-  }
-  sdb = make_spell_db();
+  // }
+  // else
+  // {
+  //   colliders.push_back({{-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0}});
+  //   colliders.push_back({{-1000, -1000, 0}, {1000, 1000, 0}, {-1000, 1000, 0}});
+  // }
+   sdb = make_spell_db();
 }
 
 void Warg_Server::process_packets()

@@ -83,8 +83,11 @@ int main(int argc, char *argv[])
   std::string char_name;
   uint8_t team;
 
+  WARG_SERVER = false;
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
+    WARG_SERVER = true;
+	ASSERT(WARG_SERVER);
     server_main();
     return 0;
   }
@@ -104,6 +107,7 @@ int main(int argc, char *argv[])
     char_name = argv[3];
     team = std::stoi(argv[4]);
   }
+  ASSERT(!WARG_SERVER);
 
   SDL_ClearError();
   generator.seed(1234);
@@ -171,6 +175,7 @@ int main(int argc, char *argv[])
   SDL_ClearError();
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
+  if (!WARG_SERVER)
   INIT_RENDERER();
 
   Warg_State *game_state;
