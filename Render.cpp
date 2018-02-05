@@ -393,6 +393,7 @@ void Texture::bind(GLuint binding)
 Mesh::Mesh() {}
 Mesh::Mesh(Mesh_Primitive p, std::string mesh_name) : name(mesh_name)
 {
+
   unique_identifier = identifier_for_primitive(p);
   auto ptr = MESH_CACHE[unique_identifier].lock();
   if (ptr)
@@ -446,6 +447,9 @@ Mesh::Mesh(const aiMesh *aimesh, std::string unique_identifier)
 
 void Mesh_Handle::enable_assign_attributes()
 {
+  if (WARG_SERVER)
+    return;
+
   ASSERT(vao);
   glBindVertexArray(vao);
 
@@ -475,6 +479,9 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 {
   std::shared_ptr<Mesh_Handle> mesh = std::make_shared<Mesh_Handle>();
   mesh->data = mesh_data;
+  if (WARG_SERVER)
+    return mesh;
+
 
   if (sizeof(decltype(mesh_data.indices)::value_type) != sizeof(uint32))
   {
@@ -556,6 +563,10 @@ Material::Material(Material_Descriptor m) { load(m); }
 Material::Material(aiMaterial *ai_material, std::string working_directory,
                    Material_Descriptor *material_override)
 {
+
+  if (WARG_SERVER)
+    return;
+
   ASSERT(ai_material);
   const int albedo_n = ai_material->GetTextureCount(aiTextureType_DIFFUSE);
   const int specular_n = ai_material->GetTextureCount(aiTextureType_SPECULAR);
@@ -631,6 +642,11 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
 }
 void Material::load(Material_Descriptor m)
 {
+
+  if (WARG_SERVER)
+    return;
+
+
   this->m = m;
   albedo = Texture(m.albedo, m.uses_transparency);
   // specular_color = Texture(m.specular);
@@ -701,6 +717,8 @@ Render_Entity::Render_Entity(Mesh *mesh, Material *material,
 
 Render::Render(SDL_Window *window, ivec2 window_size)
 {
+  if (WARG_SERVER)
+    return;
   set_message("Render constructor");
   this->window = window;
   this->window_size = window_size;
@@ -1677,6 +1695,9 @@ mat4 Render::get_next_TXAA_sample()
 
 Mesh_Handle::~Mesh_Handle()
 {
+  if(WARG_SERVER)
+  return;
+  
   set_message("Deleting mesh: ", s(vao, " ", position_buffer));
   glDeleteBuffers(1, &position_buffer);
   glDeleteBuffers(1, &normal_buffer);

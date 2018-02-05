@@ -44,6 +44,8 @@ extern const std::string BASE_MODEL_PATH;
 extern const std::string ERROR_TEXTURE_PATH;
 extern Timer PERF_TIMER;
 
+extern bool WARG_SERVER;
+
 // load an aiScene
 // will cache the result so that future loads
 // of the same path won't have to read from disk

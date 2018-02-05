@@ -16,16 +16,9 @@ Warg_Server::Warg_Server(bool local)
     ASSERT(server);
   }
   map = make_blades_edge();
-  if (local)
-  {
-    map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
-    update_colliders();
-  }
-  else
-  {
-    colliders.push_back({{-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0}});
-    colliders.push_back({{-1000, -1000, 0}, {1000, 1000, 0}, {-1000, 1000, 0}});
-  }
+  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
+  update_colliders();
+
   sdb = make_spell_db();
 }
 

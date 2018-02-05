@@ -31,6 +31,8 @@ float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
   return (offset - (floor(offset / range) * range)) + min;
 }
 
+bool WARG_SERVER = false;
+
 static Assimp::Importer importer;
 
 const int default_assimp_flags = aiProcess_FlipWindingOrder |
