@@ -39,8 +39,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
   enet_peer_send(serverp, 0, packet);
   enet_host_flush(clientp);
 
-  Map blades_edge = make_blades_edge();
-
   map = make_blades_edge();
   sdb = make_spell_db();
 
@@ -70,8 +68,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   server = std::make_unique<Warg_Server>(true);
   server->connect(&out, &in);
   out.push(char_spawn_request_event("Cubeboi", 0));
-
-  Map blades_edge = make_blades_edge();
 
   map = make_blades_edge();
   sdb = make_spell_db();
@@ -249,7 +245,7 @@ void Warg_State::handle_input(
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (pc < 0)
+  if (!pc)
     return;
   if (free_cam)
   {
@@ -370,7 +366,7 @@ void Warg_State::handle_input(
       m |= Move_Status::Right;
     out.push(move_event(pc, (Move_Status)m));
 
-    ASSERT(pc >= 0 && chars.count(pc));
+    ASSERT(pc && chars.count(pc));
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
     for (auto &surface : map.surfaces)
@@ -534,7 +530,7 @@ void Warg_State::update()
   }
 
   // meme
-  if (pc >= 0)
+  if (pc)
   {
     ASSERT(chars.count(pc));
 
@@ -586,13 +582,15 @@ void Warg_State::update()
 void Warg_State::process_event(CharSpawn_Event *spawn)
 {
   ASSERT(spawn);
+  ASSERT(spawn->id);
 
   add_char(spawn->id, spawn->team, spawn->name);
 }
 
 void Warg_State::process_event(PlayerControl_Event *ev)
 {
-  ASSERT(pc);
+  ASSERT(ev);
+  ASSERT(ev->character);
 
   pc = ev->character;
 }
@@ -600,7 +598,7 @@ void Warg_State::process_event(PlayerControl_Event *ev)
 void Warg_State::process_event(CharPos_Event *pos)
 {
   ASSERT(pos);
-  ASSERT(pos->character >= 0 && chars.count(pos->character));
+  ASSERT(pos->character && chars.count(pos->character));
   chars[pos->character].dir = pos->dir;
   chars[pos->character].pos = pos->pos;
 }
@@ -608,7 +606,7 @@ void Warg_State::process_event(CharPos_Event *pos)
 void Warg_State::process_event(CastError_Event *err)
 {
   ASSERT(err);
-  ASSERT(err->caster >= 0 && chars.count(err->caster));
+  ASSERT(err->caster && chars.count(err->caster));
 
   std::string msg;
   msg += chars[err->caster].name;
@@ -652,7 +650,7 @@ void Warg_State::process_event(CastError_Event *err)
 void Warg_State::process_event(CastBegin_Event *cast)
 {
   ASSERT(cast);
-  ASSERT(cast->caster >= 0 && chars.count(cast->caster));
+  ASSERT(cast->caster && chars.count(cast->caster));
 
   std::string msg;
   msg += chars[cast->caster].name;
@@ -664,7 +662,7 @@ void Warg_State::process_event(CastBegin_Event *cast)
 void Warg_State::process_event(CastInterrupt_Event *interrupt)
 {
   ASSERT(interrupt);
-  ASSERT(interrupt->caster >= 0 && chars.count(interrupt->caster));
+  ASSERT(interrupt->caster && chars.count(interrupt->caster));
 
   std::string msg;
   msg += chars[interrupt->caster].name;
@@ -675,7 +673,7 @@ void Warg_State::process_event(CastInterrupt_Event *interrupt)
 void Warg_State::process_event(CharHP_Event *hpev)
 {
   ASSERT(hpev);
-  ASSERT(hpev->character >= 0 && chars.count(hpev->character));
+  ASSERT(hpev->character && chars.count(hpev->character));
 
   chars[hpev->character].alive = hpev->hp > 0;
 
@@ -689,7 +687,7 @@ void Warg_State::process_event(CharHP_Event *hpev)
 void Warg_State::process_event(BuffAppl_Event *appl)
 {
   ASSERT(appl);
-  ASSERT(appl->character >= 0 && chars.count(appl->character));
+  ASSERT(appl->character && chars.count(appl->character));
 
   std::string msg;
   msg += appl->buff;
@@ -701,8 +699,8 @@ void Warg_State::process_event(BuffAppl_Event *appl)
 void Warg_State::process_event(ObjectLaunch_Event *launch)
 {
   ASSERT(launch);
-  ASSERT(launch->caster >= 0 && chars.count(launch->caster));
-  ASSERT(launch->target >= 0 && chars.count(launch->target));
+  ASSERT(launch->caster && chars.count(launch->caster));
+  ASSERT(launch->target && chars.count(launch->target));
 
   Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
@@ -750,6 +748,7 @@ void Warg_State::add_char(UID id, int team, const char *name)
   material.frag_shader = "fragment_shader.frag";
 
   Character c;
+  c.id = id;
   c.team = team;
   c.name = std::string(name);
   c.pos = pos;
@@ -782,113 +781,4 @@ void Warg_State::add_char(UID id, int team, const char *name)
   }
 
   chars[id] = c;
-}
-
-void add_wall(std::vector<Triangle> &surfaces, Wall wall)
-{
-  Triangle t1, t2;
-
-  t1.a = wall.p1;
-  t1.b = vec3(wall.p2.x, wall.p2.y, t1.a.z);
-  t1.c = vec3(wall.p2.x, wall.p2.y, wall.h);
-  surfaces.push_back(t1);
-
-  t2.a = wall.p1;
-  t2.b = vec3(wall.p2.x, wall.p2.y, wall.h);
-  t2.c = vec3(wall.p1.x, wall.p1.y, wall.h);
-  surfaces.push_back(t2);
-}
-
-Map make_nagrand()
-{
-  Map nagrand;
-
-  std::vector<Wall> walls;
-  walls.push_back({{12, 8, 0}, {0, 8}, 10});
-  walls.push_back({{12, 0, 0}, {12, 8}, 10});
-  walls.push_back({{20, 0, 0}, {12, 0}, 10});
-  walls.push_back({{20, 8, 0}, {20, 0}, 10});
-  walls.push_back({{32, 8, 0}, {20, 8}, 10});
-  walls.push_back({{32, 12, 0}, {28, 8}, 10});
-  walls.push_back({{32, 36, 0}, {32, 8}, 10});
-  walls.push_back({{20, 36, 0}, {32, 36}, 10});
-  walls.push_back({{20, 44, 0}, {20, 36}, 10});
-  walls.push_back({{12, 44, 0}, {20, 44}, 10});
-  walls.push_back({{12, 36, 0}, {12, 44}, 10});
-  walls.push_back({{0, 36, 0}, {12, 36}, 10});
-  walls.push_back({{0, 8, 0}, {0, 36}, 10});
-  walls.push_back({{4, 32, 0}, {4, 28}, 10});
-  walls.push_back({{8, 32, 0}, {4, 32}, 10});
-  walls.push_back({{8, 28, 0}, {8, 32}, 10});
-  walls.push_back({{4, 28, 0}, {8, 28}, 10});
-  walls.push_back({{24, 32, 0}, {24, 28}, 10});
-  walls.push_back({{28, 32, 0}, {24, 32}, 10});
-  walls.push_back({{28, 28, 0}, {28, 32}, 10});
-  walls.push_back({{24, 28, 0}, {28, 28}, 10});
-  walls.push_back({{28, 16, 0}, {24, 16}, 10});
-  walls.push_back({{28, 12, 0}, {28, 16}, 10});
-  walls.push_back({{24, 12, 0}, {28, 12}, 10});
-  walls.push_back({{24, 16, 0}, {24, 12}, 10});
-  walls.push_back({{8, 12, 0}, {8, 16}, 10});
-  walls.push_back({{8, 16, 0}, {4, 16}, 10});
-  walls.push_back({{4, 16, 0}, {4, 12}, 10});
-  walls.push_back({{4, 12, 0}, {8, 12}, 10});
-  for (auto &w : walls)
-    add_wall(nagrand.surfaces, w);
-
-  nagrand.surfaces.push_back({{0, 0, 0}, {32, 0, 0}, {0, 44, 0}});
-  nagrand.surfaces.push_back({{32, 44, 0}, {0, 44, 0}, {32, 0, 0}});
-
-  nagrand.surfaces.push_back({{15, 12, 0}, {17, 12, 0}, {15, 18, 5}});
-  nagrand.surfaces.push_back({{15, 18, 5}, {17, 12, 0}, {17, 18, 5}});
-
-  nagrand.spawn_pos[0] = {16, 4, 5};
-  nagrand.spawn_pos[1] = {16, 40, 5};
-  nagrand.spawn_dir[0] = {0, 1, 0};
-  nagrand.spawn_dir[1] = {0, -1, 0};
-
-  for (auto &s : nagrand.surfaces)
-  {
-    vec3 a, b, c, d;
-    a = s.a;
-    b = s.b;
-    c = s.b;
-    d = s.c;
-
-    add_quad(a, b, c, d, nagrand.mesh);
-  }
-  nagrand.mesh.unique_identifier = "nagrand_arena_map";
-
-  nagrand.material.albedo = "crate_diffuse.png";
-  nagrand.material.emissive = "test_emissive.png";
-  nagrand.material.normal = "test_normal.png";
-  nagrand.material.roughness = "crate_roughness.png";
-  nagrand.material.vertex_shader = "vertex_shader.vert";
-  nagrand.material.frag_shader = "world_origin_distance.frag";
-
-  return nagrand;
-}
-
-Map make_blades_edge()
-{
-  Map blades_edge;
-
-  // spawns
-  blades_edge.spawn_pos[0] = {5, 5, 5};
-  blades_edge.spawn_pos[1] = {45, 45, 5};
-  blades_edge.spawn_dir[0] = {0, 1, 0};
-  blades_edge.spawn_dir[1] = {0, -1, 0};
-
-  blades_edge.mesh.unique_identifier = "blades_edge_map";
-  blades_edge.material.backface_culling = false;
-  blades_edge.material.albedo = "crate_diffuse.png";
-  blades_edge.material.emissive = "";
-  blades_edge.material.normal = "crate_normal.png";
-  blades_edge.material.roughness = "crate_roughness.png";
-  blades_edge.material.vertex_shader = "vertex_shader.vert";
-  blades_edge.material.frag_shader = "fragment_shader.frag";
-  blades_edge.material.casts_shadows = true;
-  blades_edge.material.uv_scale = vec2(16);
-
-  return blades_edge;
 }
