@@ -5,7 +5,7 @@
 #include "Spell.h"
 #include <enet/enet.h>
 
-typedef int32_t UID;
+typedef uint32_t UID;
 
 struct CharSpawnRequest_Event
 {

@@ -424,7 +424,7 @@ template <> std::string s<std::string>(std::string value) { return value; }
 
 UID uid()
 {
-  static UID i = 0;
-  ASSERT(i >= 0);
+  static UID i = 1;
+  ASSERT(i);
   return i++;
 }

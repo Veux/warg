@@ -249,7 +249,7 @@ void Warg_State::handle_input(
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (pc < 0)
+  if (!pc)
     return;
   if (free_cam)
   {
@@ -370,7 +370,7 @@ void Warg_State::handle_input(
       m |= Move_Status::Right;
     out.push(move_event(pc, (Move_Status)m));
 
-    ASSERT(pc >= 0 && chars.count(pc));
+    ASSERT(pc && chars.count(pc));
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
     for (auto &surface : map.surfaces)
@@ -534,7 +534,7 @@ void Warg_State::update()
   }
 
   // meme
-  if (pc >= 0)
+  if (pc)
   {
     ASSERT(chars.count(pc));
 
@@ -586,13 +586,15 @@ void Warg_State::update()
 void Warg_State::process_event(CharSpawn_Event *spawn)
 {
   ASSERT(spawn);
+  ASSERT(spawn->id);
 
   add_char(spawn->id, spawn->team, spawn->name);
 }
 
 void Warg_State::process_event(PlayerControl_Event *ev)
 {
-  ASSERT(pc);
+  ASSERT(ev);
+  ASSERT(ev->character);
 
   pc = ev->character;
 }
@@ -600,7 +602,7 @@ void Warg_State::process_event(PlayerControl_Event *ev)
 void Warg_State::process_event(CharPos_Event *pos)
 {
   ASSERT(pos);
-  ASSERT(pos->character >= 0 && chars.count(pos->character));
+  ASSERT(pos->character && chars.count(pos->character));
   chars[pos->character].dir = pos->dir;
   chars[pos->character].pos = pos->pos;
 }
@@ -608,7 +610,7 @@ void Warg_State::process_event(CharPos_Event *pos)
 void Warg_State::process_event(CastError_Event *err)
 {
   ASSERT(err);
-  ASSERT(err->caster >= 0 && chars.count(err->caster));
+  ASSERT(err->caster && chars.count(err->caster));
 
   std::string msg;
   msg += chars[err->caster].name;
@@ -652,7 +654,7 @@ void Warg_State::process_event(CastError_Event *err)
 void Warg_State::process_event(CastBegin_Event *cast)
 {
   ASSERT(cast);
-  ASSERT(cast->caster >= 0 && chars.count(cast->caster));
+  ASSERT(cast->caster && chars.count(cast->caster));
 
   std::string msg;
   msg += chars[cast->caster].name;
@@ -664,7 +666,7 @@ void Warg_State::process_event(CastBegin_Event *cast)
 void Warg_State::process_event(CastInterrupt_Event *interrupt)
 {
   ASSERT(interrupt);
-  ASSERT(interrupt->caster >= 0 && chars.count(interrupt->caster));
+  ASSERT(interrupt->caster && chars.count(interrupt->caster));
 
   std::string msg;
   msg += chars[interrupt->caster].name;
@@ -675,7 +677,7 @@ void Warg_State::process_event(CastInterrupt_Event *interrupt)
 void Warg_State::process_event(CharHP_Event *hpev)
 {
   ASSERT(hpev);
-  ASSERT(hpev->character >= 0 && chars.count(hpev->character));
+  ASSERT(hpev->character && chars.count(hpev->character));
 
   chars[hpev->character].alive = hpev->hp > 0;
 
@@ -689,7 +691,7 @@ void Warg_State::process_event(CharHP_Event *hpev)
 void Warg_State::process_event(BuffAppl_Event *appl)
 {
   ASSERT(appl);
-  ASSERT(appl->character >= 0 && chars.count(appl->character));
+  ASSERT(appl->character && chars.count(appl->character));
 
   std::string msg;
   msg += appl->buff;
@@ -701,8 +703,8 @@ void Warg_State::process_event(BuffAppl_Event *appl)
 void Warg_State::process_event(ObjectLaunch_Event *launch)
 {
   ASSERT(launch);
-  ASSERT(launch->caster >= 0 && chars.count(launch->caster));
-  ASSERT(launch->target >= 0 && chars.count(launch->target));
+  ASSERT(launch->caster && chars.count(launch->caster));
+  ASSERT(launch->target && chars.count(launch->target));
 
   Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
@@ -750,6 +752,7 @@ void Warg_State::add_char(UID id, int team, const char *name)
   material.frag_shader = "fragment_shader.frag";
 
   Character c;
+  c.id = id;
   c.team = team;
   c.name = std::string(name);
   c.pos = pos;

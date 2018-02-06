@@ -21,12 +21,14 @@ struct CharStats
 
 struct Character
 {
+  UID id;
+
   Node_Ptr mesh;
 
   vec3 pos;
   vec3 dir;
   vec3 vel;
-  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61);//avg human in meters
+  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
   bool grounded;
   Move_Status move_status = Move_Status::None;
   Collision_Packet colpkt;
@@ -34,7 +36,7 @@ struct Character
 
   std::string name;
   int team;
-  int target = -1;
+  UID target = 0;
 
   CharStats b_stats, e_stats;
 
@@ -53,7 +55,7 @@ struct Character
   bool casting = false;
   Spell *casting_spell;
   float32 cast_progress = 0;
-  int cast_target = -1;
+  UID cast_target = 0;
 };
 
 struct Warg_State : protected State
@@ -84,7 +86,7 @@ struct Warg_State : protected State
   ENetHost *clientp;
   Map map;
   std::map<UID, Character> chars;
-  UID pc = -1;
+  UID pc = 0;
   unique_ptr<SpellDB> sdb;
   vector<SpellObjectInst> spell_objs;
 };

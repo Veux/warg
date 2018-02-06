@@ -567,7 +567,7 @@ CharSpawn_Event deserialize_char_spawn(Buffer &b)
 PlayerControl_Event deserialize_player_control(Buffer &b)
 {
   PlayerControl_Event ev;
-  ev.character = deserialize_int32(b);
+  ev.character = deserialize_uint32(b);
 
   return ev;
 }

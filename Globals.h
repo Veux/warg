@@ -159,7 +159,7 @@ template <typename T, typename... Args> std::string s(T first, Args... args)
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
 
-typedef int32_t UID;
+typedef uint32_t UID;
 UID uid();
 
 struct Bezier_Curve
