@@ -369,7 +369,7 @@ void Warg_State::handle_input(
     ASSERT(pc && chars.count(pc));
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
-    for (auto &surface : map.surfaces)
+  /* for (auto &surface : )
     {
       vec3 intersection_point;
       bool intersects = ray_intersects_triangle(
@@ -379,7 +379,7 @@ void Warg_State::handle_input(
       {
         effective_zoom = length(player_pos - intersection_point);
       }
-    }
+    } */
     cam.pos = player_pos +
               vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);

@@ -40,11 +40,6 @@ private:
   void process_cast_event(Warg_Event ev);
 
   UID add_char(int team, const char *name);
-  void update_colliders();
-  void collide_and_slide_char(Character &character, const vec3 &vel, const vec3 &gravity);
-  vec3 collide_char_with_world(Character &character, const vec3 &pos, const vec3 &vel);
-  void check_collision(Collision_Packet &colpkt);
-  void move_char(Character &character, float32 dt);
   CastErrorType cast_viable(UID caster_, UID target_, Spell *spell);
   void try_cast_spell(Character &caster, UID target, const char *spell);
   void cast_spell(UID caster, UID target, Spell *spell);
@@ -71,8 +66,8 @@ private:
   bool local = true;
 
   Map map;
+  vector<Triangle> collider_cache;
   Scene_Graph scene;
-  vector<Triangle> colliders;
   unique_ptr<SpellDB> sdb;
   std::map<UID, Character> chars;
   vector<SpellObjectInst> spell_objs;

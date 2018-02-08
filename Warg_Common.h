@@ -26,6 +26,7 @@ struct Character
   void update_spell_cooldowns(float32 dt);
   void update_global_cooldown(float32 dt);
   void apply_modifiers();
+  void move(float32 dt, const std::vector<Triangle> &colliders);
 
   UID id;
 
@@ -67,4 +68,15 @@ private:
   void apply_modifier(CharMod &modifier);
 };
 
+struct Map
+{
+  Node_Ptr node;
+  Mesh_Data mesh;
+  Material_Descriptor material;
+
+  vec3 spawn_pos[2];
+  vec3 spawn_dir[2];
+};
+
 Map make_blades_edge();
+std::vector<Triangle> collect_colliders(Scene_Graph &scene);

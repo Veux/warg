@@ -29,17 +29,6 @@ struct Plane
   float signed_distance_to(const vec3 &p) const;
 };
 
-struct Map
-{
-  Node_Ptr node;
-  Mesh_Data mesh;
-  Material_Descriptor material;
-
-  std::vector<Triangle> surfaces; // trash
-  vec3 spawn_pos[2];
-  vec3 spawn_dir[2];
-};
-
 struct Collision_Packet
 {
   vec3 e_radius;
