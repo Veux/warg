@@ -139,15 +139,9 @@ void main()
   m.shininess = 1.0 + texture4_mod.r * 64 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));
   vec3 n = texture2D(texture2, frag_uv).rgb;
 
-  if (n == vec3(0))
-  {
-    n = vec3(0, 0, 1);
-    m.normal = frag_TBN * n;
-  }
-  else
-  {
+
     m.normal = frag_TBN * normalize((n * 2) - 1.0f);
-  }
+
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -221,6 +215,5 @@ void main()
     result = debug.rgb;
     albedo_tex.a = debug.a;
   }
-  
   RESULT = vec4(result, albedo_tex.a*texture0_mod.a);
 }
