@@ -41,6 +41,8 @@ struct Scene_Graph_Node
                    std::string scene_path, Uint32 *mesh_num,
                    Material_Descriptor *material_override);
 
+  std::vector<std::shared_ptr<Scene_Graph_Node>> owned_children;
+  std::vector<std::weak_ptr<Scene_Graph_Node>> unowned_children;
 protected:
   friend Scene_Graph;
   // assimp's import mtransformation, propagates to children
@@ -54,8 +56,6 @@ protected:
 
   std::weak_ptr<Scene_Graph_Node> parent;
 
-  std::vector<std::shared_ptr<Scene_Graph_Node>> owned_children;
-  std::vector<std::weak_ptr<Scene_Graph_Node>> unowned_children;
 };
 
 struct Scene_Graph

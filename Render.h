@@ -142,18 +142,22 @@ struct Material
   Material(aiMaterial *ai_material, std::string working_directory,
            Material_Descriptor *material_override);
 
-private:
-  friend struct Render;
-  void load(Material_Descriptor m);
-  void bind();
-  void unbind_textures();
+
   Texture albedo;
-  // Texture specular_color;
   Texture normal;
   Texture emissive;
   Texture roughness;
   Shader shader;
   Material_Descriptor m;
+
+  vec4 albedo_mod = vec4(1.f);
+  vec3 emissive_mod = vec3(1.f);
+  vec3 roughness_mod = vec3(1.f);
+private:
+  friend struct Render;
+  void load(Material_Descriptor m);
+  void bind(Shader* shader);
+  void unbind_textures();
 };
 
 enum struct Light_Type

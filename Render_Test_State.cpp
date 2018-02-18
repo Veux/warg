@@ -49,7 +49,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
-  material.uv_scale = vec2(2);
+  material.uv_scale = vec2(1);
   material.albedo_alpha_override = 128;
   material.uses_transparency = false;
   material.casts_shadows = true;
@@ -86,7 +86,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
 
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
-  material.emissive = "color(.8,.8,.8,1)";
+  material.emissive = "color(1,1,1,1)";
   cone_light1 = scene.add_aiscene("sphere.obj", &material);
   cone_light1->name = "conelight1";
 
@@ -96,7 +96,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   sun_light->name = "sun";
 
   material.albedo = "color(0,0,0,1)";
-  material.emissive = "color(1.0,0,1.0,1)";
+  material.emissive = "color(2.0,0,2.0,1)";
   small_light = scene.add_aiscene("sphere.obj", &material);
 
 
@@ -339,16 +339,12 @@ void Render_Test_State::update()
   sphere->position = vec3(-3, 3, 1.5);
   sphere->scale = vec3(0.4);
 
-  sky_sphere->scale = vec3(500);
-  sky_sphere->position = vec3(0, 0, -350);
-  sky_sphere->visible = false;
-
 
 
   auto &lights = scene.lights.lights;
   scene.lights.light_count = 4;
   //float32 time_of_day = 12.;
-  const vec4 night = vec4(0.015f,0.015f,0.015f,0.f);
+  const vec4 night = vec4(0);
   const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1.,0.f);
   const vec4 sun_low = vec4(235.f/255.f, 28.f / 255., 0.f / 255.f, 0.f);
   const float time_day_scale = 0.12f;
@@ -372,6 +368,10 @@ void Render_Test_State::update()
   //clear_color = day_t*vec3(1);
   scene.lights.additional_ambient = vec3(sky_color.r, sky_color.g, sky_color.b)*vec3(0.03) + vec3(94.f / 255.f, 155.f / 255.f, 1.) * vec3(0.01);
 
+  sky_sphere->scale = vec3(500);
+  sky_sphere->position = vec3(0, 0, -350);
+  sky_sphere->visible = true;
+  sky_sphere->owned_children[0]->model[0].second.albedo_mod = 1.5f*vec4(clear_color,1);
   
   scene.lights.light_count = 3;
 
@@ -412,7 +412,7 @@ void Render_Test_State::update()
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  lights[2].color = 31.f * vec3(1, 0.05, 1.05);
+  lights[2].color = 231.f * vec3(1, 0.05, 1.05);
   lights[2].type = Light_Type::omnidirectional;
   lights[2].attenuation = vec3(1.0, 1.7, 2.4);
   lights[2].ambient = 0.0001f;

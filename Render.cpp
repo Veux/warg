@@ -839,7 +839,7 @@ void Material::load(Material_Descriptor m)
   roughness = Texture(m.roughness);
   shader = Shader(m.vertex_shader, m.frag_shader);
 }
-void Material::bind()
+void Material::bind(Shader* shader)
 {
   if (m.backface_culling)
     glEnable(GL_CULL_FACE);
@@ -847,9 +847,12 @@ void Material::bind()
     glDisable(GL_CULL_FACE);
 
   albedo.bind(Texture_Location::albedo);
+  shader->set_uniform("texture0_mod", albedo_mod);
   normal.bind(Texture_Location::normal);
   emissive.bind(Texture_Location::emissive);
+  shader->set_uniform("texture3_mod", emissive_mod);
   roughness.bind(Texture_Location::roughness);
+  shader->set_uniform("texture4_mod", roughness_mod);
 }
 void Material::unbind_textures()
 {
@@ -1193,7 +1196,7 @@ void Render::opaque_pass(float32 time)
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     shader.use();
-    entity.material->bind();
+    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1201,6 +1204,7 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", true);
+    shader.set_uniform("emissive_mod", entity.material->emissive_mod);
     set_uniform_lights(shader);
     set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
@@ -1222,7 +1226,7 @@ void Render::instance_pass(float32 time)
     Shader &shader = entity.material->shader;
     ASSERT(shader.vs == "instance.vert");
     shader.use();
-    entity.material->bind();
+    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1328,7 +1332,7 @@ void Render::translucent_pass(float32 time)
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     shader.use();
-    entity.material->bind();
+    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
