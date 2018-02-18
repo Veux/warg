@@ -220,7 +220,7 @@ void Scene_Graph::visit_nodes(const weak_ptr<Scene_Graph_Node> node_ptr,
   const mat4 S = scale(entity->scale);
   const mat4 R = toMat4(entity->orientation);
   const mat4 B = entity->basis;
-  const mat4 STACK = M * B * T * S * R;
+  const mat4 STACK = M * B * T * R * S;
   const mat4 I = entity->import_basis;
   const mat4 FINAL = STACK * I;
 
@@ -266,7 +266,7 @@ void Scene_Graph::visit_nodes_locked_accumulator(
   const mat4 S = scale(entity->scale);
   const mat4 R = toMat4(entity->orientation);
   const mat4 B = entity->basis;
-  const mat4 STACK = M * B * T * S * R;
+  const mat4 STACK = M * B * T * R * S;
   const mat4 I = entity->import_basis;
   const mat4 FINAL = STACK * I;
 

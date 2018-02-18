@@ -156,7 +156,7 @@ void main()
     vec3 att = lights[i].attenuation;
     float at = 1.0 / (att.x + (att.y * d) + (att.z * d * d));
     float alpha = 1.0f;
-    float shadow_bias = 0.00003;
+    float shadow_bias = 0.0000003;
     vec3 frag_in_this_light_shadow_space_postw =
         frag_in_shadow_space_postw[i] - shadow_bias;
     vec2 shadow_moments = variance_depth[i];

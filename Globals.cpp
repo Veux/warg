@@ -314,7 +314,7 @@ void checkSDLError(int32 line)
     set_message("SDL Error:", err);
     if (line != -1)
       set_message("SDL Error line: ", std::to_string(line));
-    ASSERT(0);
+    // ASSERT(0);
   }
 #endif
 }
@@ -454,3 +454,10 @@ template <> std::string s<std::string>(std::string value) { return value; }
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
 #define check_gl_error() _check_gl_error()
+
+UID uid()
+{
+  static UID i = 0;
+  ASSERT(i >= 0);
+  return i++;
+}
