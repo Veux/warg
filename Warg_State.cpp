@@ -452,7 +452,7 @@ void Warg_State::update()
 
     scene.lights.light_count = 2;
     light->position = vec3{25.01f, 25.0f, 45.f};
-    light->color = 1000.0f * vec3(1.0f, 0.93f, 0.92f);
+    light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
     light->attenuation = vec3(1.0f, .045f, .0075f);
     light->ambient = 0.0005f;
     light->cone_angle = 0.15f;
@@ -471,7 +471,7 @@ void Warg_State::update()
     light = &scene.lights.lights[1];
 
     light->position = vec3{.5, .2, 10.10};
-    light->color = 600.0f * vec3(1.f + sin(current_time * 1.35),
+    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
                                 1.f + cos(current_time * 1.12),
                                 1.f + sin(current_time * .9));
     light->attenuation = vec3(1.0f, .045f, .0075f);
@@ -592,7 +592,7 @@ Map make_blades_edge()
   blades_edge.material.backface_culling = false;
   blades_edge.material.albedo = "crate_diffuse.png";
   blades_edge.material.emissive = "";
-  blades_edge.material.normal = "crate_normal.png";
+  blades_edge.material.normal = "test_normal.png";
   blades_edge.material.roughness = "crate_roughness.png";
   blades_edge.material.vertex_shader = "vertex_shader.vert";
   blades_edge.material.frag_shader = "fragment_shader.frag";

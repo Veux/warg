@@ -121,7 +121,7 @@ struct Material_Descriptor
   std::string specular;  // specular color for conductors   - unused for now
   std::string metalness; // boolean conductor or insulator - unused for now
   std::string tangent;   // anisotropic surface roughness    - unused for now
-  std::string normal;
+  std::string normal = "color(0.5,.5,1,0)";
   std::string ambient_occlusion; // unused for now
   std::string emissive;
   std::string vertex_shader = "vertex_shader.vert";
@@ -138,7 +138,7 @@ struct Material_Descriptor
 struct Material
 {
   Material();
-  Material(Material_Descriptor m);
+  Material(Material_Descriptor& m);
   Material(aiMaterial *ai_material, std::string working_directory,
            Material_Descriptor *material_override);
 
@@ -155,7 +155,7 @@ struct Material
   vec3 roughness_mod = vec3(1.f);
 private:
   friend struct Render;
-  void load(Material_Descriptor m);
+  void load(Material_Descriptor& m);
   void bind(Shader* shader);
   void unbind_textures();
 };
@@ -292,7 +292,7 @@ struct Bloom_Shader
   High_Pass_Filter high_pass;
   Gaussian_Blur blur;
   float32 radius = 6.0f;
-  uint32 iterations = 135;
+  uint32 iterations = 15;
   bool initialized = false;
 };
 struct Render
@@ -343,11 +343,11 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
-  float32 render_scale = 1.3f; 
+  float32 render_scale = 1.0f; 
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
-  ivec2 shadow_map_size = 2*ivec2(2048, 2048);
+  ivec2 shadow_map_size = ivec2(2048, 2048)/2;
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);

@@ -752,7 +752,10 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 }
 
 Material::Material() {}
-Material::Material(Material_Descriptor m) { load(m); }
+Material::Material(Material_Descriptor& m) { 
+  if (m.normal == "")
+    m.normal = "color(0.5,0.5,1.0)";
+  load(m); }
 Material::Material(aiMaterial *ai_material, std::string working_directory,
     Material_Descriptor *material_override)
 {
@@ -827,9 +830,12 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
     m.uses_transparency = material_override->uses_transparency;
     m.casts_shadows = material_override->casts_shadows;
   }
+
+  if (m.normal == "")
+    m.normal = "color(0.5,0.5,1.0)";
   load(m);
 }
-void Material::load(Material_Descriptor m)
+void Material::load(Material_Descriptor& m)
 {
   this->m = m;
   albedo = Texture(m.albedo, m.uses_transparency);
