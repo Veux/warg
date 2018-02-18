@@ -171,7 +171,6 @@ int main(int argc, char *argv[])
   SDL_ClearError();
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
-  INIT_RENDERER();
 
   Warg_State *game_state;
   if (client)
@@ -223,7 +222,6 @@ int main(int argc, char *argv[])
   }
   delete game_state;
   push_log_to_disk();
-  CLEANUP_RENDERER();
   SDL_Quit();
   return 0;
 }

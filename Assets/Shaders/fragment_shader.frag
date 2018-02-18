@@ -4,6 +4,9 @@ uniform sampler2D texture1; // specular;
 uniform sampler2D texture2; // normal;
 uniform sampler2D texture3; // emissive;
 uniform sampler2D texture4; // roughness;
+uniform vec4 texture0_mod;
+uniform vec3 texture3_mod;
+uniform vec3 texture4_mod;
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
@@ -37,14 +40,13 @@ in vec4 frag_in_shadow_space[MAX_LIGHTS];
 
 layout(location = 0) out vec4 RESULT;
 
-const float PI = 3.14159265358979f;
 const float gamma = 2.2;
+const float PI = 3.14159265358979f;
 const int max_lights = MAX_LIGHTS;
 vec3[max_lights] frag_in_shadow_space_postw;
 vec2[max_lights] variance_depth;
 vec3 to_linear(in vec3 srgb) { return pow(srgb, vec3(gamma)); }
 float to_linear(in float srgb) { return pow(srgb, gamma); }
-vec3 to_srgb(in vec3 linear) { return pow(linear, vec3(1. / gamma)); }
 float linearize_depth(float z)
 {
   float near = 0.001;
@@ -132,9 +134,9 @@ void main()
 
   Material m;
   m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
-  m.albedo = to_linear(albedo_tex.rgb) / PI;
-  m.emissive = to_linear(texture2D(texture3, frag_uv).rgb);
-  m.shininess = 1.0 + 44 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));
+  m.albedo = texture0_mod.rgb * to_linear(albedo_tex.rgb) / PI;
+  m.emissive = texture3_mod * to_linear(texture2D(texture3, frag_uv).rgb);
+  m.shininess = 1.0 + texture4_mod.r * 64 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));
   vec3 n = texture2D(texture2, frag_uv).rgb;
 
   if (n == vec3(0))
@@ -219,9 +221,6 @@ void main()
     result = debug.rgb;
     albedo_tex.a = debug.a;
   }
-  else
-  {
-    result = to_srgb(result);
-  }
-  RESULT = vec4(result, albedo_tex.a);
+  
+  RESULT = vec4(result, albedo_tex.a*texture0_mod.a);
 }
