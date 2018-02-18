@@ -28,112 +28,271 @@
 using namespace glm;
 using namespace std;
 using namespace gl33core;
-// our frag shader output attachment points for deferred rendering
+
 #define DIFFUSE_TARGET GL_COLOR_ATTACHMENT0
 #define DEPTH_TARGET GL_COLOR_ATTACHMENT1
 #define NORMAL_TARGET GL_COLOR_ATTACHMENT2
 #define POSITION_TARGET GL_COLOR_ATTACHMENT3
 
-const GLenum RENDER_TARGETS[] = {DIFFUSE_TARGET};
-#define TARGET_COUNT sizeof(RENDER_TARGETS) / sizeof(GLenum)
-
 static Timer FRAME_TIMER = Timer(60);
 static Timer SWAP_TIMER = Timer(60);
-static GLuint TARGET_FRAMEBUFFER = 0; // fbo that gets rendered to
-static GLuint COLOR_TARGET_TEXTURE =
-    0; // color texture that is bound to target framebuffer
-static GLuint DEPTH_TARGET_TEXTURE =
-    0; // depth texture that is bound to target framebuffer
-static GLuint PREV_COLOR_TARGET = 0; // color texture from previous frame
-static bool PREV_COLOR_TARGET_MISSING = true;
-static GLuint INSTANCE_MVP_BUFFER = 0;   // buffer object holding MVP matrices
-static GLuint INSTANCE_MODEL_BUFFER = 0; // buffer object holding model matrices
-static Mesh QUAD;
-static Shader TEMPORALAA;
-static Shader PASSTHROUGH;
-static Shader VARIANCE_SHADOW_MAP;
-static Shader GAUSSIAN_BLUR;
-static GLuint SCRATCH_FRAMEBUFFER = 0;
-static GLuint GAUSSIAN_INTERMEDIATE;
-static ivec2 CURRENT_GAUSSIAN_SIZE = vec2(0);
-GLenum CURRENT_GAUSSIAN_FORMAT = GL_RGBA;
-static bool INIT = false;
+
+GLuint *FINAL_OUTPUT_TEXTURE = nullptr;
+
 static std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
     TEXTURE_CACHE;
 
-  
 void check_FBO_status();
 
-void INIT_RENDERER()
+Framebuffer_Handle::~Framebuffer_Handle() { glDeleteFramebuffers(1, &fbo); }
+Framebuffer::Framebuffer() {}
+void Framebuffer::init()
 {
-  set_message("INIT_RENDERER()");
-  if (INIT)
+  if (!fbo)
   {
-    set_message("Renderer already initialized");
+    fbo = make_shared<Framebuffer_Handle>();
+    glGenFramebuffers(1, &fbo->fbo);
+  }
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
+
+  for (uint32 i = 0; i < color_attachments.size(); ++i)
+  {
+    color_attachments[i].load();
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
+        color_attachments[i].texture->texture, 0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
+  }
+  check_FBO_status();
+  depth = make_shared<Renderbuffer_Handle>();
+  if (depth_enabled)
+  {
+    glGenRenderbuffers(1, &depth->rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
+
+    glRenderbufferStorage(
+        GL_RENDERBUFFER, depth_format, depth_size.x, depth_size.y);
+    glFramebufferRenderbuffer(
+        GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
+    depth->format = depth_format;
+    depth->size = depth_size;
+  }
+  check_FBO_status();
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindRenderbuffer(GL_RENDERBUFFER, 0);
+}
+
+void Framebuffer::bind()
+{
+  ASSERT(fbo);
+  ASSERT(fbo->fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
+}
+
+Gaussian_Blur::Gaussian_Blur() {}
+void Gaussian_Blur::init(ivec2 size, GLenum format)
+{
+  if (!initialized)
+    gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
+
+  if (!initialized)
+    intermediate_fbo.color_attachments.emplace_back(Texture());
+
+  Texture *intermediate_texture = &intermediate_fbo.color_attachments[0];
+  intermediate_texture->size = size;
+  intermediate_texture->format = format;
+  intermediate_texture->wrap = GL_CLAMP_TO_EDGE;
+  intermediate_texture->load();
+  intermediate_fbo.init();
+
+  if (!initialized)
+    target.color_attachments.emplace_back(Texture());
+
+  Texture *target_texture = &target.color_attachments[0];
+  target_texture->size = size;
+  target_texture->format = format;
+  target_texture->load();
+  target.init();
+
+  aspect_ratio_factor = (float32)size.y / (float32)size.x;
+
+  initialized = true;
+}
+void Gaussian_Blur::draw(
+    Render *renderer, Texture *src, float32 radius, uint32 iterations)
+{
+  if (!initialized)
+    ASSERT(0);
+  ASSERT(renderer);
+  ASSERT(intermediate_fbo.fbo);
+  ASSERT(intermediate_fbo.color_attachments.size() == 1);
+  ASSERT(src);
+  ASSERT(src->texture);
+  ASSERT(target.fbo);
+  ASSERT(target.color_attachments.size() > 0);
+
+  ivec2 *dst_size = &intermediate_fbo.color_attachments[0].size;
+
+  if (iterations == 0)
+  {
+    renderer->run_pixel_shader(&renderer->passthrough, {src}, &target, false);
     return;
   }
-  INIT = true;
-  set_message("Initializing renderer...");
-  set_message("Creating renderer QUAD");
 
-  // the uid for the renderer's quad must be different than the
-  // planes used in the game world because that plane
-  // will have its instance attributes enabled when it gets bound in the
-  // renderer loop and  the passthrough shader doesn't have attribute slots for
-  // them
+  glBindFramebuffer(GL_FRAMEBUFFER, intermediate_fbo.fbo->fbo);
+  glViewport(0, 0, dst_size->x, dst_size->y);
+  glDisable(GL_DEPTH_TEST);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  vec2 gaus_scale = vec2(aspect_ratio_factor * radius / dst_size->x, 0.0);
+  glBindVertexArray(renderer->quad.get_vao());
+  gaussian_blur_shader.use();
+  gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
+  gaussian_blur_shader.set_uniform(
+      "transform", Render::ortho_projection(*dst_size));
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, src->texture->texture);
 
-  // alternatively enable/disable the attributes every frame as needed
-  Mesh_Data quad_data = load_mesh_plane();
-  quad_data.unique_identifier = "RENDERER's PLANE";
-  QUAD = Mesh(quad_data, "RENDERER's PLANE");
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
+      GL_UNSIGNED_INT, (void *)0);
 
-  set_message("Creating TXAA and PASSTHROUGH shaders");
-  TEMPORALAA = Shader("passthrough.vert", "TemporalAA.frag");
-  PASSTHROUGH = Shader("passthrough.vert", "passthrough.frag");
-  VARIANCE_SHADOW_MAP = Shader("passthrough.vert", "variance_shadow_map.frag");
-  GAUSSIAN_BLUR = Shader("passthrough.vert","gaussian_blur.frag");
+  gaus_scale.y = radius / dst_size->x;
+  gaus_scale.x = 0;
+  gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
+  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
+  glBindTexture(
+      GL_TEXTURE_2D, intermediate_fbo.color_attachments[0].texture->texture);
 
-  set_message("Initializing instance buffers");
-  // instancing MVP Matrix buffer init
-  const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
-  const GLuint instance_buffer_size = MAX_INSTANCE_COUNT * mat4_size;
+  glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
+      GL_UNSIGNED_INT, (void *)0);
 
-  glGenBuffers(1, &INSTANCE_MVP_BUFFER);
-  glBindBuffer(GL_ARRAY_BUFFER, INSTANCE_MVP_BUFFER);
-  glBufferData(GL_ARRAY_BUFFER, instance_buffer_size, (void *)0,
-               GL_DYNAMIC_DRAW);
+  iterations -= 1;
 
-  // instancing Model Matrix buffer init
-  glGenBuffers(1, &INSTANCE_MODEL_BUFFER);
-  glBindBuffer(GL_ARRAY_BUFFER, INSTANCE_MODEL_BUFFER);
-  glBufferData(GL_ARRAY_BUFFER, instance_buffer_size, (void *)0,
-               GL_DYNAMIC_DRAW);
+  for (uint i = 0; i < iterations; ++i)
+  {
+    glBindFramebuffer(GL_FRAMEBUFFER, intermediate_fbo.fbo->fbo);
+    vec2 gaus_scale = vec2(aspect_ratio_factor * radius / dst_size->x, 0.0);
+    gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
+    glBindTexture(GL_TEXTURE_2D, target.color_attachments[0].texture->texture);
+    glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
+        GL_UNSIGNED_INT, (void *)0);
 
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
+    gaus_scale.y = radius / dst_size->x;
+    gaus_scale.x = 0;
+    gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
+    glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
+    glBindTexture(
+        GL_TEXTURE_2D, intermediate_fbo.color_attachments[0].texture->texture);
+    glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
+        GL_UNSIGNED_INT, (void *)0);
+  }
 
-  set_message("Renderer init finished");
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glEnable(GL_DEPTH_TEST);
 }
-void CLEANUP_RENDERER()
+
+High_Pass_Filter::High_Pass_Filter() {}
+
+void High_Pass_Filter::init(ivec2 size, GLenum format)
 {
-  set_message("CLEANUP_RENDERER()");
-  QUAD = Mesh();
-  TEMPORALAA = Shader();
-  PASSTHROUGH = Shader();
+  target.color_attachments.emplace_back(Texture());
+  target.color_attachments[0].format = format;
+  target.color_attachments[0].size = size;
+  target.init();
+  high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
+  initialized = true;
+}
 
-  set_message("Deleting 2 FBOs, 3 textures, 2 instance buffers:",
-              s(TARGET_FRAMEBUFFER, " ", SCRATCH_FRAMEBUFFER ,"",COLOR_TARGET_TEXTURE, " ",
-                PREV_COLOR_TARGET, " ", DEPTH_TARGET_TEXTURE, " ",
-                INSTANCE_MVP_BUFFER, " ", INSTANCE_MODEL_BUFFER));
+void High_Pass_Filter::draw(Render *renderer, Texture *src)
+{
+  if (!initialized)
+    ASSERT(0);
+  ASSERT(renderer);
+  ASSERT(src);
+  ASSERT(src->texture);
+  ASSERT(target.fbo);
+  ASSERT(target.color_attachments.size() > 0);
 
-  glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
-  glDeleteFramebuffers(1, &SCRATCH_FRAMEBUFFER);
-  glDeleteTextures(1, &COLOR_TARGET_TEXTURE);
-  glDeleteTextures(1, &PREV_COLOR_TARGET);
-  glDeleteTextures(1,&GAUSSIAN_INTERMEDIATE);
-  glDeleteRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
-  glDeleteBuffers(1, &INSTANCE_MVP_BUFFER);
-  glDeleteBuffers(1, &INSTANCE_MODEL_BUFFER);
+  ivec2 *dst_size = &target.color_attachments[0].size;
+
+  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
+  glViewport(0, 0, dst_size->x, dst_size->y);
+  glDisable(GL_DEPTH_TEST);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glBindVertexArray(renderer->quad.get_vao());
+  high_pass_shader.use();
+  high_pass_shader.set_uniform(
+      "transform", Render::ortho_projection(*dst_size));
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, src->texture->texture);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
+      GL_UNSIGNED_INT, (void *)0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glEnable(GL_DEPTH_TEST);
+}
+
+Bloom_Shader::Bloom_Shader() {}
+void Bloom_Shader::init(ivec2 size, GLenum format)
+{
+  high_pass.init(size, format);
+  blur.init(size, format);
+  target.color_attachments.emplace_back(Texture());
+  target.color_attachments[0].size = size;
+  target.color_attachments[0].format = format;
+  target.color_attachments[0].wrap = GL_CLAMP_TO_EDGE;
+  target.init();
+  initialized = true;
+}
+void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
+{
+  ASSERT(initialized);
+  ASSERT(renderer);
+  high_pass.draw(renderer, src);
+
+  blur.draw(
+      renderer, &high_pass.target.color_attachments[0], radius, iterations);
+
+  //FINAL_OUTPUT_TEXTURE = &blur.target.color_attachments[0].texture->texture;
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE);
+
+  ASSERT(dst);
+  ASSERT(dst->fbo);
+  ASSERT(dst->color_attachments.size() > 0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(
+      GL_TEXTURE_2D, blur.target.color_attachments[0].texture->texture);
+
+  ivec2 viewport_size = dst->color_attachments[0].size;
+  glViewport(0, 0, viewport_size.x, viewport_size.y);
+  glDisable(GL_DEPTH_TEST);
+  glBindVertexArray(renderer->quad.get_vao());
+  renderer->passthrough.use();
+  renderer->passthrough.set_uniform(
+      "transform", renderer->ortho_projection(viewport_size));
+  renderer->passthrough.set_uniform("time", (float32)get_real_time());
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
+  glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
+      GL_UNSIGNED_INT, (void *)0);
+
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  glDisable(GL_BLEND);
+
+}
+
+Render::~Render()
+{
+  glDeleteBuffers(1, &instance_mvp_buffer);
+  glDeleteBuffers(1, &instance_model_buffer);
 }
 
 void check_and_clear_expired_textures()
@@ -178,8 +337,8 @@ void save_and_log_screen()
     std::string name = s("screen_", i, ".png");
     set_message("Saving Screenshot: ", " With name: " + name);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE,
-                 surface->pixels);
+    glReadPixels(
+        0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, surface->pixels);
     IMG_SavePNG(surface, name.c_str());
     SDL_FreeSurface(surface);
   }
@@ -257,8 +416,7 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-
-Texture::Texture() { file_path = ERROR_TEXTURE_PATH; }
+Texture::Texture() {}
 Texture_Handle::~Texture_Handle()
 {
   set_message("Deleting texture: ", s(texture));
@@ -269,11 +427,7 @@ Texture::Texture(std::string path, bool premul)
 {
   process_premultiply = premul;
   path = fix_filename(path);
-  if (path.size() == 0)
-  {
-    texture = nullptr;
-    return;
-  }
+
   if (path.substr(0, 6) == "color(")
   { // custom color
     file_path = path;
@@ -297,9 +451,37 @@ Texture::Texture(std::string path, bool premul)
 
 void Texture::load()
 {
-  if (file_path == "" || file_path == BASE_TEXTURE_PATH)
+  if (file_path == "TEXTURE_MISSING")
   {
-    // a null texture here shows as 0,0,0,0 in the shader
+    texture = nullptr;
+    return;
+  }
+
+  if (file_path == "")
+  {
+    bool skip_init = (texture) && (texture->size == size) &&
+                     (texture->format == format) && (texture->wrap == wrap);
+    if (skip_init)
+      return;
+
+    if (!texture)
+    {
+      texture = make_shared<Texture_Handle>();
+      glGenTextures(1, &texture->texture);
+    }
+    glBindTexture(GL_TEXTURE_2D, texture->texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, size.x, size.y, 0, GL_RGBA,
+        GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return;
+  }
+  if (file_path == BASE_TEXTURE_PATH)
+  {
+    set_message(s("Warning: Invalid texture path:", file_path));
     texture = nullptr;
     return;
   }
@@ -315,11 +497,11 @@ void Texture::load()
   if (file_path.substr(0, 6) == "color(")
   {
     width = height = 1;
-    Uint32 color = string_to_color(file_path);
+    vec4 color = string_to_float4_color(file_path);
     glGenTextures(1, &texture->texture);
     glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, storage_type, width, height, 0, GL_RGBA,
-                 GL_UNSIGNED_INT_8_8_8_8, &color);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA,
+        GL_FLOAT, &color);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -338,7 +520,7 @@ void Texture::load()
     if (!data)
     {
       set_message("STBI failed to find or load texture: " + file_path);
-      file_path = "";
+      file_path = "TEXTURE_MISSING";
       texture = nullptr;
       return;
     }
@@ -352,7 +534,7 @@ void Texture::load()
 
   if (process_premultiply)
   {
-    for (uint32 i = 0; i < width * height; ++i)
+    for (int32 i = 0; i < width * height; ++i)
     {
       uint32 pixel = data[i];
       uint8 r = (uint8)(0x000000FF & pixel);
@@ -360,21 +542,23 @@ void Texture::load()
       uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
       uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
 
-      r = round(r * ((float)a / 255));
-      g = round(g * ((float)a / 255));
-      b = round(b * ((float)a / 255));
+      r = (uint8)round(r * ((float)a / 255));
+      g = (uint8)round(g * ((float)a / 255));
+      b = (uint8)round(b * ((float)a / 255));
 
       data[i] = (24 << a) | (16 << b) | (8 << g) | r;
     }
   }
   glGenTextures(1, &texture->texture);
   glBindTexture(GL_TEXTURE_2D, texture->texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, storage_type, width, height, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, data);
+  glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA,
+      GL_UNSIGNED_BYTE, data);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                  GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri(
+      GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_S);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_TEXTURE_WRAP_T);
   glGenerateMipmap(GL_TEXTURE_2D);
   stbi_image_free(data);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -383,9 +567,13 @@ void Texture::load()
 void Texture::bind(GLuint binding)
 {
 #if DYNAMIC_TEXTURE_RELOADING
-  load();
+  if (file_path != "")
+  {
+    load();
+  }
 #endif
-  //set_message(s("binding texture: ",this->file_path," handle:", texture ? texture->texture : 0," to unit:", binding));
+  // set_message(s("binding texture: ",this->file_path," handle:", texture ?
+  // texture->texture : 0," to unit:", binding));
   glActiveTexture(GL_TEXTURE0 + binding);
   glBindTexture(GL_TEXTURE_2D, texture ? texture->texture : 0);
 }
@@ -438,37 +626,49 @@ Mesh::Mesh(const aiMesh *aimesh, std::string unique_identifier)
   }
   set_message("caching mesh with uid: ", unique_identifier);
   MESH_CACHE[unique_identifier] = mesh =
-      upload_data(load_mesh(aimesh, unique_identifier));  
-      mesh->enable_assign_attributes();
+      upload_data(load_mesh(aimesh, unique_identifier));
+  mesh->enable_assign_attributes();
 }
-
-
 
 void Mesh_Handle::enable_assign_attributes()
 {
   ASSERT(vao);
   glBindVertexArray(vao);
 
-  uint32 loc = 0;
-  glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
-  glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-  loc = 1;
-  glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
-  glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-  loc = 2;
-  glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
-  glVertexAttribPointer(loc, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
-  loc = 3;
-  glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
-  glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-  loc = 4;
-  glEnableVertexAttribArray(loc);
-  glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
-  glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+  if (position_buffer)
+  {
+    glEnableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+  }
+
+  if (normal_buffer)
+  {
+    glEnableVertexAttribArray(1);
+    glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+  }
+
+  if (uv_buffer)
+  {
+    glEnableVertexAttribArray(2);
+    glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
+  }
+
+  if (tangents_buffer)
+  {
+    glEnableVertexAttribArray(3);
+    glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+  }
+
+  if (bitangents_buffer)
+  {
+    glEnableVertexAttribArray(4);
+    glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+  }
 }
 
 std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
@@ -502,49 +702,49 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
   uint32 indices_buffer_size = mesh_data.indices.size();
 
   ASSERT(all_equal(positions_buffer_size, normal_buffer_size, uv_buffer_size,
-                   tangents_size, bitangents_size));
+      tangents_size, bitangents_size));
 
   // positions
   uint32 buffer_size = mesh_data.positions.size() *
                        sizeof(decltype(mesh_data.positions)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, mesh->position_buffer);
-  glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.positions[0],
-               GL_STATIC_DRAW);
+  glBufferData(
+      GL_ARRAY_BUFFER, buffer_size, &mesh_data.positions[0], GL_STATIC_DRAW);
 
   // normals
   buffer_size = mesh_data.normals.size() *
                 sizeof(decltype(mesh_data.normals)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, mesh->normal_buffer);
-  glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.normals[0],
-               GL_STATIC_DRAW);
+  glBufferData(
+      GL_ARRAY_BUFFER, buffer_size, &mesh_data.normals[0], GL_STATIC_DRAW);
 
   // texture_coordinates
   buffer_size = mesh_data.texture_coordinates.size() *
                 sizeof(decltype(mesh_data.texture_coordinates)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, mesh->uv_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.texture_coordinates[0],
-               GL_STATIC_DRAW);
+      GL_STATIC_DRAW);
 
   // indices
   buffer_size = mesh_data.indices.size() *
                 sizeof(decltype(mesh_data.indices)::value_type);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indices_buffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer_size, &mesh_data.indices[0],
-               GL_STATIC_DRAW);
+      GL_STATIC_DRAW);
 
   // tangents
   buffer_size = mesh_data.tangents.size() *
                 sizeof(decltype(mesh_data.tangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, mesh->tangents_buffer);
-  glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.tangents[0],
-               GL_STATIC_DRAW);
+  glBufferData(
+      GL_ARRAY_BUFFER, buffer_size, &mesh_data.tangents[0], GL_STATIC_DRAW);
 
   // bitangents
   buffer_size = mesh_data.bitangents.size() *
                 sizeof(decltype(mesh_data.bitangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, mesh->bitangents_buffer);
-  glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0],
-               GL_STATIC_DRAW);
+  glBufferData(
+      GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0], GL_STATIC_DRAW);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
@@ -554,7 +754,7 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 Material::Material() {}
 Material::Material(Material_Descriptor m) { load(m); }
 Material::Material(aiMaterial *ai_material, std::string working_directory,
-                   Material_Descriptor *material_override)
+    Material_Descriptor *material_override)
 {
   ASSERT(ai_material);
   const int albedo_n = ai_material->GetTextureCount(aiTextureType_DIFFUSE);
@@ -639,7 +839,7 @@ void Material::load(Material_Descriptor m)
   roughness = Texture(m.roughness);
   shader = Shader(m.vertex_shader, m.frag_shader);
 }
-void Material::bind()
+void Material::bind(Shader* shader)
 {
   if (m.backface_culling)
     glEnable(GL_CULL_FACE);
@@ -647,9 +847,12 @@ void Material::bind()
     glDisable(GL_CULL_FACE);
 
   albedo.bind(Texture_Location::albedo);
+  shader->set_uniform("texture0_mod", albedo_mod);
   normal.bind(Texture_Location::normal);
   emissive.bind(Texture_Location::emissive);
+  shader->set_uniform("texture3_mod", emissive_mod);
   roughness.bind(Texture_Location::roughness);
+  shader->set_uniform("texture4_mod", roughness_mod);
 }
 void Material::unbind_textures()
 {
@@ -691,8 +894,8 @@ bool Light_Array::operator==(const Light_Array &rhs)
   }
   return true;
 }
-Render_Entity::Render_Entity(Mesh *mesh, Material *material,
-                             mat4 world_to_model)
+Render_Entity::Render_Entity(
+    Mesh *mesh, Material *material, mat4 world_to_model)
     : mesh(mesh), material(material), transformation(world_to_model)
 {
   ASSERT(mesh);
@@ -708,6 +911,34 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   SDL_GetCurrentDisplayMode(0, &current);
   target_frame_time = 1.0f / (float32)current.refresh_rate;
   set_vfov(vfov);
+
+  set_message("Initializing renderer...");
+
+  Mesh_Data quad_data = load_mesh_plane();
+  quad_data.unique_identifier = "RENDERER's PLANE";
+  quad = Mesh(quad_data, "RENDERER's PLANE");
+  temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
+  passthrough = Shader("passthrough.vert", "passthrough.frag");
+  variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
+  gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
+
+  set_message("Initializing instance buffers");
+  const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
+  const GLuint instance_buffer_size = MAX_INSTANCE_COUNT * mat4_size;
+
+  glGenBuffers(1, &instance_mvp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
+  glBufferData(
+      GL_ARRAY_BUFFER, instance_buffer_size, (void *)0, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &instance_model_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
+  glBufferData(
+      GL_ARRAY_BUFFER, instance_buffer_size, (void *)0, GL_DYNAMIC_DRAW);
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+  set_message("Renderer init finished");
   init_render_targets();
   FRAME_TIMER.start();
 }
@@ -716,9 +947,11 @@ void Render::set_uniform_lights(Shader &shader)
 {
   for (uint32 i = 0; i < lights.light_count; ++i)
   {
-    Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i];
-    const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
-    const Light* new_light = &lights.lights[i];
+    Light_Uniform_Value_Cache *value_cache =
+        &shader.program->light_values_cache[i];
+    const Light_Uniform_Location_Cache *location_cache =
+        &shader.program->light_locations_cache[i];
+    const Light *new_light = &lights.lights[i];
 
     if (value_cache->position != new_light->position)
     {
@@ -777,38 +1010,50 @@ void Render::set_uniform_lights(Shader &shader)
   if (shader.program->additional_ambient != new_ambient)
   {
     shader.program->additional_ambient = new_ambient;
-    glUniform3fv(shader.program->additional_ambient_location, 1, &new_ambient[0]);
+    glUniform3fv(
+        shader.program->additional_ambient_location, 1, &new_ambient[0]);
   }
 }
 
 void Render::set_uniform_shadowmaps(Shader &shader)
 {
   ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
- 
+
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
+    if (!(i < lights.light_count))
+      return;
+
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
-    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
-    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i].color.texture);
+    if (!shadow_map->enabled)
+      continue;
 
-    const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5,
-                       0.0, 0.5, 0.5, 0.5, 1.0);
+    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
+    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i]
+                                     .blur.target.color_attachments[0]
+                                     .texture->texture);
+
+    const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0,
+        0.5, 0.0, 0.5, 0.5, 0.5, 1.0);
     const mat4 shadow_map_transform = offset * shadow_map->projection_camera;
 
-    const Light_Uniform_Location_Cache* location_cache = &shader.program->light_locations_cache[i];
-    Light_Uniform_Value_Cache* value_cache = &shader.program->light_values_cache[i]; 
+    const Light_Uniform_Location_Cache *location_cache =
+        &shader.program->light_locations_cache[i];
+    Light_Uniform_Value_Cache *value_cache =
+        &shader.program->light_values_cache[i];
 
     float32 new_max_variance = lights.lights[i].max_variance;
     if (value_cache->max_variance != new_max_variance)
     {
       value_cache->max_variance = new_max_variance;
-      glUniform1f(location_cache->max_variance,new_max_variance);
+      glUniform1f(location_cache->max_variance, new_max_variance);
     }
     if (value_cache->shadow_map_transform != shadow_map_transform)
     {
       value_cache->shadow_map_transform = shadow_map_transform;
-      glUniformMatrix4fv(location_cache->shadow_map_transform, 1, GL_FALSE, &shadow_map_transform[0][0]);
+      glUniformMatrix4fv(location_cache->shadow_map_transform, 1, GL_FALSE,
+          &shadow_map_transform[0][0]);
     }
     bool casts_shadows = lights.lights[i].casts_shadows;
     if (value_cache->shadow_map_enabled != casts_shadows)
@@ -819,11 +1064,12 @@ void Render::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
-mat4 Render::ortho_projection(ivec2 dst_size)
+mat4 Render::ortho_projection(ivec2 &dst_size)
 {
-  return ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f, 100.0f) *
-    translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1)) *
-    scale(vec3(dst_size, 1));
+  return ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f,
+             100.0f) *
+         translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1)) *
+         scale(vec3(dst_size, 1));
 }
 void Render::build_shadow_maps()
 {
@@ -833,7 +1079,7 @@ void Render::build_shadow_maps()
   }
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
-    if (i > lights.light_count - 1)
+    if (!(i < lights.light_count))
       return;
 
     const Light *light = &lights.lights[i];
@@ -842,165 +1088,96 @@ void Render::build_shadow_maps()
       continue;
 
     shadow_map->enabled = true;
-    if (shadow_map->size != shadow_map_size)
-    {
-      shadow_map->load(shadow_map_size);
-    }
+    shadow_map->init(shadow_map_size);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
-   // glEnable(GL_CULL_FACE);
+    // glEnable(GL_CULL_FACE);
     glDisable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->target.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->pre_blur.fbo->fbo);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const mat4 camera =
         glm::lookAt(light->position, light->direction, vec3(0, 0, 1));
-    const mat4 projection = glm::perspective(light->shadow_fov, 1.0f, light->shadow_near_plane, light->shadow_far_plane);
+    const mat4 projection = glm::perspective(light->shadow_fov, 1.0f,
+        light->shadow_near_plane, light->shadow_far_plane);
     shadow_map->projection_camera = projection * camera;
     for (Render_Entity &entity : render_entities)
     {
-      set_message(s("entity name: ",entity.name," casts shadows: ",entity.material->m.casts_shadows));
-       if (entity.material->m.casts_shadows)
+      if (entity.material->m.casts_shadows)
       {
         ASSERT(entity.mesh);
         int vao = entity.mesh->get_vao();
         glBindVertexArray(vao);
-        VARIANCE_SHADOW_MAP.use();
-        VARIANCE_SHADOW_MAP.set_uniform(
+        variance_shadow_map.use();
+        variance_shadow_map.set_uniform(
             "transform", shadow_map->projection_camera * entity.transformation);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                     entity.mesh->get_indices_buffer());
+        glBindBuffer(
+            GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
         glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
-                       GL_UNSIGNED_INT, nullptr);
+            GL_UNSIGNED_INT, nullptr);
       }
     }
 
-    for (uint32 i = 0; i < light->shadow_blur_iterations; ++i)
-    {
-      shadow_map->blur(light->shadow_blur_radius);
-    }
+    shadow_map->blur.draw(this, &shadow_map->pre_blur.color_attachments[0],
+        light->shadow_blur_radius, light->shadow_blur_iterations);
 
+    // glGenerateMipmap(GL_TEXTURE_2D);
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Render::gaussian_blur(GLuint src, GLuint dst, ivec2 dst_size, GLenum dst_format, float radius)
+// shader must use passthrough.vert, and must use texture1, texture2 ...
+// texturen for input texture sampler names
+void Render::run_pixel_shader(Shader *shader, vector<Texture *> src_textures,
+    Framebuffer *dst, bool clear_dst)
 {
-  if(dst_size != CURRENT_GAUSSIAN_SIZE || CURRENT_GAUSSIAN_FORMAT != dst_format)
+  ASSERT(shader);
+  ASSERT(shader->vs == "passthrough.vert");
+  ASSERT(dst);
+  ASSERT(dst->fbo);
+  ASSERT(dst->color_attachments.size() > 0);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
+
+  for (uint32 i = 0; i < src_textures.size(); ++i)
   {
-    glBindTexture(GL_TEXTURE_2D, GAUSSIAN_INTERMEDIATE);
-
-  	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
-	  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
-    glTexImage2D(GL_TEXTURE_2D, 0, dst_format, dst_size.x, dst_size.y, 0, dst_format,GL_UNSIGNED_BYTE, 0);
-
-    CURRENT_GAUSSIAN_SIZE = dst_size;
-    CURRENT_GAUSSIAN_FORMAT = dst_format;
+    glActiveTexture(GL_TEXTURE0 + i);
+    glBindTexture(GL_TEXTURE_2D, src_textures[i]->texture->texture);
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, SCRATCH_FRAMEBUFFER);
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GAUSSIAN_INTERMEDIATE, 0);
-  check_FBO_status();
+  ivec2 viewport_size = dst->color_attachments[0].size;
+  glViewport(0, 0, viewport_size.x, viewport_size.y);
 
-  glViewport(0,0,dst_size.x,dst_size.y);
+  if (clear_dst)
+  {
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+  }
+
   glDisable(GL_DEPTH_TEST);
+  glBindVertexArray(quad.get_vao());
+  shader->use();
+  shader->set_uniform("transform", ortho_projection(viewport_size));
+  shader->set_uniform("time", (float32)get_real_time());
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  glDrawElements(
+      GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
-  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-
-  vec2 gaus_scale = vec2(radius / dst_size.x ,0.0);
-  glBindVertexArray(QUAD.get_vao());
-  GAUSSIAN_BLUR.use();
-  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale",gaus_scale);
-  GAUSSIAN_BLUR.set_uniform("transform",ortho_projection(dst_size));
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D,src);
-
-  glEnableVertexAttribArray(0);
-  glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-  glEnableVertexAttribArray(1);
-  glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
-
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),GL_UNSIGNED_INT, (void *)0);
-
-  gaus_scale.y = gaus_scale.x;
-  gaus_scale.x = 0;
-  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale",gaus_scale);
-
-  glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,dst,0);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D,GAUSSIAN_INTERMEDIATE);
-  check_FBO_status();
-
-  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),GL_UNSIGNED_INT, (void *)0);
-
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 0, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER,0);
-  glBindTexture(GL_TEXTURE_2D,0);
-  glEnable(GL_DEPTH_TEST);
-}
-
-//if dst_texture is 0, use main framebuffer
-//shader must use passthrough.vert, and must use texture1, texture2 ... texturen for input texture sampler names
-void Render::run_pixel_shader(Shader* shader, vector<GLuint> src_textures, GLuint dst_texture, ivec2 dst_size, bool clear_dst)
-{
-    for(uint32 i = 0; i < src_textures.size();++i)
-    {
-      glActiveTexture(GL_TEXTURE0+i);
-      glBindTexture(GL_TEXTURE_2D,src_textures[i]);
-    }
-    
-    ivec2 viewport_size;
-    
-    if(dst_texture == 0)
-    {//render to screen
-      glBindFramebuffer(GL_FRAMEBUFFER,0);
-      viewport_size = window_size;
-    }
-    else
-    {//render to dst texture
-      glBindFramebuffer(GL_FRAMEBUFFER,SCRATCH_FRAMEBUFFER);
-      glFramebufferTexture(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,dst_texture,0);
-      viewport_size = dst_size;
-    }
-
-    glViewport(0,0,viewport_size.x,viewport_size.y);
-    
-    if(clear_dst)
-    {
-      glClearColor(0,0,0,0);
-      glClear(GL_COLOR_BUFFER_BIT);
-    }
-    
-    glDisable(GL_DEPTH_TEST);
-    glBindVertexArray(QUAD.get_vao());
-    shader->use();
-
-
-   // glEnableVertexAttribArray(0); 
-   // glEnableVertexAttribArray(1);
-    
-
-    shader->set_uniform("transform", ortho_projection(viewport_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
-                   GL_UNSIGNED_INT, (void *)0);
+  for (uint32 i = 0; i < src_textures.size(); ++i)
+  {
+    glActiveTexture(GL_TEXTURE0 + i);
     glBindTexture(GL_TEXTURE_2D, 0);
+  }
 }
 
 void Render::opaque_pass(float32 time)
 {
   glViewport(0, 0, size.x, size.y);
-  glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
-  glFramebufferTexture(GL_FRAMEBUFFER, DIFFUSE_TARGET, COLOR_TARGET_TEXTURE, 0);
+  draw_target.bind();
 
   glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1010,16 +1187,16 @@ void Render::opaque_pass(float32 time)
   glCullFace(GL_BACK);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
-  //todo: depth pre-pass
+  // todo: depth pre-pass
   for (Render_Entity &entity : render_entities)
   {
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
-    //set_message(s("binding vao:", vao));
+    // set_message(s("binding vao:", vao));
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     shader.use();
-    entity.material->bind();
+    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1027,11 +1204,12 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", true);
+    shader.set_uniform("emissive_mod", entity.material->emissive_mod);
     set_uniform_lights(shader);
     set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
-                   GL_UNSIGNED_INT, nullptr);
+        GL_UNSIGNED_INT, nullptr);
     entity.material->unbind_textures();
   }
 }
@@ -1040,14 +1218,15 @@ void Render::instance_pass(float32 time)
 {
   for (auto &entity : render_instances)
   {
-    ASSERT(0); //disables vertex attribs, so non instanced draw calls will need to re-enable and re-point
+    ASSERT(0); // disables vertex attribs, so non instanced draw calls will need
+               // to re-enable and re-point
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     ASSERT(shader.vs == "instance.vert");
     shader.use();
-    entity.material->bind();
+    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1065,12 +1244,12 @@ void Render::instance_pass(float32 time)
     uint32 num_instances = entity.MVP_Matrices.size();
     uint32 buffer_size = num_instances * sizeof(mat4);
 
-    glBindBuffer(GL_ARRAY_BUFFER, INSTANCE_MVP_BUFFER);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size,
-                    &entity.MVP_Matrices[0][0][0]);
-    glBindBuffer(GL_ARRAY_BUFFER, INSTANCE_MODEL_BUFFER);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size,
-                    &entity.Model_Matrices[0][0][0]);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
+    glBufferSubData(
+        GL_ARRAY_BUFFER, 0, buffer_size, &entity.MVP_Matrices[0][0][0]);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
+    glBufferSubData(
+        GL_ARRAY_BUFFER, 0, buffer_size, &entity.Model_Matrices[0][0][0]);
 
     const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
     // shader attribute locations
@@ -1086,14 +1265,14 @@ void Render::instance_pass(float32 time)
     glEnableVertexAttribArray(loc2);
     glEnableVertexAttribArray(loc3);
     glEnableVertexAttribArray(loc4);
-    glBindBuffer(GL_ARRAY_BUFFER, INSTANCE_MVP_BUFFER);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
     glVertexAttribPointer(loc1, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(0));
-    glVertexAttribPointer(loc2, 4, GL_FLOAT, GL_FALSE, mat4_size,
-                          (void *)(sizeof(GLfloat) * 4));
-    glVertexAttribPointer(loc3, 4, GL_FLOAT, GL_FALSE, mat4_size,
-                          (void *)(sizeof(GLfloat) * 8));
-    glVertexAttribPointer(loc4, 4, GL_FLOAT, GL_FALSE, mat4_size,
-                          (void *)(sizeof(GLfloat) * 12));
+    glVertexAttribPointer(
+        loc2, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 4));
+    glVertexAttribPointer(
+        loc3, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 8));
+    glVertexAttribPointer(
+        loc4, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 12));
     glVertexAttribDivisor(loc1, 1);
     glVertexAttribDivisor(loc2, 1);
     glVertexAttribDivisor(loc3, 1);
@@ -1110,14 +1289,14 @@ void Render::instance_pass(float32 time)
     glEnableVertexAttribArray(loc_2);
     glEnableVertexAttribArray(loc_3);
     glEnableVertexAttribArray(loc_4);
-    glBindBuffer(GL_ARRAY_BUFFER, INSTANCE_MODEL_BUFFER);
+    glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
     glVertexAttribPointer(loc_1, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(0));
-    glVertexAttribPointer(loc_2, 4, GL_FLOAT, GL_FALSE, mat4_size,
-                          (void *)(sizeof(GLfloat) * 4));
-    glVertexAttribPointer(loc_3, 4, GL_FLOAT, GL_FALSE, mat4_size,
-                          (void *)(sizeof(GLfloat) * 8));
+    glVertexAttribPointer(
+        loc_2, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 4));
+    glVertexAttribPointer(
+        loc_3, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 8));
     glVertexAttribPointer(loc_4, 4, GL_FLOAT, GL_FALSE, mat4_size,
-                          (void *)(sizeof(GLfloat) * 12));
+        (void *)(sizeof(GLfloat) * 12));
     glVertexAttribDivisor(loc_1, 1);
     glVertexAttribDivisor(loc_2, 1);
     glVertexAttribDivisor(loc_3, 1);
@@ -1125,8 +1304,8 @@ void Render::instance_pass(float32 time)
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(GL_TRIANGLES,
-                            entity.mesh->get_indices_buffer_size(),
-                            GL_UNSIGNED_INT, (void *)0, num_instances);
+        entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0,
+        num_instances);
 
     entity.material->unbind_textures();
     glDisableVertexAttribArray(loc1);
@@ -1145,7 +1324,7 @@ void Render::translucent_pass(float32 time)
   glDisable(GL_CULL_FACE);
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
-
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   for (Render_Entity &entity : translucent_entities)
   {
     ASSERT(entity.mesh);
@@ -1153,7 +1332,7 @@ void Render::translucent_pass(float32 time)
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     shader.use();
-    entity.material->bind();
+    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1165,8 +1344,9 @@ void Render::translucent_pass(float32 time)
     set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
-                   GL_UNSIGNED_INT, nullptr);
+        GL_UNSIGNED_INT, nullptr);
   }
+  glDisable(GL_BLEND);
 }
 void Render::render(float64 state_time)
 {
@@ -1185,8 +1365,20 @@ void Render::render(float64 state_time)
   build_shadow_maps();
   set_message("OPAQUE PASS START", "");
   opaque_pass(time);
+
   // instance_pass(time);
   // translucent_pass(time);
+
+  bloom.draw(this, &draw_target.color_attachments[0], &draw_target);
+
+  if (FINAL_OUTPUT_TEXTURE)
+  {
+    output_texture = FINAL_OUTPUT_TEXTURE;
+  }
+  else
+  {
+    output_texture = &draw_target.color_attachments[0].texture->texture;
+  }
 
   draw_calls_last_frame = render_entities.size();
   set_message("COPYING TO SCREEN", "");
@@ -1195,121 +1387,74 @@ void Render::render(float64 state_time)
   {
     // TODO: implement motion vector vertex attribute
 
-    // render to main framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, window_size.x, window_size.y);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    TEMPORALAA.use();
+    temporalaa.use();
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
+    glBindTexture(
+        GL_TEXTURE_2D, draw_target.color_attachments[0].texture->texture);
     glActiveTexture(GL_TEXTURE0 + 1);
-    glBindTexture(GL_TEXTURE_2D,
-                  PREV_COLOR_TARGET_MISSING ? COLOR_TARGET_TEXTURE
-                                            : PREV_COLOR_TARGET);
-    TEMPORALAA.set_uniform("transform", ortho_projection(window_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
-                   GL_UNSIGNED_INT, (void *)0);
+    if (previous_color_target_missing)
+    {
+      glBindTexture(
+          GL_TEXTURE_2D, previous_frame.color_attachments[0].texture->texture);
+    }
+    else
+    {
+      glBindTexture(
+          GL_TEXTURE_2D, draw_target.color_attachments[0].texture->texture);
+    }
+    temporalaa.set_uniform("transform", ortho_projection(window_size));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
+        GL_UNSIGNED_INT, (void *)0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, 0);
-    // glFinish(); // intent is to time just the swap itself
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
     SDL_GL_SwapWindow(window);
-    // glFinish();
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
-    // copy this frame to previous framebuffer
-    // so it will be usable next frame, when its the old frame
+    
 
-    // assign previous_color as the target to overwrite
     glViewport(0, 0, size.x, size.y);
-    //todo: make a framebuffer for each target, rather than swapping textures
-    glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                         PREV_COLOR_TARGET, 0);
-    PASSTHROUGH.use();
-    // sample the current color_target as source
+    previous_frame.bind();
+    gamma_correction.use();
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
-    PASSTHROUGH.set_uniform("transform", ortho_projection(window_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
-                   GL_UNSIGNED_INT, (void *)0);
+    glBindTexture(
+        GL_TEXTURE_2D, draw_target.color_attachments[0].texture->texture);
+    gamma_correction.set_uniform("transform", ortho_projection(window_size));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
+        GL_UNSIGNED_INT, (void *)0);
 
-    PREV_COLOR_TARGET_MISSING = false;
-    // place color_target back in target_fbo
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                         COLOR_TARGET_TEXTURE, 0);
+    previous_color_target_missing = false;
+    glFramebufferTexture(
+        GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, *output_texture, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     txaa_jitter = get_next_TXAA_sample();
   }
   else
   {
-    //sponge test blur
-    static bool first = true;
-    static GLuint test_target1 = 0;
-    static GLuint test_target2 = 0;
-    if (first)
-    {
-      glGenTextures(1, &test_target1);
-      glGenTextures(1, &test_target2);
-
-      first = false;
-
-      glBindTexture(GL_TEXTURE_2D, test_target1);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, window_size.x, window_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-
-      glBindTexture(GL_TEXTURE_2D, test_target2);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl::GL_CLAMP);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl::GL_CLAMP);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, window_size.x, window_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-    }
-
-    float radius = 0;
-    gaussian_blur(COLOR_TARGET_TEXTURE, test_target2, window_size, GL_RGBA, radius);
-
-    gaussian_blur(test_target2, test_target1, window_size, GL_RGBA, radius);
-
-    gaussian_blur(test_target1, test_target2, window_size, GL_RGBA, radius);
-
-    gaussian_blur(test_target2, test_target1, window_size, GL_RGBA, radius);
-
-    gaussian_blur(test_target1, test_target2, window_size, GL_RGBA, radius);
-
-    gaussian_blur(test_target2, test_target1, window_size, GL_RGBA, radius);
-
-
-  
     // render to main framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, window_size.x, window_size.y);
     glClearColor(1, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glBindVertexArray(QUAD.get_vao());
-    PASSTHROUGH.use();
+    glBindVertexArray(quad.get_vao());
+
+    gamma_correction.use();
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, test_target1);
+    glBindTexture(GL_TEXTURE_2D, *output_texture);
 
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-    glEnableVertexAttribArray(1);
-    glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
-
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
-    PASSTHROUGH.set_uniform("transform", ortho_projection(window_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+    gamma_correction.set_uniform("transform", ortho_projection(window_size));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
+        GL_UNSIGNED_INT, (void *)0);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     FRAME_TIMER.stop();
@@ -1319,51 +1464,6 @@ void Render::render(float64 state_time)
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
     glBindVertexArray(0);
-
-    #if 0
-    ///sponge
-
-
-
-    // render to main framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, window_size.x, window_size.y);
-    glClearColor(1, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glBindVertexArray(QUAD.get_vao());
-    PASSTHROUGH.use();
-    //glEnableVertexAttribArray(0);
-    //glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->position_buffer);
-    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
-
-    //glEnableVertexAttribArray(1);
-    //glBindBuffer(GL_ARRAY_BUFFER, QUAD.mesh->uv_buffer);
-    //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
-
-   // GLuint loc = glGetUniformLocation(PASSTHROUGH.program->program, "albedo");
-   // ASSERT(loc != -1);
-   // glUniform1i(loc, Texture_Location::albedo);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
-
-    PASSTHROUGH.set_uniform("transform", ortho_projection(window_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(),
-                   GL_UNSIGNED_INT, (void *)0);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    // glFinish(); // intent is to time just the swap itself
-    FRAME_TIMER.stop();
-    SWAP_TIMER.start();
-    SDL_GL_SwapWindow(window);
-    set_message("FRAME END", "");
-    // glFinish();
-    SWAP_TIMER.stop();
-    FRAME_TIMER.start();
-    glBindVertexArray(0);
-    // set_message("Swap complete... Saving default framebuffer");
-    // save_and_log_screen();
-    #endif
   }
   frame_count += 1;
 }
@@ -1403,7 +1503,7 @@ void Render::set_camera_gaze(vec3 pos, vec3 p)
 void Render::set_vfov(float32 vfov)
 {
   const float32 aspect = (float32)window_size.x / (float32)window_size.y;
-  const float32 znear = 0.51f;
+  const float32 znear = 0.1f;
   const float32 zfar = 1000;
   projection = glm::perspective(radians(vfov), aspect, znear, zfar);
 }
@@ -1428,7 +1528,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
     bool is_transparent = entity->material->m.uses_transparency;
     if (is_transparent)
     {
-      ASSERT(entity->material->albedo.storage_type == GL_RGBA);
+      ASSERT(entity->material->albedo.format == GL_RGBA);
       index_distances.push_back({i, dist});
     }
     else
@@ -1438,9 +1538,9 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
   }
 
   std::sort(index_distances.begin(), index_distances.end(),
-            [](std::pair<uint32, float32> p1, std::pair<uint32, float32> p2) {
-              return p1.second > p2.second;
-            });
+      [](std::pair<uint32, float32> p1, std::pair<uint32, float32> p2) {
+        return p1.second > p2.second;
+      });
 
   for (auto i : index_distances)
   {
@@ -1456,20 +1556,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
   }
 }
 
-void Render::set_lights(Light_Array new_lights)
-{
-  lights = new_lights; /*
-
-   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
-   {
-     spotlight_shadow_maps[i].enabled = false;
-     Light* l = &lights.lights[i];
-     if (l->type == spot && l->casts_shadows)
-     {
-       spotlight_shadow_maps[i].enabled = true;
-     }
-   }*/
-}
+void Render::set_lights(Light_Array new_lights) { lights = new_lights; }
 
 void check_FBO_status()
 {
@@ -1516,66 +1603,28 @@ void check_FBO_status()
 void Render::init_render_targets()
 {
   set_message("init_render_targets()");
-  set_message("Deleting screen FBO", std::to_string(TARGET_FRAMEBUFFER));
-  set_message("Deleting gaussian FBO", std::to_string(SCRATCH_FRAMEBUFFER));
-  set_message("Deleting Textures",
-              std::to_string(COLOR_TARGET_TEXTURE) + " " +
-                  std::to_string(PREV_COLOR_TARGET) + " " +
-                  std::to_string(DEPTH_TARGET_TEXTURE));
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glDeleteFramebuffers(1, &TARGET_FRAMEBUFFER);
-  glDeleteFramebuffers(1, &SCRATCH_FRAMEBUFFER);
-  glDeleteTextures(1, &COLOR_TARGET_TEXTURE);
-  glDeleteTextures(1, &PREV_COLOR_TARGET);
-  glDeleteRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
-  glDeleteTextures(1,&GAUSSIAN_INTERMEDIATE);
-
-  glGenTextures(1,&GAUSSIAN_INTERMEDIATE);
 
   size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
-  glGenFramebuffers(1, &TARGET_FRAMEBUFFER);
-  glBindFramebuffer(GL_FRAMEBUFFER, TARGET_FRAMEBUFFER);
+  bloom.init(size, FRAMEBUFFER_FORMAT);
+  if (draw_target.color_attachments.size() == 0)
+  {
+    draw_target.color_attachments.emplace_back(Texture());
+  }
+  ASSERT(draw_target.color_attachments.size() == 1);
+  draw_target.color_attachments[0].size = size;
+  draw_target.color_attachments[0].format = FRAMEBUFFER_FORMAT;
+  draw_target.depth_enabled = true;
+  draw_target.depth_size = size;
+  draw_target.init();
 
-  glGenTextures(1, &COLOR_TARGET_TEXTURE);
-  glBindTexture(GL_TEXTURE_2D, COLOR_TARGET_TEXTURE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size.x, size.y, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, 0);
-
-  glGenTextures(1, &PREV_COLOR_TARGET);
-  glBindTexture(GL_TEXTURE_2D, PREV_COLOR_TARGET);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size.x, size.y, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, 0);
-
-  glFramebufferTexture(GL_FRAMEBUFFER, DIFFUSE_TARGET, COLOR_TARGET_TEXTURE, 0);
-  glDrawBuffers(TARGET_COUNT, RENDER_TARGETS);
-  glGenRenderbuffers(1, &DEPTH_TARGET_TEXTURE);
-  glBindRenderbuffer(GL_RENDERBUFFER, DEPTH_TARGET_TEXTURE);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                            GL_RENDERBUFFER, DEPTH_TARGET_TEXTURE);
-
-  PREV_COLOR_TARGET_MISSING = true;
-
-  glGenFramebuffers(1,&SCRATCH_FRAMEBUFFER);
-
-  set_message("Init screen FBO", s(TARGET_FRAMEBUFFER));
-  set_message("Init gaussian FBO", s(SCRATCH_FRAMEBUFFER));
-  set_message("Init Textures",
-              s(COLOR_TARGET_TEXTURE) + " " + s(PREV_COLOR_TARGET));
-  set_message("Init renderbuffers", s(DEPTH_TARGET_TEXTURE));
-
-  check_FBO_status();
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  if (previous_frame.color_attachments.size() == 0)
+  {
+    previous_frame.color_attachments.emplace_back(Texture());
+  }
+  ASSERT(previous_frame.color_attachments.size() == 1);
+  previous_frame.color_attachments[0].size = size;
+  previous_frame.color_attachments[0].format = FRAMEBUFFER_FORMAT;
+  previous_frame.init();
 }
 
 void Render::dynamic_framerate_target()
@@ -1651,8 +1700,7 @@ void Render::dynamic_framerate_target()
         return;
       }
       set_message("High avg swap. Increasing resolution.",
-                  std::to_string(swap_avg) + " " +
-                      std::to_string(target_frame_time));
+          std::to_string(swap_avg) + " " + std::to_string(target_frame_time));
       set_render_scale(render_scale * increase_factor);
       uint64 last_start = FRAME_TIMER.get_begin();
       SWAP_TIMER.clear_all();
@@ -1695,96 +1743,21 @@ Mesh_Handle::~Mesh_Handle()
   indices_buffer_size = 0;
 }
 
-FBO_Handle::~FBO_Handle() { glDeleteFramebuffers(1, &fbo); }
-
-void Spotlight_Shadow_Map::blur(float radius)
+void Spotlight_Shadow_Map::init(ivec2 size)
 {
-  glBindFramebuffer(GL_FRAMEBUFFER, blurfbo.fbo);
-  glViewport(0, 0, size.x, size.y);
-  glDisable(GL_DEPTH_TEST);
+  pre_blur.depth_enabled = true;
+  pre_blur.depth_size = size;
+  pre_blur.depth_format = GL_DEPTH_COMPONENT32;
 
-  vec2 gaus_scale = vec2(radius / size.x, 0.0);
-  glBindVertexArray(QUAD.get_vao());
-  GAUSSIAN_BLUR.use();
-  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale", gaus_scale);
-  GAUSSIAN_BLUR.set_uniform("transform", Render::ortho_projection(size));
+  if (!initialized)
+    pre_blur.color_attachments.emplace_back(Texture());
 
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, color.texture);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, QUAD.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  pre_blur.color_attachments[0].size = size;
+  pre_blur.color_attachments[0].format = format;
+  pre_blur.init();
+  blur.init(size, format);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
-  gaus_scale.y = gaus_scale.x;
-  gaus_scale.x = 0;
-  GAUSSIAN_BLUR.set_uniform("gauss_axis_scale", gaus_scale);
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, blurtex.texture);
-  glDrawElements(GL_TRIANGLES, QUAD.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glEnable(GL_DEPTH_TEST);
+  initialized = true;
 }
 
-void Spotlight_Shadow_Map::load(ivec2 size)
-{
-  //target fbo
-  glGenFramebuffers(1, &target.fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
-
-  // gen target depth buffer
-  glGenTextures(1, &color.texture);
-  glBindTexture(GL_TEXTURE_2D, color.texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-    GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, 0);
-
-  //glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
-  //glGenerateMipmap(GL_TEXTURE_2D);
-
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, color.texture, 0);
-  glDrawBuffer(GL_COLOR_ATTACHMENT0);
-
-  // gen actual depth buffer
-  glGenRenderbuffers(1, &depth.rbo);
-  glBindRenderbuffer(GL_RENDERBUFFER, depth.rbo);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, size.x, size.y);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                            GL_RENDERBUFFER, depth.rbo);
-
-  //gauss
-  glGenTextures(1, &blurtex.texture);
-  glBindTexture(GL_TEXTURE_2D, blurtex.texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-    GL_LINEAR);
-  //glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
-
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, size.x, size.y, 0, GL_RGBA,
-    GL_UNSIGNED_BYTE, 0);
-
-  //glGenerateMipmap(GL_TEXTURE_2D);
-
-  glGenFramebuffers(1, &blurfbo.fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, blurfbo.fbo);
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, blurtex.texture,0);
-  glDrawBuffer(GL_COLOR_ATTACHMENT0);
-
-
-  check_FBO_status();
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  this->size = size;
-}
-
-RenderBuffer_Handle::~RenderBuffer_Handle() { glDeleteRenderbuffers(1, &rbo); }
+Renderbuffer_Handle::~Renderbuffer_Handle() { glDeleteRenderbuffers(1, &rbo); }

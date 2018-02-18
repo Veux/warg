@@ -24,6 +24,12 @@ struct aiString;
 #define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 0
 #define INCLUDE_FILE_LINE_IN_LOG 0
 #define MAX_TEXTURE_SAMPLERS 20
+#define FRAMEBUFFER_FORMAT GL_RGBA16F
+
+//you can point FINAL_OUTPUT_TEXTURE to any Texture::texture->texture or Texture_Handle::texture
+//to draw it to the screen for debugging purposes
+//nullptr for default
+extern GLuint* FINAL_OUTPUT_TEXTURE;
 
 struct Warg_State;
 struct Render_Test_State;
@@ -72,7 +78,8 @@ std::string read_file(const char *path);
 
 #define ASSERT(x) _errr(x, __FILE__, __LINE__)
 
-Uint32 string_to_color(std::string color);
+Uint32 string_to_U32_color(std::string color);
+glm::vec4 string_to_float4_color(std::string color);
 Uint64 dankhash(float32 *data, uint32 size);
 
 
