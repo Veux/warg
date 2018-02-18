@@ -85,18 +85,18 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   tiger->position = vec3(-3, -3, 0);
 
   material.casts_shadows = false;
-  material.albedo = "color(0,255,0,255)";
-  material.emissive = "color(0,255,0,255)";
+  material.albedo = "color(0,0,0,1)";
+  material.emissive = "color(.8,.8,.8,1)";
   cone_light1 = scene.add_aiscene("sphere.obj", &material);
   cone_light1->name = "conelight1";
 
-  material.albedo = "color(255,255,255,255)";
-  material.emissive = "color(255,255,120,255)";
+  material.albedo = "color(0,0,0,1)";
+  material.emissive = "color(3,3,1.5,1)";
   sun_light = scene.add_aiscene("sphere.obj", &material);
   sun_light->name = "sun";
 
-  material.albedo = "color(0,0,0,255)";
-  material.emissive = "color(255,0,255,255)";
+  material.albedo = "color(0,0,0,1)";
+  material.emissive = "color(1.0,0,1.0,1)";
   small_light = scene.add_aiscene("sphere.obj", &material);
 
 
@@ -397,7 +397,7 @@ void Render_Test_State::update()
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172),2.);
   lights[1].type = Light_Type::spot;
   lights[1].direction = vec3(0);
-  lights[1].color = 200.f * vec3(1.10, 1.10, 1.0);
+  lights[1].color = 400.f * vec3(1.0, 1.00, 1.0);
   lights[1].cone_angle = 0.151;//+ 0.14*sin(current_time);
   lights[1].ambient = 0.0004;
   lights[1].casts_shadows = true;

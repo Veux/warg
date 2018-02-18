@@ -21,8 +21,7 @@
 #include <unordered_map>
 #include <vector>
 
-void INIT_RENDERER();
-void CLEANUP_RENDERER();
+struct Framebuffer;
 
 using namespace glm;
 
@@ -45,52 +44,43 @@ enum Texture_Location
   s9 
 };
 
+
+struct Renderbuffer_Handle
+{
+  ~Renderbuffer_Handle();
+  GLuint rbo = 0;
+  glm::ivec2 size = glm::ivec2(0);
+  GLenum format = GL_DEPTH_COMPONENT;
+};
+
 struct Texture_Handle
 {
   ~Texture_Handle();
   GLuint texture = 0;
+  GLenum format = GL_RGBA;
+  GLenum filtering = GL_LINEAR;
+  GLenum wrap = GL_CLAMP_TO_EDGE;
+  glm::ivec2 size = glm::ivec2(0, 0);
   time_t file_mod_t = 0;
-};
-struct RenderBuffer_Handle
-{
-  ~RenderBuffer_Handle();
-  GLuint rbo = 0;
-};
-struct FBO_Handle
-{
-  ~FBO_Handle();
-  GLuint fbo = 0;
-};
-struct Spotlight_Shadow_Map
-{
-  Spotlight_Shadow_Map() {};
-  void load(ivec2 size);
-  void blur(float radius);
-  Texture_Handle color;
-  RenderBuffer_Handle depth;
-  FBO_Handle target;
-  FBO_Handle blurfbo;
-  Texture_Handle blurtex;
-  mat4 projection_camera;
-  bool enabled = false;
-  ivec2 size = ivec2(0,0);
 };
 
 struct Texture
 {
   Texture();
   Texture(std::string path, bool premul = false);
-private:
-  friend struct Render;
-  friend struct Material;
   void load();
   void bind(GLuint texture_unit);
   std::shared_ptr<Texture_Handle> texture;
   std::string file_path;
-
-  GLenum storage_type = GL_RGBA;
+  glm::ivec2 size = glm::ivec2(0);
+  GLenum format = GL_RGBA32F;
+  GLenum filtering = GL_LINEAR;
+  GLenum wrap = GL_CLAMP_TO_EDGE;
   bool process_premultiply = false;
 };
+
+
+
 
 struct Mesh_Handle
 {
@@ -232,9 +222,79 @@ struct Render_Instance
   std::vector<mat4> Model_Matrices;
 };
 
+struct Framebuffer_Handle
+{
+  ~Framebuffer_Handle();
+  GLuint fbo = 0;
+};
+
+struct Framebuffer
+{
+  Framebuffer();
+  void init();
+  void bind();
+  std::shared_ptr<Framebuffer_Handle> fbo;
+  std::vector<Texture> color_attachments;
+  std::shared_ptr<Renderbuffer_Handle> depth;
+  glm::ivec2 depth_size = glm::ivec2(0);
+  GLenum depth_format = GL_DEPTH_COMPONENT;
+  bool depth_enabled = false;
+
+};
+
+struct Gaussian_Blur
+{
+  Gaussian_Blur();
+  void init(ivec2 size, GLenum format);
+  void draw(Render* renderer, Texture* src, float32 radius, uint32 iterations = 1);
+  Shader gaussian_blur_shader;
+  Framebuffer target;
+  Framebuffer intermediate_fbo;
+  float32 aspect_ratio_factor = 1.0f;
+  bool initialized = false;
+};
+
+struct Spotlight_Shadow_Map
+{
+  Spotlight_Shadow_Map() {};
+  void init(ivec2 size);
+  Framebuffer pre_blur;
+  mat4 projection_camera;
+  bool enabled = false;
+  Gaussian_Blur blur;
+  GLenum format = GL_RG32F;
+  bool initialized = false;
+};
+
+struct High_Pass_Filter
+{
+  High_Pass_Filter();
+  void init(ivec2 size, GLenum format);
+  void draw(Render* renderer, Texture* src);
+
+  Framebuffer target;
+  Shader high_pass_shader;
+  bool initialized = false;
+};
+
+struct Bloom_Shader
+{
+  Bloom_Shader();
+  void init(ivec2 size, GLenum format);
+
+  //adds the blurred src to dst
+  void draw(Render* renderer, Texture* src, Framebuffer* dst);
+  Framebuffer target;
+  High_Pass_Filter high_pass;
+  Gaussian_Blur blur;
+  float32 radius = 6.0f;
+  uint32 iterations = 135;
+  bool initialized = false;
+};
 struct Render
 {
   Render(SDL_Window *window, ivec2 window_size);
+  ~Render();
   void render(float64 state_time);
 
   bool use_txaa = false;
@@ -252,7 +312,16 @@ struct Render
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
-  static mat4 ortho_projection(ivec2 dst_size);
+  static mat4 ortho_projection(ivec2& dst_size);
+  void run_pixel_shader(Shader* shader, std::vector<Texture*> src_textures, Framebuffer* dst, bool clear_dst = false);
+
+
+  Mesh quad;
+  Shader temporalaa;
+  Shader passthrough;
+  Shader variance_shadow_map;
+  Shader gamma_correction;
+  Bloom_Shader bloom;
 private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
@@ -263,8 +332,6 @@ private:
   void set_uniform_lights(Shader &shader);
   void set_uniform_shadowmaps(Shader& shader);
   void build_shadow_maps();
-  void run_pixel_shader(Shader* shader, std::vector<GLuint> src_textures, GLuint dst_texture, ivec2 dst_size, bool clear_dst = false);
-  void gaussian_blur(GLuint src, GLuint dst, ivec2 dst_size, GLenum dst_format, float radius);
   void opaque_pass(float32 time);
   void instance_pass(float32 time);
   void translucent_pass(float32 time);
@@ -272,7 +339,7 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
-  float32 render_scale = 1.0f; 
+  float32 render_scale = 1.3f; 
   ivec2 window_size;            // actual window size
   ivec2 size;                   // render target size
   float32 vfov = 60;
@@ -283,4 +350,13 @@ private:
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
+  Framebuffer previous_frame;
+
+  Framebuffer draw_target;
+  GLuint* output_texture = nullptr;
+
+ bool previous_color_target_missing = true;
+  GLuint instance_mvp_buffer = 0;   // buffer object holding MVP matrices
+ GLuint instance_model_buffer = 0; // buffer object holding model matrices
+
 };

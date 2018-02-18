@@ -153,7 +153,7 @@ std::string read_file(const char *path)
   return result;
 }
 
-Uint32 string_to_color(std::string color)
+Uint32 string_to_U32_color(std::string color)
 {
   // color(n,n,n,n)
   std::string a = color.substr(6);
@@ -185,6 +185,41 @@ Uint32 string_to_color(std::string color)
     ++it;
   }
   Uint32 result = (r.r << 24) + (r.g << 16) + (r.b << 8) + r.a;
+  return result;
+}
+
+glm::vec4 string_to_float4_color(std::string color)
+{
+  // color(n,n,n,n)
+  std::string a = color.substr(6);
+  // n,n,n,n)
+  a.pop_back();
+  // n,n,n,n
+
+  std::string c;
+  vec4 result(0);
+
+  int i = 0;
+  auto it = a.begin();
+  while (true)
+  {
+    if (it == a.end() || *it == ',')
+    {
+      ASSERT(i < 4);
+      result[i] = std::stof(c);
+      if (it == a.end())
+      {
+        break;
+      }
+      c.clear();
+      ++i;
+      ++it;
+      continue;
+    }
+    c.push_back(*it);
+    ++it;
+  }
+  
   return result;
 }
 
@@ -266,7 +301,7 @@ void check_gl_error()
     }
     set_message("GL ERROR", "GL_" + error);
     push_log_to_disk();
-    std::terminate();
+    ASSERT(0);
   }
 }
 void checkSDLError(int32 line)

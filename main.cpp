@@ -119,7 +119,6 @@ int main(int argc, char *argv[])
   SDL_ClearError();
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
-  INIT_RENDERER();
 
   std::vector<State *> states;
   Warg_State game_state("Game State", window, window_size);
@@ -166,7 +165,6 @@ int main(int argc, char *argv[])
     current_state->performance_output();
   }
   push_log_to_disk();
-  CLEANUP_RENDERER();
   SDL_Quit();
   return 0;
 }

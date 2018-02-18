@@ -369,7 +369,7 @@ void Warg_State::update()
   light = &scene.lights.lights[1];
 
   light->position = vec3{ 25, 25, 20.10 };
-  light->color = 600.0f * vec3(1.f+sin(current_time*1.35), 1.f+cos(current_time*1.12), 1.f+sin(current_time*.9));
+  light->color = 700.0f * vec3(1.f+sin(current_time*1.35), 1.f+cos(current_time*1.12), 1.f+sin(current_time*.9));
   light->attenuation = vec3(1.0f, .045f, .0075f);
   light->direction = client ? client->chars.size()>0 ? client->chars[0].pos : vec3(0) : vec3(0);
   light->ambient = 0.0f;
