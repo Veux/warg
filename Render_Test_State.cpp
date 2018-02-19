@@ -96,7 +96,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   sun_light->name = "sun";
 
   material.albedo = "color(0,0,0,1)";
-  material.emissive = "color(2.0,0,2.0,1)";
+  material.emissive = "color(1.15,0,1.15,1)";
   small_light = scene.add_aiscene("sphere.obj", &material);
 
 
@@ -381,7 +381,7 @@ void Render_Test_State::update()
   lights[0].position = sun_pos;
   lights[0].type = Light_Type::spot;
   lights[0].direction = vec3(0);
-  lights[0].color = 230000.f * vec3(1.0, .95, 1.0);
+  lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
   lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);
   lights[0].ambient = 0.003*clamp(sin(two_pi<float32>()*((time_of_day - 6.f) / 24.f)),0.f,1.f);
   lights[0].casts_shadows = true;
@@ -397,7 +397,7 @@ void Render_Test_State::update()
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172),2.);
   lights[1].type = Light_Type::spot;
   lights[1].direction = vec3(0);
-  lights[1].color = 400.f * vec3(1.0, 1.00, 1.0);
+  lights[1].color = 150.f * vec3(1.0, 1.00, 1.0);
   lights[1].cone_angle = 0.151;//+ 0.14*sin(current_time);
   lights[1].ambient = 0.0004;
   lights[1].casts_shadows = true;
@@ -412,7 +412,7 @@ void Render_Test_State::update()
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  lights[2].color = 231.f * vec3(1, 0.05, 1.05);
+  lights[2].color = 111.f * vec3(1, 0.05, 1.05);
   lights[2].type = Light_Type::omnidirectional;
   lights[2].attenuation = vec3(1.0, 1.7, 2.4);
   lights[2].ambient = 0.0001f;
