@@ -41,6 +41,5 @@ protected:
   bool free_cam = false;
   Camera cam;
   vec3 clear_color = vec3(0);
-private:
   SDL_Window *window = nullptr;
 };

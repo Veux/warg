@@ -25,6 +25,8 @@
 #include <time.h>
 #include <unordered_map>
 #include <vector>
+#include "Third_party/imgui/imgui.h"
+#include "Third_party/imgui/imgui_impl_sdl_gl3.h"
 using namespace glm;
 using namespace std;
 using namespace gl33core;
@@ -1465,6 +1467,12 @@ void Render::render(float64 state_time)
     glBindTexture(GL_TEXTURE_2D, 0);
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
+
+
+    glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
+    ImGui::Render();
+    ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
+
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

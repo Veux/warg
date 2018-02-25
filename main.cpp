@@ -10,6 +10,8 @@
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
+#include "Third_party/imgui/imgui.h"
+#include "Third_party/imgui/imgui_impl_sdl_gl3.h"
 
 #include <glbinding/Binding.h>
 
@@ -169,6 +171,13 @@ int main(int argc, char *argv[])
   checkSDLError(__LINE__);
 
   SDL_ClearError();
+
+
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO(); (void)io;
+  ImGui_ImplSdlGL3_Init(window);
+  ImGui::StyleColorsDark();
+
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
 
@@ -203,6 +212,7 @@ int main(int argc, char *argv[])
       elapsed_time = 0.3;
     last_time = current_state->current_time;
 
+    ImGui_ImplSdlGL3_NewFrame(window);
     while (current_state->current_time + dt < last_time + elapsed_time)
     {
       State *s = current_state;
@@ -217,6 +227,7 @@ int main(int argc, char *argv[])
         break;
       }
     }
+    ImGui::EndFrame();
     current_state->render(current_state->current_time);
     current_state->performance_output();
   }

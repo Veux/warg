@@ -10,6 +10,8 @@
 #include <iostream>
 #include <random>
 #include <unordered_map>
+#include "Third_party/imgui/imgui.h"
+#include "Third_party/imgui/imgui_impl_sdl_gl3.h"
 using namespace glm;
 using namespace gl33core;
 struct aiString;
@@ -49,6 +51,7 @@ extern const std::string BASE_SHADER_PATH;
 extern const std::string BASE_MODEL_PATH;
 extern const std::string ERROR_TEXTURE_PATH;
 extern Timer PERF_TIMER;
+extern ImGuiIO* imgui_io;
 
 // load an aiScene
 // will cache the result so that future loads

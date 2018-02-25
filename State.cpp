@@ -63,6 +63,8 @@ void State::render(float64 t)
   renderer.render(t);
 }
 
+
+
 void State::performance_output()
 {
   std::stringstream s;

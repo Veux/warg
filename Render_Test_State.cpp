@@ -6,6 +6,8 @@
 #include <memory>
 #include <sstream>
 #include <thread>
+#include "Third_party/imgui/imgui.h"
+#include "Third_party/imgui/imgui_impl_sdl_gl3.h"
 using namespace glm;
 
 Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
@@ -113,6 +115,9 @@ void Render_Test_State::handle_input(State **current_state,
   SDL_Event _e;
   while (SDL_PollEvent(&_e))
   {
+    ImGui_ImplSdlGL3_ProcessEvent(&_e);
+    
+
     if (_e.type == SDL_QUIT)
     {
       running = false;
@@ -301,6 +306,22 @@ void Render_Test_State::handle_input(State **current_state,
 void Render_Test_State::update()
 {
 
+
+  ImGui_ImplSdlGL3_NewFrame(window);
+
+  // 1. Show a simple window.
+  // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets automatically appears in a window called "Debug".
+  {
+    static float f = 0.0f;
+    ImGui::Text("Hello, world!");                           // Display some text (you can use a format string too)
+    ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f   
+  }
+
+
+
+
+
+
   const float32 height = 1.25;
 
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
@@ -418,6 +439,9 @@ void Render_Test_State::update()
   lights[2].ambient = 0.0001f;
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
+
+
+
 
 
 }
