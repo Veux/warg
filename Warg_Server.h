@@ -34,8 +34,7 @@ private:
   void process_event(Warg_Event ev);
   void process_events();
   void process_char_spawn_request_event(Warg_Event ev);
-  void process_dir_event(Warg_Event ev);
-  void process_move_event(Warg_Event ev);
+  void process_player_movement_event(Warg_Event ev);
   void process_jump_event(Warg_Event ev);
   void process_cast_event(Warg_Event ev);
 
@@ -64,6 +63,8 @@ private:
   std::map<UID, Warg_Peer> peers;
   ENetHost *server;
   bool local = true;
+  float64 time = 0;
+  uint64 tick = 0;
 
   Map map;
   vector<Triangle> collider_cache;

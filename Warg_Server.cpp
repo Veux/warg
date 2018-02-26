@@ -67,6 +67,9 @@ void Warg_Server::process_packets()
 
 void Warg_Server::update(float32 dt)
 {
+  time += dt;
+  tick += 1;
+
   if (!local)
     process_packets();
   else
