@@ -45,35 +45,21 @@ Warg_Event player_control_event(UID character)
   ev.type = Warg_Event_Type::PlayerControl;
   ev.event = pc;
   ev.t = get_real_time();
+  ev.reliable = false;
 
   return ev;
 }
 
-Warg_Event dir_event(uint8_t ch, vec3 d)
+Warg_Event player_movement_event(Move_Status move_status, vec3 dir)
 {
-  Dir_Event *dir;
-  dir = (Dir_Event *)malloc(sizeof *dir);
-  dir->character = ch;
-  dir->dir = d;
+  Player_Movement_Event *pme;
+  pme = (Player_Movement_Event *)malloc(sizeof *pme);
+  pme->move_status = move_status;
+  pme->dir = dir;
 
   Warg_Event ev;
-  ev.type = Warg_Event_Type::Dir;
-  ev.event = dir;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event move_event(uint8_t ch, Move_Status m)
-{
-  Move_Event *mv;
-  mv = (Move_Event *)malloc(sizeof *mv);
-  mv->character = ch;
-  mv->m = m;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::Move;
-  ev.event = mv;
+  ev.type = Warg_Event_Type::PlayerMovement;
+  ev.event = pme;
   ev.t = get_real_time();
 
   return ev;
@@ -233,9 +219,7 @@ void free_warg_event(CharSpawn_Event *ev) { free(ev->name); }
 
 void free_warg_event(PlayerControl_Event *ev) {}
 
-void free_warg_event(Dir_Event *dir) {}
-
-void free_warg_event(Move_Event *ev) {}
+void free_warg_event(Player_Movement_Event *ev) {}
 
 void free_warg_event(Jump_Event *jump) {}
 
@@ -270,14 +254,11 @@ void free_warg_event(Warg_Event ev)
     case Warg_Event_Type::PlayerControl:
       free_warg_event((PlayerControl_Event *)ev.event);
       break;
-    case Warg_Event_Type::Dir:
-      free_warg_event((Dir_Event *)ev.event);
+    case Warg_Event_Type::PlayerMovement:
+      free_warg_event((Player_Movement_Event *)ev.event);
       break;
     case Warg_Event_Type::Jump:
       free_warg_event((Jump_Event *)ev.event);
-      break;
-    case Warg_Event_Type::Move:
-      free_warg_event((Move_Event *)ev.event);
       break;
     case Warg_Event_Type::CharPos:
       free_warg_event((CharPos_Event *)ev.event);
@@ -372,15 +353,9 @@ void serialize(Buffer &b, PlayerControl_Event ev)
   serialize(b, ev.character);
 }
 
-void serialize(Buffer &b, Move_Event ev)
+void serialize(Buffer &b, Player_Movement_Event ev)
 {
-  serialize(b, ev.character);
-  serialize(b, (uint8_t)ev.m);
-}
-
-void serialize(Buffer &b, Dir_Event ev)
-{
-  serialize(b, ev.character);
+  serialize(b, (uint8_t)ev.move_status);
   serialize(b, ev.dir);
 }
 
@@ -453,11 +428,8 @@ void serialize(Buffer &b, Warg_Event ev)
     case Warg_Event_Type::PlayerControl:
       serialize(b, *(PlayerControl_Event *)ev.event);
       break;
-    case Warg_Event_Type::Move:
-      serialize(b, *(Move_Event *)ev.event);
-      break;
-    case Warg_Event_Type::Dir:
-      serialize(b, *(Dir_Event *)ev.event);
+    case Warg_Event_Type::PlayerMovement:
+      serialize(b, *(Player_Movement_Event *)ev.event);
       break;
     case Warg_Event_Type::Jump:
       serialize(b, *(Jump_Event *)ev.event);
@@ -572,20 +544,11 @@ PlayerControl_Event deserialize_player_control(Buffer &b)
   return ev;
 }
 
-Dir_Event deserialize_dir(Buffer &b)
+Player_Movement_Event deserialize_player_movement(Buffer &b)
 {
-  Dir_Event ev;
-  ev.character = deserialize_uint8(b);
+  Player_Movement_Event ev;
+  ev.move_status = (Move_Status)deserialize_uint8(b);
   ev.dir = deserialize_vec3(b);
-
-  return ev;
-}
-
-Move_Event deserialize_move(Buffer &b)
-{
-  Move_Event ev;
-  ev.character = deserialize_uint8(b);
-  ev.m = (Move_Status)deserialize_uint8(b);
 
   return ev;
 }
@@ -702,13 +665,9 @@ Warg_Event deserialize_event(Buffer &b)
       ev.event = malloc(sizeof(PlayerControl_Event));
       *(PlayerControl_Event *)ev.event = deserialize_player_control(b);
       break;
-    case Warg_Event_Type::Move:
-      ev.event = malloc(sizeof(Move_Event));
-      *(Move_Event *)ev.event = deserialize_move(b);
-      break;
-    case Warg_Event_Type::Dir:
-      ev.event = malloc(sizeof(Dir_Event));
-      *(Dir_Event *)ev.event = deserialize_dir(b);
+    case Warg_Event_Type::PlayerMovement:
+      ev.event = malloc(sizeof(Player_Movement_Event));
+      *(Player_Movement_Event *)ev.event = deserialize_player_movement(b);
       break;
     case Warg_Event_Type::Jump:
       ev.event = malloc(sizeof(Jump_Event));

@@ -34,16 +34,10 @@ enum Move_Status
   Right = 1 << 3
 };
 
-struct Dir_Event
+struct Player_Movement_Event
 {
-  uint8_t character;
+  Move_Status move_status;
   vec3 dir;
-};
-
-struct Move_Event
-{
-  uint8_t character;
-  Move_Status m;
 };
 
 struct Jump_Event
@@ -115,8 +109,7 @@ enum class Warg_Event_Type
   CharSpawnRequest,
   CharSpawn,
   PlayerControl,
-  Dir,
-  Move,
+  PlayerMovement,
   Jump,
   CharPos,
   Cast,
@@ -135,6 +128,7 @@ struct Warg_Event
   void *event;
   float64 t;
   UID peer;
+  bool reliable = true;
 };
 
 enum class Data_Type
@@ -157,8 +151,7 @@ struct Buffer
 Warg_Event char_spawn_request_event(const char *name, uint8_t team);
 Warg_Event char_spawn_event(UID id, const char *name, uint8_t team);
 Warg_Event player_control_event(UID character);
-Warg_Event dir_event(uint8_t ch, vec3 dir);
-Warg_Event move_event(uint8_t ch, Move_Status m);
+Warg_Event player_movement_event(Move_Status move_status, vec3 dir);
 Warg_Event jump_event(uint8_t ch);
 Warg_Event char_pos_event(uint8_t ch, vec3 dir, vec3 pos);
 Warg_Event cast_event(uint8_t caster, uint8_t target, const char *spell);

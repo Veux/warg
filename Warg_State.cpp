@@ -352,8 +352,11 @@ void Warg_State::handle_input(
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
 
-    if (right_button_down)
-      out.push(dir_event(pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
+    ASSERT(pc && chars.count(pc));
+
+    vec3 dir = right_button_down ?
+      normalize(-vec3(cam_rel.x, cam_rel.y, 0)) :
+      chars[pc].dir;
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -364,22 +367,22 @@ void Warg_State::handle_input(
       m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
-    out.push(move_event(pc, (Move_Status)m));
+    
+    out.push(player_movement_event((Move_Status)m, dir));
 
-    ASSERT(pc && chars.count(pc));
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
-  /* for (auto &surface : )
-    {
-      vec3 intersection_point;
-      bool intersects = ray_intersects_triangle(
-          player_pos, cam_rel, surface, &intersection_point);
-      if (intersects &&
-          length(player_pos - intersection_point) < effective_zoom)
+    /* for (auto &surface : )
       {
-        effective_zoom = length(player_pos - intersection_point);
-      }
-    } */
+        vec3 intersection_point;
+        bool intersects = ray_intersects_triangle(
+            player_pos, cam_rel, surface, &intersection_point);
+        if (intersects &&
+            length(player_pos - intersection_point) < effective_zoom)
+        {
+          effective_zoom = length(player_pos - intersection_point);
+        }
+      } */
     cam.pos = player_pos +
               vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
@@ -519,8 +522,9 @@ void Warg_State::update()
 
       Buffer b;
       serialize(b, ev);
+      enet_uint32 flags = ev.reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
       ENetPacket *packet = enet_packet_create(
-          &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+          &b.data[0], b.data.size(), flags);
       enet_peer_send(serverp, 0, packet);
       enet_host_flush(clientp);
       free_warg_event(ev);

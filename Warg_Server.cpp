@@ -108,11 +108,8 @@ void Warg_Server::process_event(Warg_Event ev)
     case Warg_Event_Type::CharSpawnRequest:
       process_char_spawn_request_event(ev);
       break;
-    case Warg_Event_Type::Dir:
-      process_dir_event(ev);
-      break;
-    case Warg_Event_Type::Move:
-      process_move_event(ev);
+    case Warg_Event_Type::PlayerMovement:
+      process_player_movement_event(ev);
       break;
     case Warg_Event_Type::Jump:
       process_jump_event(ev);
@@ -192,27 +189,18 @@ void Warg_Server::process_char_spawn_request_event(Warg_Event ev)
   push(char_spawn_event(ci, name, team));
 }
 
-void Warg_Server::process_dir_event(Warg_Event ev)
+void Warg_Server::process_player_movement_event(Warg_Event ev)
 {
-  ASSERT(ev.type == Warg_Event_Type::Dir);
+  ASSERT(ev.type == Warg_Event_Type::PlayerMovement);
   ASSERT(ev.event);
+  Player_Movement_Event *pme = (Player_Movement_Event *)ev.event;
 
-  Dir_Event *dir = (Dir_Event *)ev.event;
-  ASSERT(dir->character && chars.count(dir->character));
+  ASSERT(peers.count(ev.peer));
+  ASSERT(chars.count(peers[ev.peer].character));
+  auto &ch = chars[peers[ev.peer].character];
 
-  chars[dir->character].dir = dir->dir;
-}
-
-void Warg_Server::process_move_event(Warg_Event ev)
-{
-  ASSERT(ev.type == Warg_Event_Type::Move);
-  ASSERT(ev.event);
-
-  Move_Event *mv = (Move_Event *)ev.event;
-
-  ASSERT(mv->character && chars.count(mv->character));
-
-  chars[mv->character].move_status = mv->m;
+  ch.move_status = pme->move_status;
+  ch.dir = pme->dir;
 }
 
 void Warg_Server::process_jump_event(Warg_Event ev)
