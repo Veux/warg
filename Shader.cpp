@@ -264,7 +264,7 @@ void Shader::Shader_Handle::set_location_cache()
 
     str = s("shadow_map_enabled[", i, "]");
     light_locations_cache[i].shadow_map_enabled =
-      glGetUniformLocation(program, str.c_str());
+        glGetUniformLocation(program, str.c_str());
   }
 
   light_count_location = glGetUniformLocation(program, "number_of_lights");
