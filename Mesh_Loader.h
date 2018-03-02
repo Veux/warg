@@ -6,6 +6,7 @@
 #include <assimp/types.h>
 #include <glm/glm.hpp>
 #include <vector>
+using namespace glm;
 struct Mesh_Data
 {
   std::vector<vec3> positions;

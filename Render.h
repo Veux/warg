@@ -32,7 +32,7 @@ enum Texture_Location
   normal,
   emissive,
   roughness,
-  s0,// shadow maps
+  s0, // shadow maps
   s1,
   s2,
   s3,
@@ -41,9 +41,8 @@ enum Texture_Location
   s6,
   s7,
   s8,
-  s9 
+  s9
 };
-
 
 struct Renderbuffer_Handle
 {
@@ -79,9 +78,6 @@ struct Texture
   bool process_premultiply = false;
 };
 
-
-
-
 struct Mesh_Handle
 {
   ~Mesh_Handle();
@@ -115,7 +111,7 @@ struct Mesh
 
 struct Material_Descriptor
 {
-  //solid colors can be specified with "color(r,g,b,a)" uint8 values
+  // solid colors can be specified with "color(r,g,b,a)" uint8 values
   std::string albedo;
   std::string roughness;
   std::string specular;  // specular color for conductors   - unused for now
@@ -138,10 +134,9 @@ struct Material_Descriptor
 struct Material
 {
   Material();
-  Material(Material_Descriptor& m);
+  Material(Material_Descriptor &m);
   Material(aiMaterial *ai_material, std::string working_directory,
-           Material_Descriptor *material_override);
-
+      Material_Descriptor *material_override);
 
   Texture albedo;
   Texture normal;
@@ -153,10 +148,11 @@ struct Material
   vec4 albedo_mod = vec4(1.f);
   vec3 emissive_mod = vec3(1.f);
   vec3 roughness_mod = vec3(1.f);
+
 private:
   friend struct Render;
-  void load(Material_Descriptor& m);
-  void bind(Shader* shader);
+  void load(Material_Descriptor &m);
+  void bind(Shader *shader);
   void unbind_textures();
 };
 
@@ -178,18 +174,24 @@ struct Light
   Light_Type type;
   bool operator==(const Light &rhs) const;
 
-
   bool casts_shadows = false;
-  //these take a lot of careful tuning
-  //start with max_variance at 0
-  //near plane as far away, and far plane as close as possible is critical
-  //after that, increase the max_variance up from 0, slowly, right until noise disappears
-  int shadow_blur_iterations = 2;//higher is higher quality, but lower performance
-  float shadow_blur_radius = .5f;//preference
-  float shadow_near_plane = 0.1f;//this should be as far as possible without clipping into geometry
-  float shadow_far_plane = 100.f;//this should be as near as possible without clipping geometry
-  float max_variance = 0.000001f;//this value should be as low as possible without causing float precision noise
-  float shadow_fov = glm::radians(90.f);//this should be as low as possible without causing artifacts around the edge of the light field of view 
+  // these take a lot of careful tuning
+  // start with max_variance at 0
+  // near plane as far away, and far plane as close as possible is critical
+  // after that, increase the max_variance up from 0, slowly, right until noise
+  // disappears
+  int shadow_blur_iterations =
+      2; // higher is higher quality, but lower performance
+  float shadow_blur_radius = .5f; // preference
+  float shadow_near_plane =
+      0.1f; // this should be as far as possible without clipping into geometry
+  float shadow_far_plane =
+      100.f; // this should be as near as possible without clipping geometry
+  float max_variance = 0.000001f; // this value should be as low as possible
+                                  // without causing float precision noise
+  float shadow_fov = glm::radians(90.f); // this should be as low as possible
+                                         // without causing artifacts around the
+                                         // edge of the light field of view
 private:
 };
 
@@ -206,8 +208,7 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
-  Render_Entity(Mesh *mesh, Material *material,
-                mat4 world_to_model);
+  Render_Entity(Mesh *mesh, Material *material, mat4 world_to_model);
   mat4 transformation;
   Mesh *mesh;
   Material *material;
@@ -243,14 +244,14 @@ struct Framebuffer
   glm::ivec2 depth_size = glm::ivec2(0);
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
-
 };
 
 struct Gaussian_Blur
 {
   Gaussian_Blur();
   void init(ivec2 size, GLenum format);
-  void draw(Render* renderer, Texture* src, float32 radius, uint32 iterations = 1);
+  void draw(
+      Render *renderer, Texture *src, float32 radius, uint32 iterations = 1);
   Shader gaussian_blur_shader;
   Framebuffer target;
   Framebuffer intermediate_fbo;
@@ -260,7 +261,7 @@ struct Gaussian_Blur
 
 struct Spotlight_Shadow_Map
 {
-  Spotlight_Shadow_Map() {};
+  Spotlight_Shadow_Map(){};
   void init(ivec2 size);
   Framebuffer pre_blur;
   mat4 projection_camera;
@@ -274,7 +275,7 @@ struct High_Pass_Filter
 {
   High_Pass_Filter();
   void init(ivec2 size, GLenum format);
-  void draw(Render* renderer, Texture* src);
+  void draw(Render *renderer, Texture *src);
 
   Framebuffer target;
   Shader high_pass_shader;
@@ -286,8 +287,8 @@ struct Bloom_Shader
   Bloom_Shader();
   void init(ivec2 size, GLenum format);
 
-  //adds the blurred src to dst
-  void draw(Render* renderer, Texture* src, Framebuffer* dst);
+  // adds the blurred src to dst
+  void draw(Render *renderer, Texture *src, Framebuffer *dst);
   Framebuffer target;
   High_Pass_Filter high_pass;
   Gaussian_Blur blur;
@@ -295,6 +296,10 @@ struct Bloom_Shader
   uint32 iterations = 15;
   bool initialized = false;
 };
+
+void run_pixel_shader(Shader *shader, std::vector<Texture *> *src_textures,
+    Framebuffer *dst, bool clear_dst = false);
+
 struct Render
 {
   Render(SDL_Window *window, ivec2 window_size);
@@ -316,9 +321,7 @@ struct Render
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
-  static mat4 ortho_projection(ivec2& dst_size);
-  void run_pixel_shader(Shader* shader, std::vector<Texture*> src_textures, Framebuffer* dst, bool clear_dst = false);
-
+  static mat4 ortho_projection(ivec2 &dst_size);
 
   Mesh quad;
   Shader temporalaa;
@@ -326,6 +329,7 @@ struct Render
   Shader variance_shadow_map;
   Shader gamma_correction;
   Bloom_Shader bloom;
+
 private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
@@ -334,7 +338,7 @@ private:
   std::vector<Render_Instance> render_instances;
   std::vector<Render_Entity> translucent_entities;
   void set_uniform_lights(Shader &shader);
-  void set_uniform_shadowmaps(Shader& shader);
+  void set_uniform_shadowmaps(Shader &shader);
   void build_shadow_maps();
   void opaque_pass(float32 time);
   void instance_pass(float32 time);
@@ -343,11 +347,11 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
-  float32 render_scale = 1.0f; 
-  ivec2 window_size;            // actual window size
-  ivec2 size;                   // render target size
+  float32 render_scale = 1.0f;
+  ivec2 window_size; // actual window size
+  ivec2 size;        // render target size
   float32 vfov = 60;
-  ivec2 shadow_map_size = ivec2(2048, 2048)/2;
+  ivec2 shadow_map_size = ivec2(2048, 2048) / 2;
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);
@@ -357,10 +361,9 @@ private:
   Framebuffer previous_frame;
 
   Framebuffer draw_target;
-  GLuint* output_texture = nullptr;
+  GLuint *output_texture = nullptr;
 
- bool previous_color_target_missing = true;
+  bool previous_color_target_missing = true;
   GLuint instance_mvp_buffer = 0;   // buffer object holding MVP matrices
- GLuint instance_model_buffer = 0; // buffer object holding model matrices
-
+  GLuint instance_model_buffer = 0; // buffer object holding model matrices
 };

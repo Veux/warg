@@ -2,12 +2,11 @@
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
+#include "Third_party/imgui/imgui.h"
 #include <atomic>
 #include <memory>
 #include <sstream>
 #include <thread>
-#include "Third_party/imgui/imgui.h"
-#include "Third_party/imgui/imgui_impl_sdl_gl3.h"
 
 using namespace glm;
 
@@ -80,25 +79,23 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   reset_mouse_delta();
 }
 
-void Warg_State::handle_input(
-    State **current_state, std::vector<State *> available_states)
+void Warg_State::handle_input_events(
+    const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
 {
-  auto is_pressed = [](int key) {
+  auto is_pressed = [block_kb](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
     SDL_PumpEvents();
-    return keys[key];
+    return block_kb ? 0 : keys[key];
   };
-  SDL_Event _e;
-  while (SDL_PollEvent(&_e))
+
+  set_message("warg state block kb state: ", s(block_kb), 1.0f);
+  set_message("warg state block mouse state: ", s(block_mouse), 1.0f);
+
+  for (auto &_e : events)
   {
-    ImGui_ImplSdlGL3_ProcessEvent(&_e);
-    if (_e.type == SDL_QUIT)
+    if (_e.type == SDL_KEYDOWN)
     {
-      running = false;
-      return;
-    }
-    else if (_e.type == SDL_KEYDOWN)
-    {
+      ASSERT(!block_kb);
       if (_e.key.keysym.sym == SDLK_ESCAPE)
       {
         running = false;
@@ -111,18 +108,9 @@ void Warg_State::handle_input(
     }
     else if (_e.type == SDL_KEYUP)
     {
+      ASSERT(!block_kb);
       if (local)
       {
-        if (_e.key.keysym.sym == SDLK_F1)
-        {
-          *current_state = &*available_states[0];
-          return;
-        }
-        if (_e.key.keysym.sym == SDLK_F2)
-        {
-          *current_state = &*available_states[1];
-          return;
-        }
         if (_e.key.keysym.sym == SDLK_F5)
         {
           if (free_cam)
@@ -140,72 +128,10 @@ void Warg_State::handle_input(
           }
         }
       }
-      // if (_e.key.keysym.sym == SDLK_TAB && !free_cam)
-      // {
-      //   int first_lower = -1, first_higher = -1;
-      //   for (int i = client->chars.size() - 1; i >= 0; i--)
-      //   {
-      //     if (client->chars[i].alive &&
-      //         client->chars[i].team != client->chars[client->pc].team)
-      //     {
-      //       if (i < client->chars[client->pc].target)
-      //       {
-      //         first_lower = i;
-      //       }
-      //       else if (i > client->chars[client->pc].target)
-      //       {
-      //         first_higher = i;
-      //       }
-      //     }
-      //   }
-
-      //   if (first_higher != -1)
-      //   {
-      //     client->chars[client->pc].target = first_higher;
-      //   }
-      //   else if (first_lower != -1)
-      //   {
-      //     client->chars[client->pc].target = first_lower;
-      //   }
-      //   set_message("Target",
-      //       s(client->chars[client->pc].name, " targeted ",
-      //           client->chars[client->chars[client->pc].target].name),
-      //       3.0f);
-      // }
-      // if (_e.key.keysym.sym == SDLK_1 && !free_cam)
-      // {
-      //   out.push(cast_event(
-      //       client->pc, client->chars[client->pc].target, "Frostbolt"));
-      // }
-      // if (_e.key.keysym.sym == SDLK_2 && !free_cam)
-      // {
-      //   int target = (client->chars[pc].target < 0 ||
-      //                    client->chars[pc].team !=
-      //                        client->chars[client->chars[pc].target].team)
-      //                    ? pc
-      //                    : client->chars[pc].target;
-      //   out.push(cast_event(pc, target, "Lesser Heal"));
-      // }
-      // if (_e.key.keysym.sym == SDLK_3 && !free_cam)
-      // {
-      //   out.push(cast_event(pc, client->chars[pc].target,
-      //   "Counterspell"));
-      // }
-      // if (_e.key.keysym.sym == SDLK_4 && !free_cam)
-      // {
-      //   out.push(cast_event(pc, pc, "Ice Block"));
-      // }
-      // if (_e.key.keysym.sym == SDLK_5 && !free_cam)
-      // {
-      //   out.push(cast_event(pc, -1, "Arcane Explosion"));
-      // }
-      // if (_e.key.keysym.sym == SDLK_6 && !free_cam)
-      // {
-      //   out.push(cast_event(pc, -1, "Holy Nova"));
-      // }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
+      ASSERT(!block_mouse);
       if (_e.wheel.y < 0)
       {
         cam.zoom += ZOOM_STEP;
@@ -215,33 +141,23 @@ void Warg_State::handle_input(
         cam.zoom -= ZOOM_STEP;
       }
     }
-    else if (_e.type == SDL_WINDOWEVENT)
-    {
-      if (_e.window.event == SDL_WINDOWEVENT_RESIZED)
-      {
-        // resize
-      }
-      else if (_e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
-               _e.window.event == SDL_WINDOWEVENT_ENTER)
-      { // dumping mouse delta prevents camera teleport on focus gain
-
-        // required, else clicking the title bar itself to gain focus
-        // makes SDL ignore the mouse entirely for some reason...
-        SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_SetRelativeMouseMode(SDL_bool(true));
-        reset_mouse_delta();
-      }
-    }
   }
-
-  checkSDLError(__LINE__);
   // first person style camera control:
-  const uint32 mouse_state =
-      SDL_GetMouseState(&mouse_position.x, &mouse_position.y);
+  ivec2 mouse;
+  uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
 
-  // note: SDL_SetRelativeMouseMode is being set by the constructor
-  ivec2 mouse_delta;
-  SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+  if (block_mouse)
+  {
+    mouse_state = 0;
+    mouse = last_seen_mouse_position;
+  }
+  ivec2 mouse_delta = mouse - last_seen_mouse_position;
+  last_seen_mouse_position = mouse;
+
+  set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
+  set_message("mouse grab position:",
+      s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
+      1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -252,6 +168,7 @@ void Warg_State::handle_input(
     return;
   if (free_cam)
   {
+    SDL_SetRelativeMouseMode(SDL_bool(true));
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
     cam.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
@@ -305,12 +222,39 @@ void Warg_State::handle_input(
   else
   { // wow style camera
     vec4 cam_rel;
+    // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) &&
         (last_seen_lmb || last_seen_rmb))
-    { // won't track mouse delta that happened when mouse button was not
-      // pressed
+    {
       cam.theta += mouse_delta.x * MOUSE_X_SENS;
       cam.phi += mouse_delta.y * MOUSE_Y_SENS;
+
+      if (!mouse_grabbed)
+      { // first hold
+        set_message("mouse grab event", "", 1.0f);
+        mouse_grabbed = true;
+        last_grabbed_mouse_position = mouse;
+        SDL_SetRelativeMouseMode(SDL_bool(true));
+      }
+      set_message("mouse is grabbed", "", 1.0f);
+    }
+    else
+    { // not holding button
+      set_message("mouse is free", "", 1.0f);
+      if (mouse_grabbed)
+      { // first unhold
+        set_message("mouse release event", "", 1.0f);
+        mouse_grabbed = false;
+
+        set_message("mouse warp:",
+            s("from:", mouse.x, " ", mouse.y,
+                " to:", last_grabbed_mouse_position.x, " ",
+                last_grabbed_mouse_position.y),
+            1.0f);
+        SDL_SetRelativeMouseMode(SDL_bool(false));
+        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
+            last_grabbed_mouse_position.y);
+      }
     }
     // wrap x
     if (cam.theta > two_pi<float32>())
@@ -388,7 +332,6 @@ void Warg_State::handle_input(
               vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
   }
-
   previous_mouse_state = mouse_state;
 }
 
@@ -445,26 +388,33 @@ void Warg_State::update()
   static bool show_demo_window = true;
   static bool show_another_window = false;
 
-
   {
     static float f = 0.0f;
     static int counter = 0;
-    ImGui::Text("Hello, world!");                           // Display some text (you can use a format string too)
-    ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f    
-    ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+    ImGui::Text(
+        "Hello, world!"); // Display some text (you can use a format string too)
+    ImGui::SliderFloat("float", &f, 0.0f,
+        1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+    ImGui::ColorEdit3("clear color",
+        (float *)&clear_color); // Edit 3 floats representing a color
 
-    ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our windows open/close state
+    ImGui::Checkbox("Demo Window",
+        &show_demo_window); // Edit bools storing our windows open/close state
     ImGui::Checkbox("Another Window", &show_another_window);
 
-    if (ImGui::Button("Button"))                            // Buttons return true when clicked (NB: most widgets return true when edited/activated)
+    if (ImGui::Button("Button")) // Buttons return true when clicked (NB: most
+                                 // widgets return true when edited/activated)
       counter++;
     ImGui::SameLine();
     ImGui::Text("counter = %d", counter);
 
-    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::Text(
+        "Application average %.3f ms per state update (%.1f updates/sec)",
+        1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
   }
 
-  // 2. Show another simple window. In most cases you will use an explicit Begin/End pair to name your windows.
+  // 2. Show another simple window. In most cases you will use an explicit
+  // Begin/End pair to name your windows.
   if (show_another_window)
   {
     ImGui::Begin("Another Window", &show_another_window);
@@ -474,10 +424,15 @@ void Warg_State::update()
     ImGui::End();
   }
 
-  // 3. Show the ImGui demo window. Most of the sample code is in ImGui::ShowDemoWindow(). Read its code to learn more about Dear ImGui!
+  // 3. Show the ImGui demo window. Most of the sample code is in
+  // ImGui::ShowDemoWindow(). Read its code to learn more about Dear ImGui!
   if (show_demo_window)
   {
-    ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver); // Normally user code doesn't need/want to call this because positions are saved in .ini file anyway. Here we just want to make the demo initial state a bit more friendly!
+    ImGui::SetNextWindowPos(ImVec2(650, 20),
+        ImGuiCond_FirstUseEver); // Normally user code doesn't need/want to call
+                                 // this because positions are saved in .ini
+                                 // file anyway. Here we just want to make the
+                                 // demo initial state a bit more friendly!
     ImGui::ShowDemoWindow(&show_demo_window);
   }
 
