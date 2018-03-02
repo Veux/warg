@@ -39,22 +39,22 @@ void Warg_Server::process_packets()
 
         for (auto &c : chars)
           send_event(peers[id],
-              char_spawn_event(c.first, c.second.name.c_str(), c.second.team));
+            Char_Spawn_Message(c.first, c.second.name.c_str(), c.second.team));
         break;
       }
       case ENET_EVENT_TYPE_RECEIVE:
       {
         Buffer b;
         b.insert((void *)event.packet->data, event.packet->dataLength);
-        auto ev = deserialize_event(b);
-        ev.peer = 0;
+        auto ev = deserialize_message(b);
+        ev->peer = 0;
         for (auto &p : peers)
         {
           if (p.second.peer == event.peer)
-            ev.peer = p.first;
+            ev->peer = p.first;
         }
-        ASSERT(ev.peer >= 0);
-        process_event(ev);
+        ASSERT(ev->peer >= 0);
+        ev->handle(*this);
         break;
       }
       case ENET_EVENT_TYPE_DISCONNECT:
@@ -89,7 +89,7 @@ void Warg_Server::update(float32 dt)
     ch.update_mana(dt);
     ch.update_spell_cooldowns(dt);
     ch.update_global_cooldown(dt);
-    push(char_pos_event(cid, ch.dir, ch.pos));
+    push(Char_Pos_Message(cid, ch.dir, ch.pos));
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
@@ -103,29 +103,6 @@ void Warg_Server::update(float32 dt)
   send_events();
 }
 
-void Warg_Server::process_event(Warg_Event ev)
-{
-  ASSERT(ev.event);
-  switch (ev.type)
-  {
-    case Warg_Event_Type::CharSpawnRequest:
-      process_char_spawn_request_event(ev);
-      break;
-    case Warg_Event_Type::PlayerMovement:
-      process_player_movement_event(ev);
-      break;
-    case Warg_Event_Type::Jump:
-      process_jump_event(ev);
-      break;
-    case Warg_Event_Type::Cast:
-      process_cast_event(ev);
-      break;
-    default:
-      break;
-  }
-  free_warg_event(ev);
-}
-
 void Warg_Server::process_events()
 {
   for (auto &peer : peers)
@@ -135,10 +112,8 @@ void Warg_Server::process_events()
     while (!p.in->empty())
     {
       auto &ev = p.in->front();
-      if (get_real_time() - ev.t < SIM_LATENCY / 2000.0f)
-        return;
-      ev.peer = peer.first;
-      process_event(ev);
+      ev->peer = peer.first;
+      ev->handle(*this);
       p.in->pop();
     }
   }
@@ -173,75 +148,46 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
   return false;
 }
 
-void Warg_Server::process_char_spawn_request_event(Warg_Event ev)
+void Char_Spawn_Request_Message::handle(Warg_Server &server)
 {
-  ASSERT(ev.type == Warg_Event_Type::CharSpawnRequest);
-  ASSERT(ev.event);
-
-  CharSpawnRequest_Event *req = (CharSpawnRequest_Event *)ev.event;
-
-  char *name = req->name;
-  int team = req->team;
-  ASSERT(name);
-
-  UID ci = add_char(team, name);
-  ASSERT(ev.peer && peers.count(ev.peer));
-  peers[ev.peer].character = ci;
-
-  send_event(peers[ev.peer], player_control_event(ci));
-  push(char_spawn_event(ci, name, team));
+  UID character = server.add_char(team, name.c_str());
+  ASSERT(server.peers.count(peer));
+  server.peers[peer].character = character;
 }
 
-void Warg_Server::process_player_movement_event(Warg_Event ev)
+void Player_Movement_Message::handle(Warg_Server &server)
 {
-  ASSERT(ev.type == Warg_Event_Type::PlayerMovement);
-  ASSERT(ev.event);
-  Player_Movement_Event *pme = (Player_Movement_Event *)ev.event;
+  ASSERT(server.peers.count(peer));
+  auto &peer_ = server.peers[peer];
+  ASSERT(server.chars.count(peer_.character));
+  auto &character = server.chars[peer_.character];
 
-  ASSERT(peers.count(ev.peer));
-  ASSERT(chars.count(peers[ev.peer].character));
-  auto &ch = chars[peers[ev.peer].character];
-
-  ch.move_status = pme->move_status;
-  ch.dir = pme->dir;
+  character.move_status = move_status;
+  character.dir = dir;
 }
 
-void Warg_Server::process_jump_event(Warg_Event ev)
+void Jump_Message::handle(Warg_Server &server)
 {
-  ASSERT(ev.type == Warg_Event_Type::Jump);
-  ASSERT(ev.event);
+  ASSERT(server.peers.count(peer));
+  auto &peer_ = server.peers[peer];
+  ASSERT(server.chars.count(peer_.character));
+  auto &character = server.chars[peer_.character];
 
-  Jump_Event *jump = (Jump_Event *)ev.event;
-  UID character = peers[ev.peer].character;
-
-  ASSERT(jump);
-  ASSERT(character && chars.count(character));
-  Character *c = &chars[character];
-
-  if (c->grounded)
+  if (character.grounded)
   {
-    c->vel.z += 4;
-    c->grounded = false;
+    character.vel.z += 4;
+    character.grounded = false;
   }
 }
 
-void Warg_Server::process_cast_event(Warg_Event ev)
+void Cast_Message::handle(Warg_Server &server)
 {
-  ASSERT(ev.type == Warg_Event_Type::Cast);
-  ASSERT(ev.event);
+  ASSERT(server.peers.count(peer));
+  auto &peer_ = server.peers[peer];
+  ASSERT(server.chars.count(peer_.character));
+  auto &character = server.chars[peer_.character];
 
-  Cast_Event *cast = (Cast_Event *)ev.event;
-
-  UID ch = cast->character;
-  ASSERT(ch && chars.count(ch));
-
-  UID target = cast->target;
-  ASSERT(!target || chars.count(target));
-
-  char *spell = cast->spell;
-  ASSERT(spell);
-
-  try_cast_spell(chars[ch], target, spell);
+  server.try_cast_spell(character, target, spell.c_str());
 }
 
 void Warg_Server::try_cast_spell(
@@ -256,7 +202,7 @@ void Warg_Server::try_cast_spell(
 
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster.id, target_, spell)))
-    push(cast_error_event(caster.id, target_, spell_, static_cast<int>(err)));
+    push(Cast_Error_Message(caster.id, target_, spell_, (int)err));
   else
     cast_spell(caster.id, target_, spell);
 }
@@ -287,7 +233,7 @@ void Warg_Server::begin_cast(UID caster_, UID target_, Spell *spell)
   caster->cast_target = target_;
   caster->gcd = caster->e_stats.gcd;
 
-  push(cast_begin_event(caster_, target_, spell->def->name.c_str()));
+  push(Cast_Begin_Message(caster_, target_, spell->def->name.c_str()));
 }
 
 void Warg_Server::interrupt_cast(UID ci)
@@ -299,7 +245,7 @@ void Warg_Server::interrupt_cast(UID ci)
   c->cast_progress = 0;
   c->casting_spell = nullptr;
   c->gcd = 0;
-  push(cast_interrupt_event(ci));
+  push(Cast_Interrupt_Message(ci));
 }
 
 void Warg_Server::update_cast(UID caster_, float32 dt)
@@ -364,8 +310,8 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
-    push(cast_error_event(
-        caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
+    push(Cast_Error_Message
+          (caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
     return;
   }
 
@@ -460,7 +406,7 @@ void Warg_Server::invoke_spell_effect_apply_buff(SpellEffectInst &effect)
   else
     target->debuffs.push_back(buff);
 
-  push(buff_appl_event(effect.target, buff.def.name.c_str()));
+  push(Buff_Application_Message(effect.target, buff.def.name.c_str()));
 }
 
 void Warg_Server::invoke_spell_effect_clear_debuffs(SpellEffectInst &effect)
@@ -494,7 +440,7 @@ void Warg_Server::invoke_spell_effect_damage(SpellEffectInst &effect)
     target->alive = false;
   }
 
-  push(char_hp_event(effect.target, target->hp));
+  push(Char_HP_Message(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
@@ -517,7 +463,7 @@ void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
     target->hp = target->hp_max;
   }
 
-  push(char_hp_event(effect.target, target->hp));
+  push(Char_HP_Message(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
@@ -533,7 +479,7 @@ void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
   target->cast_progress = 0;
   target->cast_target = 0;
 
-  push(cast_interrupt_event(effect.target));
+  push(Cast_Interrupt_Message(effect.target));
 }
 
 void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
@@ -547,8 +493,8 @@ void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
   obji.pos = effect.pos;
   spell_objs.push_back(obji);
 
-  push(object_launch_event(
-      effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
+  push(Object_Launch_Message(
+    effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
 }
 
 void Warg_Server::update_buffs(UID character, float32 dt)
@@ -645,25 +591,28 @@ UID Warg_Server::add_char(int team, const char *name)
 }
 
 void Warg_Server::connect(
-    std::queue<Warg_Event> *in, std::queue<Warg_Event> *out)
+    std::queue<unique_ptr<Message>> *in, std::queue<unique_ptr<Message>> *out)
 {
   peers[uid()] = {nullptr, in, out, 0};
 }
 
-void Warg_Server::push(Warg_Event ev) { tick_events.push_back(ev); }
+void Warg_Server::push(Message &ev)
+{ 
+  tick_events.push_back(std::make_unique<Message>(ev));
+}
 
-void Warg_Server::send_event(Warg_Peer &p, Warg_Event ev)
+void Warg_Server::send_event(Warg_Peer &p, Message &ev)
 {
   if (local)
   {
     ASSERT(p.out);
-    p.out->push(ev);
+    p.out->push(std::make_unique<Message>(ev));
   }
   else
   {
     ASSERT(p.peer);
     Buffer b;
-    serialize(b, ev);
+    ev.serialize_(b);
     ENetPacket *packet = enet_packet_create(
         &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
     enet_peer_send(p.peer, 0, packet);
@@ -675,6 +624,6 @@ void Warg_Server::send_events()
 {
   for (auto &p : peers)
     for (auto &ev : tick_events)
-      send_event(p.second, ev);
+      send_event(p.second, *ev);
   tick_events.clear();
 }

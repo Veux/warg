@@ -17,19 +17,10 @@ struct Warg_State : protected State
       State **current_state, std::vector<State *> available_states);
   void process_packets();
   void process_events();
-  void process_event(CharSpawn_Event *ev);
-  void process_event(PlayerControl_Event *ev);
-  void process_event(CharPos_Event *ev);
-  void process_event(CastError_Event *ev);
-  void process_event(CastBegin_Event *ev);
-  void process_event(CastInterrupt_Event *ev);
-  void process_event(CharHP_Event *ev);
-  void process_event(BuffAppl_Event *ev);
-  void process_event(ObjectLaunch_Event *ev);
   void add_char(UID id, int team, const char *name);
 
   std::unique_ptr<Warg_Server> server;
-  std::queue<Warg_Event> in, out;
+  queue<unique_ptr<Message>> in, out;
   bool local;
   ENetPeer *serverp;
   ENetHost *clientp;

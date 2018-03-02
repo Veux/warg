@@ -15,7 +15,7 @@ using std::unique_ptr;
 struct Warg_Peer
 {
   ENetPeer *peer;
-  queue<Warg_Event> *in, *out;
+  queue<unique_ptr<Message>> *in, *out;
   UID character = 0;
 };
 
@@ -23,20 +23,13 @@ struct Warg_Server
 {
   Warg_Server(bool local);
   void update(float32 dt);
-  void connect(queue<Warg_Event> *in, queue<Warg_Event> *out);
+  void connect(queue<unique_ptr<Message>> *in, queue<unique_ptr<Message>> *out);
 
-private:
-  void push(Warg_Event ev);
-  void send_event(Warg_Peer &p, Warg_Event ev);
+  void push(Message &ev);
+  void send_event(Warg_Peer &p, Message &ev);
   void send_events();
   void process_packets();
-
-  void process_event(Warg_Event ev);
   void process_events();
-  void process_char_spawn_request_event(Warg_Event ev);
-  void process_player_movement_event(Warg_Event ev);
-  void process_jump_event(Warg_Event ev);
-  void process_cast_event(Warg_Event ev);
 
   UID add_char(int team, const char *name);
   CastErrorType cast_viable(UID caster_, UID target_, Spell *spell);
@@ -58,8 +51,8 @@ private:
   void update_target(UID ch);
   bool update_spell_object(SpellObjectInst *so);
 
-  queue<Warg_Event> eq;
-  vector<Warg_Event> tick_events;
+  queue<unique_ptr<Message>> eq;
+  vector<unique_ptr<Message>> tick_events;
   std::map<UID, Warg_Peer> peers;
   ENetHost *server;
   bool local = true;
