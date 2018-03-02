@@ -12,7 +12,7 @@
 #include "Render.h"
 #include "Shader.h"
 #include "Third_party/imgui/imgui.h"
-#include "imgui_impl_sdl_gl3.h"
+#include "SDL_Imgui_State.h"
 #include "Timer.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>

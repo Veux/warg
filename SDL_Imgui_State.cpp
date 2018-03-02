@@ -8,12 +8,11 @@
 // call 4 functions: ImGui_ImplXXXX_Init(), ImGui_ImplXXXX_NewFrame(),
 // ImGui::Render() and ImGui_ImplXXXX_Shutdown().
 
-#include "imgui_impl_sdl_gl3.h"
+#include "SDL_Imgui_State.h"
 #include "Render.h"
 #include "Third_Party/imgui/imgui.h"
 
 #include "Globals.h"
-#include "imgui_impl_sdl_gl3.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 

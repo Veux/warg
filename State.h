@@ -1,7 +1,7 @@
 #pragma once
 #include "Render.h"
 #include "Scene_Graph.h"
-#include "imgui_impl_sdl_gl3.h"
+#include "SDL_Imgui_State.h"
 #include <array>
 #include <functional>
 #include <map>
