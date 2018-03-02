@@ -25,14 +25,14 @@ void serialize(Buffer &b, int32_t n) { b.insert(&n, sizeof(n)); }
 
 void serialize(Buffer &b, uint32_t n) { b.insert(&n, sizeof(n)); }
 
-void serialize(Buffer &b, char *s)
+void serialize(Buffer &b, const char *s)
 {
   ASSERT(s);
   uint16_t len = strlen(s);
   ASSERT(len <= UINT16_MAX);
   b.reserve(sizeof(len) + len);
   b.insert(&len, sizeof(len));
-  b.insert(s, len);
+  b.insert((void *)s, len);
 }
 
 void serialize(Buffer &b, std::string s)
