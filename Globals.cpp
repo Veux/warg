@@ -24,6 +24,8 @@ const std::string BASE_SHADER_PATH = BASE_ASSET_PATH + std::string("Shaders/");
 const std::string BASE_MODEL_PATH = BASE_ASSET_PATH + std::string("Models/");
 const std::string ERROR_TEXTURE_PATH = BASE_TEXTURE_PATH + "err.png";
 Timer PERF_TIMER = Timer(1000);
+Timer FRAME_TIMER = Timer(60);
+Timer SWAP_TIMER = Timer(60);
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
@@ -155,7 +157,7 @@ std::string read_file(const char *path)
   return result;
 }
 
-Uint32 string_to_color(std::string color)
+Uint32 string_to_U32_color(std::string color)
 {
   // color(n,n,n,n)
   std::string a = color.substr(6);
@@ -190,6 +192,41 @@ Uint32 string_to_color(std::string color)
   return result;
 }
 
+glm::vec4 string_to_float4_color(std::string color)
+{
+  // color(n,n,n,n)
+  std::string a = color.substr(6);
+  // n,n,n,n)
+  a.pop_back();
+  // n,n,n,n
+
+  std::string c;
+  vec4 result(0);
+
+  int i = 0;
+  auto it = a.begin();
+  while (true)
+  {
+    if (it == a.end() || *it == ',')
+    {
+      ASSERT(i < 4);
+      result[i] = std::stof(c);
+      if (it == a.end())
+      {
+        break;
+      }
+      c.clear();
+      ++i;
+      ++it;
+      continue;
+    }
+    c.push_back(*it);
+    ++it;
+  }
+
+  return result;
+}
+
 Uint64 dankhash(float32 *data, uint32 size)
 {
   Uint64 h = 1631243561234777777;
@@ -204,7 +241,7 @@ Uint64 dankhash(float32 *data, uint32 size)
   return h + acc;
 }
 
-//void _check_gl_error(const char *file, uint32 line)
+// void _check_gl_error(const char *file, uint32 line)
 //{
 //  set_message("Checking GL Error in file: ",
 //              std::string(file) + " Line: " + std::to_string(line));
@@ -234,7 +271,8 @@ Uint64 dankhash(float32 *data, uint32 size)
 //    }
 //    set_message(
 //        "GL ERROR",
-//        "GL_" + error + " - " + file + ":" + std::to_string(line) + "\n", 1.0);
+//        "GL_" + error + " - " + file + ":" + std::to_string(line) +
+//        "\n", 1.0);
 //    std::cout << get_messages();
 //    push_log_to_disk();
 //    throw;
@@ -268,7 +306,7 @@ void check_gl_error()
     }
     set_message("GL ERROR", "GL_" + error);
     push_log_to_disk();
-    std::terminate();
+    ASSERT(0);
   }
 }
 void checkSDLError(int32 line)
@@ -285,7 +323,6 @@ void checkSDLError(int32 line)
   }
 #endif
 }
-
 
 float64 get_real_time()
 {
@@ -304,12 +341,9 @@ struct Message
 };
 static std::vector<Message> messages;
 static std::string message_log = "";
-std::string get_message_log()
-{
-  return message_log;
-}
+std::string get_message_log() { return message_log; }
 void __set_message(std::string identifier, std::string message,
-                  float64 msg_duration, const char *file, uint32 line)
+    float64 msg_duration, const char *file, uint32 line)
 {
   const float64 time = get_real_time();
   bool found = false;
@@ -336,8 +370,8 @@ void __set_message(std::string identifier, std::string message,
                      message + " File: " + file + ": " + std::to_string(line) +
                      "\n\n");
 #else
-  message_log.append("Time: " + s(time) + " Event: " + identifier + " " +
-                     message + "\n");
+  message_log.append(
+      "Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
 #endif
 }
 
@@ -368,8 +402,8 @@ void push_log_to_disk()
     std::fstream file("warg_log.txt", std::ios::out | std::ios::trunc);
     first = false;
   }
-  std::fstream file("warg_log.txt",
-                    std::ios::in | std::ios::out | std::ios::app);
+  std::fstream file(
+      "warg_log.txt", std::ios::in | std::ios::out | std::ios::app);
   file.seekg(std::ios::end);
   file.write(message_log.c_str(), message_log.size());
   file.close();

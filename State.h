@@ -1,6 +1,7 @@
 #pragma once
 #include "Render.h"
 #include "Scene_Graph.h"
+#include "SDL_Imgui_State.h"
 #include <array>
 #include <functional>
 #include <map>
@@ -21,7 +22,11 @@ struct State
   virtual void render(float64 t) final;
   virtual void update() = 0;
   virtual void handle_input(State **current_state,
-                            std::vector<State *> available_states) = 0;
+      std::vector<State *> *available_states,
+      const std::vector<SDL_Event> &input_events, bool block_kb,
+      bool block_mouse) final;
+  virtual void handle_input_events(const std::vector<SDL_Event> &events,
+      bool block_kb, bool block_mouse) = 0;
   float64 current_time = 0;
   bool paused = true;
   float64 paused_time_accumulator =
@@ -34,13 +39,15 @@ struct State
   std::string state_name;
   Render renderer;
   Scene_Graph scene;
+
 protected:
   void prepare_renderer(double t);
-  ivec2 mouse_position = ivec2(0, 0);
+  ivec2 last_seen_mouse_position = ivec2(0, 0);
+  ivec2 last_grabbed_mouse_position = ivec2(0, 0);
+  bool mouse_grabbed = false;
   uint32 previous_mouse_state = 0;
   bool free_cam = false;
   Camera cam;
   vec3 clear_color = vec3(0);
-private:
   SDL_Window *window = nullptr;
 };

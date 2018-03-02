@@ -6,6 +6,9 @@
 #include "Warg_State.h"
 #include <SDL2/SDL.h>
 #undef main
+#include "Third_party/imgui/imgui.h"
+#include "Third_party/imgui/imgui_internal.h"
+#include "SDL_Imgui_State.h"
 #include <enet/enet.h>
 #include <iostream>
 #include <sstream>
@@ -97,10 +100,10 @@ int main(int argc, char *argv[])
 
     if (argc <= 4)
     {
-		std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
-           "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
-           "127.0.0.1 Warriorguy 0"
-        << std::endl;
+      std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
+                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
+                   "127.0.0.1 Warriorguy 0"
+                << std::endl;
       return 1;
     }
     address = argv[2];
@@ -163,8 +166,10 @@ int main(int argc, char *argv[])
   }
 
   glbinding::Binding::initialize();
-  glbinding::setCallbackMaskExcept(glbinding::CallbackMask::After |
-  glbinding::CallbackMask::ParametersAndReturnValue, { "glGetError", "glFlush" });
+  glbinding::setCallbackMaskExcept(
+      glbinding::CallbackMask::After |
+          glbinding::CallbackMask::ParametersAndReturnValue,
+      {"glGetError", "glFlush"});
 #if ENABLE_OPENGL_ERROR_CATCHING_AND_LOG
   glbinding::setBeforeCallback(gl_before_check);
   glbinding::setAfterCallback(gl_after_check);
@@ -173,21 +178,28 @@ int main(int argc, char *argv[])
   checkSDLError(__LINE__);
 
   SDL_ClearError();
+
+  SDL_Imgui_State state_imgui(window);
+  SDL_Imgui_State renderer_imgui(window);
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
-  if (!WARG_SERVER)
-  INIT_RENDERER();
 
   Warg_State *game_state;
   if (client)
-  	  game_state = new Warg_State("Warg", window, window_size, address.c_str(), char_name.c_str(), team);
+    game_state = new Warg_State(
+        "Warg", window, window_size, address.c_str(), char_name.c_str(), team);
   else
-	  game_state = new Warg_State("Warg", window, window_size);
+    game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
   states.push_back((State *)game_state);
   Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
   State *current_state = &*states[0];
+  std::vector<SDL_Event> input_events;
+
+  // todo: compositor for n state/renderer pairs with ui
+
+  SDL_SetRelativeMouseMode(SDL_bool(false));
   while (current_state->running)
   {
     const float64 real_time = get_real_time();
@@ -209,26 +221,90 @@ int main(int argc, char *argv[])
       elapsed_time = 0.3;
     last_time = current_state->current_time;
 
+    state_imgui.bind();
+
+    bool draw_state_ui = true;
+    bool draw_render_ui = true;
+
+    state_imgui.bind();
     while (current_state->current_time + dt < last_time + elapsed_time)
     {
       State *s = current_state;
       s->current_time += dt;
-      current_state->handle_input(&current_state, states);
+      state_imgui.handle_input();
+
+      bool block_kb = state_imgui.context->IO.WantTextInput |
+                      renderer_imgui.context->IO.WantTextInput;
+      bool block_mouse = state_imgui.context->IO.WantCaptureMouse |
+                         renderer_imgui.context->IO.WantCaptureMouse;
+
+      current_state->handle_input(&current_state, &states,
+          state_imgui.event_output, block_kb, block_mouse);
+
+      for (auto &e : state_imgui.event_output)
+      {
+        input_events.push_back(e);
+      }
+      state_imgui.event_output.clear();
+      state_imgui.new_frame(window);
       s->update();
+      state_imgui.end_frame();
+      bool last_state_update =
+          !(current_state->current_time + dt < last_time + elapsed_time);
+
       if (s != current_state)
       {
+        last_state_update = true;
         s->paused = true;
         current_state->renderer.set_render_scale(
             current_state->renderer.get_render_scale());
+      }
+      if (last_state_update)
+      {
+        if (draw_state_ui)
+          state_imgui.build_draw_data();
         break;
       }
     }
+
+    renderer_imgui.bind();
+    renderer_imgui.new_frame(window);
+
+    for (auto &e : input_events)
+    {
+      SDL_PushEvent(&e);
+    }
+    input_events.clear();
+    renderer_imgui.handle_input();
+    renderer_imgui.event_output.clear();
+
     current_state->render(current_state->current_time);
+
+    renderer_imgui.end_frame();
+
+    if (draw_state_ui)
+    {
+      state_imgui.bind();
+      state_imgui.render();
+    }
+    if (draw_render_ui)
+    {
+      renderer_imgui.bind();
+      renderer_imgui.build_draw_data();
+      renderer_imgui.render();
+    }
+
+    SDL_GL_SwapWindow(window);
+    set_message("FRAME END", "");
+    SWAP_TIMER.stop();
+    FRAME_TIMER.start();
+
     current_state->performance_output();
   }
   delete game_state;
   push_log_to_disk();
-  CLEANUP_RENDERER();
+  state_imgui.destroy();
+  renderer_imgui.destroy();
   SDL_Quit();
   return 0;
 }

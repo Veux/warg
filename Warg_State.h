@@ -13,8 +13,8 @@ struct Warg_State : protected State
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
       const char *address, const char *char_name, uint8_t team);
   void update();
-  void handle_input(
-      State **current_state, std::vector<State *> available_states);
+  virtual void handle_input_events(const std::vector<SDL_Event> &events,
+      bool block_kb, bool block_mouse) final;
   void process_packets();
   void process_events();
   void add_char(UID id, int team, const char *name);

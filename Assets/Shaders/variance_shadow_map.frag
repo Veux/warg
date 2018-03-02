@@ -1,5 +1,5 @@
 #version 330
-varying vec4 frag_position;
+in vec4 frag_position;
 layout(location = 0) out vec2 out0;
 void main()
 {
