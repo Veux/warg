@@ -113,19 +113,7 @@ void Warg_State::handle_input_events(
       {
         if (_e.key.keysym.sym == SDLK_F5)
         {
-          if (free_cam)
-          {
-            free_cam = false;
-            pc = 0;
-          }
-          else if (pc >= chars.size() - 1)
-          {
-            free_cam = true;
-          }
-          else
-          {
-            pc += 1;
-          }
+          free_cam = !free_cam;
         }
       }
     }
