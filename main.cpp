@@ -227,21 +227,17 @@ int main(int argc, char *argv[])
     {
       State *s = current_state;
       s->current_time += dt;
-      state_imgui.handle_input();
+      
 
       bool block_kb = state_imgui.context->IO.WantTextInput |
                       renderer_imgui.context->IO.WantTextInput;
-      bool block_mouse = state_imgui.context->IO.WantCaptureMouse |
-                         renderer_imgui.context->IO.WantCaptureMouse;
+      bool block_mouse = (state_imgui.context->IO.WantCaptureMouse |
+                         renderer_imgui.context->IO.WantCaptureMouse);
 
       current_state->handle_input(&current_state, &states,
-          state_imgui.event_output, block_kb, block_mouse);
+          &state_imgui, &input_events,block_kb, block_mouse);
 
-      for (auto &e : state_imgui.event_output)
-      {
-        input_events.push_back(e);
-      }
-      state_imgui.event_output.clear();
+
       state_imgui.new_frame(window);
       s->update();
       state_imgui.end_frame();
@@ -266,13 +262,24 @@ int main(int argc, char *argv[])
     renderer_imgui.bind();
     renderer_imgui.new_frame(window);
 
+    ivec2 mouse;
+    uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
+
+    if (current_state->free_cam)
+    {
+      renderer_imgui.mouse_position = ivec2(0);
+      renderer_imgui.mouse_state = 0;
+    }
+    else
+    {
+      renderer_imgui.mouse_position = mouse;
+      renderer_imgui.mouse_state = mouse_state;
+    }
     for (auto &e : input_events)
     {
-      SDL_PushEvent(&e);
+      renderer_imgui.process_event(&e);
     }
     input_events.clear();
-    renderer_imgui.handle_input();
-    renderer_imgui.event_output.clear();
 
     current_state->render(current_state->current_time);
 

@@ -123,7 +123,16 @@ void Render_Test_State::handle_input_events(
       if (_e.key.keysym.sym == SDLK_F5)
       {
         free_cam = !free_cam;
-        SDL_SetRelativeMouseMode(SDL_bool(false));
+        if (free_cam)
+        {
+          SDL_SetRelativeMouseMode(SDL_bool(true));
+          ivec2 trash;
+          SDL_GetRelativeMouseState(&trash.x, &trash.y);
+        }
+        else
+        {
+          SDL_SetRelativeMouseMode(SDL_bool(false));
+        }
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
@@ -161,6 +170,9 @@ void Render_Test_State::handle_input_events(
   if (free_cam)
   {
     SDL_SetRelativeMouseMode(SDL_bool(true));
+    SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+
+
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
     cam.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x

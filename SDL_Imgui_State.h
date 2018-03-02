@@ -15,17 +15,17 @@ struct SDL_Imgui_State
   void new_frame(SDL_Window *window);
   void end_frame();
 
-  void handle_input();
   void build_draw_data();
   void render();
 
   ImGuiIO *state_io = nullptr;
   ImGuiContext *context = nullptr;
 
-  std::vector<SDL_Event> event_output;
+  ivec2 mouse_position = ivec2(0);
+  uint32 mouse_state = 0;
 
-private:
   bool process_event(SDL_Event *event);
+private:
   bool init(SDL_Window *window);
   static const char *get_clipboard(void *);
   static void set_clipboard(void *, const char *text);

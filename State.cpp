@@ -64,36 +64,44 @@ void State::render(float64 t)
 }
 
 void State::handle_input(State **current_state,
-    std::vector<State *> *available_states,
-    const std::vector<SDL_Event> &new_events, bool block_kb, bool block_mouse)
+    std::vector<State *> *available_states, SDL_Imgui_State *imgui_state,
+    std::vector<SDL_Event> *gui_only_event_output, bool block_kb,
+    bool block_mouse)
 {
   ImGuiIO &io = ImGui::GetIO();
 
-  static std::vector<SDL_Event> dispatching;
-  dispatching.clear();
+  static std::vector<SDL_Event> game_events;
+  game_events.clear();
 
-  for (auto &e : new_events)
+  ivec2 mouse;
+  uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
+
+  if (free_cam)
   {
-    bool dispatch = true;
+    block_mouse = false;
+    imgui_state->mouse_position = ivec2(0);
+    imgui_state->mouse_state = 0;
+  }
+  else
+  {
+    imgui_state->mouse_position = mouse;
+    imgui_state->mouse_state = mouse_state;
+  }
 
-    if (block_kb && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
-      dispatch = false;
-
-    if (block_mouse &&
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
-            e.type == SDL_MOUSEWHEEL))
-      dispatch = false;
-
+  SDL_Event e;
+  while (SDL_PollEvent(&e))
+  {
     if (e.type == SDL_QUIT)
     {
       running = false;
       return;
     }
-    else if (e.type == SDL_WINDOWEVENT)
+    if (e.type == SDL_WINDOWEVENT)
     {
       if (e.window.event == SDL_WINDOWEVENT_RESIZED)
       {
         // resize
+        continue;
       }
       else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
                e.window.event == SDL_WINDOWEVENT_ENTER)
@@ -104,31 +112,75 @@ void State::handle_input(State **current_state,
         // SDL_SetRelativeMouseMode(SDL_bool(false));
         // SDL_SetRelativeMouseMode(SDL_bool(true));
         reset_mouse_delta();
+        continue;
       }
     }
-    if (dispatch)
+    if (e.type == SDL_KEYUP)
     {
-      dispatching.push_back(e);
-      if (e.type == SDL_KEYUP)
+      if (e.key.keysym.sym == SDLK_F1)
       {
-        if (e.key.keysym.sym == SDLK_F1)
+        *current_state = &*(*available_states)[0];
+        if ((*current_state)->free_cam)
+          SDL_SetRelativeMouseMode(SDL_bool(true));
+        else
         {
-          *current_state = &*(*available_states)[0];
-          return;
+          SDL_SetRelativeMouseMode(SDL_bool(false));
+          SDL_WarpMouseInWindow(nullptr,
+            (*current_state)->last_seen_mouse_position.x,
+            (*current_state)->last_seen_mouse_position.y);
         }
-        if (e.key.keysym.sym == SDLK_F2)
+        ivec2 trash;
+        SDL_GetRelativeMouseState(&trash.x, &trash.y);
+        //(*current_state)->reset_mouse_delta();
+        return;
+      }
+      if (e.key.keysym.sym == SDLK_F2)
+      {
+        *current_state = &*(*available_states)[1];
+        if ((*current_state)->free_cam)
+          SDL_SetRelativeMouseMode(SDL_bool(true));
+        else
         {
-          *current_state = &*(*available_states)[1];
-          return;
+          SDL_SetRelativeMouseMode(SDL_bool(false));
+          SDL_WarpMouseInWindow(nullptr,
+            (*current_state)->last_seen_mouse_position.x,
+            (*current_state)->last_seen_mouse_position.y);
         }
+        ivec2 trash;
+        SDL_GetRelativeMouseState(&trash.x, &trash.y);
+        //(*current_state)->reset_mouse_delta();
+        return;
       }
     }
-    else
+
+    bool gui_owns_event = false;
+
+    if (block_kb && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
+      gui_owns_event = true;
+
+    if (block_mouse &&
+        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
+            e.type == SDL_MOUSEWHEEL))
+      gui_owns_event = true;
+
+    if (free_cam)
     {
-      set_message("", s("dropping event: ", e.type), 1.0f);
+      gui_owns_event = false;
+    }
+
+    if (gui_owns_event)
+    {
+      bool event_did_a_thing = imgui_state->process_event(&e);
+      gui_only_event_output->push_back(e);
+      continue;
+    }
+    if (!gui_owns_event)
+    {
+      game_events.push_back(e);
+      continue;
     }
   }
-  handle_input_events(dispatching, block_kb, block_mouse);
+  handle_input_events(game_events, block_kb, block_mouse);
 }
 
 void State::performance_output()

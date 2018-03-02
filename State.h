@@ -23,7 +23,7 @@ struct State
   virtual void update() = 0;
   virtual void handle_input(State **current_state,
       std::vector<State *> *available_states,
-      const std::vector<SDL_Event> &input_events, bool block_kb,
+      SDL_Imgui_State* imgui_state, std::vector<SDL_Event>* gui_only_event_output, bool block_kb,
       bool block_mouse) final;
   virtual void handle_input_events(const std::vector<SDL_Event> &events,
       bool block_kb, bool block_mouse) = 0;
@@ -40,13 +40,13 @@ struct State
   Render renderer;
   Scene_Graph scene;
 
+  bool free_cam = false;
 protected:
   void prepare_renderer(double t);
   ivec2 last_seen_mouse_position = ivec2(0, 0);
   ivec2 last_grabbed_mouse_position = ivec2(0, 0);
   bool mouse_grabbed = false;
   uint32 previous_mouse_state = 0;
-  bool free_cam = false;
   Camera cam;
   vec3 clear_color = vec3(0);
   SDL_Window *window = nullptr;
