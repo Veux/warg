@@ -67,8 +67,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   server = std::make_unique<Warg_Server>(true);
   server->connect(&out, &in);
-  auto msg = Char_Spawn_Request_Message("Cubeboi", 0);
-  out.push(std::make_unique<Message>(msg));
+  out.push(std::make_unique<Message>(Char_Spawn_Request_Message("Cubeboi", 0)));
 
   map = make_blades_edge();
   sdb = make_spell_db();
@@ -408,7 +407,7 @@ void Warg_State::process_packets()
       {
         Buffer b;
         b.insert((void *)event.packet->data, event.packet->dataLength);
-        in.push(deserialize_message(b));
+        in.push(std::move(deserialize_message(b)));
         break;
       }
       case ENET_EVENT_TYPE_DISCONNECT:
@@ -484,11 +483,11 @@ void Warg_State::update()
   {
     while (!out.empty())
     {
-      Message &ev = *out.front();
+      auto ev = std::move(out.front());
 
       Buffer b;
-      ev.serialize_(b);
-      enet_uint32 flags = ev.reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
+      ev->serialize_(b);
+      enet_uint32 flags = ev->reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
       ENetPacket *packet = enet_packet_create(
           &b.data[0], b.data.size(), flags);
       enet_peer_send(serverp, 0, packet);

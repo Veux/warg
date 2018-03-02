@@ -66,8 +66,8 @@ struct Char_Spawn_Message : Message
   Char_Spawn_Message(UID id, const char *name_, uint8_t team_);
   Char_Spawn_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID id;
   std::string name;
@@ -79,8 +79,8 @@ struct Player_Control_Message : Message
   Player_Control_Message(UID character_);
   Player_Control_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID character;
 };
@@ -98,9 +98,9 @@ struct Player_Movement_Message : Message
 {
   Player_Movement_Message(Move_Status move_status, vec3 dir);
   Player_Movement_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) override;
+  virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b) override;
+  virtual void serialize_(Buffer &b);
 
   Move_Status move_status;
   vec3 dir;
@@ -110,9 +110,9 @@ struct Jump_Message : Message
 {
   Jump_Message();
   Jump_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) override;
+  virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b) override;
+  virtual void serialize_(Buffer &b);
 };
 
 struct Char_Pos_Message : Message
@@ -145,8 +145,8 @@ struct Cast_Error_Message : Message
   Cast_Error_Message(UID caster, UID target, const char *spell, uint8_t err);
   Cast_Error_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID caster;
   UID target;
@@ -159,8 +159,8 @@ struct Cast_Begin_Message : Message
   Cast_Begin_Message(UID caster, UID target, const char *spell);
   Cast_Begin_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID caster;
   UID target;
@@ -172,8 +172,8 @@ struct Cast_Interrupt_Message : Message
   Cast_Interrupt_Message(UID caster);
   Cast_Interrupt_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID caster;
 };
@@ -183,8 +183,8 @@ struct Char_HP_Message : Message
   Char_HP_Message(UID character, int hp);
   Char_HP_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID character;
   int hp;
@@ -195,8 +195,8 @@ struct Buff_Application_Message : Message
   Buff_Application_Message(UID character, const char *buff);
   Buff_Application_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID character;
   std::string buff;
@@ -207,8 +207,8 @@ struct Object_Launch_Message : Message
   Object_Launch_Message(UID object, UID caster, UID target, vec3 pos);
   Object_Launch_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) override;
-  virtual void serialize_(Buffer &b) override;
+  virtual void handle(Warg_State &state);
+  virtual void serialize_(Buffer &b);
 
   UID object;
   UID caster;
@@ -221,9 +221,7 @@ struct Object_Destroy_Message : Message
   Object_Destroy_Message();
   Object_Destroy_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) {
-    ASSERT(false);
-  };
+  virtual void handle(Warg_State &state) { ASSERT(false); };
   virtual void serialize_(Buffer &b);
 };
 

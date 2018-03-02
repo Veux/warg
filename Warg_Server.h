@@ -25,8 +25,8 @@ struct Warg_Server
   void update(float32 dt);
   void connect(queue<unique_ptr<Message>> *in, queue<unique_ptr<Message>> *out);
 
-  void push(Message &ev);
-  void send_event(Warg_Peer &p, Message &ev);
+  void push(unique_ptr<Message> ev);
+  void send_event(Warg_Peer &p, unique_ptr<Message> ev);
   void send_events();
   void process_packets();
   void process_events();
