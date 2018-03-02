@@ -1,296 +1,5 @@
 #include "Warg_Event.h"
 
-Warg_Event char_spawn_request_event(const char *name, uint8_t team)
-{
-  ASSERT(name);
-
-  CharSpawnRequest_Event *spawn =
-      (CharSpawnRequest_Event *)malloc(sizeof *spawn);
-  spawn->name = (char *)malloc(strlen(name) + 1);
-  strcpy(spawn->name, name);
-  spawn->team = team;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CharSpawnRequest;
-  ev.event = spawn;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event char_spawn_event(UID id, const char *name, uint8_t team)
-{
-  ASSERT(name);
-
-  CharSpawn_Event *spawn = (CharSpawn_Event *)malloc(sizeof *spawn);
-  spawn->id = id;
-  spawn->name = (char *)malloc(strlen(name) + 1);
-  strcpy(spawn->name, name);
-  spawn->team = team;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CharSpawn;
-  ev.event = spawn;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event player_control_event(UID character)
-{
-  PlayerControl_Event *pc = (PlayerControl_Event *)malloc(sizeof *pc);
-  pc->character = character;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::PlayerControl;
-  ev.event = pc;
-  ev.t = get_real_time();
-  ev.reliable = false;
-
-  return ev;
-}
-
-Warg_Event player_movement_event(Move_Status move_status, vec3 dir)
-{
-  Player_Movement_Event *pme;
-  pme = (Player_Movement_Event *)malloc(sizeof *pme);
-  pme->move_status = move_status;
-  pme->dir = dir;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::PlayerMovement;
-  ev.event = pme;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event jump_event(uint8_t ch)
-{
-  Jump_Event *jump;
-  jump = (Jump_Event *)malloc(sizeof *jump);
-  jump->character = ch;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::Jump;
-  ev.event = jump;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event char_pos_event(uint8_t ch, vec3 dir, vec3 pos)
-{
-  CharPos_Event *posev = (CharPos_Event *)malloc(sizeof *posev);
-  posev->character = ch;
-  posev->dir = dir;
-  posev->pos = pos;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CharPos;
-  ev.event = posev;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event cast_event(uint8_t caster, uint8_t target, const char *spell)
-{
-  ASSERT(spell);
-
-  Cast_Event *cast = (Cast_Event *)malloc(sizeof *cast);
-  cast->character = caster;
-  cast->target = target;
-  cast->spell = (char *)malloc(strlen(spell) + 1);
-  strcpy(cast->spell, spell);
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::Cast;
-  ev.event = cast;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event cast_error_event(
-    uint8_t caster, uint8_t target, const char *spell, uint8_t err)
-{
-  ASSERT(spell);
-
-  CastError_Event *errev = (CastError_Event *)malloc(sizeof *errev);
-  errev->caster = caster;
-  errev->target = target;
-  errev->spell = (char *)malloc(strlen(spell) + 1);
-  strcpy(errev->spell, spell);
-  errev->err = err;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CastError;
-  ev.event = errev;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event cast_begin_event(uint8_t caster, uint8_t target, const char *spell)
-{
-  ASSERT(spell);
-
-  CastBegin_Event *begin = (CastBegin_Event *)malloc(sizeof *begin);
-  begin->caster = caster;
-  begin->target = target;
-  begin->spell = (char *)malloc(strlen(spell) + 1);
-  strcpy(begin->spell, spell);
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CastBegin;
-  ev.event = begin;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event cast_interrupt_event(uint8_t caster)
-{
-  CastInterrupt_Event *interrupt =
-      (CastInterrupt_Event *)malloc(sizeof *interrupt);
-
-  interrupt->caster = caster;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CastInterrupt;
-  ev.event = interrupt;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event char_hp_event(uint8_t character, int hp)
-{
-  CharHP_Event *chhp = (CharHP_Event *)malloc(sizeof *chhp);
-  chhp->character = character;
-  chhp->hp = hp;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::CharHP;
-  ev.event = chhp;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event buff_appl_event(uint8_t character, const char *buff)
-{
-  ASSERT(buff);
-
-  BuffAppl_Event *appl = (BuffAppl_Event *)malloc(sizeof *appl);
-  appl->character = character;
-  appl->buff = (char *)malloc(strlen(buff) + 1);
-  strcpy(appl->buff, buff);
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::BuffAppl;
-  ev.event = appl;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-Warg_Event object_launch_event(
-    int object, uint8_t caster, uint8_t target, vec3 pos)
-{
-  ObjectLaunch_Event *launch = (ObjectLaunch_Event *)malloc(sizeof *launch);
-  launch->object = object;
-  launch->caster = caster;
-  launch->target = target;
-  launch->pos = pos;
-
-  Warg_Event ev;
-  ev.type = Warg_Event_Type::ObjectLaunch;
-  ev.event = launch;
-  ev.t = get_real_time();
-
-  return ev;
-}
-
-void free_warg_event(CharSpawnRequest_Event *ev) { free(ev->name); }
-
-void free_warg_event(CharSpawn_Event *ev) { free(ev->name); }
-
-void free_warg_event(PlayerControl_Event *ev) {}
-
-void free_warg_event(Player_Movement_Event *ev) {}
-
-void free_warg_event(Jump_Event *jump) {}
-
-void free_warg_event(CharPos_Event *ev) {}
-
-void free_warg_event(Cast_Event *ev) { free(ev->spell); }
-
-void free_warg_event(CastError_Event *ev) { free(ev->spell); }
-
-void free_warg_event(CastBegin_Event *ev) { free(ev->spell); }
-
-void free_warg_event(CastInterrupt_Event *ev) {}
-
-void free_warg_event(CharHP_Event *ev) {}
-
-void free_warg_event(BuffAppl_Event *ev) { free(ev->buff); }
-
-void free_warg_event(ObjectLaunch_Event *ev) {}
-
-void free_warg_event(Warg_Event ev)
-{
-  ASSERT(ev.event);
-
-  switch (ev.type)
-  {
-    case Warg_Event_Type::CharSpawnRequest:
-      free_warg_event((CharSpawnRequest_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CharSpawn:
-      free_warg_event((CharSpawn_Event *)ev.event);
-      break;
-    case Warg_Event_Type::PlayerControl:
-      free_warg_event((PlayerControl_Event *)ev.event);
-      break;
-    case Warg_Event_Type::PlayerMovement:
-      free_warg_event((Player_Movement_Event *)ev.event);
-      break;
-    case Warg_Event_Type::Jump:
-      free_warg_event((Jump_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CharPos:
-      free_warg_event((CharPos_Event *)ev.event);
-      break;
-    case Warg_Event_Type::Cast:
-      free_warg_event((Cast_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CastError:
-      free_warg_event((CastError_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CastBegin:
-      free_warg_event((CastBegin_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CastInterrupt:
-      free_warg_event((CastInterrupt_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CharHP:
-      free_warg_event((CharHP_Event *)ev.event);
-      break;
-    case Warg_Event_Type::BuffAppl:
-      free_warg_event((BuffAppl_Event *)ev.event);
-      break;
-    case Warg_Event_Type::ObjectLaunch:
-      free_warg_event((ObjectLaunch_Event *)ev.event);
-      break;
-    default:
-      ASSERT(false);
-  }
-
-  free(ev.event);
-}
-
 void Buffer::reserve(size_t size) { data.reserve(wnext + size); }
 
 void Buffer::insert(void *d, size_t size)
@@ -326,6 +35,11 @@ void serialize(Buffer &b, char *s)
   b.insert(s, len);
 }
 
+void serialize(Buffer &b, std::string s)
+{
+  serialize(b, s.c_str());
+}
+
 void serialize(Buffer &b, float32_t a) { b.insert(&a, sizeof(a)); }
 
 void serialize(Buffer &b, vec3 v)
@@ -335,136 +49,108 @@ void serialize(Buffer &b, vec3 v)
   serialize(b, v.z);
 }
 
-void serialize(Buffer &b, CharSpawnRequest_Event ev)
+void serialize(Buffer &b, Warg_Event_Type type)
 {
-  serialize(b, ev.name);
-  serialize(b, ev.team);
+  serialize(b, (uint8_t)type);
 }
 
-void serialize(Buffer &b, CharSpawn_Event ev)
+void Char_Spawn_Request_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.id);
-  serialize(b, ev.name);
-  serialize(b, ev.team);
+  serialize(b, Warg_Event_Type::CharSpawnRequest);
+  serialize(b, name);
+  serialize(b, team);
 }
 
-void serialize(Buffer &b, PlayerControl_Event ev)
+void Char_Spawn_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.character);
+  serialize(b, Warg_Event_Type::CharSpawn);
+  serialize(b, id);
+  serialize(b, name);
+  serialize(b, team);
 }
 
-void serialize(Buffer &b, Player_Movement_Event ev)
+void Player_Control_Message::serialize_(Buffer &b)
 {
-  serialize(b, (uint8_t)ev.move_status);
-  serialize(b, ev.dir);
+  serialize(b, Warg_Event_Type::PlayerControl);
+  serialize(b, character);
 }
 
-void serialize(Buffer &b, Jump_Event ev) { serialize(b, ev.character); }
-
-void serialize(Buffer &b, CharPos_Event ev)
+void Player_Movement_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.character);
-  serialize(b, ev.dir);
-  serialize(b, ev.pos);
+  serialize(b, Warg_Event_Type::PlayerMovement);
+  serialize(b, (uint8_t)move_status);
+  serialize(b, dir);
 }
 
-void serialize(Buffer &b, Cast_Event ev)
+void Jump_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.character);
-  serialize(b, ev.target);
-  serialize(b, ev.spell);
+  serialize(b, Warg_Event_Type::Jump);
 }
 
-void serialize(Buffer &b, CastError_Event ev)
+void Char_Pos_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.caster);
-  serialize(b, ev.target);
-  serialize(b, ev.spell);
-  serialize(b, ev.err);
+  serialize(b, Warg_Event_Type::CharPos);
+  serialize(b, character);
+  serialize(b, dir);
+  serialize(b, pos);
 }
 
-void serialize(Buffer &b, CastBegin_Event ev)
+void Cast_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.caster);
-  serialize(b, ev.target);
-  serialize(b, ev.spell);
+  serialize(b, Warg_Event_Type::Cast);
+  serialize(b, target);
+  serialize(b, spell);
 }
 
-void serialize(Buffer &b, CastInterrupt_Event ev) { serialize(b, ev.caster); }
-
-void serialize(Buffer &b, CharHP_Event ev)
+void Cast_Error_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.character);
-  serialize(b, ev.hp);
+  serialize(b, Warg_Event_Type::CastError);
+  serialize(b, caster);
+  serialize(b, target);
+  serialize(b, spell);
+  serialize(b, err);
 }
 
-void serialize(Buffer &b, BuffAppl_Event ev)
+void Cast_Begin_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.character);
-  serialize(b, ev.buff);
+  serialize(b, Warg_Event_Type::CastBegin);
+  serialize(b, caster);
+  serialize(b, target);
+  serialize(b, spell);
 }
 
-void serialize(Buffer &b, ObjectLaunch_Event ev)
+void Cast_Interrupt_Message::serialize_(Buffer &b)
 {
-  serialize(b, ev.object);
-  serialize(b, ev.caster);
-  serialize(b, ev.target);
-  serialize(b, ev.pos);
+  serialize(b, Warg_Event_Type::CastInterrupt);
+  serialize(b, caster);
 }
 
-void serialize(Buffer &b, ObjectDestroy_Event ev) {}
-
-void serialize(Buffer &b, Warg_Event ev)
+void Char_HP_Message::serialize_(Buffer &b)
 {
-  serialize(b, (uint8_t)ev.type);
-  switch (ev.type)
-  {
-    case Warg_Event_Type::CharSpawnRequest:
-      serialize(b, *(CharSpawnRequest_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CharSpawn:
-      serialize(b, *(CharSpawn_Event *)ev.event);
-      break;
-    case Warg_Event_Type::PlayerControl:
-      serialize(b, *(PlayerControl_Event *)ev.event);
-      break;
-    case Warg_Event_Type::PlayerMovement:
-      serialize(b, *(Player_Movement_Event *)ev.event);
-      break;
-    case Warg_Event_Type::Jump:
-      serialize(b, *(Jump_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CharPos:
-      serialize(b, *(CharPos_Event *)ev.event);
-      break;
-    case Warg_Event_Type::Cast:
-      serialize(b, *(Cast_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CastError:
-      serialize(b, *(CastError_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CastBegin:
-      serialize(b, *(CastBegin_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CastInterrupt:
-      serialize(b, *(CastInterrupt_Event *)ev.event);
-      break;
-    case Warg_Event_Type::CharHP:
-      serialize(b, *(CharHP_Event *)ev.event);
-      break;
-    case Warg_Event_Type::BuffAppl:
-      serialize(b, *(BuffAppl_Event *)ev.event);
-      break;
-    case Warg_Event_Type::ObjectLaunch:
-      serialize(b, *(ObjectLaunch_Event *)ev.event);
-      break;
-    case Warg_Event_Type::ObjectDestroy:
-      serialize(b, *(ObjectDestroy_Event *)ev.event);
-      break;
-    default:
-      ASSERT(false);
-      break;
-  }
+  serialize(b, Warg_Event_Type::CharHP);
+  serialize(b, character);
+  serialize(b, hp);
+}
+
+void Buff_Application_Message::serialize_(Buffer &b)
+{
+  serialize(b, Warg_Event_Type::BuffAppl);
+  serialize(b, character);
+  serialize(b, buff);
+}
+
+void Object_Launch_Message::serialize_(Buffer &b)
+{
+  serialize(b, Warg_Event_Type::ObjectLaunch);
+  serialize(b, object);
+  serialize(b, caster);
+  serialize(b, target);
+  serialize(b, pos);
+}
+
+void Object_Destroy_Message::serialize_(Buffer &b)
+{
+  serialize(b, Warg_Event_Type::ObjectDestroy);
 }
 
 uint8_t deserialize_uint8(Buffer &b)
@@ -491,13 +177,10 @@ uint32_t deserialize_uint32(Buffer &b)
   return n;
 }
 
-char *deserialize_string(Buffer &b)
+std::string deserialize_string(Buffer &b)
 {
   uint16_t len = deserialize_uint16(b);
-  char *s = (char *)malloc(len + 1);
-  memcpy(s, b.read(len), len);
-  s[len] = '\0';
-  return s;
+  return std::string((char *)b.read(len), len);
 }
 
 float32_t deserialize_float32(Buffer &b)
@@ -517,203 +200,236 @@ vec3 deserialize_vec3(Buffer &b)
   return v;
 }
 
-CharSpawnRequest_Event deserialize_char_spawn_request(Buffer &b)
+UID deserialize_uid(Buffer &b)
 {
-  CharSpawnRequest_Event ev;
-  ev.name = deserialize_string(b);
-  ev.team = deserialize_uint8(b);
-
-  return ev;
+  return deserialize_uint32(b);
 }
 
-CharSpawn_Event deserialize_char_spawn(Buffer &b)
+Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 {
-  CharSpawn_Event ev;
-  ev.id = deserialize_uint32(b);
-  ev.name = deserialize_string(b);
-  ev.team = deserialize_uint8(b);
-
-  return ev;
+  name = deserialize_string(b);
+  team = deserialize_uint8(b);
 }
 
-PlayerControl_Event deserialize_player_control(Buffer &b)
+Char_Spawn_Message::Char_Spawn_Message(Buffer &b)
 {
-  PlayerControl_Event ev;
-  ev.character = deserialize_uint32(b);
-
-  return ev;
+  id = deserialize_uid(b);
+  name = deserialize_string(b);
+  team = deserialize_uint8(b);
 }
 
-Player_Movement_Event deserialize_player_movement(Buffer &b)
+Player_Control_Message::Player_Control_Message(Buffer &b)
 {
-  Player_Movement_Event ev;
-  ev.move_status = (Move_Status)deserialize_uint8(b);
-  ev.dir = deserialize_vec3(b);
-
-  return ev;
+  character = deserialize_uid(b);
 }
 
-Jump_Event deserialize_jump(Buffer &b)
+Player_Movement_Message::Player_Movement_Message(Buffer &b)
 {
-  Jump_Event ev;
-  ev.character = deserialize_uint8(b);
-
-  return ev;
+  move_status = (Move_Status)deserialize_uint8(b);
+  dir = deserialize_vec3(b);
 }
 
-CharPos_Event deserialize_char_pos(Buffer &b)
+Jump_Message::Jump_Message(Buffer &b)
 {
-  CharPos_Event ev;
-  ev.character = deserialize_uint8(b);
-  ev.dir = deserialize_vec3(b);
-  ev.pos = deserialize_vec3(b);
-
-  return ev;
 }
 
-Cast_Event deserialize_cast(Buffer &b)
+Char_Pos_Message::Char_Pos_Message(Buffer &b)
 {
-  Cast_Event ev;
-  ev.character = deserialize_uint8(b);
-  ev.target = deserialize_uint8(b);
-  ev.spell = deserialize_string(b);
-
-  return ev;
+  character = deserialize_uid(b);
+  dir = deserialize_vec3(b);
+  pos = deserialize_vec3(b);
 }
 
-CastError_Event deserialize_cast_error(Buffer &b)
+Cast_Message::Cast_Message(Buffer &b)
 {
-  CastError_Event ev;
-  ev.caster = deserialize_uint8(b);
-  ev.target = deserialize_uint8(b);
-  ev.spell = deserialize_string(b);
-  ev.err = deserialize_uint8(b);
-
-  return ev;
+  target = deserialize_uid(b);
+  spell = deserialize_string(b);
 }
 
-CastBegin_Event deserialize_cast_begin(Buffer &b)
+Cast_Error_Message::Cast_Error_Message(Buffer &b)
 {
-  CastBegin_Event ev;
-  ev.caster = deserialize_uint8(b);
-  ev.target = deserialize_uint8(b);
-  ev.spell = deserialize_string(b);
-
-  return ev;
+  caster = deserialize_uid(b);
+  target = deserialize_uid(b);
+  spell = deserialize_string(b);
+  err = deserialize_uint8(b);
 }
 
-CastInterrupt_Event deserialize_cast_interrupt(Buffer &b)
+Cast_Begin_Message::Cast_Begin_Message(Buffer &b)
 {
-  CastInterrupt_Event ev;
-  ev.caster = deserialize_uint8(b);
-
-  return ev;
+  caster = deserialize_uid(b);
+  target = deserialize_uid(b);
+  spell = deserialize_string(b);
 }
 
-CharHP_Event deserialize_char_hp(Buffer &b)
+Cast_Interrupt_Message::Cast_Interrupt_Message(Buffer &b)
 {
-  CharHP_Event ev;
-  ev.character = deserialize_uint8(b);
-  ev.hp = deserialize_int32(b);
-
-  return ev;
+  caster = deserialize_uid(b);
 }
 
-BuffAppl_Event deserialize_buff_appl(Buffer &b)
+Char_HP_Message::Char_HP_Message(Buffer &b)
 {
-  BuffAppl_Event ev;
-  ev.character = deserialize_uint8(b);
-  ev.buff = deserialize_string(b);
-
-  return ev;
+  character = deserialize_uid(b);
+  hp = deserialize_int32(b);
 }
 
-ObjectLaunch_Event deserialize_object_launch(Buffer &b)
+Buff_Application_Message::Buff_Application_Message(Buffer &b)
 {
-  ObjectLaunch_Event ev;
-  ev.object = deserialize_int32(b);
-  ev.caster = deserialize_uint8(b);
-  ev.target = deserialize_uint8(b);
-  ev.pos = deserialize_vec3(b);
-
-  return ev;
+  character = deserialize_uid(b);
+  buff = deserialize_string(b);
 }
 
-ObjectDestroy_Event deserialize_object_destroy(Buffer &b)
+Object_Launch_Message::Object_Launch_Message(Buffer &b)
 {
-  ObjectDestroy_Event ev;
-
-  return ev;
+  object = deserialize_uid(b);
+  caster = deserialize_uid(b);
+  target = deserialize_uid(b);
+  pos = deserialize_vec3(b);
 }
 
-Warg_Event deserialize_event(Buffer &b)
+Object_Destroy_Message::Object_Destroy_Message(Buffer &b)
 {
-  Warg_Event ev;
+}
 
-  ev.type = (Warg_Event_Type)deserialize_uint8(b);
-  switch (ev.type)
+std::unique_ptr<Message> deserialize_message(Buffer &b)
+{
+  auto type = (Warg_Event_Type)deserialize_uint8(b);
+  switch (type)
   {
     case Warg_Event_Type::CharSpawnRequest:
-      ev.event = malloc(sizeof(CharSpawnRequest_Event));
-      *(CharSpawnRequest_Event *)ev.event = deserialize_char_spawn_request(b);
-      break;
+      return std::make_unique<Char_Spawn_Request_Message>(b);
     case Warg_Event_Type::CharSpawn:
-      ev.event = malloc(sizeof(CharSpawn_Event));
-      *(CharSpawn_Event *)ev.event = deserialize_char_spawn(b);
-      break;
+      return std::make_unique<Char_Spawn_Message>(b);
     case Warg_Event_Type::PlayerControl:
-      ev.event = malloc(sizeof(PlayerControl_Event));
-      *(PlayerControl_Event *)ev.event = deserialize_player_control(b);
-      break;
+      return std::make_unique<Player_Control_Message>(b);
     case Warg_Event_Type::PlayerMovement:
-      ev.event = malloc(sizeof(Player_Movement_Event));
-      *(Player_Movement_Event *)ev.event = deserialize_player_movement(b);
-      break;
+      return std::make_unique<Player_Movement_Message>(b);
     case Warg_Event_Type::Jump:
-      ev.event = malloc(sizeof(Jump_Event));
-      *(Jump_Event *)ev.event = deserialize_jump(b);
-      break;
+      return std::make_unique<Jump_Message>(b);
     case Warg_Event_Type::CharPos:
-      ev.event = malloc(sizeof(CharPos_Event));
-      *(CharPos_Event *)ev.event = deserialize_char_pos(b);
-      break;
+      return std::make_unique<Char_Pos_Message>(b);
     case Warg_Event_Type::Cast:
-      ev.event = malloc(sizeof(Cast_Event));
-      *(Cast_Event *)ev.event = deserialize_cast(b);
-      break;
+      return std::make_unique<Cast_Message>(b);
     case Warg_Event_Type::CastError:
-      ev.event = malloc(sizeof(CastError_Event));
-      *(CastError_Event *)ev.event = deserialize_cast_error(b);
-      break;
+      return std::make_unique<Cast_Error_Message>(b);
     case Warg_Event_Type::CastBegin:
-      ev.event = malloc(sizeof(CastBegin_Event));
-      *(CastBegin_Event *)ev.event = deserialize_cast_begin(b);
-      break;
+      return std::make_unique<Cast_Begin_Message>(b);
     case Warg_Event_Type::CastInterrupt:
-      ev.event = malloc(sizeof(CastInterrupt_Event));
-      *(CastInterrupt_Event *)ev.event = deserialize_cast_interrupt(b);
-      break;
+      return std::make_unique<Cast_Interrupt_Message>(b);
     case Warg_Event_Type::CharHP:
-      ev.event = malloc(sizeof(CharHP_Event));
-      *(CharHP_Event *)ev.event = deserialize_char_hp(b);
-      break;
+      return std::make_unique<Char_HP_Message>(b);
     case Warg_Event_Type::BuffAppl:
-      ev.event = malloc(sizeof(BuffAppl_Event));
-      *(BuffAppl_Event *)ev.event = deserialize_buff_appl(b);
-      break;
+      return std::make_unique<Buff_Application_Message>(b);
     case Warg_Event_Type::ObjectLaunch:
-      ev.event = malloc(sizeof(ObjectLaunch_Event));
-      *(ObjectLaunch_Event *)ev.event = deserialize_object_launch(b);
-      break;
+      return std::make_unique<Object_Launch_Message>(b);
     case Warg_Event_Type::ObjectDestroy:
-      ev.event = malloc(sizeof(ObjectDestroy_Event));
-      *(ObjectDestroy_Event *)ev.event = deserialize_object_destroy(b);
-      break;
-    default:
-      ASSERT(false);
-      break;
+      return std::make_unique<Object_Destroy_Message>(b);
   }
-  ev.t = get_real_time();
+  ASSERT(false);
+  return nullptr;
+}
 
-  return ev;
+Char_Spawn_Request_Message::Char_Spawn_Request_Message(
+  const char *name_, uint8_t team_)
+{
+  t = get_real_time();
+  name = name_;
+  team = team_;
+}
+
+Char_Spawn_Message::Char_Spawn_Message(UID id_, const char *name_, uint8_t team_)
+{
+  t = get_real_time();
+  id = id_;
+  name = name_;
+  team = team_;
+}
+
+Player_Control_Message::Player_Control_Message(UID character_)
+{
+  t = get_real_time();
+  character = character_;
+}
+
+Player_Movement_Message::Player_Movement_Message
+  (Move_Status move_status_, vec3 dir_)
+{
+  t = get_real_time();
+  reliable = false;
+  move_status = move_status_;
+  dir = dir_;
+}
+
+Jump_Message::Jump_Message()
+{
+  t = get_real_time();
+}
+
+Char_Pos_Message::Char_Pos_Message(UID character_, vec3 dir_, vec3 pos_)
+{
+  t = get_real_time();
+  character = character_;
+  dir = dir_;
+  pos = pos_;
+}
+
+Cast_Message::Cast_Message(UID target_, const char *spell_)
+{
+  t = get_real_time();
+  target = target_;
+  spell = spell_;
+}
+
+Cast_Error_Message::Cast_Error_Message
+  (UID caster_, UID target_, const char *spell_, uint8_t err_)
+{
+  t = get_real_time();
+  caster = caster_;
+  target = target_;
+  spell = spell_;
+  err = err_;
+}
+
+Cast_Begin_Message::Cast_Begin_Message
+  (UID caster_, UID target_, const char *spell_)
+{
+  t = get_real_time();
+  caster = caster_;
+  target = target_;
+  spell = spell_;
+}
+
+Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_)
+{
+  t = get_real_time();
+  caster = caster_;
+}
+
+Char_HP_Message::Char_HP_Message(UID character_, int hp_)
+{
+  t = get_real_time();
+  character = character_;
+  hp = hp_;
+}
+
+Buff_Application_Message::Buff_Application_Message
+  (UID character_, const char *buff_)
+{
+  t = get_real_time();
+  character = character_;
+  buff = buff_;
+}
+
+Object_Launch_Message::Object_Launch_Message
+  (UID object_, UID caster_, UID target_, vec3 pos_)
+{
+  t = get_real_time();
+  object = object_;
+  caster = caster_;
+  target = target_;
+  pos = pos_;
+}
+
+Object_Destroy_Message::Object_Destroy_Message()
+{
+  t = get_real_time();
 }

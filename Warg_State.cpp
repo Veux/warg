@@ -32,8 +32,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
          event.type == ENET_EVENT_TYPE_CONNECT);
 
   Buffer b;
-  auto ev = char_spawn_request_event("Eirich", 0);
-  serialize(b, ev);
+  auto msg = Char_Spawn_Request_Message("Eirich", 0);
+  msg.serialize_(b);
   ENetPacket *packet =
       enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
   enet_peer_send(serverp, 0, packet);
@@ -65,9 +65,9 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 {
   local = true;
 
-  server = std::make_unique<Warg_Server>(true);
+  server = make_unique<Warg_Server>(true);
   server->connect(&out, &in);
-  out.push(char_spawn_request_event("Cubeboi", 0));
+  out.push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
   map = make_blades_edge();
   sdb = make_spell_db();
@@ -103,7 +103,7 @@ void Warg_State::handle_input(
       }
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
-        out.push(jump_event(pc));
+        out.push(make_unique<Jump_Message>());
       }
     }
     else if (_e.type == SDL_KEYUP)
@@ -368,7 +368,8 @@ void Warg_State::handle_input(
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
     
-    out.push(player_movement_event((Move_Status)m, dir));
+    out.push(
+      make_unique<Player_Movement_Message>((Move_Status)m, dir));
 
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
@@ -406,8 +407,7 @@ void Warg_State::process_packets()
       {
         Buffer b;
         b.insert((void *)event.packet->data, event.packet->dataLength);
-        auto ev = deserialize_event(b);
-        in.push(ev);
+        in.push(std::move(deserialize_message(b)));
         break;
       }
       case ENET_EVENT_TYPE_DISCONNECT:
@@ -422,47 +422,12 @@ void Warg_State::process_events()
 {
   while (!in.empty())
   {
-    Warg_Event ev = in.front();
+    auto &msg = in.front();
 
-    if (get_real_time() - ev.t < SIM_LATENCY / 2000.0f)
-      return;
-
-    ASSERT(ev.event);
-    switch (ev.type)
-    {
-      case Warg_Event_Type::CharSpawn:
-        process_event((CharSpawn_Event *)ev.event);
-        break;
-      case Warg_Event_Type::PlayerControl:
-        process_event((PlayerControl_Event *)ev.event);
-        break;
-      case Warg_Event_Type::CharPos:
-        process_event((CharPos_Event *)ev.event);
-        break;
-      case Warg_Event_Type::CastError:
-        process_event((CastError_Event *)ev.event);
-        break;
-      case Warg_Event_Type::CastBegin:
-        process_event((CastBegin_Event *)ev.event);
-        break;
-      case Warg_Event_Type::CastInterrupt:
-        process_event((CastInterrupt_Event *)ev.event);
-        break;
-      case Warg_Event_Type::CharHP:
-        process_event((CharHP_Event *)ev.event);
-        break;
-      case Warg_Event_Type::BuffAppl:
-        process_event((BuffAppl_Event *)ev.event);
-        break;
-      case Warg_Event_Type::ObjectLaunch:
-        process_event((ObjectLaunch_Event *)ev.event);
-        break;
-      default:
-        break;
-    }
-    free_warg_event(ev);
+    msg->handle(*this);
     in.pop();
   }
+  return;
 }
 
 void Warg_State::update()
@@ -518,16 +483,15 @@ void Warg_State::update()
   {
     while (!out.empty())
     {
-      Warg_Event ev = out.front();
+      auto ev = std::move(out.front());
 
       Buffer b;
-      serialize(b, ev);
-      enet_uint32 flags = ev.reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
+      ev->serialize_(b);
+      enet_uint32 flags = ev->reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
       ENetPacket *packet = enet_packet_create(
           &b.data[0], b.data.size(), flags);
       enet_peer_send(serverp, 0, packet);
       enet_host_flush(clientp);
-      free_warg_event(ev);
 
       out.pop();
     }
@@ -583,156 +547,143 @@ void Warg_State::update()
   }
 }
 
-void Warg_State::process_event(CharSpawn_Event *spawn)
+void Char_Spawn_Message::handle(Warg_State &state)
 {
-  ASSERT(spawn);
-  ASSERT(spawn->id);
-
-  add_char(spawn->id, spawn->team, spawn->name);
+  state.add_char(id, team, name.c_str());
 }
 
-void Warg_State::process_event(PlayerControl_Event *ev)
+void Player_Control_Message::handle(Warg_State &state)
 {
-  ASSERT(ev);
-  ASSERT(ev->character);
-
-  pc = ev->character;
+  state.pc = character;
 }
 
-void Warg_State::process_event(CharPos_Event *pos)
+void Char_Pos_Message::handle(Warg_State &state)
 {
-  ASSERT(pos);
-  ASSERT(pos->character && chars.count(pos->character));
-  chars[pos->character].dir = pos->dir;
-  chars[pos->character].pos = pos->pos;
+  ASSERT(state.chars.count(character));
+  auto &character_ = state.chars[character];
+  character_.dir = dir;
+  character_.pos = pos;
 }
 
-void Warg_State::process_event(CastError_Event *err)
+void Cast_Error_Message::handle(Warg_State &state)
 {
-  ASSERT(err);
-  ASSERT(err->caster && chars.count(err->caster));
+  ASSERT(state.chars.count(caster));
 
   std::string msg;
-  msg += chars[err->caster].name;
+  msg += state.chars[caster].name;
   msg += " failed to cast ";
-  msg += err->spell;
+  msg += spell;
   msg += ": ";
 
-  switch (err->err)
+  switch (err)
   {
-    case (int)CastErrorType::Silenced:
-      msg += "silenced";
-      break;
-    case (int)CastErrorType::GCD:
-      msg += "GCD";
-      break;
-    case (int)CastErrorType::SpellCD:
-      msg += "spell on cooldown";
-      break;
-    case (int)CastErrorType::NotEnoughMana:
-      msg += "not enough mana";
-      break;
-    case (int)CastErrorType::InvalidTarget:
-      msg += "invalid target";
-      break;
-    case (int)CastErrorType::OutOfRange:
-      msg += "out of range";
-      break;
-    case (int)CastErrorType::AlreadyCasting:
-      msg += "already casting";
-      break;
-    case (int)CastErrorType::Success:
-      ASSERT(false);
-      break;
-    default:
-      ASSERT(false);
+  case (int)CastErrorType::Silenced:
+    msg += "silenced";
+    break;
+  case (int)CastErrorType::GCD:
+    msg += "GCD";
+    break;
+  case (int)CastErrorType::SpellCD:
+    msg += "spell on cooldown";
+    break;
+  case (int)CastErrorType::NotEnoughMana:
+    msg += "not enough mana";
+    break;
+  case (int)CastErrorType::InvalidTarget:
+    msg += "invalid target";
+    break;
+  case (int)CastErrorType::OutOfRange:
+    msg += "out of range";
+    break;
+  case (int)CastErrorType::AlreadyCasting:
+    msg += "already casting";
+    break;
+  case (int)CastErrorType::Success:
+    ASSERT(false);
+    break;
+  default:
+    ASSERT(false);
   }
 
   set_message("SpellError:", msg, 10);
 }
 
-void Warg_State::process_event(CastBegin_Event *cast)
+void Cast_Begin_Message::handle(Warg_State &state)
 {
-  ASSERT(cast);
-  ASSERT(cast->caster && chars.count(cast->caster));
+  ASSERT(state.chars.count(caster));
 
   std::string msg;
-  msg += chars[cast->caster].name;
+  msg += state.chars[caster].name;
   msg += " begins casting ";
-  msg += cast->spell;
+  msg += spell;
   set_message("CastBegin:", msg, 10);
 }
 
-void Warg_State::process_event(CastInterrupt_Event *interrupt)
+void Cast_Interrupt_Message::handle(Warg_State &state)
 {
-  ASSERT(interrupt);
-  ASSERT(interrupt->caster && chars.count(interrupt->caster));
+  ASSERT(state.chars.count(caster));
 
   std::string msg;
-  msg += chars[interrupt->caster].name;
+  msg += state.chars[caster].name;
   msg += "'s casting was interrupted";
   set_message("CastInterrupt:", msg, 10);
 }
 
-void Warg_State::process_event(CharHP_Event *hpev)
+void Char_HP_Message::handle(Warg_State &state)
 {
-  ASSERT(hpev);
-  ASSERT(hpev->character && chars.count(hpev->character));
+  ASSERT(state.chars.count(character));
+  auto &character_ = state.chars[character];
 
-  chars[hpev->character].alive = hpev->hp > 0;
+  character_.alive = hp > 0;
 
   std::string msg;
-  msg += chars[hpev->character].name;
+  msg += character_.name;
   msg += "'s HP is ";
-  msg += std::to_string(hpev->hp);
+  msg += std::to_string(hp);
   set_message("", msg, 10);
 }
 
-void Warg_State::process_event(BuffAppl_Event *appl)
+void Buff_Application_Message::handle(Warg_State &state)
 {
-  ASSERT(appl);
-  ASSERT(appl->character && chars.count(appl->character));
+  ASSERT(state.chars.count(character));
 
   std::string msg;
-  msg += appl->buff;
+  msg += buff;
   msg += " applied to ";
-  msg += chars[appl->character].name;
+  msg += state.chars[character].name;
   set_message("ApplyBuff:", msg, 10);
 }
 
-void Warg_State::process_event(ObjectLaunch_Event *launch)
+void Object_Launch_Message::handle(Warg_State &state)
 {
-  ASSERT(launch);
-  ASSERT(launch->caster && chars.count(launch->caster));
-  ASSERT(launch->target && chars.count(launch->target));
+  ASSERT(state.chars.count(caster));
+  auto &caster_ = state.chars[caster];
+  ASSERT(state.chars.count(target));
+  auto &target_ = state.chars[target];
 
-  Material_Descriptor material;
-  material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "world_origin_distance.frag";
+  //Material_Descriptor material;
+  //material.albedo = "crate_diffuse.png";
+  //material.emissive = "test_emissive.png";
+  //material.normal = "test_normal.png";
+  //material.roughness = "crate_roughness.png";
+  //material.vertex_shader = "vertex_shader.vert";
+  //material.frag_shader = "world_origin_distance.frag";
 
-  SpellObjectInst obji;
-  obji.def = sdb->objects[launch->object];
-  obji.caster = launch->caster;
-  obji.target = launch->target;
-  obji.pos = launch->pos;
-  obji.mesh = scene.add_primitive_mesh(cube, "spell_object_cube", material);
-  obji.mesh->scale = vec3(0.4f);
-  spell_objs.push_back(obji);
+  //SpellObjectInst obji;
+  //obji.def = state.sdb->objects[object];
+  //obji.caster = caster;
+  //obji.target = target;
+  //obji.pos = pos;
+  //obji.mesh = state.scene.add_primitive_mesh(cube, "spell_object_cube", material);
+  //obji.mesh->scale = vec3(0.4f);
+  //spell_objs.push_back(obji);
 
   std::string msg;
-  msg += (0 <= launch->caster && launch->caster < chars.size())
-             ? chars[launch->caster].name
-             : "unknown character";
+  msg += caster_.name;
   msg += " launched ";
-  msg += sdb->objects[launch->object].name;
+  msg += state.sdb->objects[object].name;
   msg += " at ";
-  msg += (0 <= launch->target && launch->target < chars.size())
-             ? chars[launch->target].name
-             : "unknown character";
+  msg += target_.name;
   set_message("ObjectLaunch:", msg, 10);
 }
 
