@@ -16,7 +16,8 @@ struct aiString;
 
 #define MAX_INSTANCE_COUNT 100
 #define UNIFORM_LIGHT_LOCATION 20
-#define MAX_LIGHTS 10  // reminder to change the Texture_Location::s1...sn shadow map enums
+#define MAX_LIGHTS                                                             \
+  10 // reminder to change the Texture_Location::s1...sn shadow map enums
 #define DYNAMIC_TEXTURE_RELOADING 1
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define DEBUG 1
@@ -26,10 +27,10 @@ struct aiString;
 #define MAX_TEXTURE_SAMPLERS 20
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
 
-//you can point FINAL_OUTPUT_TEXTURE to any Texture::texture->texture or Texture_Handle::texture
-//to draw it to the screen for debugging purposes
-//nullptr for default
-extern GLuint* FINAL_OUTPUT_TEXTURE;
+// you can point FINAL_OUTPUT_TEXTURE to any Texture::texture->texture or
+// Texture_Handle::texture  to draw it to the screen for debugging purposes
+// nullptr for default
+extern GLuint *FINAL_OUTPUT_TEXTURE;
 
 struct Warg_State;
 struct Render_Test_State;
@@ -49,12 +50,14 @@ extern const std::string BASE_SHADER_PATH;
 extern const std::string BASE_MODEL_PATH;
 extern const std::string ERROR_TEXTURE_PATH;
 extern Timer PERF_TIMER;
+extern Timer FRAME_TIMER;
+extern Timer SWAP_TIMER;
 
 // load an aiScene
 // will cache the result so that future loads
 // of the same path won't have to read from disk
-extern const aiScene *load_aiscene(std::string path,
-                                   const int *assimp_flags = nullptr);
+extern const aiScene *load_aiscene(
+    std::string path, const int *assimp_flags = nullptr);
 
 // todo: make some variadic template for this crap:
 bool all_equal(int32 a, int32 b, int32 c);
@@ -62,8 +65,8 @@ bool all_equal(int32 a, int32 b, int32 c, int32 d);
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f);
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f, int32 g);
 
-float32 wrap_to_range(const float32 input, const float32 min,
-                      const float32 max);
+float32 wrap_to_range(
+    const float32 input, const float32 min, const float32 max);
 template <typename T> uint32 array_count(T t)
 {
   return sizeof(t) / sizeof(t[0]);
@@ -82,7 +85,6 @@ Uint32 string_to_U32_color(std::string color);
 glm::vec4 string_to_float4_color(std::string color);
 Uint64 dankhash(float32 *data, uint32 size);
 
-
 void checkSDLError(int32 line = -1);
 void check_gl_error();
 
@@ -91,7 +93,7 @@ void check_gl_error();
 float64 get_real_time();
 
 void __set_message(std::string identifier, std::string message,
-  float64 msg_duration, const char *, uint32);
+    float64 msg_duration, const char *, uint32);
 #define CREATE_3(x, y, z) __set_message(x, y, z, __FILE__, __LINE__)
 #define CREATE_2(x, y) CREATE_3(x, y, 0.0)
 #define CREATE_1(x) CREATE_2(x, "")
@@ -103,7 +105,6 @@ void __set_message(std::string identifier, std::string message,
   FUNC_RECOMPOSER((__VA_ARGS__, CREATE_3, CREATE_2, CREATE_1, ))
 #define NO_ARG_EXPANDER() , , CREATE_0
 #define MACRO_CHOOSER(...) CHOOSE_FROM_ARG_COUNT(NO_ARG_EXPANDER __VA_ARGS__())
-
 
 // adds a message to a container that is retrieved by get_messages()
 // subsequent calls to this function with identical identifiers will
@@ -131,9 +132,9 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
   if (!t)
   {
     set_message("",
-                "Assertion failed in:" + std::string(file) +
-                    "\non line:" + std::to_string(line),
-                1.0);
+        "Assertion failed in:" + std::string(file) +
+            "\non line:" + std::to_string(line),
+        1.0);
     std::cout << get_message_log() << std::endl;
     push_log_to_disk();
     throw;
