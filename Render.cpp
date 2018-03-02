@@ -11,6 +11,8 @@
 #include "Mesh_Loader.h"
 #include "Render.h"
 #include "Shader.h"
+#include "Third_party/imgui/imgui.h"
+#include "SDL_Imgui_State.h"
 #include "Timer.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,8 +27,6 @@
 #include <time.h>
 #include <unordered_map>
 #include <vector>
-#include "Third_party/imgui/imgui.h"
-#include "Third_party/imgui/imgui_impl_sdl_gl3.h"
 using namespace glm;
 using namespace std;
 using namespace gl33core;
@@ -35,9 +35,6 @@ using namespace gl33core;
 #define DEPTH_TARGET GL_COLOR_ATTACHMENT1
 #define NORMAL_TARGET GL_COLOR_ATTACHMENT2
 #define POSITION_TARGET GL_COLOR_ATTACHMENT3
-
-static Timer FRAME_TIMER = Timer(60);
-static Timer SWAP_TIMER = Timer(60);
 
 GLuint *FINAL_OUTPUT_TEXTURE = nullptr;
 
@@ -137,7 +134,8 @@ void Gaussian_Blur::draw(
 
   if (iterations == 0)
   {
-    renderer->run_pixel_shader(&renderer->passthrough, {src}, &target, false);
+    vector<Texture*> texture = { src };
+    run_pixel_shader(&renderer->passthrough, &texture, &target, false);
     return;
   }
 
@@ -259,7 +257,7 @@ void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
   blur.draw(
       renderer, &high_pass.target.color_attachments[0], radius, iterations);
 
-  //FINAL_OUTPUT_TEXTURE = &blur.target.color_attachments[0].texture->texture;
+  // FINAL_OUTPUT_TEXTURE = &blur.target.color_attachments[0].texture->texture;
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE);
 
@@ -288,7 +286,6 @@ void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
   glBindTexture(GL_TEXTURE_2D, 0);
 
   glDisable(GL_BLEND);
-
 }
 
 Render::~Render()
@@ -472,8 +469,8 @@ void Texture::load()
       glGenTextures(1, &texture->texture);
     }
     glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, format, size.x, size.y, 0, GL_RGBA,
-        GL_FLOAT, 0);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, format, size.x, size.y, 0, GL_RGBA, GL_FLOAT, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
@@ -502,8 +499,8 @@ void Texture::load()
     vec4 color = string_to_float4_color(file_path);
     glGenTextures(1, &texture->texture);
     glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA,
-        GL_FLOAT, &color);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA, GL_FLOAT, &color);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -754,10 +751,12 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 }
 
 Material::Material() {}
-Material::Material(Material_Descriptor& m) { 
+Material::Material(Material_Descriptor &m)
+{
   if (m.normal == "")
     m.normal = "color(0.5,0.5,1.0)";
-  load(m); }
+  load(m);
+}
 Material::Material(aiMaterial *ai_material, std::string working_directory,
     Material_Descriptor *material_override)
 {
@@ -837,7 +836,7 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
     m.normal = "color(0.5,0.5,1.0)";
   load(m);
 }
-void Material::load(Material_Descriptor& m)
+void Material::load(Material_Descriptor &m)
 {
   this->m = m;
   albedo = Texture(m.albedo, m.uses_transparency);
@@ -847,7 +846,7 @@ void Material::load(Material_Descriptor& m)
   roughness = Texture(m.roughness);
   shader = Shader(m.vertex_shader, m.frag_shader);
 }
-void Material::bind(Shader* shader)
+void Material::bind(Shader *shader)
 {
   if (m.backface_culling)
     glEnable(GL_CULL_FACE);
@@ -1141,21 +1140,27 @@ void Render::build_shadow_maps()
 
 // shader must use passthrough.vert, and must use texture1, texture2 ...
 // texturen for input texture sampler names
-void Render::run_pixel_shader(Shader *shader, vector<Texture *> src_textures,
+void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
     Framebuffer *dst, bool clear_dst)
 {
   ASSERT(shader);
   ASSERT(shader->vs == "passthrough.vert");
-  ASSERT(dst);
-  ASSERT(dst->fbo);
-  ASSERT(dst->color_attachments.size() > 0);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
+  static Mesh quad = Mesh(load_mesh_plane(), "run_pixel_shader_quad");
 
-  for (uint32 i = 0; i < src_textures.size(); ++i)
+  if (dst)
+  {
+    ASSERT(dst->fbo);
+    ASSERT(dst->color_attachments.size());
+    glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
+  }
+  else
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  for (uint32 i = 0; i < src_textures->size(); ++i)
   {
     glActiveTexture(GL_TEXTURE0 + i);
-    glBindTexture(GL_TEXTURE_2D, src_textures[i]->texture->texture);
+    glBindTexture(GL_TEXTURE_2D, (*src_textures)[i]->texture->texture);
   }
   ivec2 viewport_size = dst->color_attachments[0].size;
   glViewport(0, 0, viewport_size.x, viewport_size.y);
@@ -1169,13 +1174,13 @@ void Render::run_pixel_shader(Shader *shader, vector<Texture *> src_textures,
   glDisable(GL_DEPTH_TEST);
   glBindVertexArray(quad.get_vao());
   shader->use();
-  shader->set_uniform("transform", ortho_projection(viewport_size));
+  shader->set_uniform("transform", Render::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(
-      GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
+      GL_UNSIGNED_INT, (void *)0);
 
-  for (uint32 i = 0; i < src_textures.size(); ++i)
+  for (uint32 i = 0; i < src_textures->size(); ++i)
   {
     glActiveTexture(GL_TEXTURE0 + i);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1427,8 +1432,6 @@ void Render::render(float64 state_time)
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
-    
-
     glViewport(0, 0, size.x, size.y);
     previous_frame.bind();
     gamma_correction.use();
@@ -1468,15 +1471,6 @@ void Render::render(float64 state_time)
     FRAME_TIMER.stop();
     SWAP_TIMER.start();
 
-
-    glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
-    ImGui::Render();
-    ImGui_ImplSdlGL3_RenderDrawData(ImGui::GetDrawData());
-
-    SDL_GL_SwapWindow(window);
-    set_message("FRAME END", "");
-    SWAP_TIMER.stop();
-    FRAME_TIMER.start();
     glBindVertexArray(0);
   }
   frame_count += 1;
@@ -1484,9 +1478,10 @@ void Render::render(float64 state_time)
 
 void Render::resize_window(ivec2 window_size)
 {
+  ASSERT(0);
+  // todo: implement window resize, must notify imgui
   this->window_size = window_size;
   set_vfov(vfov);
-  ASSERT(0); // not yet implemented
 }
 
 void Render::set_render_scale(float32 scale)

@@ -5,8 +5,7 @@ struct Render_Test_State : protected State
 {
   Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size);
   void update();
-  void handle_input(State **current_state,
-    std::vector<State *> available_states);
+  virtual void handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse) final;
 
   vec3 player_pos = vec3(0, 0, 0.5);
   vec3 player_dir = vec3(0, 1, 0);
