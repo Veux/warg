@@ -37,9 +37,10 @@ void Warg_Server::process_packets()
         UID id = uid();
         peers[id] = {event.peer, nullptr, nullptr, 0};
 
+        
         for (auto &c : chars)
           send_event(peers[id],
-            std::make_unique<Message>(Char_Spawn_Message(c.first, c.second.name.c_str(), c.second.team)));
+            make_unique<Char_Spawn_Message>(c.first, c.second.name.c_str(), c.second.team));
         break;
       }
       case ENET_EVENT_TYPE_RECEIVE:
@@ -89,7 +90,7 @@ void Warg_Server::update(float32 dt)
     ch.update_mana(dt);
     ch.update_spell_cooldowns(dt);
     ch.update_global_cooldown(dt);
-    push(std::make_unique<Message>(Char_Pos_Message(cid, ch.dir, ch.pos)));
+    push(make_unique<Char_Pos_Message>(cid, ch.dir, ch.pos));
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
@@ -153,6 +154,8 @@ void Char_Spawn_Request_Message::handle(Warg_Server &server)
   UID character = server.add_char(team, name.c_str());
   ASSERT(server.peers.count(peer));
   server.peers[peer].character = character;
+  server.send_event(server.peers[peer], make_unique<Player_Control_Message>(character));
+  server.push(make_unique<Char_Spawn_Message>(character, name.c_str(), team));
 }
 
 void Player_Movement_Message::handle(Warg_Server &server)
@@ -202,7 +205,7 @@ void Warg_Server::try_cast_spell(
 
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster.id, target_, spell)))
-    push(std::make_unique<Message>(Cast_Error_Message(caster.id, target_, spell_, (int)err)));
+    push(make_unique<Cast_Error_Message>(caster.id, target_, spell_, (int)err));
   else
     cast_spell(caster.id, target_, spell);
 }
@@ -233,7 +236,7 @@ void Warg_Server::begin_cast(UID caster_, UID target_, Spell *spell)
   caster->cast_target = target_;
   caster->gcd = caster->e_stats.gcd;
 
-  push(std::make_unique<Message>(Cast_Begin_Message(caster_, target_, spell->def->name.c_str())));
+  push(make_unique<Cast_Begin_Message>(caster_, target_, spell->def->name.c_str()));
 }
 
 void Warg_Server::interrupt_cast(UID ci)
@@ -245,7 +248,7 @@ void Warg_Server::interrupt_cast(UID ci)
   c->cast_progress = 0;
   c->casting_spell = nullptr;
   c->gcd = 0;
-  push(std::make_unique<Message>(Cast_Interrupt_Message(ci)));
+  push(make_unique<Cast_Interrupt_Message>(ci));
 }
 
 void Warg_Server::update_cast(UID caster_, float32 dt)
@@ -310,8 +313,8 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
-    push(std::make_unique<Message>(Cast_Error_Message
-          (caster_, target_, spell->def->name.c_str(), static_cast<int>(err))));
+    push(make_unique<Cast_Error_Message>(
+          caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
     return;
   }
 
@@ -406,7 +409,7 @@ void Warg_Server::invoke_spell_effect_apply_buff(SpellEffectInst &effect)
   else
     target->debuffs.push_back(buff);
 
-  push(std::make_unique<Message>(Buff_Application_Message(effect.target, buff.def.name.c_str())));
+  push(make_unique<Buff_Application_Message>(effect.target, buff.def.name.c_str()));
 }
 
 void Warg_Server::invoke_spell_effect_clear_debuffs(SpellEffectInst &effect)
@@ -440,7 +443,7 @@ void Warg_Server::invoke_spell_effect_damage(SpellEffectInst &effect)
     target->alive = false;
   }
 
-  push(std::make_unique<Message>(Char_HP_Message(effect.target, target->hp)));
+  push(make_unique<Char_HP_Message>(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
@@ -463,7 +466,7 @@ void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
     target->hp = target->hp_max;
   }
 
-  push(std::make_unique<Message>(Char_HP_Message(effect.target, target->hp)));
+  push(make_unique<Char_HP_Message>(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
@@ -479,7 +482,7 @@ void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
   target->cast_progress = 0;
   target->cast_target = 0;
 
-  push(std::make_unique<Message>(Cast_Interrupt_Message(effect.target)));
+  push(make_unique<Cast_Interrupt_Message>(effect.target));
 }
 
 void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
@@ -493,8 +496,8 @@ void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
   obji.pos = effect.pos;
   spell_objs.push_back(obji);
 
-  push(std::make_unique<Message>(Object_Launch_Message(
-    effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos)));
+  push(make_unique<Object_Launch_Message>(
+    effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
 }
 
 void Warg_Server::update_buffs(UID character, float32 dt)

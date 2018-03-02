@@ -19,7 +19,7 @@ struct Warg_State : protected State
   void process_events();
   void add_char(UID id, int team, const char *name);
 
-  std::unique_ptr<Warg_Server> server;
+  unique_ptr<Warg_Server> server;
   queue<unique_ptr<Message>> in, out;
   bool local;
   ENetPeer *serverp;

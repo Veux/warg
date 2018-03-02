@@ -177,13 +177,10 @@ uint32_t deserialize_uint32(Buffer &b)
   return n;
 }
 
-char *deserialize_string(Buffer &b)
+std::string deserialize_string(Buffer &b)
 {
   uint16_t len = deserialize_uint16(b);
-  char *s = (char *)malloc(len + 1);
-  memcpy(s, b.read(len), len);
-  s[len] = '\0';
-  return s;
+  return std::string((char *)b.read(len), len);
 }
 
 float32_t deserialize_float32(Buffer &b)

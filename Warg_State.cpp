@@ -65,9 +65,9 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 {
   local = true;
 
-  server = std::make_unique<Warg_Server>(true);
+  server = make_unique<Warg_Server>(true);
   server->connect(&out, &in);
-  out.push(std::make_unique<Message>(Char_Spawn_Request_Message("Cubeboi", 0)));
+  out.push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
   map = make_blades_edge();
   sdb = make_spell_db();
@@ -103,7 +103,7 @@ void Warg_State::handle_input(
       }
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
-        out.push(std::make_unique<Message>(Jump_Message()));
+        out.push(make_unique<Jump_Message>());
       }
     }
     else if (_e.type == SDL_KEYUP)
@@ -369,7 +369,7 @@ void Warg_State::handle_input(
       m |= Move_Status::Right;
     
     out.push(
-      std::make_unique<Message>(Player_Movement_Message((Move_Status)m, dir)));
+      make_unique<Player_Movement_Message>((Move_Status)m, dir));
 
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;

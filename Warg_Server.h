@@ -11,6 +11,7 @@
 using std::vector;
 using std::queue;
 using std::unique_ptr;
+using std::make_unique;
 
 struct Warg_Peer
 {
