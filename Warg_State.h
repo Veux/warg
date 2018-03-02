@@ -27,7 +27,7 @@ struct Character
   vec3 pos;
   vec3 dir;
   vec3 vel;
-  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61);//avg human in meters
+  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
   bool grounded;
   Move_Status move_status = Move_Status::None;
   Collision_Packet colpkt;
@@ -63,8 +63,8 @@ struct Warg_State : protected State
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
       const char *address, const char *char_name, uint8_t team);
   void update();
-  void handle_input(
-      State **current_state, std::vector<State *> available_states);
+  virtual void handle_input_events(const std::vector<SDL_Event> &events,
+      bool block_kb, bool block_mouse) final;
 
   std::unique_ptr<Warg_Client> client;
   std::unique_ptr<Warg_Server> server;

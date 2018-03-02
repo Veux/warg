@@ -40,10 +40,8 @@ Scene_Graph_Node::Scene_Graph_Node(string name, const mat4 *basis)
 }
 
 Scene_Graph_Node::Scene_Graph_Node(string name, const aiNode *node,
-                                   const mat4 *import_basis_,
-                                   const aiScene *scene, string scene_file_path,
-                                   Uint32 *mesh_num,
-                                   Material_Descriptor *material_override)
+    const mat4 *import_basis_, const aiScene *scene, string scene_file_path,
+    Uint32 *mesh_num, Material_Descriptor *material_override)
 {
   ASSERT(node);
   ASSERT(scene);
@@ -73,22 +71,20 @@ Scene_Graph::Scene_Graph()
   root = make_shared<Scene_Graph_Node>("SCENE_GRAPH_ROOT", nullptr);
 }
 void Scene_Graph::add_graph_node(const aiNode *node,
-                                 weak_ptr<Scene_Graph_Node> parent,
-                                 const mat4 *import_basis,
-                                 const aiScene *aiscene, string scene_file_path,
-                                 Uint32 *mesh_num,
-                                 Material_Descriptor *material_override)
+    weak_ptr<Scene_Graph_Node> parent, const mat4 *import_basis,
+    const aiScene *aiscene, string scene_file_path, Uint32 *mesh_num,
+    Material_Descriptor *material_override)
 {
   ASSERT(node);
   ASSERT(aiscene);
   string name = copy(&node->mName);
   // construct just this node in the main node array
   auto thing = Scene_Graph_Node(name, node, import_basis, aiscene,
-                                scene_file_path, mesh_num, material_override);
+      scene_file_path, mesh_num, material_override);
 
-  shared_ptr<Scene_Graph_Node> new_node = make_shared<Scene_Graph_Node>(
-      name, node, import_basis, aiscene, scene_file_path, mesh_num,
-      material_override);
+  shared_ptr<Scene_Graph_Node> new_node =
+      make_shared<Scene_Graph_Node>(name, node, import_basis, aiscene,
+          scene_file_path, mesh_num, material_override);
 
   set_parent(new_node, parent, true);
 
@@ -97,14 +93,12 @@ void Scene_Graph::add_graph_node(const aiNode *node,
   {
     const aiNode *child = node->mChildren[i];
     add_graph_node(child, new_node, import_basis, aiscene, scene_file_path,
-                   mesh_num, material_override);
+        mesh_num, material_override);
   }
 }
 
-shared_ptr<Scene_Graph_Node> Scene_Graph::add_mesh(Mesh_Data m,
-                                                   Material_Descriptor md,
-                                                   string name,
-                                                   const mat4 *import_basis)
+shared_ptr<Scene_Graph_Node> Scene_Graph::add_mesh(
+    Mesh_Data m, Material_Descriptor md, string name, const mat4 *import_basis)
 {
   shared_ptr<Scene_Graph_Node> node =
       make_shared<Scene_Graph_Node>(name, import_basis);
@@ -115,8 +109,7 @@ shared_ptr<Scene_Graph_Node> Scene_Graph::add_mesh(Mesh_Data m,
   return node;
 }
 void Scene_Graph::set_parent(weak_ptr<Scene_Graph_Node> p,
-                             weak_ptr<Scene_Graph_Node> desired_parent,
-                             bool parent_owned)
+    weak_ptr<Scene_Graph_Node> desired_parent, bool parent_owned)
 {
   shared_ptr<Scene_Graph_Node> child = p.lock();
   shared_ptr<Scene_Graph_Node> current_parent_ptr = child->parent.lock();
@@ -163,26 +156,23 @@ void Scene_Graph::set_parent(weak_ptr<Scene_Graph_Node> p,
   }
 }
 
-shared_ptr<Scene_Graph_Node>
-Scene_Graph::add_aiscene(string scene_file_path, const mat4 *import_basis,
-                         Material_Descriptor *material_override)
+shared_ptr<Scene_Graph_Node> Scene_Graph::add_aiscene(string scene_file_path,
+    const mat4 *import_basis, Material_Descriptor *material_override)
 {
   return add_aiscene(load_aiscene(scene_file_path), scene_file_path,
-                     import_basis, material_override);
+      import_basis, material_override);
 }
 
-shared_ptr<Scene_Graph_Node>
-Scene_Graph::add_aiscene(string scene_file_path,
-                         Material_Descriptor *material_override)
+shared_ptr<Scene_Graph_Node> Scene_Graph::add_aiscene(
+    string scene_file_path, Material_Descriptor *material_override)
 {
   return add_aiscene(load_aiscene(scene_file_path), scene_file_path, nullptr,
-                     material_override);
+      material_override);
 }
 
-shared_ptr<Scene_Graph_Node>
-Scene_Graph::add_aiscene(const aiScene *scene, string scene_file_path,
-                         const mat4 *import_basis,
-                         Material_Descriptor *material_override)
+shared_ptr<Scene_Graph_Node> Scene_Graph::add_aiscene(const aiScene *scene,
+    string scene_file_path, const mat4 *import_basis,
+    Material_Descriptor *material_override)
 {
   // accumulates as meshes are imported, used along with the scene file path
   // to create a unique_id for the mesh
@@ -193,9 +183,8 @@ Scene_Graph::add_aiscene(const aiScene *scene, string scene_file_path,
   string name =
       string("ROOT FOR: ") + scene_file_path + " " + copy(&root->mName);
   scene_file_path = BASE_MODEL_PATH + scene_file_path;
-  shared_ptr<Scene_Graph_Node> new_node = make_shared<Scene_Graph_Node>(
-      name, root, import_basis, scene, scene_file_path, &mesh_num,
-      material_override);
+  shared_ptr<Scene_Graph_Node> new_node = make_shared<Scene_Graph_Node>(name,
+      root, import_basis, scene, scene_file_path, &mesh_num, material_override);
   set_parent(new_node, this->root, false);
 
   // add every aiscene child to the new node
@@ -204,12 +193,12 @@ Scene_Graph::add_aiscene(const aiScene *scene, string scene_file_path,
   {
     const aiNode *node = scene->mRootNode->mChildren[i];
     add_graph_node(node, new_node, import_basis, scene, scene_file_path,
-                   &mesh_num, material_override);
+        &mesh_num, material_override);
   }
   return new_node;
 }
 void Scene_Graph::visit_nodes(const weak_ptr<Scene_Graph_Node> node_ptr,
-                              const mat4 &M, vector<Render_Entity> &accumulator)
+    const mat4 &M, vector<Render_Entity> &accumulator)
 {
   shared_ptr<Scene_Graph_Node> entity = node_ptr.lock();
   ASSERT(entity);
@@ -223,7 +212,6 @@ void Scene_Graph::visit_nodes(const weak_ptr<Scene_Graph_Node> node_ptr,
   const mat4 STACK = M * B * T * R * S;
   const mat4 I = entity->import_basis;
   const mat4 FINAL = STACK * I;
-
 
   const uint32 num_meshes = entity->model.size();
   for (uint32 i = 0; i < num_meshes; ++i)
@@ -307,8 +295,7 @@ void Scene_Graph::visit_nodes_locked_accumulator(
 }
 
 void Scene_Graph::visit_root_node_base_index(uint32 node_index, uint32 count,
-                                             vector<Render_Entity> *accumulator,
-                                             atomic_flag *lock)
+    vector<Render_Entity> *accumulator, atomic_flag *lock)
 {
   const Scene_Graph_Node *const entity = root.get();
   ASSERT(entity->name == "SCENE_GRAPH_ROOT");
@@ -343,16 +330,16 @@ vector<Render_Entity> Scene_Graph::visit_nodes_async_start()
   {
     const uint32 base_index = i * nodes_per_thread;
     auto fp = [this, base_index, nodes_per_thread, &accumulator, &lock] {
-      this->visit_root_node_base_index(base_index, nodes_per_thread,
-                                       &accumulator, &lock);
+      this->visit_root_node_base_index(
+          base_index, nodes_per_thread, &accumulator, &lock);
     };
     threads[i] = thread(fp);
   }
   PERF_TIMER.stop();
   uint32 leftover_index = (thread_count * nodes_per_thread);
   ASSERT(leftover_index + leftover_nodes == root_children_count);
-  visit_root_node_base_index(leftover_index, leftover_nodes, &accumulator,
-                             &lock);
+  visit_root_node_base_index(
+      leftover_index, leftover_nodes, &accumulator, &lock);
   for (int i = 0; i < thread_count; ++i)
   {
     threads[i].join();
@@ -370,9 +357,8 @@ vector<Render_Entity> Scene_Graph::visit_nodes_st_start()
   return accumulator;
 }
 
-shared_ptr<Scene_Graph_Node>
-Scene_Graph::add_primitive_mesh(Mesh_Primitive p, string name,
-                                Material_Descriptor m, const mat4 *import_basis)
+shared_ptr<Scene_Graph_Node> Scene_Graph::add_primitive_mesh(Mesh_Primitive p,
+    string name, Material_Descriptor m, const mat4 *import_basis)
 {
   Mesh mesh(p, name);
   Material material(m);
