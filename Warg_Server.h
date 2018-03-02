@@ -7,9 +7,9 @@
 #include <map>
 #include <queue>
 
-using std::vector;
 using std::queue;
 using std::unique_ptr;
+using std::vector;
 
 struct Character;
 
