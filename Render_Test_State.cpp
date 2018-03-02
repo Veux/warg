@@ -2,14 +2,15 @@
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
+#include "Third_party/imgui/imgui.h"
 #include <atomic>
 #include <memory>
 #include <sstream>
 #include <thread>
 using namespace glm;
 
-Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
-                                     ivec2 window_size)
+Render_Test_State::Render_Test_State(
+    std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
   free_cam = true;
@@ -28,8 +29,6 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   ground->position = {0.0f, 0.0f, -5.f};
   ground->scale = {40.0f, 40.0f, 10.f};
 
-
-
   Material_Descriptor sky_mat;
   sky_mat.uv_scale = vec3(1.f);
   sky_mat.backface_culling = false;
@@ -37,7 +36,6 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   sky_mat.vertex_shader = "vertex_shader.vert";
   sky_mat.frag_shader = "passthrough.frag";
   sky_sphere = scene.add_aiscene("sphere.obj", &sky_mat);
-
 
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
@@ -59,7 +57,6 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   scene.set_parent(cube_planet, cube_star, false);
   cube_moon = scene.add_primitive_mesh(cube, "moon", material);
   scene.set_parent(cube_moon, cube_planet, false);
-
 
   material.albedo_alpha_override = 0;
   material.uses_transparency = false;
@@ -98,28 +95,23 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window,
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1.15,0,1.15,1)";
   small_light = scene.add_aiscene("sphere.obj", &material);
-
-
 }
 
-void Render_Test_State::handle_input(State **current_state,
-                                     std::vector<State *> available_states)
+void Render_Test_State::handle_input_events(
+    const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
 {
-  auto is_pressed = [](int key) {
+  auto is_pressed = [block_kb](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
     SDL_PumpEvents();
-    return keys[key];
+    return block_kb ? 0 : keys[key];
   };
-  SDL_Event _e;
-  while (SDL_PollEvent(&_e))
+
+  for (auto &_e : events)
   {
-    if (_e.type == SDL_QUIT)
+
+    if (_e.type == SDL_KEYDOWN)
     {
-      running = false;
-      return;
-    }
-    else if (_e.type == SDL_KEYDOWN)
-    {
+      ASSERT(!block_kb);
       if (_e.key.keysym.sym == SDLK_ESCAPE)
       {
         running = false;
@@ -131,52 +123,35 @@ void Render_Test_State::handle_input(State **current_state,
       if (_e.key.keysym.sym == SDLK_F5)
       {
         free_cam = !free_cam;
-      }
-      if (_e.key.keysym.sym == SDLK_F1)
-      {
-        *current_state = &*available_states[0];
-        return;
-      }
-      if (_e.key.keysym.sym == SDLK_F2)
-      {
-        *current_state = &*available_states[1];
-        return;
+        SDL_SetRelativeMouseMode(SDL_bool(false));
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
+      ASSERT(!block_mouse);
       if (_e.wheel.y < 0)
         cam.zoom += ZOOM_STEP;
       else if (_e.wheel.y > 0)
         cam.zoom -= ZOOM_STEP;
     }
-    else if (_e.type == SDL_WINDOWEVENT)
-    {
-      if (_e.window.event == SDL_WINDOWEVENT_RESIZED)
-      {
-        // resize
-      }
-      else if (_e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
-               _e.window.event == SDL_WINDOWEVENT_ENTER)
-      { // dumping mouse delta prevents camera teleport on focus gain
-
-        // required, else clicking the title bar itself to gain focus
-        // makes SDL ignore the mouse entirely for some reason...
-        SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_SetRelativeMouseMode(SDL_bool(true));
-        reset_mouse_delta();
-      }
-    }
   }
 
-  checkSDLError(__LINE__);
   // first person style camera control:
-  const uint32 mouse_state =
-      SDL_GetMouseState(&mouse_position.x, &mouse_position.y);
+  ivec2 mouse;
+  uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
 
-  // note: SDL_SetRelativeMouseMode is being set by the constructor
-  ivec2 mouse_delta;
-  SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+  if (block_mouse)
+  {
+    mouse_state = 0;
+    mouse = last_seen_mouse_position;
+  }
+  ivec2 mouse_delta = mouse - last_seen_mouse_position;
+  last_seen_mouse_position = mouse;
+
+  set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
+  set_message("mouse grab position:",
+      s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
+      1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -185,6 +160,7 @@ void Render_Test_State::handle_input(State **current_state,
 
   if (free_cam)
   {
+    SDL_SetRelativeMouseMode(SDL_bool(true));
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
     cam.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
@@ -226,11 +202,39 @@ void Render_Test_State::handle_input(State **current_state,
   else
   { // wow style camera
     vec4 cam_rel;
+    // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) &&
         (last_seen_lmb || last_seen_rmb))
-    { // won't track mouse delta that happened when mouse button was not pressed
+    {
       cam.theta += mouse_delta.x * MOUSE_X_SENS;
       cam.phi += mouse_delta.y * MOUSE_Y_SENS;
+
+      if (!mouse_grabbed)
+      { // first hold
+        set_message("mouse grab event", "", 1.0f);
+        mouse_grabbed = true;
+        last_grabbed_mouse_position = mouse;
+        SDL_SetRelativeMouseMode(SDL_bool(true));
+      }
+      set_message("mouse is grabbed", "", 1.0f);
+    }
+    else
+    { // not holding button
+      set_message("mouse is free", "", 1.0f);
+      if (mouse_grabbed)
+      { // first unhold
+        set_message("mouse release event", "", 1.0f);
+        mouse_grabbed = false;
+
+        set_message("mouse warp:",
+            s("from:", mouse.x, " ", mouse.y,
+                " to:", last_grabbed_mouse_position.x, " ",
+                last_grabbed_mouse_position.y),
+            1.0f);
+        SDL_SetRelativeMouseMode(SDL_bool(false));
+        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
+            last_grabbed_mouse_position.y);
+      }
     }
     // wrap x
     if (cam.theta > two_pi<float32>())
@@ -300,17 +304,27 @@ void Render_Test_State::handle_input(State **current_state,
 
 void Render_Test_State::update()
 {
+  // 1. Show a simple window.
+  // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets automatically
+  // appears in a window called "Debug".
+  {
+    static float f = 0.0f;
+    ImGui::Text(
+        "Hello, world!"); // Display some text (you can use a format string too)
+    ImGui::SliderFloat("float", &f, 0.0f,
+        1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+  }
 
   const float32 height = 1.25;
 
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
   cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
-  const float32 anglestar = wrap_to_range(pi<float32>() * sin(current_time / 2),
-                                          0, 2 * pi<float32>());
-  //cube_star->visible = sin(current_time * 1.2) > -.25;
+  const float32 anglestar = wrap_to_range(
+      pi<float32>() * sin(current_time / 2), 0, 2 * pi<float32>());
+  // cube_star->visible = sin(current_time * 1.2) > -.25;
   cube_star->propagate_visibility = true;
   cube_star->orientation = angleAxis(anglestar,
-   normalize(vec3(cos(current_time*.2), sin(current_time*.2), 1)));
+      normalize(vec3(cos(current_time * .2), sin(current_time * .2), 1)));
 
   const float32 planet_scale = 0.35;
   const float32 planet_distance = 4;
@@ -332,50 +346,54 @@ void Render_Test_State::update()
   const float32 moon_day = .1;
   cube_moon->scale = vec3(moon_scale);
   cube_moon->position = moon_distance * vec3(cos(current_time / moon_year),
-                                             sin(current_time / moon_year), 0);
+                                            sin(current_time / moon_year), 0);
   cube_moon->orientation =
       angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
 
   sphere->position = vec3(-3, 3, 1.5);
   sphere->scale = vec3(0.4);
 
-
-
   auto &lights = scene.lights.lights;
   scene.lights.light_count = 4;
-  //float32 time_of_day = 12.;
+  // float32 time_of_day = 12.;
   const vec4 night = vec4(0);
-  const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1.,0.f);
-  const vec4 sun_low = vec4(235.f/255.f, 28.f / 255., 0.f / 255.f, 0.f);
+  const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1., 0.f);
+  const vec4 sun_low = vec4(235.f / 255.f, 28.f / 255., 0.f / 255.f, 0.f);
   const float time_day_scale = 0.12f;
-  float32 time_of_day = wrap_to_range((time_day_scale*current_time)+135.f, 0.0f, 24.0f);
-  //time_of_day = 12.f;
-  float32 day_range = clamp(time_of_day, 5.85f, 18.85f);//5:30am to 7:30pm
-  float32 day_t = (day_range-5.85f) / 12.7f; //0-1 daytime
+  float32 time_of_day =
+      wrap_to_range((time_day_scale * current_time) + 135.f, 0.0f, 24.0f);
+  // time_of_day = 12.f;
+  float32 day_range = clamp(time_of_day, 5.85f, 18.85f); // 5:30am to 7:30pm
+  float32 day_t = (day_range - 5.85f) / 12.7f;           // 0-1 daytime
 
   Bezier_Curve time_curve;
-  time_curve.points = { vec4(1.0),vec4(0.0),vec4(1.0) };
+  time_curve.points = {vec4(1.0), vec4(0.0), vec4(1.0)};
   vec4 sky_color_t = time_curve.lerp(day_t);
-  
 
-  float parabola_day_t =  0.5f*(1.0f+pow((day_t-0.5f)*2.f, 15.f));
+  float parabola_day_t = 0.5f * (1.0f + pow((day_t - 0.5f) * 2.f, 15.f));
 
   Bezier_Curve sky_curve;
-  sky_curve.points = { night,1.3f*sun_low,2.6f*day,1.3f*sun_low,night };
-  vec4 sky_color = sky_curve.lerp(clamp(parabola_day_t,0.f,1.f));
-  clear_color = vec3(clamp(sky_color.r,0.f,1.f), clamp(sky_color.g,0.f,1.f), clamp(sky_color.b,0.f,1.f));
-   
-  //clear_color = day_t*vec3(1);
-  scene.lights.additional_ambient = vec3(sky_color.r, sky_color.g, sky_color.b)*vec3(0.03) + vec3(94.f / 255.f, 155.f / 255.f, 1.) * vec3(0.01);
+  sky_curve.points = {night, 1.3f * sun_low, 2.6f * day, 1.3f * sun_low, night};
+  vec4 sky_color = sky_curve.lerp(clamp(parabola_day_t, 0.f, 1.f));
+  clear_color = vec3(clamp(sky_color.r, 0.f, 1.f), clamp(sky_color.g, 0.f, 1.f),
+      clamp(sky_color.b, 0.f, 1.f));
+
+  // clear_color = day_t*vec3(1);
+  scene.lights.additional_ambient =
+      vec3(sky_color.r, sky_color.g, sky_color.b) * vec3(0.03) +
+      vec3(94.f / 255.f, 155.f / 255.f, 1.) * vec3(0.01);
 
   sky_sphere->scale = vec3(500);
   sky_sphere->position = vec3(0, 0, -350);
   sky_sphere->visible = true;
-  sky_sphere->owned_children[0]->model[0].second.albedo_mod = 1.5f*vec4(clear_color,1);
-  
+  sky_sphere->owned_children[0]->model[0].second.albedo_mod =
+      1.5f * vec4(clear_color, 1);
+
   scene.lights.light_count = 3;
 
-  vec3 sun_pos = 180.f* vec3(cos(two_pi<float32>()*((time_of_day-6.f)/24.f)),0,sin(two_pi<float32>()*((time_of_day-6.f) / 24.f)));
+  vec3 sun_pos =
+      180.f * vec3(cos(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0,
+                  sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)));
   sun_light->position = sun_pos;
   sun_light->scale = vec3(10.);
   lights[0].position = sun_pos;
@@ -383,7 +401,9 @@ void Render_Test_State::update()
   lights[0].direction = vec3(0);
   lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
   lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);
-  lights[0].ambient = 0.003*clamp(sin(two_pi<float32>()*((time_of_day - 6.f) / 24.f)),0.f,1.f);
+  lights[0].ambient =
+      0.003 *
+      clamp(sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
   lights[0].casts_shadows = true;
   lights[0].shadow_blur_iterations = 6;
   lights[0].shadow_blur_radius = 1.25005f;
@@ -392,13 +412,12 @@ void Render_Test_State::update()
   lights[0].shadow_far_plane = 350.f;
   lights[0].shadow_fov = radians(15.5f);
 
-
   lights[1].position =
-      vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172),2.);
+      vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   lights[1].type = Light_Type::spot;
   lights[1].direction = vec3(0);
   lights[1].color = 150.f * vec3(1.0, 1.00, 1.0);
-  lights[1].cone_angle = 0.151;//+ 0.14*sin(current_time);
+  lights[1].cone_angle = 0.151; //+ 0.14*sin(current_time);
   lights[1].ambient = 0.0004;
   lights[1].casts_shadows = true;
   lights[1].max_variance = 0.0000002;
@@ -407,7 +426,8 @@ void Render_Test_State::update()
   lights[1].shadow_fov = radians(90.f);
   lights[1].shadow_blur_iterations = 4;
   lights[1].shadow_blur_radius = 2.12;
-  cone_light1->position = lights[1].position + 0.5f*normalize(lights[1].position);
+  cone_light1->position =
+      lights[1].position + 0.5f * normalize(lights[1].position);
   cone_light1->scale = vec3(.25);
 
   lights[2].position =
@@ -418,6 +438,4 @@ void Render_Test_State::update()
   lights[2].ambient = 0.0001f;
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
-
-
 }
