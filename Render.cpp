@@ -10,9 +10,9 @@
 #undef STB_IMAGE_IMPLEMENTATION
 #include "Mesh_Loader.h"
 #include "Render.h"
+#include "SDL_Imgui_State.h"
 #include "Shader.h"
 #include "Third_party/imgui/imgui.h"
-#include "SDL_Imgui_State.h"
 #include "Timer.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -134,7 +134,7 @@ void Gaussian_Blur::draw(
 
   if (iterations == 0)
   {
-    vector<Texture*> texture = { src };
+    vector<Texture *> texture = {src};
     run_pixel_shader(&renderer->passthrough, &texture, &target, false);
     return;
   }
@@ -1177,8 +1177,8 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
   shader->set_uniform("transform", Render::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
-      GL_UNSIGNED_INT, (void *)0);
+  glDrawElements(
+      GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {
@@ -1369,6 +1369,16 @@ void Render::render(float64 state_time)
 #if DYNAMIC_TEXTURE_RELOADING
   check_and_clear_expired_textures();
 #endif
+
+  static bool show_renderer_window = true;
+  if (show_renderer_window)
+  {
+    ImGui::Begin("renderer.cpp Window", &show_renderer_window);
+    ImGui::Text("Hello from renderer.cpp window!");
+    if (ImGui::Button("Close Me"))
+      show_renderer_window = false;
+    ImGui::End();
+  }
 
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;

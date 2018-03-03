@@ -195,7 +195,7 @@
         MyGameUpdate(); // may use any ImGui functions, e.g. ImGui::Begin("My
  window"); ImGui::Text("Hello, world!"); ImGui::End(); MyGameRender(); // may
  use any ImGui functions as well!
-     
+     
         // Render & swap video buffers
         ImGui::Render();
         MyImGuiRenderFunction(ImGui::GetDrawData());
@@ -907,7 +907,7 @@
       // Add default Japanese ranges
       io.Fonts->AddFontFromFileTTF("myfontfile.ttf", size_in_pixels, NULL,
  io.Fonts->GetGlyphRangesJapanese());
-   
+   
       // Or create your own custom ranges (e.g. for a game you can feed your
  entire game script and only build the characters the game need)
       ImVector<ImWchar> ranges;
@@ -3076,8 +3076,8 @@ static void ImGui::NavProcessItem(
 {
   ImGuiContext &g = *GImGui;
   // if (!g.IO.NavActive)  // [2017/10/06] Removed this possibly redundant test
-  // but I am not sure of all the side-effects yet. Some of the feature here will
-  // need to work regardless of using a _NoNavInputs flag.
+  // but I am not sure of all the side-effects yet. Some of the feature here
+  // will need to work regardless of using a _NoNavInputs flag.
   //    return;
 
   const ImGuiItemFlags item_flags = window->DC.ItemFlags;
@@ -16467,7 +16467,8 @@ bool ImGui::BeginDragDropSource(ImGuiDragDropFlags flags, int mouse_button)
     {
       // FIXME-DRAG
       // SetNextWindowPos(g.IO.MousePos - g.ActiveIdClickOffset -
-      // g.Style.WindowPadding);  PushStyleVar(ImGuiStyleVar_Alpha, g.Style.Alpha
+      // g.Style.WindowPadding);  PushStyleVar(ImGuiStyleVar_Alpha,
+      // g.Style.Alpha
       // * 0.60f); // This is better but e.g ColorButton with checkboard has
       // issue with transparent colors :(
       SetNextWindowPos(g.IO.MousePos);
