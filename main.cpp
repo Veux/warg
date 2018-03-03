@@ -6,9 +6,9 @@
 #include "Warg_State.h"
 #include <SDL2/SDL.h>
 #undef main
+#include "SDL_Imgui_State.h"
 #include "Third_party/imgui/imgui.h"
 #include "Third_party/imgui/imgui_internal.h"
-#include "SDL_Imgui_State.h"
 #include <enet/enet.h>
 #include <iostream>
 #include <sstream>
@@ -175,8 +175,14 @@ int main(int argc, char *argv[])
 
   SDL_ClearError();
 
-  SDL_Imgui_State state_imgui(window);
-  SDL_Imgui_State renderer_imgui(window);
+  SDL_Imgui_State trash_imgui(window);
+  SDL_Imgui_State imgui(window);
+  ImGui::StyleColorsDark();
+
+  trash_imgui.bind();
+  trash_imgui.new_frame(window);
+  trash_imgui.end_frame();
+
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
 
@@ -191,8 +197,9 @@ int main(int argc, char *argv[])
   Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
   State *current_state = &*states[0];
-  std::vector<SDL_Event> input_events;
+  std::vector<SDL_Event> imgui_event_accumulator;
 
+  bool first_update = false;
   // todo: compositor for n state/renderer pairs with ui
 
   SDL_SetRelativeMouseMode(SDL_bool(false));
@@ -217,32 +224,27 @@ int main(int argc, char *argv[])
       elapsed_time = 0.3;
     last_time = current_state->current_time;
 
-    state_imgui.bind();
-
-    bool draw_state_ui = true;
-    bool draw_render_ui = true;
-
-    state_imgui.bind();
+    trash_imgui.bind();
     while (current_state->current_time + dt < last_time + elapsed_time)
     {
+      first_update = true;
       State *s = current_state;
       s->current_time += dt;
-      
-
-      bool block_kb = state_imgui.context->IO.WantTextInput |
-                      renderer_imgui.context->IO.WantTextInput;
-      bool block_mouse = (state_imgui.context->IO.WantCaptureMouse |
-                         renderer_imgui.context->IO.WantCaptureMouse);
-
-      current_state->handle_input(&current_state, &states,
-          &state_imgui, &input_events,block_kb, block_mouse);
-
-
-      state_imgui.new_frame(window);
-      s->update();
-      state_imgui.end_frame();
       bool last_state_update =
           !(current_state->current_time + dt < last_time + elapsed_time);
+
+      std::vector<SDL_Event> new_events;
+      SDL_Event e;
+      while (SDL_PollEvent(&e))
+      {
+        new_events.push_back(e);
+        imgui_event_accumulator.push_back(e);
+      }
+
+      imgui.ignore_all_input = current_state->free_cam;
+
+      current_state->handle_input(&current_state, &states, &new_events,
+          imgui.context->IO.WantTextInput, imgui.context->IO.WantCaptureMouse);
 
       if (s != current_state)
       {
@@ -251,50 +253,50 @@ int main(int argc, char *argv[])
         current_state->renderer.set_render_scale(
             current_state->renderer.get_render_scale());
       }
+
       if (last_state_update)
+      { // possible bug: two clicks faster than 1 frame aren't seen
+        imgui.bind();
+        imgui.handle_input(&imgui_event_accumulator);
+        imgui_event_accumulator.clear();
+        imgui.new_frame(window);
+        s->update();
+      }
+      else
       {
-        if (draw_state_ui)
-          state_imgui.build_draw_data();
-        break;
+        trash_imgui.bind();
+        trash_imgui.new_frame(window);
+        s->update();
+        trash_imgui.end_frame();
       }
     }
 
-    renderer_imgui.bind();
-    renderer_imgui.new_frame(window);
-
-    ivec2 mouse;
-    uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
-
-    if (current_state->free_cam)
-    {
-      renderer_imgui.mouse_position = ivec2(0);
-      renderer_imgui.mouse_state = 0;
-    }
-    else
-    {
-      renderer_imgui.mouse_position = mouse;
-      renderer_imgui.mouse_state = mouse_state;
-    }
-    for (auto &e : input_events)
-    {
-      renderer_imgui.process_event(&e);
-    }
-    input_events.clear();
+    if (!first_update)
+      continue;
 
     current_state->render(current_state->current_time);
 
-    renderer_imgui.end_frame();
+    std::string messages = get_messages();
+    ImGui::Text(messages.c_str());
 
-    if (draw_state_ui)
+    static bool show_demo_window = true;
+    if (show_demo_window)
     {
-      state_imgui.bind();
-      state_imgui.render();
+      ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver);
+      ImGui::ShowDemoWindow(&show_demo_window);
     }
-    if (draw_render_ui)
+
+    if (ImGui::GetCurrentContext() == imgui.context)
     {
-      renderer_imgui.bind();
-      renderer_imgui.build_draw_data();
-      renderer_imgui.render();
+      imgui.build_draw_data();
+      imgui.render();
+      imgui.end_frame();
+    }
+    else
+    {
+      imgui.bind();
+      imgui.render();
+      trash_imgui.bind();
     }
 
     SDL_GL_SwapWindow(window);
@@ -306,8 +308,7 @@ int main(int argc, char *argv[])
   }
   delete game_state;
   push_log_to_disk();
-  state_imgui.destroy();
-  renderer_imgui.destroy();
+  imgui.destroy();
   SDL_Quit();
   return 0;
 }
