@@ -95,22 +95,13 @@ void Gaussian_Blur::init(ivec2 size, GLenum format)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
 
   if (!initialized)
-    intermediate_fbo.color_attachments.emplace_back(Texture());
+    intermediate_fbo.color_attachments.emplace_back(Texture(size,format));
 
-  Texture *intermediate_texture = &intermediate_fbo.color_attachments[0];
-  intermediate_texture->size = size;
-  intermediate_texture->format = format;
-  intermediate_texture->wrap = GL_CLAMP_TO_EDGE;
-  intermediate_texture->load();
   intermediate_fbo.init();
 
   if (!initialized)
-    target.color_attachments.emplace_back(Texture());
+    target.color_attachments.emplace_back(Texture(size, format));
 
-  Texture *target_texture = &target.color_attachments[0];
-  target_texture->size = size;
-  target_texture->format = format;
-  target_texture->load();
   target.init();
 
   aspect_ratio_factor = (float32)size.y / (float32)size.x;
@@ -196,9 +187,7 @@ High_Pass_Filter::High_Pass_Filter() {}
 
 void High_Pass_Filter::init(ivec2 size, GLenum format)
 {
-  target.color_attachments.emplace_back(Texture());
-  target.color_attachments[0].format = format;
-  target.color_attachments[0].size = size;
+  target.color_attachments.emplace_back(Texture(size,format));
   target.init();
   high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
   initialized = true;
@@ -241,10 +230,7 @@ void Bloom_Shader::init(ivec2 size, GLenum format)
 {
   high_pass.init(size, format);
   blur.init(size, format);
-  target.color_attachments.emplace_back(Texture());
-  target.color_attachments[0].size = size;
-  target.color_attachments[0].format = format;
-  target.color_attachments[0].wrap = GL_CLAMP_TO_EDGE;
+  target.color_attachments.emplace_back(Texture(size,format));
   target.init();
   initialized = true;
 }
@@ -415,7 +401,14 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-Texture::Texture() {}
+Texture::Texture(glm::ivec2 size, GLenum format , GLenum  filtering, GLenum wrap)
+{
+  this->size = size;
+  this->format = format;
+  this->filtering = filtering;
+  this->wrap = wrap;
+  load();
+}
 Texture_Handle::~Texture_Handle()
 {
   set_message("Deleting texture: ", s(texture));
