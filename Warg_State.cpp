@@ -386,6 +386,10 @@ void Warg_State::update()
     ImGui::Text("Hello from warg_state.cpp window!");
     if (ImGui::Button("Close Me"))
       show_warg_state_window = false;
+    
+    static Texture test("../Assets/Textures/pebbles_diffuse.png");
+
+    ImGui::Image((ImTextureID)test.texture->texture, ImVec2(256, 256));
     ImGui::End();
   }
 
