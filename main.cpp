@@ -203,6 +203,7 @@ int main(int argc, char *argv[])
   // todo: compositor for n state/renderer pairs with ui
 
   SDL_SetRelativeMouseMode(SDL_bool(false));
+  bool renderer_requires_trashgui_wrapping = false;
   while (current_state->running)
   {
     const float64 real_time = get_real_time();
@@ -225,13 +226,14 @@ int main(int argc, char *argv[])
     last_time = current_state->current_time;
 
     trash_imgui.bind();
+    renderer_requires_trashgui_wrapping = true;
     while (current_state->current_time + dt < last_time + elapsed_time)
     {
       first_update = true;
       State *s = current_state;
       s->current_time += dt;
       bool last_state_update =
-          !(current_state->current_time + dt < last_time + elapsed_time);
+          !(s->current_time + dt < last_time + elapsed_time);
 
       std::vector<SDL_Event> new_events;
       SDL_Event e;
@@ -241,26 +243,29 @@ int main(int argc, char *argv[])
         imgui_event_accumulator.push_back(e);
       }
 
-      imgui.ignore_all_input = current_state->free_cam;
+      imgui.ignore_all_input = s->free_cam;
 
-      current_state->handle_input(&current_state, &states, &new_events,
+      s->handle_input(&current_state, &states, &new_events,
           imgui.context->IO.WantTextInput, imgui.context->IO.WantCaptureMouse);
 
       if (s != current_state)
       {
-        last_state_update = true;
         s->paused = true;
         current_state->renderer.set_render_scale(
             current_state->renderer.get_render_scale());
+        break;
       }
 
       if (last_state_update)
       { // possible bug: two clicks faster than 1 frame aren't seen
+
+        // todo : update dt properly inside new_frame
         imgui.bind();
         imgui.handle_input(&imgui_event_accumulator);
         imgui_event_accumulator.clear();
         imgui.new_frame(window);
         s->update();
+        renderer_requires_trashgui_wrapping = false;
       }
       else
       {
@@ -274,6 +279,11 @@ int main(int argc, char *argv[])
     if (!first_update)
       continue;
 
+    if (renderer_requires_trashgui_wrapping)
+    {
+      ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
+      trash_imgui.new_frame(window);
+    }
     current_state->render(current_state->current_time);
 
     std::string messages = get_messages();
@@ -285,7 +295,11 @@ int main(int argc, char *argv[])
       ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver);
       ImGui::ShowDemoWindow(&show_demo_window);
     }
-
+    if (renderer_requires_trashgui_wrapping)
+    {
+      ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
+      trash_imgui.end_frame();
+    }
     if (ImGui::GetCurrentContext() == imgui.context)
     {
       imgui.build_draw_data();
