@@ -11,6 +11,7 @@
 #include "SDL_Imgui_State.h"
 #include "Render.h"
 #include "Third_Party/imgui/imgui.h"
+#include "Third_Party/imgui/imgui_internal.h"
 
 #include "Globals.h"
 #include <SDL2/SDL.h>
@@ -234,18 +235,6 @@ bool SDL_Imgui_State::process_event(SDL_Event *event)
   return false;
 }
 
-void SDL_Imgui_State::handle_input()
-{
-  ImGuiIO &io = ImGui::GetIO();
-  SDL_Event e;
-  while (SDL_PollEvent(&e))
-  {
-    // gives imgui the input, true if it used it
-    bool event_did_a_thing = process_event(&e);
-    event_output.push_back(e);
-  }
-}
-
 void SDL_Imgui_State::create_fonts_texture()
 {
   // Build texture atlas
@@ -400,7 +389,6 @@ SDL_Imgui_State::SDL_Imgui_State(SDL_Window *window)
   ImGui::SetCurrentContext(context);
   init(window);
   state_io = &ImGui::GetIO();
-  ImGui::StyleColorsDark();
 }
 
 bool SDL_Imgui_State::init(SDL_Window *window)
@@ -470,7 +458,7 @@ void SDL_Imgui_State::destroy()
     SDL_FreeCursor(sdl_cursors[cursor_n]);
 }
 
-void SDL_Imgui_State::new_frame(SDL_Window *window)
+void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
 {
 
   if (!font_texture)
@@ -496,29 +484,22 @@ void SDL_Imgui_State::new_frame(SDL_Window *window)
   io.DisplayFramebufferScale = ImVec2(
       w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
 
-  // Setup time step (we don't use SDL_GetTicks() because it is using
-  // millisecond resolution)
-  static Uint64 frequency = SDL_GetPerformanceFrequency();
-  Uint64 current_time = SDL_GetPerformanceCounter();
-  io.DeltaTime = time > 0 ? (float)((double)(current_time - time) / frequency)
-                          : (float)(1.0f / 60.0f);
-  time = current_time;
+
+  io.DeltaTime = dt;
 
   // Setup mouse inputs (we already got mouse wheel, keyboard keys &
   // characters from our event handler)
-  int mx, my;
-  Uint32 mouse_buttons = SDL_GetMouseState(&mx, &my);
   io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
   io.MouseDown[0] =
-      mouse_pressed[0] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) !=
+      mouse_pressed[0] || (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) !=
                               0; // If a mouse press event came, always pass it
                                  // as "mouse held this frame", so we don't
                                  // miss click-release events that are shorter
                                  // than 1 frame.
   io.MouseDown[1] =
-      mouse_pressed[1] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+      mouse_pressed[1] || (mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
   io.MouseDown[2] =
-      mouse_pressed[2] || (mouse_buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
+      mouse_pressed[2] || (mouse_state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
   mouse_pressed[0] = mouse_pressed[1] = mouse_pressed[2] = false;
 
   // We need to use SDL_CaptureMouse() to easily retrieve mouse coordinates
@@ -528,7 +509,7 @@ void SDL_Imgui_State::new_frame(SDL_Window *window)
     (SDL_PATCHLEVEL >= 4)
   if ((SDL_GetWindowFlags(window) &
           (SDL_WINDOW_MOUSE_FOCUS | SDL_WINDOW_MOUSE_CAPTURE)) != 0)
-    io.MousePos = ImVec2((float)mx, (float)my);
+    io.MousePos = ImVec2((float)mouse_position.x, (float)mouse_position.y);
   bool any_mouse_button_down = false;
   for (int n = 0; n < IM_ARRAYSIZE(io.MouseDown); n++)
     any_mouse_button_down |= io.MouseDown[n];
@@ -567,4 +548,22 @@ void SDL_Imgui_State::end_frame()
   ImGuiContext *current = ImGui::GetCurrentContext();
   ASSERT(current == context);
   ImGui::EndFrame();
+}
+
+void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
+{
+  ASSERT(input);
+  mouse_state = SDL_GetMouseState(&mouse_position.x, &mouse_position.y);
+
+  if (ignore_all_input)
+  {
+    mouse_position = ivec2(0);
+    mouse_state = 0;
+    return;
+  }
+
+  for (auto &e : *input)
+  {
+    process_event(&e);
+  }
 }
