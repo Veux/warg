@@ -458,7 +458,7 @@ void SDL_Imgui_State::destroy()
     SDL_FreeCursor(sdl_cursors[cursor_n]);
 }
 
-void SDL_Imgui_State::new_frame(SDL_Window *window)
+void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
 {
 
   if (!font_texture)
@@ -484,13 +484,8 @@ void SDL_Imgui_State::new_frame(SDL_Window *window)
   io.DisplayFramebufferScale = ImVec2(
       w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
 
-  // Setup time step (we don't use SDL_GetTicks() because it is using
-  // millisecond resolution)
-  static Uint64 frequency = SDL_GetPerformanceFrequency();
-  Uint64 current_time = SDL_GetPerformanceCounter();
-  io.DeltaTime = time > 0 ? (float)((double)(current_time - time) / frequency)
-                          : (float)(1.0f / 60.0f);
-  time = current_time;
+
+  io.DeltaTime = dt;
 
   // Setup mouse inputs (we already got mouse wheel, keyboard keys &
   // characters from our event handler)

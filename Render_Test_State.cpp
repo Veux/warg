@@ -216,17 +216,19 @@ void Render_Test_State::handle_input_events(
     // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) &&
         (last_seen_lmb || last_seen_rmb))
-    {
-      cam.theta += mouse_delta.x * MOUSE_X_SENS;
-      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
-
+    { // currently holding
       if (!mouse_grabbed)
       { // first hold
         set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_mouse_position = mouse;
         SDL_SetRelativeMouseMode(SDL_bool(true));
+        SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       }
+      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+      cam.theta += mouse_delta.x * MOUSE_X_SENS;
+      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
       set_message("mouse is grabbed", "", 1.0f);
     }
     else
@@ -236,7 +238,6 @@ void Render_Test_State::handle_input_events(
       { // first unhold
         set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-
         set_message("mouse warp:",
             s("from:", mouse.x, " ", mouse.y,
                 " to:", last_grabbed_mouse_position.x, " ",
