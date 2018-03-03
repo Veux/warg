@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
   ImGui::StyleColorsDark();
 
   trash_imgui.bind();
-  trash_imgui.new_frame(window);
+  trash_imgui.new_frame(window, 0.1f);
   trash_imgui.end_frame();
 
   float64 last_time = 0.0;
@@ -227,11 +227,13 @@ int main(int argc, char *argv[])
 
     trash_imgui.bind();
     renderer_requires_trashgui_wrapping = true;
+    float64 imgui_dt_accumulator = 0;
     while (current_state->current_time + dt < last_time + elapsed_time)
     {
       first_update = true;
       State *s = current_state;
       s->current_time += dt;
+      imgui_dt_accumulator += dt;
       bool last_state_update =
           !(s->current_time + dt < last_time + elapsed_time);
 
@@ -259,18 +261,17 @@ int main(int argc, char *argv[])
       if (last_state_update)
       { // possible bug: two clicks faster than 1 frame aren't seen
 
-        // todo : update dt properly inside new_frame
         imgui.bind();
         imgui.handle_input(&imgui_event_accumulator);
         imgui_event_accumulator.clear();
-        imgui.new_frame(window);
+        imgui.new_frame(window,imgui_dt_accumulator);
         s->update();
         renderer_requires_trashgui_wrapping = false;
       }
       else
       {
         trash_imgui.bind();
-        trash_imgui.new_frame(window);
+        trash_imgui.new_frame(window,dt);
         s->update();
         trash_imgui.end_frame();
       }
@@ -282,7 +283,7 @@ int main(int argc, char *argv[])
     if (renderer_requires_trashgui_wrapping)
     {
       ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
-      trash_imgui.new_frame(window);
+      trash_imgui.new_frame(window,0.1f);
     }
     current_state->render(current_state->current_time);
 

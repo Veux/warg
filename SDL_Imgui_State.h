@@ -11,7 +11,7 @@ struct SDL_Imgui_State
   void destroy();
 
   void bind();
-  void new_frame(SDL_Window *window);
+  void new_frame(SDL_Window *window, float64 dt_since_last_frame);
   void end_frame();
   void handle_input(std::vector<SDL_Event> *input);
 
@@ -38,7 +38,6 @@ private:
 
   ImDrawData *draw_data = nullptr;
 
-  Uint64 time = 0;
   bool mouse_pressed[3] = {false, false, false};
   GLuint font_texture = 0;
   int shader_handle = 0, vert_handle = 0, frag_handle = 0;
