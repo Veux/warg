@@ -11,6 +11,7 @@
 #include "SDL_Imgui_State.h"
 #include "Render.h"
 #include "Third_Party/imgui/imgui.h"
+#include "Third_Party/imgui/imgui_internal.h"
 
 #include "Globals.h"
 #include <SDL2/SDL.h>
@@ -234,8 +235,6 @@ bool SDL_Imgui_State::process_event(SDL_Event *event)
   return false;
 }
 
-
-
 void SDL_Imgui_State::create_fonts_texture()
 {
   // Build texture atlas
@@ -390,7 +389,6 @@ SDL_Imgui_State::SDL_Imgui_State(SDL_Window *window)
   ImGui::SetCurrentContext(context);
   init(window);
   state_io = &ImGui::GetIO();
-  ImGui::StyleColorsDark();
 }
 
 bool SDL_Imgui_State::init(SDL_Window *window)
@@ -555,4 +553,22 @@ void SDL_Imgui_State::end_frame()
   ImGuiContext *current = ImGui::GetCurrentContext();
   ASSERT(current == context);
   ImGui::EndFrame();
+}
+
+void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
+{
+  ASSERT(input);
+  mouse_state = SDL_GetMouseState(&mouse_position.x, &mouse_position.y);
+
+  if (ignore_all_input)
+  {
+    mouse_position = ivec2(0);
+    mouse_state = 0;
+    return;
+  }
+
+  for (auto &e : *input)
+  {
+    process_event(&e);
+  }
 }

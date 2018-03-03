@@ -172,7 +172,6 @@ void Render_Test_State::handle_input_events(
     SDL_SetRelativeMouseMode(SDL_bool(true));
     SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
 
-
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
     cam.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
@@ -316,15 +315,15 @@ void Render_Test_State::handle_input_events(
 
 void Render_Test_State::update()
 {
-  // 1. Show a simple window.
-  // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets automatically
-  // appears in a window called "Debug".
+  static bool show_render_test_state_window = true;
+  if (show_render_test_state_window)
   {
-    static float f = 0.0f;
-    ImGui::Text(
-        "Hello, world!"); // Display some text (you can use a format string too)
-    ImGui::SliderFloat("float", &f, 0.0f,
-        1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+    ImGui::Begin(
+        "render_test_state.cpp Window", &show_render_test_state_window);
+    ImGui::Text("Hello from render_test_state.cpp window!");
+    if (ImGui::Button("Close Me"))
+      show_render_test_state_window = false;
+    ImGui::End();
   }
 
   const float32 height = 1.25;
