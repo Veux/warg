@@ -458,7 +458,10 @@ void Texture::load()
 
     if (!texture)
     {
-      texture = make_shared<Texture_Handle>();
+      static uint32 i = 0;
+      ++i;
+      std::string unique_key = s("Generated texture:", i);
+      TEXTURE_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
       glGenTextures(1, &texture->texture);
     }
     glBindTexture(GL_TEXTURE_2D, texture->texture);
@@ -1370,6 +1373,13 @@ void Render::render(float64 state_time)
     ImGui::Text("Hello from renderer.cpp window!");
     if (ImGui::Button("Close Me"))
       show_renderer_window = false;
+
+    for (auto& tex : TEXTURE_CACHE)
+    {
+      ImGui::Image((ImTextureID)tex.second.lock()->texture, ImVec2(256, 256));
+    }
+
+
     ImGui::End();
   }
 
