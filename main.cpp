@@ -256,10 +256,10 @@ int main(int argc, char *argv[])
 
       if (s != current_state)
       {
-        last_state_update = true;
         s->paused = true;
         current_state->renderer.set_render_scale(
             current_state->renderer.get_render_scale());
+        break;
       }
 
       if (last_state_update)
