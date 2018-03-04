@@ -51,6 +51,7 @@ struct Message
   uint32_t tick;
   UID peer;
   bool reliable = true;
+  float64_t t;
 };
 
 struct Connection_Message : Message

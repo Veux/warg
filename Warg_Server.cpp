@@ -123,8 +123,8 @@ void Warg_Server::process_events()
     while (!p.in->empty())
     {
       auto &ev = p.in->front();
-      //if (get_real_time() - ev->t < SIM_LATENCY / 2000.0f)
-      //  return;
+      if (get_real_time() - ev->t < SIM_LATENCY / 2000.0f)
+        return;
       ev->peer = uid;
       ev->handle(*this);
       p.in->pop();
@@ -639,6 +639,7 @@ void Warg_Server::push(unique_ptr<Message> ev)
 
 void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> &ev)
 {
+  ev->t = get_real_time();
   ASSERT(ev != nullptr);
   if (local)
   {

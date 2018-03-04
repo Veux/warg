@@ -54,6 +54,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 
   Buffer b;
   auto msg = Char_Spawn_Request_Message(tick, "Eirich", 0);
+  msg.t = get_real_time();
   msg.serialize(b);
   ENetPacket *packet =
     enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
@@ -76,7 +77,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   server = make_unique<Warg_Server>(true);
   server->connect(&out, &in);
-  out.push(make_unique<Char_Spawn_Request_Message>(tick, "Cubeboi", 0));
+  push(make_unique<Char_Spawn_Request_Message>(tick, "Cubeboi", 0));
 }
 
 void Warg_State::handle_input_events(
@@ -308,7 +309,7 @@ void Warg_State::handle_input_events(
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
     
-    out.push(
+    push(
       make_unique<Player_Movement_Message>(tick, (Move_Status)m, dir));
 
     vec3 player_pos = chars[pc].pos;
@@ -362,14 +363,20 @@ void Warg_State::process_events()
   while (!in.empty())
   {
     auto &msg = in.front();
-    //if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
-    //  return;
+    if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
+      return;
     if (msg->tick > server_tick)
       server_tick = msg->tick;
     msg->handle(*this);
     in.pop();
   }
   return;
+}
+
+void Warg_State::push(unique_ptr<Message> msg)
+{
+  msg->t = get_real_time();
+  out.push(std::move(msg));
 }
 
 void Warg_State::update()
@@ -382,7 +389,7 @@ void Warg_State::update()
 
   if (tick % 300 == 0)
   {
-    out.push(make_unique<Ping_Message>(tick));
+    push(make_unique<Ping_Message>(tick));
     last_ping_sent = get_real_time();
   }
 
@@ -704,7 +711,7 @@ void Object_Launch_Message::handle(Warg_State &state)
 
 void Ping_Message::handle(Warg_State &state)
 {
-  state.out.push(make_unique<Ack_Message>(tick));
+  state.push(make_unique<Ack_Message>(tick));
 }
 
 void Ack_Message::handle(Warg_State &state)

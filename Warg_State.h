@@ -17,6 +17,7 @@ struct Warg_State : protected State
       bool block_kb, bool block_mouse) final;
   void process_packets();
   void process_events();
+  void push(unique_ptr<Message> msg);
   void add_char(UID id, int team, const char *name);
 
   unique_ptr<Warg_Server> server;
