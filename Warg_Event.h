@@ -1,14 +1,16 @@
 #pragma once
 
-#define SIM_LATENCY 0
+#define SIM_LATENCY 200
 
 #include "Spell.h"
+#include <map>
 #include <enet/enet.h>
 
 typedef uint32_t UID;
 
 struct Warg_Server;
 struct Warg_State;
+struct Character;
 
 struct Buffer
 {
@@ -26,8 +28,8 @@ enum class Warg_Event_Type
   CharSpawn,
   PlayerControl,
   PlayerMovement,
+  PlayerGeometry,
   Jump,
-  CharPos,
   Cast,
   CastError,
   CastBegin,
@@ -35,27 +37,38 @@ enum class Warg_Event_Type
   CharHP,
   BuffAppl,
   ObjectLaunch,
-  ObjectDestroy
+  Ping,
+  Ack,
+  Connection
 };
 
 struct Message
 {
   virtual void handle(Warg_Server &server) = 0;
   virtual void handle(Warg_State &state) = 0;
-  virtual void serialize_(Buffer &buffer) = 0;
+  virtual void serialize(Buffer &buffer) = 0;
 
-  float64 t = 0;
-  UID peer = 0;
+  uint32_t tick;
+  UID peer;
   bool reliable = true;
+};
+
+struct Connection_Message : Message
+{
+  Connection_Message(uint32_t tick);
+  Connection_Message(Buffer &b);
+  virtual void handle(Warg_Server &server) { ASSERT(false); };
+  virtual void handle(Warg_State &state);
+  virtual void serialize(Buffer &b);
 };
 
 struct Char_Spawn_Request_Message : Message
 {
-  Char_Spawn_Request_Message(const char *name, uint8_t team);
+  Char_Spawn_Request_Message(uint32_t tick, const char *name, uint8_t team);
   Char_Spawn_Request_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   std::string name;
   uint8_t team;
@@ -63,11 +76,11 @@ struct Char_Spawn_Request_Message : Message
 
 struct Char_Spawn_Message : Message
 {
-  Char_Spawn_Message(UID id, const char *name_, uint8_t team_);
+  Char_Spawn_Message(uint32_t tick, UID id, const char *name_, uint8_t team_);
   Char_Spawn_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID id;
   std::string name;
@@ -76,11 +89,11 @@ struct Char_Spawn_Message : Message
 
 struct Player_Control_Message : Message
 {
-  Player_Control_Message(UID character_);
+  Player_Control_Message(uint32_t tick, UID character_);
   Player_Control_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID character;
 };
@@ -96,11 +109,11 @@ enum Move_Status
 
 struct Player_Movement_Message : Message
 {
-  Player_Movement_Message(Move_Status move_status, vec3 dir);
+  Player_Movement_Message(uint32_t tick, Move_Status move_status, vec3 dir);
   Player_Movement_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   Move_Status move_status;
   vec3 dir;
@@ -108,33 +121,20 @@ struct Player_Movement_Message : Message
 
 struct Jump_Message : Message 
 {
-  Jump_Message();
+  Jump_Message(uint32_t tick);
   Jump_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b);
-};
-
-struct Char_Pos_Message : Message
-{
-  Char_Pos_Message(UID character, vec3 dir, vec3 pos);
-  Char_Pos_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
-
-  UID character;
-  vec3 dir;
-  vec3 pos;
+  virtual void serialize(Buffer &b);
 };
 
 struct Cast_Message : Message
 {
-  Cast_Message(UID target, const char *spell);
+  Cast_Message(uint32_t tick, UID target, const char *spell);
   Cast_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID target;
   std::string spell;
@@ -142,11 +142,11 @@ struct Cast_Message : Message
 
 struct Cast_Error_Message : Message
 {
-  Cast_Error_Message(UID caster, UID target, const char *spell, uint8_t err);
+  Cast_Error_Message(uint32_t tick, UID caster, UID target, const char *spell, uint8_t err);
   Cast_Error_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID caster;
   UID target;
@@ -156,11 +156,11 @@ struct Cast_Error_Message : Message
 
 struct Cast_Begin_Message : Message
 {
-  Cast_Begin_Message(UID caster, UID target, const char *spell);
+  Cast_Begin_Message(uint32_t tick, UID caster, UID target, const char *spell);
   Cast_Begin_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID caster;
   UID target;
@@ -169,22 +169,22 @@ struct Cast_Begin_Message : Message
 
 struct Cast_Interrupt_Message : Message
 {
-  Cast_Interrupt_Message(UID caster);
+  Cast_Interrupt_Message(uint32_t tick, UID caster);
   Cast_Interrupt_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID caster;
 };
 
 struct Char_HP_Message : Message
 {
-  Char_HP_Message(UID character, int hp);
+  Char_HP_Message(uint32_t tick, UID character, int hp);
   Char_HP_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID character;
   int hp;
@@ -192,11 +192,11 @@ struct Char_HP_Message : Message
 
 struct Buff_Application_Message : Message
 {
-  Buff_Application_Message(UID character, const char *buff);
+  Buff_Application_Message(uint32_t tick, UID character, const char *buff);
   Buff_Application_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID character;
   std::string buff;
@@ -204,11 +204,11 @@ struct Buff_Application_Message : Message
 
 struct Object_Launch_Message : Message
 {
-  Object_Launch_Message(UID object, UID caster, UID target, vec3 pos);
+  Object_Launch_Message(uint32_t tick, UID object, UID caster, UID target, vec3 pos);
   Object_Launch_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
-  virtual void serialize_(Buffer &b);
+  virtual void serialize(Buffer &b);
 
   UID object;
   UID caster;
@@ -216,13 +216,36 @@ struct Object_Launch_Message : Message
   vec3 pos;
 };
 
-struct Object_Destroy_Message : Message
+struct Player_Geometry_Message : Message
 {
-  Object_Destroy_Message();
-  Object_Destroy_Message(Buffer &b);
+  Player_Geometry_Message(uint32_t tick, std::map<UID, Character> &chars);
+  Player_Geometry_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize_(Buffer &b);
+  virtual void handle(Warg_State &state);
+  virtual void serialize(Buffer &b);
+
+  std::vector<UID> character_ids;
+  std::vector<vec3> character_pos;
+  std::vector<vec3> character_dir;
+  std::vector<vec3> character_vel;
+};
+
+struct Ping_Message : Message
+{
+  Ping_Message(uint32_t tick);
+  Ping_Message(Buffer &b);
+  virtual void handle(Warg_Server &server);
+  virtual void handle(Warg_State &state);
+  virtual void serialize(Buffer &b);
+};
+
+struct Ack_Message : Message
+{
+  Ack_Message(uint32_t tick);
+  Ack_Message(Buffer &b);
+  virtual void handle(Warg_Server &server);
+  virtual void handle(Warg_State &state);
+  virtual void serialize(Buffer &b);
 };
 
 std::unique_ptr<Message> deserialize_message(Buffer &b);

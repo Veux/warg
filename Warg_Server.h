@@ -18,6 +18,7 @@ struct Warg_Peer
   ENetPeer *peer;
   queue<unique_ptr<Message>> *in, *out;
   UID character = 0;
+  float64 last_latency;
 };
 
 struct Warg_Server
@@ -27,7 +28,7 @@ struct Warg_Server
   void connect(queue<unique_ptr<Message>> *in, queue<unique_ptr<Message>> *out);
 
   void push(unique_ptr<Message> ev);
-  void send_event(Warg_Peer &p, unique_ptr<Message> ev);
+  void send_event(Warg_Peer &p, unique_ptr<Message> &ev);
   void send_events();
   void process_packets();
   void process_events();
@@ -58,7 +59,8 @@ struct Warg_Server
   ENetHost *server;
   bool local = true;
   float64 time = 0;
-  uint64 tick = 0;
+  uint32 tick = 0;
+  float64 last_ping_sent;
 
   Map map;
   vector<Triangle> collider_cache;

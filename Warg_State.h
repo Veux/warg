@@ -29,4 +29,8 @@ struct Warg_State : protected State
   UID pc = 0;
   unique_ptr<SpellDB> sdb;
   vector<SpellObjectInst> spell_objs;
+  uint32 tick = 0;
+  uint32 server_tick = 0;
+  float64 last_ping_sent;
+  float64 last_latency = 0;
 };

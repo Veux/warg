@@ -16,30 +16,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 {
   local = false;
 
-  ASSERT(!enet_initialize());
-  clientp = enet_host_create(NULL, 1, 2, 0, 0);
-  ASSERT(clientp);
-
-  ENetAddress address;
-  ENetEvent event;
-
-  enet_address_set_host(&address, address_);
-  address.port = 1337;
-
-  serverp = enet_host_connect(clientp, &address, 2, 0);
-  ASSERT(serverp);
-
-  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
-         event.type == ENET_EVENT_TYPE_CONNECT);
-
-  Buffer b;
-  auto msg = Char_Spawn_Request_Message("Eirich", 0);
-  msg.serialize_(b);
-  ENetPacket *packet =
-      enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
-  enet_peer_send(serverp, 0, packet);
-  enet_host_flush(clientp);
-
   map = make_blades_edge();
   sdb = make_spell_db();
 
@@ -59,16 +35,36 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
+
+  ASSERT(!enet_initialize());
+  clientp = enet_host_create(NULL, 1, 2, 0, 0);
+  ASSERT(clientp);
+
+  ENetAddress address;
+  ENetEvent event;
+
+  enet_address_set_host(&address, address_);
+  address.port = 1337;
+
+  serverp = enet_host_connect(clientp, &address, 2, 0);
+  ASSERT(serverp);
+
+  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
+    event.type == ENET_EVENT_TYPE_CONNECT);
+
+  Buffer b;
+  auto msg = Char_Spawn_Request_Message(tick, "Eirich", 0);
+  msg.serialize(b);
+  ENetPacket *packet =
+    enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  enet_peer_send(serverp, 0, packet);
+  enet_host_flush(clientp);
 }
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
   local = true;
-
-  server = make_unique<Warg_Server>(true);
-  server->connect(&out, &in);
-  out.push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
   map = make_blades_edge();
   sdb = make_spell_db();
@@ -77,6 +73,10 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
+
+  server = make_unique<Warg_Server>(true);
+  server->connect(&out, &in);
+  out.push(make_unique<Char_Spawn_Request_Message>(tick, "Cubeboi", 0));
 }
 
 void Warg_State::handle_input_events(
@@ -103,7 +103,7 @@ void Warg_State::handle_input_events(
       }
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
-        out.push(make_unique<Jump_Message>());
+        out.push(make_unique<Jump_Message>(tick));
       }
     }
     else if (_e.type == SDL_KEYUP)
@@ -152,7 +152,7 @@ void Warg_State::handle_input_events(
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!pc)
+  if (!pc || !chars.count(pc))
     return;
   if (free_cam)
   {
@@ -304,7 +304,7 @@ void Warg_State::handle_input_events(
       m |= Move_Status::Right;
     
     out.push(
-      make_unique<Player_Movement_Message>((Move_Status)m, dir));
+      make_unique<Player_Movement_Message>(tick, (Move_Status)m, dir));
 
     vec3 player_pos = chars[pc].pos;
     float effective_zoom = cam.zoom;
@@ -341,7 +341,7 @@ void Warg_State::process_packets()
       {
         Buffer b;
         b.insert((void *)event.packet->data, event.packet->dataLength);
-        in.push(std::move(deserialize_message(b)));
+        in.push(deserialize_message(b));
         break;
       }
       case ENET_EVENT_TYPE_DISCONNECT:
@@ -357,7 +357,10 @@ void Warg_State::process_events()
   while (!in.empty())
   {
     auto &msg = in.front();
-
+    //if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
+    //  return;
+    if (msg->tick > server_tick)
+      server_tick = msg->tick;
     msg->handle(*this);
     in.pop();
   }
@@ -366,9 +369,30 @@ void Warg_State::process_events()
 
 void Warg_State::update()
 {
+  tick += 1;
+
   if (!local)
     process_packets();
   process_events();
+
+  if (tick % 300 == 0)
+  {
+    out.push(make_unique<Ping_Message>(tick));
+    last_ping_sent = get_real_time();
+  }
+
+  bool show_stats_bar = true;
+  ImVec2 stats_bar_pos = { 10, 10 };
+  ImGui::SetNextWindowPos(stats_bar_pos);
+  ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
+    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_AlwaysAutoResize);
+  ImGui::Text("Tick: %u | Server tick: %u | Ping: %dms",
+              tick,
+              server_tick,
+              (int)(last_latency * 1000));
+  ImGui::End();
 
   for (auto &c_ : chars)
   {
@@ -420,7 +444,7 @@ void Warg_State::update()
       auto ev = std::move(out.front());
 
       Buffer b;
-      ev->serialize_(b);
+      ev->serialize(b);
       enet_uint32 flags = ev->reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
       ENetPacket *packet = enet_packet_create(
           &b.data[0], b.data.size(), flags);
@@ -430,7 +454,7 @@ void Warg_State::update()
       out.pop();
     }
   }
-  static bool show_demo_window = true;
+  static bool show_demo_window = false;
   static bool show_another_window = false;
 
   {
@@ -482,7 +506,7 @@ void Warg_State::update()
   }
 
   // meme
-  if (pc)
+  if (pc && chars.count(pc))
   {
     ASSERT(chars.count(pc));
 
@@ -531,6 +555,12 @@ void Warg_State::update()
   }
 }
 
+void Connection_Message::handle(Warg_State &state)
+{
+  state.tick = tick;
+  state.server_tick = tick;
+}
+
 void Char_Spawn_Message::handle(Warg_State &state)
 {
   state.add_char(id, team, name.c_str());
@@ -541,12 +571,18 @@ void Player_Control_Message::handle(Warg_State &state)
   state.pc = character;
 }
 
-void Char_Pos_Message::handle(Warg_State &state)
+void Player_Geometry_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(character));
-  auto &character_ = state.chars[character];
-  character_.dir = dir;
-  character_.pos = pos;
+  for (size_t i = 0; i < character_ids.size(); i++)
+  {
+    if (state.chars.count(character_ids[i]))
+    {
+      auto &character = state.chars[character_ids[i]];
+      character.pos = character_pos[i];
+      character.dir = character_dir[i];
+      character.vel = character_vel[i];
+    }
+  }
 }
 
 void Cast_Error_Message::handle(Warg_State &state)
@@ -669,6 +705,16 @@ void Object_Launch_Message::handle(Warg_State &state)
   msg += " at ";
   msg += target_.name;
   set_message("ObjectLaunch:", msg, 10);
+}
+
+void Ping_Message::handle(Warg_State &state)
+{
+  state.out.push(make_unique<Ack_Message>(tick));
+}
+
+void Ack_Message::handle(Warg_State &state)
+{
+  state.last_latency = get_real_time() - state.last_ping_sent;
 }
 
 void Warg_State::add_char(UID id, int team, const char *name)

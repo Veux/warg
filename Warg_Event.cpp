@@ -1,4 +1,5 @@
 #include "Warg_Event.h"
+#include "Warg_Common.h"
 
 void Buffer::reserve(size_t size) { data.reserve(wnext + size); }
 
@@ -17,15 +18,15 @@ void *Buffer::read(size_t size)
   return p;
 }
 
-void serialize(Buffer &b, uint8_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, uint8_t n) { b.insert(&n, sizeof(n)); }
 
-void serialize(Buffer &b, uint16_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, uint16_t n) { b.insert(&n, sizeof(n)); }
 
-void serialize(Buffer &b, int32_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, int32_t n) { b.insert(&n, sizeof(n)); }
 
-void serialize(Buffer &b, uint32_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, uint32_t n) { b.insert(&n, sizeof(n)); }
 
-void serialize(Buffer &b, const char *s)
+void serialize_(Buffer &b, const char *s)
 {
   ASSERT(s);
   uint16_t len = strlen(s);
@@ -35,122 +36,157 @@ void serialize(Buffer &b, const char *s)
   b.insert((void *)s, len);
 }
 
-void serialize(Buffer &b, std::string s)
+void serialize_(Buffer &b, std::string s)
 {
-  serialize(b, s.c_str());
+  serialize_(b, s.c_str());
 }
 
-void serialize(Buffer &b, float32_t a) { b.insert(&a, sizeof(a)); }
+void serialize_(Buffer &b, float32_t a) { b.insert(&a, sizeof(a)); }
 
-void serialize(Buffer &b, vec3 v)
+void serialize_(Buffer &b, vec3 v)
 {
-  serialize(b, v.x);
-  serialize(b, v.y);
-  serialize(b, v.z);
+  serialize_(b, v.x);
+  serialize_(b, v.y);
+  serialize_(b, v.z);
 }
 
-void serialize(Buffer &b, Warg_Event_Type type)
+void serialize_(Buffer &b, Warg_Event_Type type)
 {
-  serialize(b, (uint8_t)type);
+  serialize_(b, (uint8_t)type);
 }
 
-void Char_Spawn_Request_Message::serialize_(Buffer &b)
+void Connection_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CharSpawnRequest);
-  serialize(b, name);
-  serialize(b, team);
+  serialize_(b, Warg_Event_Type::Connection);
+  serialize_(b, tick);
 }
 
-void Char_Spawn_Message::serialize_(Buffer &b)
+void Char_Spawn_Request_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CharSpawn);
-  serialize(b, id);
-  serialize(b, name);
-  serialize(b, team);
+  serialize_(b, Warg_Event_Type::CharSpawnRequest);
+  serialize_(b, tick);
+  serialize_(b, name);
+  serialize_(b, team);
 }
 
-void Player_Control_Message::serialize_(Buffer &b)
+void Char_Spawn_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::PlayerControl);
-  serialize(b, character);
+  serialize_(b, Warg_Event_Type::CharSpawn);
+  serialize_(b, tick);
+  serialize_(b, id);
+  serialize_(b, name);
+  serialize_(b, team);
 }
 
-void Player_Movement_Message::serialize_(Buffer &b)
+void Player_Control_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::PlayerMovement);
-  serialize(b, (uint8_t)move_status);
-  serialize(b, dir);
+  serialize_(b, Warg_Event_Type::PlayerControl);
+  serialize_(b, tick);
+  serialize_(b, character);
 }
 
-void Jump_Message::serialize_(Buffer &b)
+void Player_Movement_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::Jump);
+  serialize_(b, Warg_Event_Type::PlayerMovement);
+  serialize_(b, tick);
+  serialize_(b, (uint8_t)move_status);
+  serialize_(b, dir);
 }
 
-void Char_Pos_Message::serialize_(Buffer &b)
+void Jump_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CharPos);
-  serialize(b, character);
-  serialize(b, dir);
-  serialize(b, pos);
+  serialize_(b, Warg_Event_Type::Jump);
+  serialize_(b, tick);
 }
 
-void Cast_Message::serialize_(Buffer &b)
+void Cast_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::Cast);
-  serialize(b, target);
-  serialize(b, spell);
+  serialize_(b, Warg_Event_Type::Cast);
+  serialize_(b, tick);
+  serialize_(b, target);
+  serialize_(b, spell);
 }
 
-void Cast_Error_Message::serialize_(Buffer &b)
+void Cast_Error_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CastError);
-  serialize(b, caster);
-  serialize(b, target);
-  serialize(b, spell);
-  serialize(b, err);
+  serialize_(b, Warg_Event_Type::CastError);
+  serialize_(b, tick);
+  serialize_(b, caster);
+  serialize_(b, target);
+  serialize_(b, spell);
+  serialize_(b, err);
 }
 
-void Cast_Begin_Message::serialize_(Buffer &b)
+void Cast_Begin_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CastBegin);
-  serialize(b, caster);
-  serialize(b, target);
-  serialize(b, spell);
+  serialize_(b, Warg_Event_Type::CastBegin);
+  serialize_(b, tick);
+  serialize_(b, caster);
+  serialize_(b, target);
+  serialize_(b, spell);
 }
 
-void Cast_Interrupt_Message::serialize_(Buffer &b)
+void Cast_Interrupt_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CastInterrupt);
-  serialize(b, caster);
+  serialize_(b, Warg_Event_Type::CastInterrupt);
+  serialize_(b, tick);
+  serialize_(b, caster);
 }
 
-void Char_HP_Message::serialize_(Buffer &b)
+void Char_HP_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::CharHP);
-  serialize(b, character);
-  serialize(b, hp);
+  serialize_(b, Warg_Event_Type::CharHP);
+  serialize_(b, tick);
+  serialize_(b, character);
+  serialize_(b, hp);
 }
 
-void Buff_Application_Message::serialize_(Buffer &b)
+void Buff_Application_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::BuffAppl);
-  serialize(b, character);
-  serialize(b, buff);
+  serialize_(b, Warg_Event_Type::BuffAppl);
+  serialize_(b, tick);
+  serialize_(b, character);
+  serialize_(b, buff);
 }
 
-void Object_Launch_Message::serialize_(Buffer &b)
+void Object_Launch_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::ObjectLaunch);
-  serialize(b, object);
-  serialize(b, caster);
-  serialize(b, target);
-  serialize(b, pos);
+  serialize_(b, Warg_Event_Type::ObjectLaunch);
+  serialize_(b, tick);
+  serialize_(b, object);
+  serialize_(b, caster);
+  serialize_(b, target);
+  serialize_(b, pos);
 }
 
-void Object_Destroy_Message::serialize_(Buffer &b)
+void Player_Geometry_Message::serialize(Buffer &b)
 {
-  serialize(b, Warg_Event_Type::ObjectDestroy);
+  serialize_(b, Warg_Event_Type::PlayerGeometry);
+  serialize_(b, tick);
+  uint8_t num_chars = character_ids.size();
+  ASSERT(character_pos.size() == num_chars);
+  ASSERT(character_vel.size() == num_chars);
+  serialize_(b, num_chars);
+  for (UID &uid : character_ids)
+    serialize_(b, uid);
+  for (vec3 &pos : character_pos)
+    serialize_(b, pos);
+  for (vec3 &dir : character_dir)
+    serialize_(b, dir);
+  for (vec3 &vel : character_vel)
+    serialize_(b, vel);
+}
+
+void Ping_Message::serialize(Buffer &b)
+{
+  serialize_(b, Warg_Event_Type::Ping);
+  serialize_(b, tick);
+}
+
+void Ack_Message::serialize(Buffer &b)
+{
+  serialize_(b, Warg_Event_Type::Ack);
+  serialize_(b, tick);
 }
 
 uint8_t deserialize_uint8(Buffer &b)
@@ -205,6 +241,10 @@ UID deserialize_uid(Buffer &b)
   return deserialize_uint32(b);
 }
 
+Connection_Message::Connection_Message(Buffer &b)
+{
+}
+
 Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 {
   name = deserialize_string(b);
@@ -229,15 +269,21 @@ Player_Movement_Message::Player_Movement_Message(Buffer &b)
   dir = deserialize_vec3(b);
 }
 
-Jump_Message::Jump_Message(Buffer &b)
+Player_Geometry_Message::Player_Geometry_Message(Buffer &b)
 {
+  uint8_t num_chars = deserialize_uint8(b);
+  for (size_t i = 0; i < num_chars; i++)
+    character_ids.push_back(deserialize_uid(b));
+  for (size_t i = 0; i < num_chars; i++)
+    character_pos.push_back(deserialize_vec3(b));
+  for (size_t i = 0; i < num_chars; i++)
+    character_dir.push_back(deserialize_vec3(b));
+  for (size_t i = 0; i < num_chars; i++)
+    character_vel.push_back(deserialize_vec3(b));
 }
 
-Char_Pos_Message::Char_Pos_Message(Buffer &b)
+Jump_Message::Jump_Message(Buffer &b)
 {
-  character = deserialize_uid(b);
-  dir = deserialize_vec3(b);
-  pos = deserialize_vec3(b);
 }
 
 Cast_Message::Cast_Message(Buffer &b)
@@ -286,103 +332,125 @@ Object_Launch_Message::Object_Launch_Message(Buffer &b)
   pos = deserialize_vec3(b);
 }
 
-Object_Destroy_Message::Object_Destroy_Message(Buffer &b)
+Ping_Message::Ping_Message(Buffer &b)
+{
+}
+
+Ack_Message::Ack_Message(Buffer &b)
 {
 }
 
 std::unique_ptr<Message> deserialize_message(Buffer &b)
 {
   auto type = (Warg_Event_Type)deserialize_uint8(b);
+  auto tick = deserialize_uint32(b);
+
+  std::unique_ptr<Message> msg = nullptr;
   switch (type)
   {
+    case Warg_Event_Type::Connection:
+      msg = std::make_unique<Connection_Message>(b);
+      break;
     case Warg_Event_Type::CharSpawnRequest:
-      return std::make_unique<Char_Spawn_Request_Message>(b);
+      msg = std::make_unique<Char_Spawn_Request_Message>(b);
+      break;
     case Warg_Event_Type::CharSpawn:
-      return std::make_unique<Char_Spawn_Message>(b);
+      msg = std::make_unique<Char_Spawn_Message>(b);
+      break;
     case Warg_Event_Type::PlayerControl:
-      return std::make_unique<Player_Control_Message>(b);
+      msg = std::make_unique<Player_Control_Message>(b);
+      break;
     case Warg_Event_Type::PlayerMovement:
-      return std::make_unique<Player_Movement_Message>(b);
+      msg = std::make_unique<Player_Movement_Message>(b);
+      break;
+    case Warg_Event_Type::PlayerGeometry:
+      msg = std::make_unique<Player_Geometry_Message>(b);
+      break;
     case Warg_Event_Type::Jump:
-      return std::make_unique<Jump_Message>(b);
-    case Warg_Event_Type::CharPos:
-      return std::make_unique<Char_Pos_Message>(b);
+      msg = std::make_unique<Jump_Message>(b);
+      break;
     case Warg_Event_Type::Cast:
-      return std::make_unique<Cast_Message>(b);
+      msg = std::make_unique<Cast_Message>(b);
+      break;
     case Warg_Event_Type::CastError:
-      return std::make_unique<Cast_Error_Message>(b);
+      msg = std::make_unique<Cast_Error_Message>(b);
+      break;
     case Warg_Event_Type::CastBegin:
-      return std::make_unique<Cast_Begin_Message>(b);
+      msg = std::make_unique<Cast_Begin_Message>(b);
+      break;
     case Warg_Event_Type::CastInterrupt:
-      return std::make_unique<Cast_Interrupt_Message>(b);
+      msg = std::make_unique<Cast_Interrupt_Message>(b);
+      break;
     case Warg_Event_Type::CharHP:
-      return std::make_unique<Char_HP_Message>(b);
+      msg = std::make_unique<Char_HP_Message>(b);
+      break;
     case Warg_Event_Type::BuffAppl:
-      return std::make_unique<Buff_Application_Message>(b);
+      msg = std::make_unique<Buff_Application_Message>(b);
+      break;
     case Warg_Event_Type::ObjectLaunch:
-      return std::make_unique<Object_Launch_Message>(b);
-    case Warg_Event_Type::ObjectDestroy:
-      return std::make_unique<Object_Destroy_Message>(b);
+      msg = std::make_unique<Object_Launch_Message>(b);
+      break;
+    case Warg_Event_Type::Ping:
+      msg = std::make_unique<Ping_Message>(b);
+      break;
+    case Warg_Event_Type::Ack:
+      msg = std::make_unique<Ack_Message>(b);
+      break;
+    default:
+      ASSERT(false);
   }
-  ASSERT(false);
-  return nullptr;
+
+  msg->tick = tick;
+  return msg;
 }
 
 Char_Spawn_Request_Message::Char_Spawn_Request_Message(
-  const char *name_, uint8_t team_)
+  uint32_t tick_, const char *name_, uint8_t team_)
 {
-  t = get_real_time();
+  tick = tick_;
   name = name_;
   team = team_;
 }
 
-Char_Spawn_Message::Char_Spawn_Message(UID id_, const char *name_, uint8_t team_)
+Char_Spawn_Message::Char_Spawn_Message(uint32_t tick_, UID id_, const char *name_, uint8_t team_)
 {
-  t = get_real_time();
+  tick = tick_;
   id = id_;
   name = name_;
   team = team_;
 }
 
-Player_Control_Message::Player_Control_Message(UID character_)
+Player_Control_Message::Player_Control_Message(uint32_t tick_, UID character_)
 {
-  t = get_real_time();
+  tick = tick_;
   character = character_;
 }
 
 Player_Movement_Message::Player_Movement_Message
-  (Move_Status move_status_, vec3 dir_)
+  (uint32_t tick_, Move_Status move_status_, vec3 dir_)
 {
-  t = get_real_time();
+  tick = tick_;
   reliable = false;
   move_status = move_status_;
   dir = dir_;
 }
 
-Jump_Message::Jump_Message()
+Jump_Message::Jump_Message(uint32_t tick_)
 {
-  t = get_real_time();
+  tick = tick_;
 }
 
-Char_Pos_Message::Char_Pos_Message(UID character_, vec3 dir_, vec3 pos_)
+Cast_Message::Cast_Message(uint32_t tick_, UID target_, const char *spell_)
 {
-  t = get_real_time();
-  character = character_;
-  dir = dir_;
-  pos = pos_;
-}
-
-Cast_Message::Cast_Message(UID target_, const char *spell_)
-{
-  t = get_real_time();
+  tick = tick_;
   target = target_;
   spell = spell_;
 }
 
 Cast_Error_Message::Cast_Error_Message
-  (UID caster_, UID target_, const char *spell_, uint8_t err_)
+  (uint32_t tick_, UID caster_, UID target_, const char *spell_, uint8_t err_)
 {
-  t = get_real_time();
+  tick = tick_;
   caster = caster_;
   target = target_;
   spell = spell_;
@@ -390,46 +458,72 @@ Cast_Error_Message::Cast_Error_Message
 }
 
 Cast_Begin_Message::Cast_Begin_Message
-  (UID caster_, UID target_, const char *spell_)
+  (uint32_t tick_, UID caster_, UID target_, const char *spell_)
 {
-  t = get_real_time();
+  tick = tick_;
   caster = caster_;
   target = target_;
   spell = spell_;
 }
 
-Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_)
+Cast_Interrupt_Message::Cast_Interrupt_Message(uint32_t tick_, UID caster_)
 {
-  t = get_real_time();
+  tick = tick_;
   caster = caster_;
 }
 
-Char_HP_Message::Char_HP_Message(UID character_, int hp_)
+Char_HP_Message::Char_HP_Message(uint32_t tick_, UID character_, int hp_)
 {
-  t = get_real_time();
+  tick = tick_;
   character = character_;
   hp = hp_;
 }
 
 Buff_Application_Message::Buff_Application_Message
-  (UID character_, const char *buff_)
+  (uint32_t tick_, UID character_, const char *buff_)
 {
-  t = get_real_time();
+  tick = tick_;
   character = character_;
   buff = buff_;
 }
 
 Object_Launch_Message::Object_Launch_Message
-  (UID object_, UID caster_, UID target_, vec3 pos_)
+  (uint32_t tick_, UID object_, UID caster_, UID target_, vec3 pos_)
 {
-  t = get_real_time();
+  tick = tick_;
   object = object_;
   caster = caster_;
   target = target_;
   pos = pos_;
 }
 
-Object_Destroy_Message::Object_Destroy_Message()
+Player_Geometry_Message::Player_Geometry_Message(uint32_t tick_, std::map<UID, Character> &chars_)
 {
-  t = get_real_time();
+  tick = tick_;
+  reliable = false;
+  for (auto &c : chars_)
+  {
+    UID uid = c.first;
+    Character &character = c.second;
+
+    character_ids.push_back(uid);
+    character_pos.push_back(character.pos);
+    character_dir.push_back(character.dir);
+    character_vel.push_back(character.vel);
+  }
+}
+
+Ping_Message::Ping_Message(uint32_t tick_)
+{
+  tick = tick_;
+}
+
+Ack_Message::Ack_Message(uint32_t tick_)
+{
+  tick = tick_;
+}
+
+Connection_Message::Connection_Message(uint32_t tick_)
+{
+  tick = tick_;
 }
