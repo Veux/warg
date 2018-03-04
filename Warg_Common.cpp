@@ -117,10 +117,15 @@ void Character::move(float32 dt, const std::vector<Triangle> &colliders)
     vec4 v_ = vec4(dir.x, dir.y, 0, 0);
     v += vec3(r * v_);
   }
-  if (move_status)
+  if (move_status & ~Move_Status::Jumping)
   {
     v = normalize(v);
     v *= e_stats.speed;
+  }
+  if (move_status & Move_Status::Jumping && grounded)
+  {
+    vel.z += 4;
+    grounded = false;
   }
 
   vel.z -= 9.81 * dt;

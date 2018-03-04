@@ -185,20 +185,6 @@ void Player_Movement_Message::handle(Warg_Server &server)
   character.dir = dir;
 }
 
-void Jump_Message::handle(Warg_Server &server)
-{
-  ASSERT(server.peers.count(peer));
-  auto &peer_ = server.peers[peer];
-  ASSERT(server.chars.count(peer_.character));
-  auto &character = server.chars[peer_.character];
-
-  if (character.grounded)
-  {
-    character.vel.z += 4;
-    character.grounded = false;
-  }
-}
-
 void Cast_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));

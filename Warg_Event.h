@@ -105,7 +105,8 @@ enum Move_Status
   Forwards = 1 << 0,
   Left = 1 << 1,
   Backwards = 1 << 2,
-  Right = 1 << 3
+  Right = 1 << 3,
+  Jumping = 1 << 4
 };
 
 struct Player_Movement_Message : Message
@@ -118,15 +119,6 @@ struct Player_Movement_Message : Message
 
   Move_Status move_status;
   vec3 dir;
-};
-
-struct Jump_Message : Message 
-{
-  Jump_Message(uint32_t tick);
-  Jump_Message(Buffer &b);
-  virtual void handle(Warg_Server &server);
-  virtual void handle(Warg_State &state) { ASSERT(false); };
-  virtual void serialize(Buffer &b);
 };
 
 struct Cast_Message : Message

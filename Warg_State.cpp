@@ -104,7 +104,6 @@ void Warg_State::handle_input_events(
       }
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
-        out.push(make_unique<Jump_Message>(tick));
       }
     }
     else if (_e.type == SDL_KEYUP)
@@ -308,6 +307,8 @@ void Warg_State::handle_input_events(
       m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
+    if (is_pressed(SDL_SCANCODE_SPACE))
+      m |= Move_Status::Jumping;
     
     push(
       make_unique<Player_Movement_Message>(tick, (Move_Status)m, dir));

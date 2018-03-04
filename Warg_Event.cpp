@@ -93,12 +93,6 @@ void Player_Movement_Message::serialize(Buffer &b)
   serialize_(b, dir);
 }
 
-void Jump_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::Jump);
-  serialize_(b, tick);
-}
-
 void Cast_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::Cast);
@@ -282,10 +276,6 @@ Player_Geometry_Message::Player_Geometry_Message(Buffer &b)
     character_vel.push_back(deserialize_vec3(b));
 }
 
-Jump_Message::Jump_Message(Buffer &b)
-{
-}
-
 Cast_Message::Cast_Message(Buffer &b)
 {
   target = deserialize_uid(b);
@@ -366,9 +356,6 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
     case Warg_Event_Type::PlayerGeometry:
       msg = std::make_unique<Player_Geometry_Message>(b);
       break;
-    case Warg_Event_Type::Jump:
-      msg = std::make_unique<Jump_Message>(b);
-      break;
     case Warg_Event_Type::Cast:
       msg = std::make_unique<Cast_Message>(b);
       break;
@@ -433,11 +420,6 @@ Player_Movement_Message::Player_Movement_Message
   reliable = false;
   move_status = move_status_;
   dir = dir_;
-}
-
-Jump_Message::Jump_Message(uint32_t tick_)
-{
-  tick = tick_;
 }
 
 Cast_Message::Cast_Message(uint32_t tick_, UID target_, const char *spell_)
