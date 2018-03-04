@@ -386,6 +386,10 @@ void Warg_State::update()
     ImGui::Text("Hello from warg_state.cpp window!");
     if (ImGui::Button("Close Me"))
       show_warg_state_window = false;
+    
+    static Texture test("../Assets/Textures/pebbles_diffuse.png");
+
+    ImGui::Image((ImTextureID)test.texture->texture, ImVec2(256, 256));
     ImGui::End();
   }
 
@@ -393,52 +397,85 @@ void Warg_State::update()
   if (client->pc >= 0)
   {
     ASSERT(client->chars.count(client->pc));
-
-    clear_color = vec3(94. / 255., 155. / 255., 1.);
-    scene.lights.light_count = 2;
-
     Light *light = &scene.lights.lights[0];
 
-    scene.lights.light_count = 2;
-    light->position = vec3{25.01f, 25.0f, 45.f};
-    light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
-    light->attenuation = vec3(1.0f, .045f, .0075f);
-    light->ambient = 0.0005f;
-    light->cone_angle = 0.15f;
-    light->type = Light_Type::spot;
-    light->casts_shadows = true;
-    // there was a divide by 0 here, a camera can't point exactly straight down
-    light->direction = vec3(0);
-    // see Render.h for what these are for:
-    light->shadow_blur_iterations = 1;
-    light->shadow_blur_radius = 1.25005f;
-    light->max_variance = 0.00000001;
-    light->shadow_near_plane = 15.f;
-    light->shadow_far_plane = 80.f;
-    light->shadow_fov = radians(90.f);
+    static bool first = true;
+    if (first)
+    {
+      first = false;
+
+      clear_color = vec3(94. / 255., 155. / 255., 1.);
+      scene.lights.light_count = 2;
+
+      
+
+      scene.lights.light_count = 2;
+      light->position = vec3{ 25.01f, 25.0f, 45.f };
+      light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
+      light->attenuation = vec3(1.0f, .045f, .0075f);
+      light->ambient = 0.0005f;
+      light->cone_angle = 0.03f;
+
+      light->type = Light_Type::spot;
+      light->casts_shadows = true;
+      // there was a divide by 0 here, a camera can't point exactly straight down
+      light->direction = vec3(0);
+      // see Render.h for what these are for:
+      light->shadow_blur_iterations = 1;
+      light->shadow_blur_radius = 1.25005f;
+      light->max_variance = 0.00000001;
+      light->shadow_near_plane = 15.f;
+      light->shadow_far_plane = 80.f;
+      light->shadow_fov = radians(90.f);
+
+      light = &scene.lights.lights[1];
+
+      light->position = vec3{ .5, .2, 10.10 };
+      light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
+        1.f + cos(current_time * 1.12),
+        1.f + sin(current_time * .9));
+      light->attenuation = vec3(1.0f, .045f, .0075f);
+      light->direction =
+        client
+        ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
+        : vec3(0);
+      light->ambient = 0.0f;
+      light->cone_angle = 0.012f;
+      light->type = Light_Type::spot;
+      light->casts_shadows = true;
+      // see Render.h for what these are for:
+      light->shadow_blur_iterations = 1;
+      light->shadow_blur_radius = 0.55005f;
+      light->max_variance = 0.0000003;
+      light->shadow_near_plane = 4.51f;
+      light->shadow_far_plane = 50.f;
+      light->shadow_fov = radians(40.f);
+    }
+
+    ImGui::Begin("lighting adjustment");
+    ImGui::DragFloat("Main light shadow fov", &light->shadow_fov, 0.005f);
+
+    static float uv_scale = 14.575f;
+    ImGui::DragFloat("map_uv_scale", &uv_scale, 0.005f);
+
+
+    ImGui::End();
+
+    //->shh->bby.get()->is->ok->c++[0]->is->*->get()[0]->*(*fast);
+    client->map.node.get()->owned_children[0].get()->model[0].second.m.uv_scale = vec2(uv_scale);
+
+    
+
 
     light = &scene.lights.lights[1];
-
-    light->position = vec3{.5, .2, 10.10};
-    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-                                1.f + cos(current_time * 1.12),
-                                1.f + sin(current_time * .9));
-    light->attenuation = vec3(1.0f, .045f, .0075f);
     light->direction =
-        client
-            ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
-            : vec3(0);
-    light->ambient = 0.0f;
-    light->cone_angle = 0.012f;
-    light->type = Light_Type::spot;
-    light->casts_shadows = true;
-    // see Render.h for what these are for:
-    light->shadow_blur_iterations = 1;
-    light->shadow_blur_radius = 0.55005f;
-    light->max_variance = 0.0000003;
-    light->shadow_near_plane = 4.51f;
-    light->shadow_far_plane = 50.f;
-    light->shadow_fov = radians(40.f);
+      client
+      ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
+      : vec3(0);
+    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
+      1.f + cos(current_time * 1.12),
+      1.f + sin(current_time * .9));
+
   }
 }
 

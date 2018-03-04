@@ -96,7 +96,7 @@ void SDL_Imgui_State::render()
       {-1.0f, 1.0f, 0.0f, 1.0f},
   };
   glUseProgram(shader_handle);
-  glUniform1i(texture_location, 0);
+  glUniform1i(texture_location, 0); 
   glUniformMatrix4fv(projection_location, 1, GL_FALSE, &ortho_projection[0][0]);
   glBindVertexArray(vao);
   glBindSampler(0, 0); // Rely on combined texture/sampler state.
@@ -180,13 +180,6 @@ void SDL_Imgui_State::set_clipboard(void *, const char *text)
   SDL_SetClipboardText(text);
 }
 
-// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell
-// if dear imgui wants to use your inputs.
-// - When io.WantCaptureMouse is true, do not dispatch mouse input data to
-// your main application.
-// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data
-// to your main application. Generally you may always pass all inputs to dear
-// imgui, and hide them from your application based on those two flags.
 bool SDL_Imgui_State::process_event(SDL_Event *event)
 {
   ImGuiIO &io = ImGui::GetIO();
@@ -545,8 +538,7 @@ void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
 
 void SDL_Imgui_State::end_frame()
 {
-  ImGuiContext *current = ImGui::GetCurrentContext();
-  ASSERT(current == context);
+  ASSERT(ImGui::GetCurrentContext() == context);
   ImGui::EndFrame();
 }
 
