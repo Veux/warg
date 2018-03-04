@@ -64,36 +64,23 @@ void State::render(float64 t)
 }
 
 void State::handle_input(State **current_state,
-    std::vector<State *> *available_states,
-    const std::vector<SDL_Event> &new_events, bool block_kb, bool block_mouse)
+    std::vector<State *> *available_states, std::vector<SDL_Event> *input,
+    bool block_kb, bool block_mouse)
 {
-  ImGuiIO &io = ImGui::GetIO();
-
-  static std::vector<SDL_Event> dispatching;
-  dispatching.clear();
-
-  for (auto &e : new_events)
+  std::vector<SDL_Event> game_events;
+  for (auto &e : *input)
   {
-    bool dispatch = true;
-
-    if (block_kb && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
-      dispatch = false;
-
-    if (block_mouse &&
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
-            e.type == SDL_MOUSEWHEEL))
-      dispatch = false;
-
     if (e.type == SDL_QUIT)
     {
       running = false;
       return;
     }
-    else if (e.type == SDL_WINDOWEVENT)
+    if (e.type == SDL_WINDOWEVENT)
     {
       if (e.window.event == SDL_WINDOWEVENT_RESIZED)
       {
         // resize
+        continue;
       }
       else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
                e.window.event == SDL_WINDOWEVENT_ENTER)
@@ -104,56 +91,97 @@ void State::handle_input(State **current_state,
         // SDL_SetRelativeMouseMode(SDL_bool(false));
         // SDL_SetRelativeMouseMode(SDL_bool(true));
         reset_mouse_delta();
+        continue;
       }
     }
-    if (dispatch)
+    if (e.type == SDL_KEYUP)
     {
-      dispatching.push_back(e);
-      if (e.type == SDL_KEYUP)
+      if (e.key.keysym.sym == SDLK_F1)
       {
-        if (e.key.keysym.sym == SDLK_F1)
+        *current_state = &*(*available_states)[0];
+        if ((*current_state)->free_cam)
+          SDL_SetRelativeMouseMode(SDL_bool(true));
+        else
         {
-          *current_state = &*(*available_states)[0];
-          return;
+          SDL_SetRelativeMouseMode(SDL_bool(false));
+          SDL_WarpMouseInWindow(nullptr,
+              (*current_state)->last_seen_mouse_position.x,
+              (*current_state)->last_seen_mouse_position.y);
         }
-        if (e.key.keysym.sym == SDLK_F2)
+        ivec2 trash;
+        SDL_GetRelativeMouseState(&trash.x, &trash.y);
+        //(*current_state)->reset_mouse_delta();
+        return;
+      }
+      if (e.key.keysym.sym == SDLK_F2)
+      {
+        *current_state = &*(*available_states)[1];
+        if ((*current_state)->free_cam)
+          SDL_SetRelativeMouseMode(SDL_bool(true));
+        else
         {
-          *current_state = &*(*available_states)[1];
-          return;
+          SDL_SetRelativeMouseMode(SDL_bool(false));
+          SDL_WarpMouseInWindow(nullptr,
+              (*current_state)->last_seen_mouse_position.x,
+              (*current_state)->last_seen_mouse_position.y);
         }
+        ivec2 trash;
+        SDL_GetRelativeMouseState(&trash.x, &trash.y);
+        //(*current_state)->reset_mouse_delta();
+        return;
       }
     }
-    else
+
+    bool gui_owns_event = false;
+
+    if (block_kb && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
+      gui_owns_event = true;
+
+    if (block_mouse &&
+        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
+            e.type == SDL_MOUSEWHEEL))
+      gui_owns_event = true;
+
+    if (free_cam)
     {
-      set_message("", s("dropping event: ", e.type), 1.0f);
+      gui_owns_event = false;
     }
+    if (gui_owns_event)
+    {
+      continue;
+    }
+    game_events.push_back(e);
   }
-  handle_input_events(dispatching, block_kb, block_mouse);
+  handle_input_events(game_events, block_kb, block_mouse);
 }
 
 void State::performance_output()
 {
+  const float report_frequency_in_seconds = 1.f;
   std::stringstream s;
-  const float64 report_delay = .1;
   const uint64 frame_count = renderer.frame_count;
-  const uint64 frames_since_last_tick = frame_count - frames_at_last_tick;
 
-  if (last_output + report_delay < current_time)
+  static float current_frame_rate = 0;
+
+  s << PERF_TIMER.string_report();
+  s << "Current FPS: " << current_frame_rate;
+  s << "\nAverage FPS:" << (float64)frame_count / current_time;
+  s << "\nRender Scale: " << renderer.get_render_scale();
+  set_message("Performance output: ", s.str(), report_frequency_in_seconds / 2);
+
+  if (last_performance_output + report_frequency_in_seconds < current_time)
   {
 #ifdef __linux__
     system("clear");
 #elif _WIN32
     system("cls");
 #endif
-    frames_at_last_tick = frame_count;
-    last_output = current_time;
-    Uint64 current_frame_rate = (1.0 / report_delay) * frames_since_last_tick;
-    s << PERF_TIMER.string_report();
-    s << "FPS: " << current_frame_rate;
-    s << "\nTotal FPS:" << (float64)frame_count / current_time;
-    s << "\nRender Scale: " << renderer.get_render_scale();
-    s << "\nDraw calls: " << renderer.draw_calls_last_frame;
-    set_message("Performance output: ", s.str(), report_delay / 2);
+    const uint64 frames_since_last_report = frame_count - frames_at_last_report;
+
+    current_frame_rate =
+        (1.0f / report_frequency_in_seconds) * (float)frames_since_last_report;
+    frames_at_last_report = frame_count;
+    last_performance_output = current_time;
     std::cout << get_messages() << std::endl;
   }
 }

@@ -7,25 +7,28 @@ typedef union SDL_Event SDL_Event;
 
 struct SDL_Imgui_State
 {
-
   SDL_Imgui_State(SDL_Window *window);
   void destroy();
 
   void bind();
-  void new_frame(SDL_Window *window);
+  void new_frame(SDL_Window *window, float64 dt_since_last_frame);
   void end_frame();
+  void handle_input(std::vector<SDL_Event> *input);
 
-  void handle_input();
   void build_draw_data();
   void render();
 
   ImGuiIO *state_io = nullptr;
   ImGuiContext *context = nullptr;
 
-  std::vector<SDL_Event> event_output;
+  ivec2 mouse_position = ivec2(0);
+  uint32 mouse_state = 0;
+
+  bool ignore_all_input = false;
 
 private:
   bool process_event(SDL_Event *event);
+
   bool init(SDL_Window *window);
   static const char *get_clipboard(void *);
   static void set_clipboard(void *, const char *text);
@@ -35,7 +38,6 @@ private:
 
   ImDrawData *draw_data = nullptr;
 
-  Uint64 time = 0;
   bool mouse_pressed[3] = {false, false, false};
   GLuint font_texture = 0;
   int shader_handle = 0, vert_handle = 0, frag_handle = 0;

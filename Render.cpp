@@ -10,9 +10,9 @@
 #undef STB_IMAGE_IMPLEMENTATION
 #include "Mesh_Loader.h"
 #include "Render.h"
+#include "SDL_Imgui_State.h"
 #include "Shader.h"
 #include "Third_party/imgui/imgui.h"
-#include "SDL_Imgui_State.h"
 #include "Timer.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -95,22 +95,13 @@ void Gaussian_Blur::init(ivec2 size, GLenum format)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
 
   if (!initialized)
-    intermediate_fbo.color_attachments.emplace_back(Texture());
+    intermediate_fbo.color_attachments.emplace_back(Texture(size,format));
 
-  Texture *intermediate_texture = &intermediate_fbo.color_attachments[0];
-  intermediate_texture->size = size;
-  intermediate_texture->format = format;
-  intermediate_texture->wrap = GL_CLAMP_TO_EDGE;
-  intermediate_texture->load();
   intermediate_fbo.init();
 
   if (!initialized)
-    target.color_attachments.emplace_back(Texture());
+    target.color_attachments.emplace_back(Texture(size, format));
 
-  Texture *target_texture = &target.color_attachments[0];
-  target_texture->size = size;
-  target_texture->format = format;
-  target_texture->load();
   target.init();
 
   aspect_ratio_factor = (float32)size.y / (float32)size.x;
@@ -134,7 +125,7 @@ void Gaussian_Blur::draw(
 
   if (iterations == 0)
   {
-    vector<Texture*> texture = { src };
+    vector<Texture *> texture = {src};
     run_pixel_shader(&renderer->passthrough, &texture, &target, false);
     return;
   }
@@ -196,9 +187,7 @@ High_Pass_Filter::High_Pass_Filter() {}
 
 void High_Pass_Filter::init(ivec2 size, GLenum format)
 {
-  target.color_attachments.emplace_back(Texture());
-  target.color_attachments[0].format = format;
-  target.color_attachments[0].size = size;
+  target.color_attachments.emplace_back(Texture(size,format));
   target.init();
   high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
   initialized = true;
@@ -241,10 +230,7 @@ void Bloom_Shader::init(ivec2 size, GLenum format)
 {
   high_pass.init(size, format);
   blur.init(size, format);
-  target.color_attachments.emplace_back(Texture());
-  target.color_attachments[0].size = size;
-  target.color_attachments[0].format = format;
-  target.color_attachments[0].wrap = GL_CLAMP_TO_EDGE;
+  target.color_attachments.emplace_back(Texture(size,format));
   target.init();
   initialized = true;
 }
@@ -415,7 +401,14 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-Texture::Texture() {}
+Texture::Texture(glm::ivec2 size, GLenum format , GLenum  filtering, GLenum wrap)
+{
+  this->size = size;
+  this->format = format;
+  this->filtering = filtering;
+  this->wrap = wrap;
+  load();
+}
 Texture_Handle::~Texture_Handle()
 {
   set_message("Deleting texture: ", s(texture));
@@ -465,7 +458,10 @@ void Texture::load()
 
     if (!texture)
     {
-      texture = make_shared<Texture_Handle>();
+      static uint32 i = 0;
+      ++i;
+      std::string unique_key = s("Generated texture:", i);
+      TEXTURE_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
       glGenTextures(1, &texture->texture);
     }
     glBindTexture(GL_TEXTURE_2D, texture->texture);
@@ -1195,8 +1191,8 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
   shader->set_uniform("transform", Render::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
-      GL_UNSIGNED_INT, (void *)0);
+  glDrawElements(
+      GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {
@@ -1387,6 +1383,23 @@ void Render::render(float64 state_time)
 #if DYNAMIC_TEXTURE_RELOADING
   check_and_clear_expired_textures();
 #endif
+
+  static bool show_renderer_window = true;
+  if (show_renderer_window)
+  {
+    ImGui::Begin("renderer.cpp Window", &show_renderer_window);
+    ImGui::Text("Hello from renderer.cpp window!");
+    if (ImGui::Button("Close Me"))
+      show_renderer_window = false;
+
+    for (auto& tex : TEXTURE_CACHE)
+    {
+      ImGui::Image((ImTextureID)tex.second.lock()->texture, ImVec2(256, 256));
+    }
+
+
+    ImGui::End();
+  }
 
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;
