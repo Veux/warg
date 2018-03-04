@@ -1394,7 +1394,8 @@ void Render::render(float64 state_time)
 
     for (auto& tex : TEXTURE_CACHE)
     {
-      ImGui::Image((ImTextureID)tex.second.lock()->texture, ImVec2(256, 256));
+      ImGui::Image((ImTextureID)tex.second.lock()->texture, ImVec2(256, 256),
+        ImVec2(0, 1), ImVec2(1, 0));
     }
 
 
