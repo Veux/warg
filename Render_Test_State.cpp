@@ -123,7 +123,16 @@ void Render_Test_State::handle_input_events(
       if (_e.key.keysym.sym == SDLK_F5)
       {
         free_cam = !free_cam;
-        SDL_SetRelativeMouseMode(SDL_bool(false));
+        if (free_cam)
+        {
+          SDL_SetRelativeMouseMode(SDL_bool(true));
+          ivec2 trash;
+          SDL_GetRelativeMouseState(&trash.x, &trash.y);
+        }
+        else
+        {
+          SDL_SetRelativeMouseMode(SDL_bool(false));
+        }
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
@@ -161,6 +170,8 @@ void Render_Test_State::handle_input_events(
   if (free_cam)
   {
     SDL_SetRelativeMouseMode(SDL_bool(true));
+    SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
     cam.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
@@ -205,17 +216,19 @@ void Render_Test_State::handle_input_events(
     // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) &&
         (last_seen_lmb || last_seen_rmb))
-    {
-      cam.theta += mouse_delta.x * MOUSE_X_SENS;
-      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
-
+    { // currently holding
       if (!mouse_grabbed)
       { // first hold
         set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_mouse_position = mouse;
         SDL_SetRelativeMouseMode(SDL_bool(true));
+        SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       }
+      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+      cam.theta += mouse_delta.x * MOUSE_X_SENS;
+      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
       set_message("mouse is grabbed", "", 1.0f);
     }
     else
@@ -225,7 +238,6 @@ void Render_Test_State::handle_input_events(
       { // first unhold
         set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-
         set_message("mouse warp:",
             s("from:", mouse.x, " ", mouse.y,
                 " to:", last_grabbed_mouse_position.x, " ",
@@ -304,15 +316,15 @@ void Render_Test_State::handle_input_events(
 
 void Render_Test_State::update()
 {
-  // 1. Show a simple window.
-  // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets automatically
-  // appears in a window called "Debug".
+  static bool show_render_test_state_window = true;
+  if (show_render_test_state_window)
   {
-    static float f = 0.0f;
-    ImGui::Text(
-        "Hello, world!"); // Display some text (you can use a format string too)
-    ImGui::SliderFloat("float", &f, 0.0f,
-        1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+    ImGui::Begin(
+        "render_test_state.cpp Window", &show_render_test_state_window);
+    ImGui::Text("Hello from render_test_state.cpp window!");
+    if (ImGui::Button("Close Me"))
+      show_render_test_state_window = false;
+    ImGui::End();
   }
 
   const float32 height = 1.25;

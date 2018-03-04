@@ -22,7 +22,7 @@ Map make_blades_edge()
   blades_edge.material.backface_culling = false;
   blades_edge.material.albedo = "crate_diffuse.png";
   blades_edge.material.emissive = "";
-  blades_edge.material.normal = "crate_normal.png";
+  blades_edge.material.normal = "test_normal.png";
   blades_edge.material.roughness = "crate_roughness.png";
   blades_edge.material.vertex_shader = "vertex_shader.vert";
   blades_edge.material.frag_shader = "fragment_shader.frag";

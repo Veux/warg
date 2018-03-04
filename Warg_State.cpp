@@ -114,6 +114,7 @@ void Warg_State::handle_input_events(
         if (_e.key.keysym.sym == SDLK_F5)
         {
           free_cam = !free_cam;
+          SDL_SetRelativeMouseMode(SDL_bool(free_cam));
         }
       }
     }
@@ -157,6 +158,7 @@ void Warg_State::handle_input_events(
   if (free_cam)
   {
     SDL_SetRelativeMouseMode(SDL_bool(true));
+    SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
     cam.theta += mouse_delta.x * MOUSE_X_SENS;
     cam.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
@@ -210,20 +212,24 @@ void Warg_State::handle_input_events(
   else
   { // wow style camera
     vec4 cam_rel;
+    set_message(
+        "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
     // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) &&
         (last_seen_lmb || last_seen_rmb))
-    {
-      cam.theta += mouse_delta.x * MOUSE_X_SENS;
-      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
-
+    { // currently holding
       if (!mouse_grabbed)
       { // first hold
         set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_mouse_position = mouse;
         SDL_SetRelativeMouseMode(SDL_bool(true));
+        SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       }
+      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+      cam.theta += mouse_delta.x * MOUSE_X_SENS;
+      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
       set_message("mouse is grabbed", "", 1.0f);
     }
     else
@@ -233,7 +239,6 @@ void Warg_State::handle_input_events(
       { // first unhold
         set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-
         set_message("mouse warp:",
             s("from:", mouse.x, " ", mouse.y,
                 " to:", last_grabbed_mouse_position.x, " ",
@@ -457,101 +462,91 @@ void Warg_State::update()
   static bool show_demo_window = false;
   static bool show_another_window = false;
 
+  static bool show_warg_state_window = true;
+  if (show_warg_state_window)
   {
-    static float f = 0.0f;
-    static int counter = 0;
-    ImGui::Text(
-        "Hello, world!"); // Display some text (you can use a format string too)
-    ImGui::SliderFloat("float", &f, 0.0f,
-        1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
-    ImGui::ColorEdit3("clear color",
-        (float *)&clear_color); // Edit 3 floats representing a color
-
-    ImGui::Checkbox("Demo Window",
-        &show_demo_window); // Edit bools storing our windows open/close state
-    ImGui::Checkbox("Another Window", &show_another_window);
-
-    if (ImGui::Button("Button")) // Buttons return true when clicked (NB: most
-                                 // widgets return true when edited/activated)
-      counter++;
-    ImGui::SameLine();
-    ImGui::Text("counter = %d", counter);
-
-    ImGui::Text(
-        "Application average %.3f ms per state update (%.1f updates/sec)",
-        1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-  }
-
-  // 2. Show another simple window. In most cases you will use an explicit
-  // Begin/End pair to name your windows.
-  if (show_another_window)
-  {
-    ImGui::Begin("Another Window", &show_another_window);
-    ImGui::Text("Hello from another window!");
+    ImGui::Begin("warg_state.cpp Window", &show_warg_state_window);
+    ImGui::Text("Hello from warg_state.cpp window!");
     if (ImGui::Button("Close Me"))
-      show_another_window = false;
-    ImGui::End();
-  }
+      show_warg_state_window = false;
+    
+    static Texture test("../Assets/Textures/pebbles_diffuse.png");
 
-  // 3. Show the ImGui demo window. Most of the sample code is in
-  // ImGui::ShowDemoWindow(). Read its code to learn more about Dear ImGui!
-  if (show_demo_window)
-  {
-    ImGui::SetNextWindowPos(ImVec2(650, 20),
-        ImGuiCond_FirstUseEver); // Normally user code doesn't need/want to call
-                                 // this because positions are saved in .ini
-                                 // file anyway. Here we just want to make the
-                                 // demo initial state a bit more friendly!
-    ImGui::ShowDemoWindow(&show_demo_window);
+    ImGui::Image((ImTextureID)test.texture->texture, ImVec2(256, 256));
+    ImGui::End();
   }
 
   // meme
   if (pc && chars.count(pc))
   {
-    ASSERT(chars.count(pc));
-
-    clear_color = vec3(94. / 255., 155. / 255., 1.);
-    scene.lights.light_count = 2;
-
     Light *light = &scene.lights.lights[0];
+    ASSERT(chars.count(pc));
+    static bool first = true;
+    if (first)
+    {
+      first = false;
 
-    scene.lights.light_count = 2;
-    light->position = vec3{25.01f, 25.0f, 45.f};
-    light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
-    light->attenuation = vec3(1.0f, .045f, .0075f);
-    light->ambient = 0.0005f;
-    light->cone_angle = 0.15f;
-    light->type = Light_Type::spot;
-    light->casts_shadows = true;
-    // there was a divide by 0 here, a camera can't point exactly straight down
-    light->direction = vec3(0);
-    // see Render.h for what these are for:
-    light->shadow_blur_iterations = 1;
-    light->shadow_blur_radius = 1.25005f;
-    light->max_variance = 0.00000001;
-    light->shadow_near_plane = 15.f;
-    light->shadow_far_plane = 80.f;
-    light->shadow_fov = radians(90.f);
+      clear_color = vec3(94. / 255., 155. / 255., 1.);
+      scene.lights.light_count = 2;
+
+      light->position = vec3{ 25.01f, 25.0f, 45.f };
+      light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
+      light->attenuation = vec3(1.0f, .045f, .0075f);
+      light->ambient = 0.0005f;
+      light->cone_angle = 0.03f;
+
+      light->type = Light_Type::spot;
+      light->casts_shadows = true;
+      // there was a divide by 0 here, a camera can't point exactly straight down
+      light->direction = vec3(0);
+      // see Render.h for what these are for:
+      light->shadow_blur_iterations = 1;
+      light->shadow_blur_radius = 1.25005f;
+      light->max_variance = 0.00000001;
+      light->shadow_near_plane = 15.f;
+      light->shadow_far_plane = 80.f;
+      light->shadow_fov = radians(90.f);
+
+      light = &scene.lights.lights[1];
+
+      light->position = vec3{ .5, .2, 10.10 };
+      light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
+        1.f + cos(current_time * 1.12),
+        1.f + sin(current_time * .9));
+      light->attenuation = vec3(1.0f, .045f, .0075f);
+      light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+      light->ambient = 0.0f;
+      light->cone_angle = 0.012f;
+      light->type = Light_Type::spot;
+      light->casts_shadows = true;
+      // see Render.h for what these are for:
+      light->shadow_blur_iterations = 1;
+      light->shadow_blur_radius = 0.55005f;
+      light->max_variance = 0.0000003;
+      light->shadow_near_plane = 4.51f;
+      light->shadow_far_plane = 50.f;
+      light->shadow_fov = radians(40.f);
+    }
+    light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+
+    ImGui::Begin("lighting adjustment");
+    ImGui::DragFloat("Main light shadow fov", &light->shadow_fov, 0.005f);
+
+    static float uv_scale = 14.575f;
+    ImGui::DragFloat("map_uv_scale", &uv_scale, 0.005f);
+
+
+    ImGui::End();
+
+    //->shh->bby.get()->is->ok->c++[0]->is->*->get()[0]->*(*fast);
+    map.node.get()->owned_children[0].get()->model[0].second.m.uv_scale = vec2(uv_scale);
+
 
     light = &scene.lights.lights[1];
-
-    light->position = vec3{.5, .2, 10.10};
-    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-                                1.f + cos(current_time * 1.12),
-                                1.f + sin(current_time * .9));
-    light->attenuation = vec3(1.0f, .045f, .0075f);
     light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
-    light->ambient = 0.0f;
-    light->cone_angle = 0.012f;
-    light->type = Light_Type::spot;
-    light->casts_shadows = true;
-    // see Render.h for what these are for:
-    light->shadow_blur_iterations = 1;
-    light->shadow_blur_radius = 0.55005f;
-    light->max_variance = 0.0000003;
-    light->shadow_near_plane = 4.51f;
-    light->shadow_far_plane = 50.f;
-    light->shadow_fov = radians(40.f);
+    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
+      1.f + cos(current_time * 1.12),
+      1.f + sin(current_time * .9));
   }
 }
 

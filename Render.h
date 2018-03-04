@@ -65,7 +65,8 @@ struct Texture_Handle
 
 struct Texture
 {
-  Texture();
+  Texture() {}
+  Texture(glm::ivec2 size, GLenum format = GL_RGBA32F, GLenum  filtering = GL_LINEAR, GLenum wrap = GL_CLAMP_TO_EDGE);
   Texture(std::string path, bool premul = false);
   void load();
   void bind(GLuint texture_unit);
