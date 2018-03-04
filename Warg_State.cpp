@@ -53,7 +53,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
     event.type == ENET_EVENT_TYPE_CONNECT);
 
   Buffer b;
-  auto msg = Char_Spawn_Request_Message(tick, "Eirich", 0);
+  auto msg = Char_Spawn_Request_Message(tick, char_name, 0);
   msg.t = get_real_time();
   msg.serialize(b);
   ENetPacket *packet =
