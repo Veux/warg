@@ -8,11 +8,11 @@ using namespace glm;
 enum struct Light_Type;
 struct Light_Uniform_Location_Cache
 {
-  GLint position, direction, color, attenuation, ambient, cone_angle, type, shadow_map_transform, max_variance, shadow_map_enabled;
+  GLint position, direction, irradiance, attenuation, ambient, cone_angle, type, shadow_map_transform, max_variance, shadow_map_enabled;
 };
 struct Light_Uniform_Value_Cache
 {
-  vec3 position, direction, color, attenuation, ambient;
+  vec3 position, direction, irradiance, attenuation, ambient;
   float cone_angle;
   Light_Type type;
   mat4 shadow_map_transform;

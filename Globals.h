@@ -166,7 +166,10 @@ std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
 std::string mtos(glm::mat4 m);
 
+
+enum struct Light_Type;
 template <typename T> std::string s(T value) { return std::to_string(value); }
+
 
 template <typename T, typename... Args> std::string s(T first, Args... args)
 {
@@ -174,6 +177,7 @@ template <typename T, typename... Args> std::string s(T first, Args... args)
 }
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
+template <> std::string s<Light_Type>(Light_Type value);
 
 typedef int32_t UID;
 UID uid();

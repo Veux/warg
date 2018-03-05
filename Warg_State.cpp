@@ -386,7 +386,7 @@ void Warg_State::update()
     ImGui::Text("Hello from warg_state.cpp window!");
     if (ImGui::Button("Close Me"))
       show_warg_state_window = false;
-    
+
     static Texture test("../Assets/Textures/pebbles_diffuse.png");
 
     ImGui::Image((ImTextureID)test.texture->texture, ImVec2(256, 256));
@@ -407,10 +407,8 @@ void Warg_State::update()
       clear_color = vec3(94. / 255., 155. / 255., 1.);
       scene.lights.light_count = 2;
 
-      
-
       scene.lights.light_count = 2;
-      light->position = vec3{ 25.01f, 25.0f, 45.f };
+      light->position = vec3{25.01f, 25.0f, 45.f};
       light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
       light->attenuation = vec3(1.0f, .045f, .0075f);
       light->ambient = 0.0005f;
@@ -418,7 +416,8 @@ void Warg_State::update()
 
       light->type = Light_Type::spot;
       light->casts_shadows = true;
-      // there was a divide by 0 here, a camera can't point exactly straight down
+      // there was a divide by 0 here, a camera can't point exactly straight
+      // down
       light->direction = vec3(0);
       // see Render.h for what these are for:
       light->shadow_blur_iterations = 1;
@@ -430,15 +429,15 @@ void Warg_State::update()
 
       light = &scene.lights.lights[1];
 
-      light->position = vec3{ .5, .2, 10.10 };
+      light->position = vec3{.5, .2, 10.10};
       light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-        1.f + cos(current_time * 1.12),
-        1.f + sin(current_time * .9));
+                                  1.f + cos(current_time * 1.12),
+                                  1.f + sin(current_time * .9));
       light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->direction =
-        client
-        ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
-        : vec3(0);
+      light->direction = client ? client->chars.size() > 0
+                                      ? client->chars[client->pc].pos
+                                      : vec3(0)
+                                : vec3(0);
       light->ambient = 0.0f;
       light->cone_angle = 0.012f;
       light->type = Light_Type::spot;
@@ -452,30 +451,25 @@ void Warg_State::update()
       light->shadow_fov = radians(40.f);
     }
 
-    ImGui::Begin("lighting adjustment");
-    ImGui::DragFloat("Main light shadow fov", &light->shadow_fov, 0.005f);
+    imgui_light_array(scene.lights);
 
-    static float uv_scale = 14.575f;
-    ImGui::DragFloat("map_uv_scale", &uv_scale, 0.005f);
+    // static float uv_scale = 14.575f;
+    // ImGui::DragFloat("map_uv_scale", &uv_scale, 0.005f);
 
+    ////->shh->bby.get()->is->ok->c++[0]->is->*->get()[0]->*(*fast);
+    // client->map.node.get()->owned_children[0].get()->model[0].second.m.uv_scale
+    // = vec2(uv_scale);
 
-    ImGui::End();
-
-    //->shh->bby.get()->is->ok->c++[0]->is->*->get()[0]->*(*fast);
-    client->map.node.get()->owned_children[0].get()->model[0].second.m.uv_scale = vec2(uv_scale);
-
-    
-
+    //
 
     light = &scene.lights.lights[1];
     light->direction =
-      client
-      ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
-      : vec3(0);
+        client
+            ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
+            : vec3(0);
     light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-      1.f + cos(current_time * 1.12),
-      1.f + sin(current_time * .9));
-
+                                1.f + cos(current_time * 1.12),
+                                1.f + sin(current_time * .9));
   }
 }
 

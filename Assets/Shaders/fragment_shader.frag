@@ -23,7 +23,7 @@ struct Light
 {
   vec3 position;
   vec3 direction;
-  vec3 color;
+  vec3 irradiance;
   vec3 attenuation;
   vec3 ambient;
   float cone_angle;
@@ -199,7 +199,7 @@ void main()
     float ec = (8.0f * m.shininess) / (8.0f * PI);
     float specular = ec * pow(max(dot(h, m.normal), 0.0), m.shininess);
     vec3 ambient = vec3(lights[i].ambient * at * m.albedo);
-    result += ldotn * specular * m.albedo * lights[i].color * at * alpha;
+    result += ldotn * specular * m.albedo * lights[i].irradiance * at * alpha;
     result += ambient;
   }
   result += m.emissive;

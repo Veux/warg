@@ -236,8 +236,8 @@ void Shader::Shader_Handle::set_location_cache()
     light_locations_cache[i].direction =
         glGetUniformLocation(program, str.c_str());
 
-    str = s("lights[", i, "].color");
-    light_locations_cache[i].color = glGetUniformLocation(program, str.c_str());
+    str = s("lights[", i, "].irradiance");
+    light_locations_cache[i].irradiance = glGetUniformLocation(program, str.c_str());
 
     str = s("lights[", i, "].attenuation");
     light_locations_cache[i].attenuation =

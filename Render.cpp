@@ -95,7 +95,7 @@ void Gaussian_Blur::init(ivec2 size, GLenum format)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
 
   if (!initialized)
-    intermediate_fbo.color_attachments.emplace_back(Texture(size,format));
+    intermediate_fbo.color_attachments.emplace_back(Texture(size, format));
 
   intermediate_fbo.init();
 
@@ -187,7 +187,7 @@ High_Pass_Filter::High_Pass_Filter() {}
 
 void High_Pass_Filter::init(ivec2 size, GLenum format)
 {
-  target.color_attachments.emplace_back(Texture(size,format));
+  target.color_attachments.emplace_back(Texture(size, format));
   target.init();
   high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
   initialized = true;
@@ -230,7 +230,7 @@ void Bloom_Shader::init(ivec2 size, GLenum format)
 {
   high_pass.init(size, format);
   blur.init(size, format);
-  target.color_attachments.emplace_back(Texture(size,format));
+  target.color_attachments.emplace_back(Texture(size, format));
   target.init();
   initialized = true;
 }
@@ -401,7 +401,7 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-Texture::Texture(glm::ivec2 size, GLenum format , GLenum  filtering, GLenum wrap)
+Texture::Texture(glm::ivec2 size, GLenum format, GLenum filtering, GLenum wrap)
 {
   this->size = size;
   this->format = format;
@@ -880,7 +880,8 @@ bool Light::operator==(const Light &rhs) const
   bool b5 = ambient == rhs.ambient;
   bool b6 = cone_angle == rhs.cone_angle;
   bool b7 = type == rhs.type;
-  return b1 & b2 & b3 & b4 & b5 & b6 & b7;
+  bool b8 = brightness == rhs.brightness;
+  return b1 & b2 & b3 & b4 & b5 & b6 & b7 & b8;
 }
 
 bool Light_Array::operator==(const Light_Array &rhs)
@@ -967,11 +968,11 @@ void Render::set_uniform_lights(Shader &shader)
       value_cache->direction = new_light->direction;
       glUniform3fv(location_cache->direction, 1, &new_light->direction[0]);
     }
-
-    if (value_cache->color != new_light->color)
+    vec3 new_irradiance = new_light->color * new_light->brightness;
+    if (value_cache->irradiance != new_irradiance)
     {
-      value_cache->color = new_light->color;
-      glUniform3fv(location_cache->color, 1, &new_light->color[0]);
+      value_cache->irradiance = new_irradiance;
+      glUniform3fv(location_cache->irradiance, 1, &new_irradiance[0]);
     }
 
     if (value_cache->attenuation != new_light->attenuation)
@@ -1183,6 +1184,120 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
   }
 }
 
+void imgui_light_array(Light_Array &lights)
+{
+  const uint32 initial_height = 50;
+  const uint32 height_per_inactive_light = 25;
+  const uint32 max_height = 600;
+  const uint32 width = 270;
+
+  uint32 height =
+      initial_height + height_per_inactive_light * lights.light_count;
+
+  ImGui::Begin("lighting adjustment", nullptr, ImGuiWindowFlags_NoResize);
+  ImGui::SetWindowSize(ImVec2(width, height));
+  if (ImGui::Button("Push Light"))
+  {
+    lights.light_count++;
+
+    if (lights.light_count > MAX_LIGHTS)
+    {
+      lights.light_count = MAX_LIGHTS;
+    }
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Pop Light"))
+  {
+    if (!lights.light_count == 0)
+    {
+      lights.light_count--;
+    }
+  }
+  ImGui::SameLine();
+  bool want_collapse = false;
+  if (ImGui::Button("Collapse"))
+  {
+    want_collapse = true;
+  }
+  bool want_large_window = false;
+  ImGui::BeginChild("ScrollingRegion");
+  for (uint32 i = 0; i < lights.light_count; ++i)
+  {
+    ImGui::PushID(s(i).c_str());
+    ImGui::PushItemWidth(150);
+    if (want_collapse)
+    {
+      ImGui::SetNextTreeNodeOpen(false);
+    }
+    if (!ImGui::CollapsingHeader(s("Light ", i).c_str()))
+    {
+      ImGui::PopID();
+      continue;
+    }
+    want_large_window = true;
+    Light *light = &lights.lights[i];
+    ImGui::Indent(5);
+    ImGui::LabelText("Option", "Setting %u", i);
+    ImGui::ColorPicker3("Irradiance", &light->color[0],
+        ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_RGB);
+    ImGui::DragFloat3("Position", &light->position[0]);
+    ImGui::DragFloat("Brightness", &light->brightness);
+    ImGui::DragFloat3("Attenuation", &light->attenuation[0], 0.01f);
+    ImGui::DragFloat("Ambient", &light->ambient);
+    std::string current_type = s(light->type);
+    if (ImGui::BeginCombo("Light Type", current_type.c_str()))
+    {
+      const uint light_type_count = 3;
+      for (int n = 0; n < light_type_count; n++)
+      {
+        std::string list_type_n = s(Light_Type(n));
+        bool is_selected = (current_type == list_type_n);
+        if (ImGui::Selectable(list_type_n.c_str(), is_selected))
+          light->type = Light_Type(n);
+        if (is_selected)
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndCombo();
+    }
+    if (light->type == Light_Type::parallel)
+    {
+      ImGui::DragFloat3("Direction", &light->direction[0]);
+    }
+    if (light->type == Light_Type::omnidirectional)
+    {
+    }
+    if (light->type == Light_Type::spot)
+    {
+      ImGui::DragFloat3("Direction", &light->direction[0]);
+      ImGui::DragFloat("Focus", &light->cone_angle, 0.0001f, 0.0000001, 0.5);
+      ImGui::Checkbox("Casts Shadows", &light->casts_shadows);
+      if (light->casts_shadows)
+      {
+        if (ImGui::TreeNode("Shadow settings"))
+        {
+          ImGui::SetWindowSize(ImVec2(320, 600));
+          ImGui::DragInt(
+              "Blur Iterations", &light->shadow_blur_iterations, 1.0f, 0, 50);
+          ImGui::DragFloat(
+              "Near Plane", &light->shadow_near_plane, 1.0f, 0.0000001f);
+          ImGui::DragFloat("Far Plane", &light->shadow_far_plane, 1.0f, 1.0f);
+          ImGui::DragFloat(
+              "Max Variance", &light->max_variance, 0.0001f, 0.0f, 1.0f);
+          ImGui::DragFloat("FoV", &light->shadow_fov, 1.0f, 0.0000001f, 90.f);
+          ImGui::TreePop();
+        }
+      }
+    }
+    ImGui::Unindent(5);
+    ImGui::PopItemWidth();
+    ImGui::PopID();
+  }
+  ImGui::EndChild();
+  if (want_large_window)
+    ImGui::SetWindowSize(ImVec2(width, max_height));
+  ImGui::End();
+}
+
 void Render::opaque_pass(float32 time)
 {
   glViewport(0, 0, size.x, size.y);
@@ -1374,11 +1489,10 @@ void Render::render(float64 state_time)
     if (ImGui::Button("Close Me"))
       show_renderer_window = false;
 
-    for (auto& tex : TEXTURE_CACHE)
+    for (auto &tex : TEXTURE_CACHE)
     {
       ImGui::Image((ImTextureID)tex.second.lock()->texture, ImVec2(256, 256));
     }
-
 
     ImGui::End();
   }

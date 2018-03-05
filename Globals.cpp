@@ -4,6 +4,7 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
+#include "Render.h"
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
@@ -443,6 +444,18 @@ std::string mtos(glm::mat4 m)
     result += "|" + vtos(m[i]) + "|\n";
   }
   return result;
+}
+
+template <> std::string s<Light_Type>(Light_Type value)
+{
+  if (value == Light_Type::parallel)
+    return "Parallel";
+  if (value == Light_Type::omnidirectional)
+    return "Omnidirectional";
+  if (value == Light_Type::spot)
+    return "Spotlight";
+
+  return "s(): Unknown Light_Type";
 }
 
 template <> std::string s<const char *>(const char *value)

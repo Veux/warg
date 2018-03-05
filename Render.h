@@ -168,6 +168,7 @@ struct Light
 {
   vec3 position = vec3(0, 0, 0);
   vec3 direction = vec3(0, 0, 0);
+  float brightness = 1.0f;
   vec3 color = vec3(1, 1, 1);
   vec3 attenuation = vec3(1, 0.22, 0.2);
   float ambient = 0.0004f;
@@ -300,6 +301,9 @@ struct Bloom_Shader
 
 void run_pixel_shader(Shader *shader, std::vector<Texture *> *src_textures,
     Framebuffer *dst, bool clear_dst = false);
+
+void imgui_light_array(Light_Array& lights);
+
 
 struct Render
 {
