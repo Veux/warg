@@ -316,16 +316,7 @@ void Render_Test_State::handle_input_events(
 
 void Render_Test_State::update()
 {
-  static bool show_render_test_state_window = true;
-  if (show_render_test_state_window)
-  {
-    ImGui::Begin(
-        "render_test_state.cpp Window", &show_render_test_state_window);
-    ImGui::Text("Hello from render_test_state.cpp window!");
-    if (ImGui::Button("Close Me"))
-      show_render_test_state_window = false;
-    ImGui::End();
-  }
+
 
   const float32 height = 1.25;
 
@@ -364,6 +355,19 @@ void Render_Test_State::update()
 
   sphere->position = vec3(-3, 3, 1.5);
   sphere->scale = vec3(0.4);
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   auto &lights = scene.lights.lights;
   scene.lights.light_count = 4;
@@ -408,46 +412,66 @@ void Render_Test_State::update()
                   sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)));
   sun_light->position = sun_pos;
   sun_light->scale = vec3(10.);
+
+
+
+
+  static bool first = true;
+  if (first)
+  {
+
+    lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
+    lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
+    lights[0].shadow_blur_iterations = 6;
+    lights[0].shadow_blur_radius = 1.25005f;
+    lights[0].max_variance = 0.0000002;
+    lights[0].shadow_near_plane = 110.f;
+    lights[0].shadow_far_plane = 350.f;
+    lights[0].shadow_fov = radians(15.5f);
+
+    lights[1].type = Light_Type::spot;
+    lights[1].direction = vec3(0);
+    lights[1].color = 150.f * vec3(1.0, 1.00, 1.0);
+    lights[1].cone_angle = 0.151; //+ 0.14*sin(current_time);
+    lights[1].ambient = 0.0004;
+    lights[1].casts_shadows = true;
+    lights[1].max_variance = 0.0000002;
+    lights[1].shadow_near_plane = .5f;
+    lights[1].shadow_far_plane = 200.f;
+    lights[1].shadow_fov = radians(90.f);
+    lights[1].shadow_blur_iterations = 4;
+    lights[1].shadow_blur_radius = 2.12;
+
+
+    lights[2].color = 111.f * vec3(1, 0.05, 1.05);
+    lights[2].type = Light_Type::omnidirectional;
+    lights[2].attenuation = vec3(1.0, 1.7, 2.4);
+    lights[2].ambient = 0.0001f;
+  }
+
+
+
   lights[0].position = sun_pos;
   lights[0].type = Light_Type::spot;
   lights[0].direction = vec3(0);
-  lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
-  lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);
   lights[0].ambient =
       0.003 *
       clamp(sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
-  lights[0].casts_shadows = true;
-  lights[0].shadow_blur_iterations = 6;
-  lights[0].shadow_blur_radius = 1.25005f;
-  lights[0].max_variance = 0.0000002;
-  lights[0].shadow_near_plane = 110.f;
-  lights[0].shadow_far_plane = 350.f;
-  lights[0].shadow_fov = radians(15.5f);
+  
 
   lights[1].position =
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-  lights[1].type = Light_Type::spot;
-  lights[1].direction = vec3(0);
-  lights[1].color = 150.f * vec3(1.0, 1.00, 1.0);
-  lights[1].cone_angle = 0.151; //+ 0.14*sin(current_time);
-  lights[1].ambient = 0.0004;
-  lights[1].casts_shadows = true;
-  lights[1].max_variance = 0.0000002;
-  lights[1].shadow_near_plane = .5f;
-  lights[1].shadow_far_plane = 200.f;
-  lights[1].shadow_fov = radians(90.f);
-  lights[1].shadow_blur_iterations = 4;
-  lights[1].shadow_blur_radius = 2.12;
+  
   cone_light1->position =
       lights[1].position + 0.5f * normalize(lights[1].position);
   cone_light1->scale = vec3(.25);
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  lights[2].color = 111.f * vec3(1, 0.05, 1.05);
-  lights[2].type = Light_Type::omnidirectional;
-  lights[2].attenuation = vec3(1.0, 1.7, 2.4);
-  lights[2].ambient = 0.0001f;
+  
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
+
+
+  imgui_light_array(scene.lights);
 }
