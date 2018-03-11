@@ -100,6 +100,13 @@ void Character::apply_modifiers()
 
 void Character::move(float32 dt, const std::vector<Triangle> &colliders)
 {
+  vec3 &pos = physics.pos;
+  vec3 &dir = last_movement_command.dir;
+  physics.dir = dir;
+  vec3 &vel = physics.vel;
+  bool &grounded = physics.grounded;
+  Move_Status move_status = last_movement_command.m;
+
   vec3 v = vec3(0);
   if (move_status & Move_Status::Forwards)
     v += vec3(dir.x, dir.y, 0);
@@ -238,7 +245,7 @@ void collide_and_slide_char(Character &character, const vec3 &vel,
     const vec3 &gravity, const std::vector<Triangle> &colliders)
 {
   character.colpkt.e_radius = character.radius;
-  character.colpkt.pos_r3 = character.pos;
+  character.colpkt.pos_r3 = character.physics.pos;
   character.colpkt.vel_r3 = vel;
 
   vec3 e_space_pos = character.colpkt.pos_r3 / character.colpkt.e_radius;
@@ -248,7 +255,7 @@ void collide_and_slide_char(Character &character, const vec3 &vel,
 
   vec3 final_pos = collide_char_with_world(character, e_space_pos, e_space_vel, colliders);
 
-  if (character.grounded)
+  if (character.physics.grounded)
   {
     character.colpkt.pos_r3 = final_pos * character.colpkt.e_radius;
     character.colpkt.vel_r3 = vec3(0, 0, -0.5);
@@ -280,8 +287,20 @@ void collide_and_slide_char(Character &character, const vec3 &vel,
 
   check_collision(character.colpkt, colliders);
 
-  character.grounded = character.colpkt.found_collision && gravity.z <= 0;
+  character.physics.grounded = character.colpkt.found_collision && gravity.z <= 0;
 
   final_pos *= character.colpkt.e_radius;
-  character.pos = final_pos;
+  character.physics.pos = final_pos;
+}
+
+bool Character_Physics::operator==(const Character_Physics &b) const
+{
+  auto &a = *this;
+  return a.pos == b.pos && a.dir == b.dir && a.vel == b.vel
+    && a.grounded == b.grounded;
+}
+
+bool Character_Physics::operator!=(const Character_Physics &b) const
+{
+  return !(*this == b);
 }

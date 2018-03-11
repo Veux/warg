@@ -19,6 +19,22 @@ struct CharStats
   float32 atk_speed;
 };
 
+struct Character_Physics
+{
+  bool operator==(const Character_Physics &) const;
+  bool operator!=(const Character_Physics &) const;
+
+  vec3 pos = vec3(0), dir = vec3(0), vel = vec3(0);
+  bool grounded = false;
+};
+
+struct Movement_Command
+{
+  uint32 i;
+  Move_Status m;
+  vec3 dir;
+};
+
 struct Character
 {
   void update_hp(float32 dt);
@@ -32,12 +48,9 @@ struct Character
 
   Node_Ptr mesh;
 
-  vec3 pos;
-  vec3 dir;
-  vec3 vel;
+  Character_Physics physics;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
-  bool grounded;
-  Move_Status move_status = Move_Status::None;
+  Movement_Command last_movement_command;
   Collision_Packet colpkt;
   int collision_recursion_depth;
 

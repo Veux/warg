@@ -296,7 +296,7 @@ void Warg_State::handle_input_events(
 
     vec3 dir = right_button_down ?
       normalize(-vec3(cam_rel.x, cam_rel.y, 0)) :
-      chars[pc].dir;
+      chars[pc].physics.dir;
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -310,10 +310,13 @@ void Warg_State::handle_input_events(
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
     
+    static uint32 movement_command_i = 0;
     push(
-      make_unique<Player_Movement_Message>(tick, (Move_Status)m, dir));
+      make_unique<Player_Movement_Message>(tick, movement_command_i,
+      (Move_Status)m, dir));
+    movement_command_i++;
 
-    vec3 player_pos = chars[pc].pos;
+    vec3 player_pos = chars[pc].physics.pos;
     float effective_zoom = cam.zoom;
     /* for (auto &surface : )
       {
@@ -411,10 +414,10 @@ void Warg_State::update()
   {
     auto &c = c_.second;
     if (!c.alive)
-      c.pos = {-1000, -1000, 0};
-    c.mesh->position = c.pos;
+      c.physics.pos = {-1000, -1000, 0};
+    c.mesh->position = c.physics.pos;
     c.mesh->orientation =
-        angleAxis((float32)atan2(c.dir.y, c.dir.x) - half_pi<float32>(),
+        angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(),
             vec3(0.f, 0.f, 1.f));
     c.mesh->scale = c.radius * vec3(2);
   }
@@ -422,7 +425,7 @@ void Warg_State::update()
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
     auto &o = *i;
-    float32 d = length(chars[o.target].pos - o.pos);
+    float32 d = length(chars[o.target].physics.pos - o.pos);
     if (d < 0.5)
     {
       set_message("object hit",
@@ -434,7 +437,7 @@ void Warg_State::update()
     }
     else
     {
-      vec3 a = normalize(chars[o.target].pos - o.pos);
+      vec3 a = normalize(chars[o.target].physics.pos - o.pos);
       a.x *= o.def.speed * dt;
       a.y *= o.def.speed * dt;
       a.z *= o.def.speed * dt;
@@ -522,7 +525,7 @@ void Warg_State::update()
         1.f + cos(current_time * 1.12),
         1.f + sin(current_time * .9));
       light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+      light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
       light->ambient = 0.0f;
       light->cone_angle = 0.012f;
       light->type = Light_Type::spot;
@@ -535,7 +538,7 @@ void Warg_State::update()
       light->shadow_far_plane = 50.f;
       light->shadow_fov = radians(40.f);
     }
-    light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+    light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
 
     ImGui::Begin("lighting adjustment");
     ImGui::DragFloat("Main light shadow fov", &light->shadow_fov, 0.005f);
@@ -551,7 +554,7 @@ void Warg_State::update()
 
 
     light = &scene.lights.lights[1];
-    light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+    light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
     light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
       1.f + cos(current_time * 1.12),
       1.f + sin(current_time * .9));
@@ -576,14 +579,15 @@ void Player_Control_Message::handle(Warg_State &state)
 
 void Player_Geometry_Message::handle(Warg_State &state)
 {
-  for (size_t i = 0; i < character_ids.size(); i++)
+  for (size_t i = 0; i < id.size(); i++)
   {
-    if (state.chars.count(character_ids[i]))
+    if (state.chars.count(id[i]))
     {
-      auto &character = state.chars[character_ids[i]];
-      character.pos = character_pos[i];
-      character.dir = character_dir[i];
-      character.vel = character_vel[i];
+      auto &character = state.chars[id[i]];
+      character.physics.pos = pos[i];
+      character.physics.dir = dir[i];
+      character.physics.vel = vel[i];
+      character.physics.grounded = grounded[i];
     }
   }
 }
@@ -739,8 +743,8 @@ void Warg_State::add_char(UID id, int team, const char *name)
   c.id = id;
   c.team = team;
   c.name = std::string(name);
-  c.pos = pos;
-  c.dir = dir;
+  c.physics.pos = pos;
+  c.physics.dir = dir;
   c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
   c.hp_max = 100;
   c.hp = c.hp_max;

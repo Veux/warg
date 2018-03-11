@@ -89,6 +89,7 @@ void Player_Movement_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerMovement);
   serialize_(b, tick);
+  serialize_(b, i);
   serialize_(b, (uint8_t)move_status);
   serialize_(b, dir);
 }
@@ -157,18 +158,22 @@ void Player_Geometry_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerGeometry);
   serialize_(b, tick);
-  uint8_t num_chars = character_ids.size();
-  ASSERT(character_pos.size() == num_chars);
-  ASSERT(character_vel.size() == num_chars);
+  uint8_t num_chars = id.size();
+  ASSERT(pos.size() == num_chars);
+  ASSERT(vel.size() == num_chars);
   serialize_(b, num_chars);
-  for (UID &uid : character_ids)
-    serialize_(b, uid);
-  for (vec3 &pos : character_pos)
-    serialize_(b, pos);
-  for (vec3 &dir : character_dir)
-    serialize_(b, dir);
-  for (vec3 &vel : character_vel)
-    serialize_(b, vel);
+  for (UID &id_ : id)
+    serialize_(b, id_);
+  for (vec3 &pos_ : pos)
+    serialize_(b, pos_);
+  for (vec3 &dir_ : dir)
+    serialize_(b, dir_);
+  for (vec3 &vel_ : vel)
+    serialize_(b, vel_);
+  for (uint8_t &grounded_ : grounded)
+    serialize_(b, grounded_);
+  for (uint32_t &command_n_ : command_n)
+    serialize_(b, command_n_);
 }
 
 void Ping_Message::serialize(Buffer &b)
@@ -259,6 +264,7 @@ Player_Control_Message::Player_Control_Message(Buffer &b)
 
 Player_Movement_Message::Player_Movement_Message(Buffer &b)
 {
+  i = deserialize_uint32(b);
   move_status = (Move_Status)deserialize_uint8(b);
   dir = deserialize_vec3(b);
 }
@@ -267,13 +273,17 @@ Player_Geometry_Message::Player_Geometry_Message(Buffer &b)
 {
   uint8_t num_chars = deserialize_uint8(b);
   for (size_t i = 0; i < num_chars; i++)
-    character_ids.push_back(deserialize_uid(b));
+    id.push_back(deserialize_uid(b));
   for (size_t i = 0; i < num_chars; i++)
-    character_pos.push_back(deserialize_vec3(b));
+    pos.push_back(deserialize_vec3(b));
   for (size_t i = 0; i < num_chars; i++)
-    character_dir.push_back(deserialize_vec3(b));
+    dir.push_back(deserialize_vec3(b));
   for (size_t i = 0; i < num_chars; i++)
-    character_vel.push_back(deserialize_vec3(b));
+    vel.push_back(deserialize_vec3(b));
+  for (size_t i = 0; i < num_chars; i++)
+    grounded.push_back(deserialize_uint8(b));
+  for (size_t i = 0; i < num_chars; i++)
+    command_n.push_back(deserialize_uint32(b));
 }
 
 Cast_Message::Cast_Message(Buffer &b)
@@ -414,10 +424,11 @@ Player_Control_Message::Player_Control_Message(uint32_t tick_, UID character_)
 }
 
 Player_Movement_Message::Player_Movement_Message
-  (uint32_t tick_, Move_Status move_status_, vec3 dir_)
+  (uint32_t tick_, uint32_t i_, Move_Status move_status_, vec3 dir_)
 {
   tick = tick_;
   reliable = false;
+  i = i_;
   move_status = move_status_;
   dir = dir_;
 }
@@ -488,10 +499,12 @@ Player_Geometry_Message::Player_Geometry_Message(uint32_t tick_, std::map<UID, C
     UID uid = c.first;
     Character &character = c.second;
 
-    character_ids.push_back(uid);
-    character_pos.push_back(character.pos);
-    character_dir.push_back(character.dir);
-    character_vel.push_back(character.vel);
+    id.push_back(uid);
+    pos.push_back(character.physics.pos);
+    dir.push_back(character.physics.dir);
+    vel.push_back(character.physics.vel);
+    grounded.push_back(character.physics.grounded);
+    command_n.push_back(character.last_movement_command.i);
   }
 }
 

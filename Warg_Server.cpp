@@ -140,7 +140,7 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
   ASSERT(so->target && chars.count(so->target));
   Character *target = &chars[so->target];
 
-  float d = length(target->pos - so->pos);
+  float d = length(target->physics.pos - so->pos);
 
   if (d < 0.3)
   {
@@ -156,7 +156,7 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
     return true;
   }
 
-  vec3 a = normalize(target->pos - so->pos);
+  vec3 a = normalize(target->physics.pos - so->pos);
   a.x *= so->def.speed * dt;
   a.y *= so->def.speed * dt;
   a.z *= so->def.speed * dt;
@@ -181,8 +181,11 @@ void Player_Movement_Message::handle(Warg_Server &server)
   ASSERT(server.chars.count(peer_.character));
   auto &character = server.chars[peer_.character];
 
-  character.move_status = move_status;
-  character.dir = dir;
+  Movement_Command command;
+  command.i = i;
+  command.dir = dir;
+  command.m = move_status;
+  character.last_movement_command = command;
 }
 
 void Cast_Message::handle(Warg_Server &server)
@@ -310,7 +313,7 @@ CastErrorType Warg_Server::cast_viable(UID caster_, UID target_, Spell *spell)
     return CastErrorType::NotEnoughMana;
   if (!target && spell->def->targets != SpellTargets::Terrain)
     return CastErrorType::InvalidTarget;
-  if (target && length(caster->pos - target->pos) > spell->def->range &&
+  if (target && length(caster->physics.pos - target->physics.pos) > spell->def->range &&
       spell->def->targets != SpellTargets::Terrain)
     return CastErrorType::OutOfRange;
   if (caster->casting)
@@ -340,7 +343,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
     SpellEffectInst i;
     i.def = *e;
     i.caster = caster_;
-    i.pos = caster->pos;
+    i.pos = caster->physics.pos;
     i.target = target_;
 
     invoke_spell_effect(i);
@@ -390,7 +393,7 @@ void Warg_Server::invoke_spell_effect_aoe(SpellEffectInst &effect)
   {
     Character *c = &chars[ch];
 
-    bool in_range = length(c->pos - effect.pos) <= effect.def.aoe.radius;
+    bool in_range = length(c->physics.pos - effect.pos) <= effect.def.aoe.radius;
     bool at_ally = effect.def.aoe.targets == SpellTargets::Ally &&
                    c->team == chars[effect.caster].team;
     bool at_hostile = effect.def.aoe.targets == SpellTargets::Hostile &&
@@ -577,8 +580,8 @@ UID Warg_Server::add_char(int team, const char *name)
   c.id = id;
   c.team = team;
   c.name = std::string(name);
-  c.pos = map.spawn_pos[team];
-  c.dir = map.spawn_dir[team];
+  c.physics.pos = map.spawn_pos[team];
+  c.physics.dir = map.spawn_dir[team];
   c.hp_max = 100;
   c.hp = c.hp_max;
   c.mana_max = 500;

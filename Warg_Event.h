@@ -111,12 +111,14 @@ enum Move_Status
 
 struct Player_Movement_Message : Message
 {
-  Player_Movement_Message(uint32_t tick, Move_Status move_status, vec3 dir);
+  Player_Movement_Message(uint32_t tick, uint32_t i_,
+    Move_Status move_status, vec3 dir);
   Player_Movement_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
   virtual void serialize(Buffer &b);
 
+  uint32_t i;
   Move_Status move_status;
   vec3 dir;
 };
@@ -217,10 +219,12 @@ struct Player_Geometry_Message : Message
   virtual void handle(Warg_State &state);
   virtual void serialize(Buffer &b);
 
-  std::vector<UID> character_ids;
-  std::vector<vec3> character_pos;
-  std::vector<vec3> character_dir;
-  std::vector<vec3> character_vel;
+  std::vector<UID> id;
+  std::vector<vec3> pos;
+  std::vector<vec3> dir;
+  std::vector<vec3> vel;
+  std::vector<uint8_t> grounded;
+  std::vector<uint32> command_n;
 };
 
 struct Ping_Message : Message
