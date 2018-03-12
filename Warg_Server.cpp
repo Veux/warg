@@ -87,12 +87,10 @@ void Warg_Server::update(float32 dt)
     auto &cid = c.first;
     auto &ch = c.second;
 
-    ImGui::Begin("pos control");
-    if (ImGui::Button("reset pos"))
-      ch.physics.pos = map.spawn_pos[0];
-    ImGui::End();
-
     ch.move(dt, collider_cache);
+    if (_isnan(ch.physics.pos.x) || _isnan(ch.physics.pos.y)
+      || _isnan(ch.physics.pos.z))
+      ch.physics.pos = map.spawn_pos[ch.team];
     update_buffs(cid, dt);
     ch.apply_modifiers();
     update_cast(cid, dt);
