@@ -1,4 +1,5 @@
 #include "Warg_Server.h"
+#include "Third_party/imgui/imgui.h"
 #include <cstring>
 #include <memory>
 
@@ -85,6 +86,11 @@ void Warg_Server::update(float32 dt)
   {
     auto &cid = c.first;
     auto &ch = c.second;
+
+    ImGui::Begin("pos control");
+    if (ImGui::Button("reset pos"))
+      ch.physics.pos = map.spawn_pos[0];
+    ImGui::End();
 
     ch.move(dt, collider_cache);
     update_buffs(cid, dt);
