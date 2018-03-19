@@ -545,12 +545,21 @@ void set_import_materials(Node_Ptr ptr, json json_for_ptr)
   const uint32 import_children_size = ptr->owned_children.size();
   const uint32 jchildren_size = jchildren.size();
 
+
+
   // we need the full json for the child that matches this already-constructed
   // child in order to recurse
   for (uint32 i = 0; i < import_children_size; ++i)
   {
-    if (i >= jchildren_size) // out of range
+    if (i >= jchildren_size)
+    {
+      //problem: if the user added something to this node's owned-children
+      //before the final import child, the order will be ruined, and the
+      //remaining nodes will never have their materials restored
+      //unless you implement heuristics or save the vertex data raw
       break;
+    }
+     
 
     Node_Ptr child = ptr->owned_children[i];
     json jchild = jchildren[i];
@@ -570,11 +579,12 @@ void set_import_materials(Node_Ptr ptr, json json_for_ptr)
   // todo: keep track of if the entire asset was imported with an actual
   // material-override pointer  and always respawn it with that override, when
   // reconstructing the node_ptr in build_node_graph_from_json
+  // this ensures that even if theres an asset file modification
+  // the override materials are still applied
 }
 
 Node_Ptr build_node_graph_from_json(const json &j, Scene_Graph &scene)
 {
-
   Node_Ptr ptr;
   std::string name;
   try
