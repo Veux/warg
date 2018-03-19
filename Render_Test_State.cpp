@@ -351,7 +351,7 @@ void Render_Test_State::update()
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
   cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
   const float32 anglestar = wrap_to_range(
-      pi<float32>() * sin(current_time / 2), 0, 2 * pi<float32>());
+      pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
   // cube_star->visible = sin(current_time * 1.2) > -.25;
   cube_star->propagate_visibility = true;
   cube_star->orientation = angleAxis(anglestar,
@@ -365,7 +365,7 @@ void Render_Test_State::update()
   cube_planet->position =
       planet_distance *
       vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
-  const float32 angle = wrap_to_range(current_time, 0, 2 * pi<float32>());
+  const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
   cube_planet->orientation =
       angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
   cube_planet->visible = sin(current_time * 6) > 0;
@@ -391,7 +391,7 @@ void Render_Test_State::update()
   const vec4 sun_low = vec4(235.f / 255.f, 28.f / 255., 0.f / 255.f, 0.f);
   const float time_day_scale = 0.12f;
   float32 time_of_day =
-      wrap_to_range((time_day_scale * current_time) + 135.f, 0.0f, 24.0f);
+      wrap_to_range((time_day_scale * (float32)current_time) + 135.f, 0.0f, 24.0f);
   // time_of_day = 12.f;
   float32 day_range = clamp(time_of_day, 5.85f, 18.85f); // 5:30am to 7:30pm
   float32 day_t = (day_range - 5.85f) / 12.7f;           // 0-1 daytime
@@ -468,8 +468,8 @@ void Render_Test_State::update()
   lights[0].type = Light_Type::spot;
   lights[0].direction = vec3(0);
   lights[0].ambient =
-      0.003 *
-      clamp(sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
+      0.003f *
+      clamp((float32)sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
 
   lights[1].position =
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);

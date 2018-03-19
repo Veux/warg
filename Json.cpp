@@ -454,12 +454,12 @@ void to_json(json &result, const std::shared_ptr<Scene_Graph_Node> &node_ptr)
 
 void to_json(json &result, const Scene_Graph_Node &node)
 {
-  json j;/* 
-   if (!node.include_in_save)
-   {
-     result = j;
-     return;
-   }*/
+  json j; /*
+    if (!node.include_in_save)
+    {
+      result = j;
+      return;
+    }*/
 
   j["Name"] = node.name;
   j["Position"] = node.position;
@@ -549,7 +549,7 @@ void set_import_materials(Node_Ptr ptr, json json_for_ptr)
   // child in order to recurse
   for (uint32 i = 0; i < import_children_size; ++i)
   {
-    if (i >= jchildren_size) //out of range
+    if (i >= jchildren_size) // out of range
       break;
 
     Node_Ptr child = ptr->owned_children[i];
@@ -584,6 +584,8 @@ Node_Ptr build_node_graph_from_json(const json &j, Scene_Graph &scene)
   }
   catch (std::exception &e)
   {
+    set_message(s(
+        "No \"Name\" found for json node:", j.dump(), "Exception:", e.what()));
     return nullptr;
   }
 
@@ -636,7 +638,7 @@ Node_Ptr build_node_graph_from_json(const json &j, Scene_Graph &scene)
       {
         std::string name = jmesh.at("Name");
         set_message(s("JSON unable to restore mesh/material pair. Name:", name,
-            " UID:", unique_id));
+            " UID:", unique_id, "Exception:", e.what()));
       }
 
       if (primitive != null)
@@ -681,9 +683,12 @@ void from_json(const json &k, Scene_Graph &scene)
   catch (std::exception &e)
   {
     std::string dump = k.dump();
+    std::string pretty;
+    size_t pos = 0;
+    pretty_json(pretty, dump, pos);
     set_message(s("Warning: JSON for Scene_Graph::root load failed.",
                     "Exception: ", e.what(), " JSON:\n"),
-        dump, 15.0f);
+        pretty, 15.0f);
     scene = Scene_Graph();
   }
   try
@@ -693,8 +698,11 @@ void from_json(const json &k, Scene_Graph &scene)
   catch (std::exception &e)
   {
     std::string dump = k.dump();
+    std::string pretty;
+    size_t pos = 0;
+    pretty_json(pretty, dump, pos);
     set_message(s("Warning: JSON for Scene_Graph::lights load failed.",
                     "Exception: ", e.what(), " JSON:\n"),
-        dump, 15.0f);
+        pretty, 15.0f);
   }
 }

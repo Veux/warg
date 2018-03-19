@@ -1432,12 +1432,12 @@ void imgui_light_array(Light_Array &lights)
         }
       }
     }
-    ImGui::Unindent(5);
+    ImGui::Unindent(5.f);
     ImGui::PopItemWidth();
     ImGui::PopID();
   }
   ImGui::EndChild();
-  ImGui::SetWindowSize(ImVec2(width, height));
+  ImGui::SetWindowSize(ImVec2((float32)width, (float32)height));
   ImGui::End();
 }
 

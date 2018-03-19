@@ -218,11 +218,11 @@ struct Light
 {
   vec3 position = vec3(0, 0, 0);
   vec3 direction = vec3(0, 0, 0);
-  float brightness = 1.0f;
+  float32 brightness = 1.0f;
   vec3 color = vec3(1, 1, 1);
   vec3 attenuation = vec3(1, 0.22, 0.2);
-  float ambient = 0.0004f;
-  float cone_angle = .15f;
+  float32 ambient = 0.0004f;
+  float32 cone_angle = .15f;
   Light_Type type;
   bool operator==(const Light &rhs) const;
   bool casts_shadows = false;
@@ -231,16 +231,16 @@ struct Light
   // near plane as far away, and far plane as close as possible is critical
   // after that, increase the max_variance up from 0, slowly, right until noise
   // disappears
-  int shadow_blur_iterations =
+  int32 shadow_blur_iterations =
       2; // higher is higher quality, but lower performance
-  float shadow_blur_radius = .5f; // preference
-  float shadow_near_plane =
+  float32 shadow_blur_radius = .5f; // preference
+  float32 shadow_near_plane =
       0.1f; // this should be as far as possible without clipping into geometry
-  float shadow_far_plane =
+  float32 shadow_far_plane =
       100.f; // this should be as near as possible without clipping geometry
-  float max_variance = 0.000001f; // this value should be as low as possible
+  float32 max_variance = 0.000001f; // this value should be as low as possible
                                   // without causing float precision noise
-  float shadow_fov = glm::radians(90.f); // this should be as low as possible
+  float32 shadow_fov = glm::radians(90.f); // this should be as low as possible
                                          // without causing artifacts around the
                                          // edge of the light field of view
 private:
