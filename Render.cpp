@@ -37,8 +37,8 @@ using namespace gl33core;
 #define POSITION_TARGET GL_COLOR_ATTACHMENT3
 
 GLuint *FINAL_OUTPUT_TEXTURE = nullptr;
+std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 
-static std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
     TEXTURE_CACHE;
 
@@ -57,9 +57,11 @@ void Framebuffer::init()
 
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
+    ASSERT(color_attachments[i].t.name !=
+           ""); // texture must be named, or .load assumes null
     color_attachments[i].load();
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
-        color_attachments[i].texture->texture, 0);
+        color_attachments[i].get_handle(), 0);
     glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
   }
   check_FBO_status();
@@ -95,12 +97,14 @@ void Gaussian_Blur::init(ivec2 size, GLenum format)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
 
   if (!initialized)
-    intermediate_fbo.color_attachments.emplace_back(Texture(size, format));
+    intermediate_fbo.color_attachments.emplace_back(Texture(
+        s("Gaussian Blur intermediate. this==:", (uint32)this), size, format));
 
   intermediate_fbo.init();
 
   if (!initialized)
-    target.color_attachments.emplace_back(Texture(size, format));
+    target.color_attachments.emplace_back(Texture(
+        s("Gaussian Blur target. this==:", (uint32)this), size, format));
 
   target.init();
 
@@ -117,11 +121,11 @@ void Gaussian_Blur::draw(
   ASSERT(intermediate_fbo.fbo);
   ASSERT(intermediate_fbo.color_attachments.size() == 1);
   ASSERT(src);
-  ASSERT(src->texture);
+  ASSERT(src->get_handle());
   ASSERT(target.fbo);
   ASSERT(target.color_attachments.size() > 0);
 
-  ivec2 *dst_size = &intermediate_fbo.color_attachments[0].size;
+  ivec2 *dst_size = &intermediate_fbo.color_attachments[0].t.size;
 
   if (iterations == 0)
   {
@@ -140,8 +144,7 @@ void Gaussian_Blur::draw(
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform(
       "transform", Render::ortho_projection(*dst_size));
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, src->texture->texture);
+  src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
@@ -151,8 +154,8 @@ void Gaussian_Blur::draw(
   gaus_scale.x = 0;
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
-  glBindTexture(
-      GL_TEXTURE_2D, intermediate_fbo.color_attachments[0].texture->texture);
+
+  intermediate_fbo.color_attachments[0].bind(0);
 
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
       GL_UNSIGNED_INT, (void *)0);
@@ -164,16 +167,14 @@ void Gaussian_Blur::draw(
     glBindFramebuffer(GL_FRAMEBUFFER, intermediate_fbo.fbo->fbo);
     vec2 gaus_scale = vec2(aspect_ratio_factor * radius / dst_size->x, 0.0);
     gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
-    glBindTexture(GL_TEXTURE_2D, target.color_attachments[0].texture->texture);
+    target.color_attachments[0].bind(0);
     glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
         GL_UNSIGNED_INT, (void *)0);
-
     gaus_scale.y = radius / dst_size->x;
     gaus_scale.x = 0;
     gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
     glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
-    glBindTexture(
-        GL_TEXTURE_2D, intermediate_fbo.color_attachments[0].texture->texture);
+    intermediate_fbo.color_attachments[0].bind(0);
     glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
         GL_UNSIGNED_INT, (void *)0);
   }
@@ -187,7 +188,8 @@ High_Pass_Filter::High_Pass_Filter() {}
 
 void High_Pass_Filter::init(ivec2 size, GLenum format)
 {
-  target.color_attachments.emplace_back(Texture(size, format));
+  target.color_attachments.emplace_back(Texture(
+      s("High Pass Filter target. this==:", (uint32)this), size, format));
   target.init();
   high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
   initialized = true;
@@ -199,11 +201,11 @@ void High_Pass_Filter::draw(Render *renderer, Texture *src)
     ASSERT(0);
   ASSERT(renderer);
   ASSERT(src);
-  ASSERT(src->texture);
+  ASSERT(src->get_handle());
   ASSERT(target.fbo);
   ASSERT(target.color_attachments.size() > 0);
 
-  ivec2 *dst_size = &target.color_attachments[0].size;
+  ivec2 *dst_size = &target.color_attachments[0].t.size;
 
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
   glViewport(0, 0, dst_size->x, dst_size->y);
@@ -213,8 +215,7 @@ void High_Pass_Filter::draw(Render *renderer, Texture *src)
   high_pass_shader.use();
   high_pass_shader.set_uniform(
       "transform", Render::ortho_projection(*dst_size));
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, src->texture->texture);
+  src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(),
@@ -230,7 +231,8 @@ void Bloom_Shader::init(ivec2 size, GLenum format)
 {
   high_pass.init(size, format);
   blur.init(size, format);
-  target.color_attachments.emplace_back(Texture(size, format));
+  target.color_attachments.emplace_back(
+      Texture(s("Bloom Shader target:", (uint32)this), size, format));
   target.init();
   initialized = true;
 }
@@ -253,11 +255,9 @@ void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
 
   glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
 
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(
-      GL_TEXTURE_2D, blur.target.color_attachments[0].texture->texture);
+  blur.target.color_attachments[0].bind(0);
 
-  ivec2 viewport_size = dst->color_attachments[0].size;
+  ivec2 viewport_size = dst->color_attachments[0].t.size;
   glViewport(0, 0, viewport_size.x, viewport_size.y);
   glDisable(GL_DEPTH_TEST);
   glBindVertexArray(renderer->quad.get_vao());
@@ -401,12 +401,24 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
-Texture::Texture(glm::ivec2 size, GLenum format, GLenum filtering, GLenum wrap)
+Texture::Texture(Texture_Descriptor &td)
 {
-  this->size = size;
-  this->format = format;
-  this->filtering = filtering;
-  this->wrap = wrap;
+  t = td;
+  load();
+}
+
+Texture::Texture(std::string name, glm::ivec2 size, GLenum format,
+    GLenum minification_filter, GLenum magnification_filter, GLenum wrap_s,
+    GLenum wrap_t)
+{
+  this->t.name = name;
+  this->t.size = size;
+  this->t.format = format;
+  this->t.minification_filter = minification_filter;
+  this->t.magnification_filter = magnification_filter;
+  this->t.wrap_t = wrap_t;
+  this->t.wrap_s = wrap_s;
+  this->t.cache_as_unique = true;
   load();
 }
 Texture_Handle::~Texture_Handle()
@@ -417,117 +429,145 @@ Texture_Handle::~Texture_Handle()
 }
 Texture::Texture(std::string path, bool premul)
 {
-  process_premultiply = premul;
-  path = fix_filename(path);
-
-  if (path.substr(0, 6) == "color(")
-  { // custom color
-    file_path = path;
-    load();
-    return;
-  }
-
-  if (path.find_last_of("/") == path.npos)
-  { // no specified directory, so use base path
-    file_path = BASE_TEXTURE_PATH + path;
-    load();
-    return;
-  }
-  else
-  { // assimp imported model or user specified a directory
-    file_path = path;
-    load();
-    return;
-  }
+  t.name = path; // note this will possibly be modified within .load()
+  t.cache_as_unique = false;
+  t.process_premultiply = premul;
 }
 
 void Texture::load()
 {
-  if (file_path == "TEXTURE_MISSING")
-  {
-    texture = nullptr;
+  if (initialized && !texture)
+  { // file doesnt exist
     return;
   }
 
-  if (file_path == "")
+  if (t.name == "")
+    return;
+
+  const bool is_a_color = t.name.substr(0, 6) == "color(";
+
+  if (is_a_color)
   {
-    bool skip_init = (texture) && (texture->size == size) &&
-                     (texture->format == format) && (texture->wrap == wrap);
-    if (skip_init)
+    t.cache_as_unique = false;
+  }
+
+  if (!initialized && !is_a_color)
+    t.cache_as_unique = !has_img_file_extension(t.name);
+
+  if (t.cache_as_unique)
+  {
+    // probably doesnt need the wrap checks here
+    bool requires_reallocation =
+        !((texture) && (texture->size == t.size) &&
+            (texture->format == t.format) && (texture->wrap_t == t.wrap_t) &&
+            (texture->wrap_s == t.wrap_s));
+    if (!requires_reallocation)
       return;
 
     if (!texture)
     {
       static uint32 i = 0;
       ++i;
-      std::string unique_key = s("Generated texture:", i);
+      std::string unique_key = t.name = s("Generated texture: ", i);
       TEXTURE_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
       glGenTextures(1, &texture->texture);
+      texture.get()->filename = t.name;
     }
+
     glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, format, size.x, size.y, 0, GL_RGBA, GL_FLOAT, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filtering);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filtering);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA,
+        GL_FLOAT, 0);
+    glTexParameterf(
+        GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
+
+    texture->filename = t.name;
+    texture->size = t.size;
+    texture->format = t.format;
+    initialized = true;
     return;
   }
-  if (file_path == BASE_TEXTURE_PATH)
+
+  if (!initialized && !is_a_color)
   {
-    set_message(s("Warning: Invalid texture path:", file_path));
+    t.name = fix_filename(t.name);
+
+    if (t.name.find_last_of("/") == t.name.npos)
+    { // no directory included in name, so use base path
+      t.name = BASE_TEXTURE_PATH + t.name; // also color( hits this
+    }
+    // else: use t.name as the full directory
+  }
+
+  if (t.name == BASE_TEXTURE_PATH)
+  {
+    set_message(s("Warning: Invalid texture path:", t.name));
     texture = nullptr;
     return;
   }
-  auto ptr = TEXTURE_CACHE[file_path].lock();
+  auto ptr = TEXTURE_CACHE[t.name].lock();
   if (ptr)
   {
     texture = ptr;
+
+    t.size = texture->size;
+    t.format = texture->format;
+    initialized = true;
     return;
   }
+
   texture = std::make_shared<Texture_Handle>();
-  TEXTURE_CACHE[file_path] = texture;
+  TEXTURE_CACHE[t.name] = texture;
   int32 width, height, n;
-  if (file_path.substr(0, 6) == "color(")
+
+  // todo: other software procedural texture generators here?
+  if (t.name.substr(0, 6) == "color(")
   {
-    width = height = 1;
-    vec4 color = string_to_float4_color(file_path);
+    t.size = ivec2(1, 1);
+    t.format = GL_RGBA32F; // could detect and support other formats in here
+    t.magnification_filter = GL_NEAREST;
+    t.minification_filter = GL_NEAREST;
+
+    vec4 color = string_to_float4_color(t.name);
     glGenTextures(1, &texture->texture);
     glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA, GL_FLOAT, &color);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA,
+        GL_FLOAT, &color);
+
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    texture->size = t.size;
+    texture->filename = t.name;
+    texture->format = t.format;
+    initialized = true;
     return;
   }
-  auto *data = stbi_load(file_path.c_str(), &width, &height, &n, 4);
+
+  auto *data = stbi_load(t.name.c_str(), &width, &height, &n, 4);
   if (!data)
   { // error loading file...
 #if DYNAMIC_TEXTURE_RELOADING
     // retry next frame
-    set_message("Warning: missing texture:" + file_path);
+    set_message("Warning: missing texture:" + t.name);
     texture = nullptr;
     return;
 #else
     if (!data)
     {
-      set_message("STBI failed to find or load texture: " + file_path);
+      set_message("STBI failed to find or load texture: " + t.filename, 3.0);
       file_path = "TEXTURE_MISSING";
       texture = nullptr;
+      initialized = true;
       return;
     }
 #endif
   }
 
-  set_message("Texture load cache miss. Texture from disk: ", file_path, 1.0);
+  set_message("Texture load cache miss. Texture from disk: ", t.name, 1.0);
   struct stat attr;
-  stat(file_path.c_str(), &attr);
+  stat(t.name.c_str(), &attr);
   texture.get()->file_mod_t = attr.st_mtime;
 
-  if (process_premultiply)
+  if (t.process_premultiply)
   {
     for (int32 i = 0; i < width * height; ++i)
     {
@@ -544,39 +584,121 @@ void Texture::load()
       data[i] = (24 << a) | (16 << b) | (8 << g) | r;
     }
   }
+
+  t.format = GL_RGBA;
+  t.size = ivec2(width, height);
   glGenTextures(1, &texture->texture);
   glBindTexture(GL_TEXTURE_2D, texture->texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA,
+  glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA,
       GL_UNSIGNED_BYTE, data);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(
-      GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, 8);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_S);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_TEXTURE_WRAP_T);
+  glTexParameterf(
+      GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
+
   glGenerateMipmap(GL_TEXTURE_2D);
   stbi_image_free(data);
   glBindTexture(GL_TEXTURE_2D, 0);
+  texture->filename = t.name;
+  texture->size = t.size;
+  texture->format = t.format;
+  t.magnification_filter = GL_LINEAR;
+  t.minification_filter = GL_LINEAR;
+  initialized = true;
 }
 
 void Texture::bind(GLuint binding)
 {
+  set_message(s("Texture::bind(", binding, ")"));
 #if DYNAMIC_TEXTURE_RELOADING
-  if (file_path != "")
+  load();
+#endif
+
+  if (!initialized)
   {
     load();
   }
-#endif
-  // set_message(s("binding texture: ",this->file_path," handle:", texture ?
-  // texture->texture : 0," to unit:", binding));
+  if (!texture)
+  {
+    set_message("Null texture for binding:", s(binding));
+    glActiveTexture(GL_TEXTURE0 + binding);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return;
+  }
+
+  // descriptor desync - the handle should have been dropped and reloaded:
+  ASSERT(t.name == texture->filename);
+  ASSERT(t.format == texture->format);
+  ASSERT(t.size == texture->size);
+
+  // set_message(s("Binding texture name:",texture->filename," with handle:",
+  // texture->texture, " to binding:", s(binding)));
   glActiveTexture(GL_TEXTURE0 + binding);
-  glBindTexture(GL_TEXTURE_2D, texture ? texture->texture : 0);
+  glBindTexture(GL_TEXTURE_2D, texture->texture);
+
+  // check/set desired state:
+  ASSERT(t.magnification_filter != GLenum(0));
+  ASSERT(t.minification_filter != GLenum(0));
+  ASSERT(t.wrap_t != GLenum(0));
+  ASSERT(t.wrap_s != GLenum(0));
+
+  // todo: texture mod is not right by default
+
+  if (t.magnification_filter != texture->magnification_filter)
+  {
+    texture->magnification_filter = t.magnification_filter;
+    glTexParameteri(
+        GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, t.magnification_filter);
+  }
+  if (t.minification_filter != texture->minification_filter)
+  {
+    texture->minification_filter = t.minification_filter;
+    glTexParameteri(
+        GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, t.minification_filter);
+  }
+  if (t.wrap_t != texture->wrap_t)
+  {
+    texture->wrap_t = t.wrap_t;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, t.wrap_t);
+  }
+  if (t.wrap_s != texture->wrap_s)
+  {
+    texture->wrap_s = t.wrap_s;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, t.wrap_s);
+  }
+}
+
+// not guaranteed to be constant for every call -
+// handle lifetime only guaranteed for as long as the Texture object
+// is held, and if dynamic texture reloading has not been triggered
+// by a file modification - if it is, it will gracefully display
+// black, or a random other texture
+
+inline GLuint Texture::get_handle()
+{
+  if (!initialized)
+    load();
+
+  return texture ? texture->texture : 0;
+}
+
+bool Texture::has_img_file_extension(std::string name)
+{
+  uint32 size = name.size();
+
+  if (size < 3)
+    return false;
+
+  std::string end = name.substr(size - 4, 4);
+  if (end == ".jpg" || end == ".png")
+  {
+    return true;
+  }
+  return false;
 }
 
 Mesh::Mesh() {}
 Mesh::Mesh(Mesh_Primitive p, std::string mesh_name) : name(mesh_name)
 {
-  unique_identifier = identifier_for_primitive(p);
+  unique_identifier = to_string(p);
   auto ptr = MESH_CACHE[unique_identifier].lock();
   if (ptr)
   {
@@ -593,6 +715,8 @@ Mesh::Mesh(Mesh_Data data, std::string mesh_name) : name(mesh_name)
   unique_identifier = data.unique_identifier;
   if (unique_identifier == "NULL")
   { // lets not cache custom meshes thx
+    // todo: Mesh JSON: but we could hash it for a uid and cache it
+    // to support json restore
     mesh = upload_data(data);
     mesh->enable_assign_attributes();
     return;
@@ -749,8 +873,7 @@ std::shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 Material::Material() {}
 Material::Material(Material_Descriptor &m)
 {
-  if (m.normal == "")
-    m.normal = "color(0.5,0.5,1.0)";
+  ASSERT(m.normal.name != "");
   load(m);
 }
 Material::Material(aiMaterial *ai_material, std::string working_directory,
@@ -792,33 +915,33 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
   name.Clear();
 
   if (albedo_n)
-    m.albedo = working_directory + m.albedo;
+    m.albedo.name = working_directory + m.albedo.name;
   if (specular_n)
-    m.specular = working_directory + m.specular;
+    m.specular.name = working_directory + m.specular.name;
   if (emissive_n)
-    m.emissive = working_directory + m.emissive;
+    m.emissive.name = working_directory + m.emissive.name;
   if (normal_n)
-    m.normal = working_directory + m.normal;
+    m.normal.name = working_directory + m.normal.name;
   if (roughness_n)
-    m.roughness = working_directory + m.roughness;
+    m.roughness.name = working_directory + m.roughness.name;
 
   if (material_override)
   {
-    if (material_override->albedo != "")
+    if (material_override->albedo.name != "")
       m.albedo = material_override->albedo;
-    if (material_override->roughness != "")
+    if (material_override->roughness.name != "")
       m.roughness = material_override->roughness;
-    if (material_override->specular != "")
+    if (material_override->specular.name != "")
       m.specular = material_override->specular;
-    if (material_override->metalness != "")
+    if (material_override->metalness.name != "")
       m.metalness = material_override->metalness;
-    if (material_override->tangent != "")
+    if (material_override->tangent.name != "")
       m.tangent = material_override->tangent;
-    if (material_override->normal != "")
+    if (material_override->normal.name != "")
       m.normal = material_override->normal;
-    if (material_override->ambient_occlusion != "")
+    if (material_override->ambient_occlusion.name != "")
       m.ambient_occlusion = material_override->ambient_occlusion;
-    if (material_override->emissive != "")
+    if (material_override->emissive.name != "")
       m.emissive = material_override->emissive;
     m.vertex_shader = material_override->vertex_shader;
     m.frag_shader = material_override->frag_shader;
@@ -828,14 +951,14 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
     m.casts_shadows = material_override->casts_shadows;
   }
 
-  if (m.normal == "")
+  if (m.normal.name == "")
     m.normal = "color(0.5,0.5,1.0)";
   load(m);
 }
 void Material::load(Material_Descriptor &m)
 {
   this->m = m;
-  albedo = Texture(m.albedo, m.uses_transparency);
+  albedo = Texture(m.albedo);
   // specular_color = Texture(m.specular);
   normal = Texture(m.normal);
   emissive = Texture(m.emissive);
@@ -844,18 +967,26 @@ void Material::load(Material_Descriptor &m)
 }
 void Material::bind(Shader *shader)
 {
+  // set_message("Material::bind()");
   if (m.backface_culling)
     glEnable(GL_CULL_FACE);
   else
     glDisable(GL_CULL_FACE);
 
+  // set_message("Material::bind(): binding albedo:");
   albedo.bind(Texture_Location::albedo);
-  shader->set_uniform("texture0_mod", albedo_mod);
+  shader->set_uniform("texture0_mod", m.albedo.mod);
+
+  // set_message("Material::bind(): binding normal:");
   normal.bind(Texture_Location::normal);
+
+  // set_message("Material::bind(): binding emissive:");
   emissive.bind(Texture_Location::emissive);
-  shader->set_uniform("texture3_mod", emissive_mod);
+  shader->set_uniform("texture3_mod", m.emissive.mod);
+
+  // set_message("Material::bind(): binding roughness:");
   roughness.bind(Texture_Location::roughness);
-  shader->set_uniform("texture4_mod", roughness_mod);
+  shader->set_uniform("texture4_mod", m.roughness.mod);
 }
 void Material::unbind_textures()
 {
@@ -1029,14 +1160,14 @@ void Render::set_uniform_shadowmaps(Shader &shader)
       return;
 
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
+    /*
+        
+        if (!shadow_map->enabled)
+          continue;*/
 
-    if (!shadow_map->enabled)
-      continue;
-
-    glActiveTexture(GL_TEXTURE0 + (GLuint)Texture_Location::s0 + i);
-    glBindTexture(GL_TEXTURE_2D, spotlight_shadow_maps[i]
-                                     .blur.target.color_attachments[0]
-                                     .texture->texture);
+    if (shadow_map->enabled)
+      spotlight_shadow_maps[i].blur.target.color_attachments[0].bind(
+          Texture_Location::s0 + i);
 
     const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0,
         0.5, 0.0, 0.5, 0.5, 0.5, 1.0);
@@ -1088,8 +1219,21 @@ void Render::build_shadow_maps()
 
     const Light *light = &lights.lights[i];
     Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
+
+    if (!light->casts_shadows)
+    {
+      shadow_map->enabled = false; /*
+       glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->pre_blur.fbo->fbo);
+       glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);*/
+    }
+
     if (light->type != Light_Type::spot || !light->casts_shadows)
       continue;
+
+    // todo improve shadow maps:
+    // dont sample or clear disabled shadow maps every frame
+    //
 
     shadow_map->enabled = true;
     shadow_map->init(shadow_map_size);
@@ -1102,7 +1246,7 @@ void Render::build_shadow_maps()
     glDepthFunc(GL_LESS);
 
     glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->pre_blur.fbo->fbo);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const mat4 camera =
@@ -1156,10 +1300,9 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {
-    glActiveTexture(GL_TEXTURE0 + i);
-    glBindTexture(GL_TEXTURE_2D, (*src_textures)[i]->texture->texture);
+    (*src_textures)[i]->bind(i);
   }
-  ivec2 viewport_size = dst->color_attachments[0].size;
+  ivec2 viewport_size = dst->color_attachments[0].t.size;
   glViewport(0, 0, viewport_size.x, viewport_size.y);
 
   if (clear_dst)
@@ -1186,16 +1329,17 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
 
 void imgui_light_array(Light_Array &lights)
 {
+  static bool open = false;
   const uint32 initial_height = 50;
   const uint32 height_per_inactive_light = 25;
   const uint32 max_height = 600;
-  const uint32 width = 270;
+  uint32 width = 243;
 
   uint32 height =
       initial_height + height_per_inactive_light * lights.light_count;
 
-  ImGui::Begin("lighting adjustment", nullptr, ImGuiWindowFlags_NoResize);
-  ImGui::SetWindowSize(ImVec2(width, height));
+  ImGui::Begin("lighting adjustment", &open, ImGuiWindowFlags_NoResize);
+  ImGui::SetWindowSize(ImVec2((float)width, (float)height));
   if (ImGui::Button("Push Light"))
   {
     lights.light_count++;
@@ -1219,7 +1363,6 @@ void imgui_light_array(Light_Array &lights)
   {
     want_collapse = true;
   }
-  bool want_large_window = false;
   ImGui::BeginChild("ScrollingRegion");
   for (uint32 i = 0; i < lights.light_count; ++i)
   {
@@ -1234,7 +1377,8 @@ void imgui_light_array(Light_Array &lights)
       ImGui::PopID();
       continue;
     }
-    want_large_window = true;
+    width = 270;
+    height = max_height;
     Light *light = &lights.lights[i];
     ImGui::Indent(5);
     ImGui::LabelText("Option", "Setting %u", i);
@@ -1275,7 +1419,7 @@ void imgui_light_array(Light_Array &lights)
       {
         if (ImGui::TreeNode("Shadow settings"))
         {
-          ImGui::SetWindowSize(ImVec2(320, 600));
+          width = 320;
           ImGui::DragInt(
               "Blur Iterations", &light->shadow_blur_iterations, 1.0f, 0, 50);
           ImGui::DragFloat(
@@ -1293,13 +1437,13 @@ void imgui_light_array(Light_Array &lights)
     ImGui::PopID();
   }
   ImGui::EndChild();
-  if (want_large_window)
-    ImGui::SetWindowSize(ImVec2(width, max_height));
+  ImGui::SetWindowSize(ImVec2(width, height));
   ImGui::End();
 }
 
 void Render::opaque_pass(float32 time)
 {
+  // set_message("opaque_pass()");
   glViewport(0, 0, size.x, size.y);
   draw_target.bind();
 
@@ -1316,10 +1460,12 @@ void Render::opaque_pass(float32 time)
   {
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
+    // set_message(s("drawing entity with name:", entity.name));
     // set_message(s("binding vao:", vao));
     glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     shader.use();
+
     entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
@@ -1328,10 +1474,11 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", true);
-    shader.set_uniform("emissive_mod", entity.material->emissive_mod);
     set_uniform_lights(shader);
+    // set_message("SETTING SHADOW MAPS:");
     set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
+    // set_message(s("drawing elements..."));
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
         GL_UNSIGNED_INT, nullptr);
     entity.material->unbind_textures();
@@ -1485,13 +1632,18 @@ void Render::render(float64 state_time)
   if (show_renderer_window)
   {
     ImGui::Begin("renderer.cpp Window", &show_renderer_window);
-    ImGui::Text("Hello from renderer.cpp window!");
     if (ImGui::Button("Close Me"))
       show_renderer_window = false;
 
     for (auto &tex : TEXTURE_CACHE)
     {
-      ImGui::Image((ImTextureID)tex.second.lock()->texture, ImVec2(256, 256));
+      auto ptr = tex.second.lock();
+      if (ptr)
+      {
+        ImGui::Text(ptr->peek_filename().c_str());
+        ImGui::Text(s("Handle:", ptr->texture).c_str());
+        ImGui::Image((ImTextureID)ptr->texture, ImVec2(256, 256));
+      }
     }
 
     ImGui::End();
@@ -1513,11 +1665,11 @@ void Render::render(float64 state_time)
 
   if (FINAL_OUTPUT_TEXTURE)
   {
-    output_texture = FINAL_OUTPUT_TEXTURE;
+    output_texture = *FINAL_OUTPUT_TEXTURE;
   }
   else
   {
-    output_texture = &draw_target.color_attachments[0].texture->texture;
+    output_texture = draw_target.color_attachments[0].get_handle();
   }
 
   draw_calls_last_frame = render_entities.size();
@@ -1531,20 +1683,17 @@ void Render::render(float64 state_time)
     glViewport(0, 0, window_size.x, window_size.y);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     temporalaa.use();
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(
-        GL_TEXTURE_2D, draw_target.color_attachments[0].texture->texture);
+    draw_target.color_attachments[0].bind(0);
     glActiveTexture(GL_TEXTURE0 + 1);
     if (previous_color_target_missing)
     {
-      glBindTexture(
-          GL_TEXTURE_2D, previous_frame.color_attachments[0].texture->texture);
+      previous_frame.color_attachments[0].bind(1);
     }
     else
     {
-      glBindTexture(
-          GL_TEXTURE_2D, draw_target.color_attachments[0].texture->texture);
+      draw_target.color_attachments[0].bind(1);
     }
+
     temporalaa.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
@@ -1562,9 +1711,7 @@ void Render::render(float64 state_time)
     glViewport(0, 0, size.x, size.y);
     previous_frame.bind();
     gamma_correction.use();
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(
-        GL_TEXTURE_2D, draw_target.color_attachments[0].texture->texture);
+    draw_target.color_attachments[0].bind(0);
     gamma_correction.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
@@ -1572,7 +1719,7 @@ void Render::render(float64 state_time)
 
     previous_color_target_missing = false;
     glFramebufferTexture(
-        GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, *output_texture, 0);
+        GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, output_texture, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     txaa_jitter = get_next_TXAA_sample();
   }
@@ -1587,7 +1734,7 @@ void Render::render(float64 state_time)
 
     gamma_correction.use();
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, *output_texture);
+    glBindTexture(GL_TEXTURE_2D, output_texture);
 
     gamma_correction.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
@@ -1664,7 +1811,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
     bool is_transparent = entity->material->m.uses_transparency;
     if (is_transparent)
     {
-      ASSERT(entity->material->albedo.format == GL_RGBA);
+      ASSERT(entity->material->albedo.t.format == GL_RGBA);
       index_distances.push_back({i, dist});
     }
     else
@@ -1742,24 +1889,23 @@ void Render::init_render_targets()
 
   size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
   bloom.init(size, FRAMEBUFFER_FORMAT);
+
+  Texture_Descriptor td;
+  td.name = "Render::draw_target.color[0]";
+  td.size = size;
+  td.format = FRAMEBUFFER_FORMAT;
   if (draw_target.color_attachments.size() == 0)
   {
-    draw_target.color_attachments.emplace_back(Texture());
+    draw_target.color_attachments.emplace_back(Texture(td));
   }
-  ASSERT(draw_target.color_attachments.size() == 1);
-  draw_target.color_attachments[0].size = size;
-  draw_target.color_attachments[0].format = FRAMEBUFFER_FORMAT;
   draw_target.depth_enabled = true;
   draw_target.depth_size = size;
   draw_target.init();
-
+  td.name = "Render::previous_frame.color[0]";
   if (previous_frame.color_attachments.size() == 0)
   {
-    previous_frame.color_attachments.emplace_back(Texture());
+    previous_frame.color_attachments.emplace_back(Texture(td));
   }
-  ASSERT(previous_frame.color_attachments.size() == 1);
-  previous_frame.color_attachments[0].size = size;
-  previous_frame.color_attachments[0].format = FRAMEBUFFER_FORMAT;
   previous_frame.init();
 }
 
@@ -1886,10 +2032,13 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   pre_blur.depth_format = GL_DEPTH_COMPONENT32;
 
   if (!initialized)
-    pre_blur.color_attachments.emplace_back(Texture());
+    pre_blur.color_attachments.emplace_back(
+        Texture("Spotlight Shadow Map pre_blur[0]"));
 
-  pre_blur.color_attachments[0].size = size;
-  pre_blur.color_attachments[0].format = format;
+  ASSERT(pre_blur.color_attachments.size() == 1);
+
+  pre_blur.color_attachments[0].t.size = size;
+  pre_blur.color_attachments[0].t.format = format;
   pre_blur.init();
   blur.init(size, format);
 

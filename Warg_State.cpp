@@ -389,7 +389,7 @@ void Warg_State::update()
 
     static Texture test("../Assets/Textures/pebbles_diffuse.png");
 
-    ImGui::Image((ImTextureID)test.texture->texture, ImVec2(256, 256));
+    ImGui::Image((ImTextureID)test.get_handle(), ImVec2(256, 256));
     ImGui::End();
   }
 

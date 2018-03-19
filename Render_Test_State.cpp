@@ -1,5 +1,6 @@
 #include "Render_Test_State.h"
 #include "Globals.h"
+#include "Json.h"
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
@@ -14,6 +15,21 @@ Render_Test_State::Render_Test_State(
     : State(name, window, window_size)
 {
   free_cam = true;
+  save_graph_on_exit = true;
+  scene_graph_json_filename = s(ROOT_PATH,"Render_Test_State.json");
+  scene.root->include_in_save = true;
+  std::string str = read_file(scene_graph_json_filename.c_str());
+  try
+  {
+    json scene_descriptor = json::parse(str);
+    dejsonificate(&scene, scene_descriptor);
+  }
+  catch (std::exception &e)
+  {
+    set_message("Exception loading scene graph json:", e.what(), 55.0f);
+    set_message("JSON:\n", str.c_str(), 55.0f);
+  }
+  scene.root->include_in_save = true;
 
   Material_Descriptor material;
   material.albedo = "pebbles_diffuse.png";
@@ -76,14 +92,27 @@ Render_Test_State::Render_Test_State(
     }
   }
 
-  Material_Descriptor tiger_mat;
-  tiger_mat.backface_culling = false;
-  tiger = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
-  tiger->position = vec3(-3, -3, 0);
+   Material_Descriptor tiger_mat;
+   tiger_mat.backface_culling = false;
+   tiger = scene.add_aiscene("tiger/tiger.obj",&tiger_mat);
+   tiger->position = vec3(0,0,0.5);
+   tiger->scale = vec3(0.45f);
+   scene.set_parent(tiger, cube_star, true);
+
+   Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+   tiger2->position = vec3(0, 0, 0.5);
+   tiger2->scale = vec3(0.45f);
+   scene.set_parent(tiger2, cube_planet, true);
+
+   Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+   tiger3->position = vec3(0, 0, 0.5);
+   tiger3->scale = vec3(0.45f);
+   scene.set_parent(tiger3, cube_moon, true);
 
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1,1,1,1)";
+  material.roughness = "";
   cone_light1 = scene.add_aiscene("sphere.obj", &material);
   cone_light1->name = "conelight1";
 
@@ -317,7 +346,6 @@ void Render_Test_State::handle_input_events(
 void Render_Test_State::update()
 {
 
-
   const float32 height = 1.25;
 
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
@@ -356,21 +384,7 @@ void Render_Test_State::update()
   sphere->position = vec3(-3, 3, 1.5);
   sphere->scale = vec3(0.4);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
   auto &lights = scene.lights.lights;
-  scene.lights.light_count = 4;
   // float32 time_of_day = 12.;
   const vec4 night = vec4(0);
   const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1., 0.f);
@@ -402,10 +416,10 @@ void Render_Test_State::update()
   sky_sphere->scale = vec3(500);
   sky_sphere->position = vec3(0, 0, -350);
   sky_sphere->visible = true;
-  sky_sphere->owned_children[0]->model[0].second.albedo_mod =
+  sky_sphere->owned_children[0]->model[0].second.m.albedo.mod =
       1.5f * vec4(clear_color, 1);
-
-  scene.lights.light_count = 3;
+  /*
+    scene.lights.light_count = 3;*/
 
   vec3 sun_pos =
       180.f * vec3(cos(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0,
@@ -413,21 +427,21 @@ void Render_Test_State::update()
   sun_light->position = sun_pos;
   sun_light->scale = vec3(10.);
 
-
-
-
   static bool first = true;
-  if (first)
+  if (false)
   {
+    scene.lights.light_count = 4;
 
     lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
-    lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
+    lights[0].cone_angle =
+        0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
     lights[0].shadow_blur_iterations = 6;
     lights[0].shadow_blur_radius = 1.25005f;
     lights[0].max_variance = 0.0000002;
     lights[0].shadow_near_plane = 110.f;
     lights[0].shadow_far_plane = 350.f;
     lights[0].shadow_fov = radians(15.5f);
+    lights[0].casts_shadows = true;
 
     lights[1].type = Light_Type::spot;
     lights[1].direction = vec3(0);
@@ -442,14 +456,13 @@ void Render_Test_State::update()
     lights[1].shadow_blur_iterations = 4;
     lights[1].shadow_blur_radius = 2.12;
 
-
     lights[2].color = 111.f * vec3(1, 0.05, 1.05);
     lights[2].type = Light_Type::omnidirectional;
     lights[2].attenuation = vec3(1.0, 1.7, 2.4);
     lights[2].ambient = 0.0001f;
+
+    first = false;
   }
-
-
 
   lights[0].position = sun_pos;
   lights[0].type = Light_Type::spot;
@@ -457,21 +470,19 @@ void Render_Test_State::update()
   lights[0].ambient =
       0.003 *
       clamp(sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
-  
 
   lights[1].position =
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-  
+
   cone_light1->position =
       lights[1].position + 0.5f * normalize(lights[1].position);
   cone_light1->scale = vec3(.25);
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  
+
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
-
 
   imgui_light_array(scene.lights);
 }

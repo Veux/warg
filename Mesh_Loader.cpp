@@ -127,7 +127,7 @@ Mesh_Data load_mesh_cube()
 {
 	Mesh_Data cube;
   cube.name = "cube";
-  cube.unique_identifier = identifier_for_primitive(Mesh_Primitive::cube);
+  cube.unique_identifier = to_string(Mesh_Primitive::cube);
 	vec3 a, b, c, d;
 
 	//top
@@ -180,7 +180,7 @@ Mesh_Data load_mesh_plane()
   set_message("building plane mesh_data");
 	Mesh_Data mesh;
   mesh.name = "plane";
-  mesh.unique_identifier = identifier_for_primitive(Mesh_Primitive::plane);
+  mesh.unique_identifier = to_string(Mesh_Primitive::plane);
   mesh.positions =
 	{
 		{-0.5,-0.5,0}, {-0.5,0.5,0}, {0.5,0.5,0},
@@ -226,9 +226,13 @@ Mesh_Data load_mesh(Mesh_Primitive p)
 	return Mesh_Data();
 }
 
-std::string identifier_for_primitive(Mesh_Primitive p)
+std::string to_string(Mesh_Primitive p)
 {
-  if (p == plane)
+  if (p == null)
+  {
+    return "null";
+  }
+  else if (p == plane)
   {
     return "generated plane";
   }
@@ -238,9 +242,30 @@ std::string identifier_for_primitive(Mesh_Primitive p)
   }
   else
   {
-    ASSERT(0);
+    throw;
   }
   return "";
+}
+
+Mesh_Primitive s_to_primitive(std::string p)
+{
+  if (p == "null")
+  {
+    return null;
+  }
+  if (p == "generated plane")
+  {
+    return plane;
+  }
+  else if (p == "generated cube")
+  {
+    return cube;
+  }
+  else
+  {
+    throw;
+  }
+  return Mesh_Primitive();
 }
 
 void copy_mesh_data(std::vector<vec3>& dst, aiVector3D* src, uint32 length)

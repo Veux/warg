@@ -5,8 +5,8 @@ uniform sampler2D texture2; // normal;
 uniform sampler2D texture3; // emissive;
 uniform sampler2D texture4; // roughness;
 uniform vec4 texture0_mod;
-uniform vec3 texture3_mod;
-uniform vec3 texture4_mod;
+uniform vec4 texture3_mod;
+uniform vec4 texture4_mod;
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
@@ -135,12 +135,12 @@ void main()
   Material m;
   m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
   m.albedo = texture0_mod.rgb * to_linear(albedo_tex.rgb) / PI;
-  m.emissive = texture3_mod * to_linear(texture2D(texture3, frag_uv).rgb);
-  m.shininess = 1.0 + texture4_mod.r * 64 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));
+  m.emissive = texture3_mod.rgb * to_linear(texture2D(texture3, frag_uv).rgb);
+  m.shininess = 1.0 + texture4_mod.r * 64 *
+                          (1.0 - to_linear(texture2D(texture4, frag_uv).r));
   vec3 n = texture2D(texture2, frag_uv).rgb;
 
-
-    m.normal = frag_TBN * normalize((n * 2) - 1.0f);
+  m.normal = frag_TBN * normalize((n * 2) - 1.0f);
 
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
@@ -179,11 +179,11 @@ void main()
         // float shadow_map_depth = (shadow_moments.r-0.5)*2.0;
         // float frag_depth_from_light =
         // frag_in_this_light_shadow_space_postw.z;  float light_visibility =
-        // float(frag_depth_from_light-0.0000008 < shadow_moments.r);  debug.rgb =
-        // vec3(linearize_depth(shadow_map_depth));  debug.rgb =
+        // float(frag_depth_from_light-0.0000008 < shadow_moments.r);  debug.rgb
+        // = vec3(linearize_depth(shadow_map_depth));  debug.rgb =
         // vec3(light_visibility);
       }
-      if (true)
+      if (shadow_map_enabled)
       {
         float light_visibility = chebyshevUpperBound(shadow_moments,
             frag_in_this_light_shadow_space_postw.z, this_map_variance);
@@ -205,15 +205,15 @@ void main()
   result += m.emissive;
   result += additional_ambient * m.albedo;
 
-  //debug.rgb = vec3(texture2D(shadow_maps[1],
-  //frag_in_shadow_space_postw[1].xy).rg,0);  
-  //debug.rgb = m.normal;  
-  //debug.a = 1;
+  // debug.rgb = vec3(texture2D(shadow_maps[1],
+  // frag_in_shadow_space_postw[1].xy).rg,0);
+  // debug.rgb = n; //tangent space normal map
+  // debug.a = 1;
   albedo_tex.a = 1;
   if (debug != vec4(-1))
   {
     result = debug.rgb;
     albedo_tex.a = debug.a;
   }
-  RESULT = vec4(result, albedo_tex.a*texture0_mod.a);
+  RESULT = vec4(result, albedo_tex.a * texture0_mod.a);
 }
