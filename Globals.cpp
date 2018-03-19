@@ -4,6 +4,7 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
+#include "Render.h"
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
@@ -12,11 +13,7 @@ const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
 const float32 ZOOM_STEP = 0.2f;
 const float32 ATK_RANGE = 5.0f;
-#ifdef __linux__
-#define ROOT_PATH std::string("../")
-#elif _WIN32
-#define ROOT_PATH std::string("../")
-#endif
+
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
 const std::string BASE_TEXTURE_PATH =
     BASE_ASSET_PATH + std::string("Textures/");
@@ -443,6 +440,18 @@ std::string mtos(glm::mat4 m)
     result += "|" + vtos(m[i]) + "|\n";
   }
   return result;
+}
+
+template <> std::string s<Light_Type>(Light_Type value)
+{
+  if (value == Light_Type::parallel)
+    return "Parallel";
+  if (value == Light_Type::omnidirectional)
+    return "Omnidirectional";
+  if (value == Light_Type::spot)
+    return "Spotlight";
+
+  return "s(): Unknown Light_Type";
 }
 
 template <> std::string s<const char *>(const char *value)

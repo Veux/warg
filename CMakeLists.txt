@@ -38,6 +38,8 @@ include_directories (${GLM_INCLUDE_DIRS})
 include_directories (${SDL2_INCLUDE_DIRS})
 include_directories (${SDL2_IMAGE_INCLUDE_DIRS})
 include_directories (${ENet_INCLUDE_DIRS})
+target_include_directories (warg PRIVATE "Third_Party")
+
 
 #someone kill me
 if (WIN32)

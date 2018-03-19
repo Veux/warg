@@ -123,14 +123,14 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     else
     {
       embedded_in_plane = true;
-      t0 = 0.0;
-      t1 = 1.0;
+      t0 = 0.0f;
+      t1 = 1.0f;
     }
   }
   else
   {
-    t0 = (-1.0 - signed_dist_to_triangle_plane) / normal_dot_vel;
-    t1 = (1.0 - signed_dist_to_triangle_plane) / normal_dot_vel;
+    t0 = (-1.0f - signed_dist_to_triangle_plane) / normal_dot_vel;
+    t1 = (1.0f - signed_dist_to_triangle_plane) / normal_dot_vel;
 
     if (t0 > t1)
     {
@@ -144,14 +144,14 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
       return false;
     }
 
-    if (t0 < 0.0)
-      t0 = 0.0;
-    if (t1 < 0.0)
-      t1 = 0.0;
-    if (t0 > 1.0)
-      t0 = 1.0;
-    if (t1 > 1.0)
-      t1 = 1.0;
+    if (t0 < 0.0f)
+      t0 = 0.0f;
+    if (t1 < 0.0f)
+      t1 = 0.0f;
+    if (t0 > 1.0f)
+      t0 = 1.0f;
+    if (t1 > 1.0f)
+      t1 = 1.0f;
   }
 
   vec3 collision_point;
@@ -181,8 +181,8 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
 
     a = vel_squared_length;
 
-    b = 2.0 * dot(vel, base - tri.a);
-    c = squared_length(tri.a - base) - 1.0;
+    b = 2.0f * dot(vel, base - tri.a);
+    c = squared_length(tri.a - base) - 1.0f;
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       t = new_t;
@@ -190,8 +190,8 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
       collision_point = tri.a;
     }
 
-    b = 2.0 * dot(vel, base - tri.b);
-    c = squared_length(tri.b - base) - 1.0;
+    b = 2.0f * dot(vel, base - tri.b);
+    c = squared_length(tri.b - base) - 1.0f;
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       t = new_t;
@@ -199,8 +199,8 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
       collision_point = tri.b;
     }
 
-    b = 2.0 * dot(vel, base - tri.c);
-    c = squared_length(tri.c - base) - 1.0;
+    b = 2.0f * dot(vel, base - tri.c);
+    c = squared_length(tri.c - base) - 1.0f;
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       t = new_t;
@@ -215,16 +215,16 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     float edge_dot_base_to_vertex = dot(edge, base_to_vertex);
 
     a = edge_squared_length * -vel_squared_length + edge_dot_vel * edge_dot_vel;
-    b = edge_squared_length * 2.0 * dot(vel, base_to_vertex) -
-        2.0 * edge_dot_vel * edge_dot_base_to_vertex;
-    c = edge_squared_length * (1 - squared_length(base_to_vertex)) +
+    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) -
+        2.0f * edge_dot_vel * edge_dot_base_to_vertex;
+    c = edge_squared_length * (1.0f - squared_length(base_to_vertex)) +
         edge_dot_base_to_vertex * edge_dot_base_to_vertex;
 
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) /
                 edge_squared_length;
-      if (f >= 0.0 && f <= 1.0)
+      if (f >= 0.0f && f <= 1.0f)
       {
         t = new_t;
         found_collision = true;
@@ -239,9 +239,9 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     edge_dot_base_to_vertex = dot(edge, base_to_vertex);
 
     a = edge_squared_length * -vel_squared_length + edge_dot_vel * edge_dot_vel;
-    b = edge_squared_length * 2.0 * dot(vel, base_to_vertex) -
-        2.0 * edge_dot_vel * edge_dot_base_to_vertex;
-    c = edge_squared_length * (1 - squared_length(base_to_vertex)) +
+    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) -
+        2.0f * edge_dot_vel * edge_dot_base_to_vertex;
+    c = edge_squared_length * (1.0f - squared_length(base_to_vertex)) +
         edge_dot_base_to_vertex * edge_dot_base_to_vertex;
 
     if (get_lowest_root(a, b, c, t, &new_t))
@@ -263,16 +263,16 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     edge_dot_base_to_vertex = dot(edge, base_to_vertex);
 
     a = edge_squared_length * -vel_squared_length + edge_dot_vel * edge_dot_vel;
-    b = edge_squared_length * 2.0 * dot(vel, base_to_vertex) -
-        2.0 * edge_dot_vel * edge_dot_base_to_vertex;
-    c = edge_squared_length * (1 - squared_length(base_to_vertex)) +
+    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) -
+        2.0f * edge_dot_vel * edge_dot_base_to_vertex;
+    c = edge_squared_length * (1.0f - squared_length(base_to_vertex)) +
         edge_dot_base_to_vertex * edge_dot_base_to_vertex;
 
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) /
                 edge_squared_length;
-      if (f >= 0.0 && f <= 1.0)
+      if (f >= 0.0f && f <= 1.0f)
       {
         t = new_t;
         found_collision = true;

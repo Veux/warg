@@ -18,7 +18,7 @@ struct Camera
 struct State
 {
   State(std::string name, SDL_Window *window, ivec2 window_size);
-
+  ~State();
   virtual void render(float64 t) final;
   virtual void update() = 0;
   virtual void handle_input(State **current_state,
@@ -40,6 +40,9 @@ struct State
   Scene_Graph scene;
 
   bool free_cam = false;
+
+  bool save_graph_on_exit = false;
+  std::string scene_graph_json_filename;
 
 protected:
   void prepare_renderer(double t);

@@ -14,6 +14,8 @@ using namespace glm;
 using namespace gl33core;
 struct aiString;
 
+//todo: config file
+
 #define MAX_INSTANCE_COUNT 100
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS                                                             \
@@ -25,8 +27,13 @@ struct aiString;
 #define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 0
 #define INCLUDE_FILE_LINE_IN_LOG 0
 #define MAX_TEXTURE_SAMPLERS 20
+#define MAX_ANISOTROPY 8
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
-
+#ifdef __linux__
+#define ROOT_PATH std::string("../")
+#elif _WIN32
+#define ROOT_PATH std::string("../")
+#endif
 // you can point FINAL_OUTPUT_TEXTURE to any Texture::texture->texture or
 // Texture_Handle::texture  to draw it to the screen for debugging purposes
 // nullptr for default
@@ -166,7 +173,10 @@ std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
 std::string mtos(glm::mat4 m);
 
+
+enum struct Light_Type;
 template <typename T> std::string s(T value) { return std::to_string(value); }
+
 
 template <typename T, typename... Args> std::string s(T first, Args... args)
 {
@@ -174,6 +184,7 @@ template <typename T, typename... Args> std::string s(T first, Args... args)
 }
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
+template <> std::string s<Light_Type>(Light_Type value);
 
 typedef int32_t UID;
 UID uid();
