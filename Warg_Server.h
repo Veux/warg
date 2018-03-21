@@ -19,7 +19,8 @@ struct Warg_Peer
   queue<Warg_Event> *in, *out;
   UID character = -1;
 };
-
+//todo: change all built in dynamic types to static types, eg int, float
+//todo: change all instances of dt to use float64 for identical precision with game loop
 struct Warg_Server
 {
   Warg_Server(bool local);

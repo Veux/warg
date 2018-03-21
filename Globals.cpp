@@ -4,6 +4,8 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
+#include "Render.h"
+#include "Json.h"
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
@@ -12,11 +14,7 @@ const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
 const float32 ZOOM_STEP = 0.2f;
 const float32 ATK_RANGE = 5.0f;
-#ifdef __linux__
-#define ROOT_PATH std::string("../")
-#elif _WIN32
-#define ROOT_PATH std::string("../")
-#endif
+
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
 const std::string BASE_TEXTURE_PATH =
     BASE_ASSET_PATH + std::string("Textures/");
@@ -26,6 +24,7 @@ const std::string ERROR_TEXTURE_PATH = BASE_TEXTURE_PATH + "err.png";
 Timer PERF_TIMER = Timer(1000);
 Timer FRAME_TIMER = Timer(60);
 Timer SWAP_TIMER = Timer(60);
+Config CONFIG;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
@@ -445,6 +444,18 @@ std::string mtos(glm::mat4 m)
   return result;
 }
 
+template <> std::string s<Light_Type>(Light_Type value)
+{
+  if (value == Light_Type::parallel)
+    return "Parallel";
+  if (value == Light_Type::omnidirectional)
+    return "Omnidirectional";
+  if (value == Light_Type::spot)
+    return "Spotlight";
+
+  return "s(): Unknown Light_Type";
+}
+
 template <> std::string s<const char *>(const char *value)
 {
   return std::string(value);
@@ -459,4 +470,37 @@ UID uid()
   static UID i = 0;
   ASSERT(i >= 0);
   return i++;
+}
+
+void Config::load(std::string filename)
+{
+  std::string str = read_file(filename.c_str());
+  json j = json::parse(str);
+  auto i = j.end();
+
+  if ((i = j.find("Resolution")) != j.end())
+    resolution = *i;
+
+  if ((i = j.find("Render Scale")) != j.end())
+    render_scale = *i;
+
+  if ((i = j.find("Fov")) != j.end())
+    fov = *i;
+
+  if ((i = j.find("Shadow Map Resolution")) != j.end())
+    shadow_map_size = *i;
+
+}
+
+void Config::save(std::string filename)
+{
+  json j;
+  j["Resolution"] = resolution;
+  j["Render Scale"] = render_scale;
+  j["Fov"] = fov;
+  j["Shadow Map Resolution"] = shadow_map_size;
+
+  std::string str = pretty_dump(j);
+  std::fstream file(filename, std::ios::out);
+  file.write(str.c_str(), str.size());
 }

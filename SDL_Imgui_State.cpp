@@ -478,7 +478,7 @@ void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
       w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
 
 
-  io.DeltaTime = dt;
+  io.DeltaTime = (float32)dt;
 
   // Setup mouse inputs (we already got mouse wheel, keyboard keys &
   // characters from our event handler)

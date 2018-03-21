@@ -1,5 +1,6 @@
 #include "State.h"
 #include "Globals.h"
+#include "Json.h"
 #include "Render.h"
 #include "Third_party/imgui/imgui.h"
 #include <atomic>
@@ -13,6 +14,19 @@ State::State(std::string name, SDL_Window *window, ivec2 window_size)
     : state_name(name), window(window), renderer(window, window_size)
 {
   reset_mouse_delta();
+}
+
+State::~State()
+{
+  if (save_graph_on_exit)
+  {
+    json j = jsonify(scene);
+    std::string str = pretty_dump(j);
+    set_message("state destructor saved scene graph: ", str, 1.0f);
+    std::fstream file(
+        scene_graph_json_filename, std::ios::out | std::ios::trunc);
+    file.write(str.c_str(), str.size());
+  }
 }
 
 void State::prepare_renderer(double t)
@@ -172,9 +186,9 @@ void State::performance_output()
   if (last_performance_output + report_frequency_in_seconds < current_time)
   {
 #ifdef __linux__
-    system("clear");
+    // system("clear");
 #elif _WIN32
-    system("cls");
+    // system("cls");
 #endif
     const uint64 frames_since_last_report = frame_count - frames_at_last_report;
 
@@ -182,6 +196,6 @@ void State::performance_output()
         (1.0f / report_frequency_in_seconds) * (float)frames_since_last_report;
     frames_at_last_report = frame_count;
     last_performance_output = current_time;
-    std::cout << get_messages() << std::endl;
+    // std::cout << get_messages() << std::endl;
   }
 }

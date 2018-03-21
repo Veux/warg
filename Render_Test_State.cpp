@@ -1,5 +1,6 @@
 #include "Render_Test_State.h"
 #include "Globals.h"
+#include "Json.h"
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
@@ -14,6 +15,21 @@ Render_Test_State::Render_Test_State(
     : State(name, window, window_size)
 {
   free_cam = true;
+  save_graph_on_exit = true;
+  scene_graph_json_filename = s(ROOT_PATH,"Render_Test_State.json");
+  scene.root->include_in_save = true;
+  std::string str = read_file(scene_graph_json_filename.c_str());
+  try
+  {
+    json scene_descriptor = json::parse(str);
+    dejsonificate(&scene, scene_descriptor);
+  }
+  catch (std::exception &e)
+  {
+    set_message("Exception loading scene graph json:", e.what(), 55.0f);
+    set_message("JSON:\n", str.c_str(), 55.0f);
+  }
+  scene.root->include_in_save = true;
 
   Material_Descriptor material;
   material.albedo = "pebbles_diffuse.png";
@@ -76,14 +92,27 @@ Render_Test_State::Render_Test_State(
     }
   }
 
-  Material_Descriptor tiger_mat;
-  tiger_mat.backface_culling = false;
-  tiger = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
-  tiger->position = vec3(-3, -3, 0);
+   Material_Descriptor tiger_mat;
+   tiger_mat.backface_culling = false;
+   tiger = scene.add_aiscene("tiger/tiger.obj",&tiger_mat);
+   tiger->position = vec3(0,0,0.5);
+   tiger->scale = vec3(0.45f);
+   scene.set_parent(tiger, cube_star, true);
+
+   Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+   tiger2->position = vec3(0, 0, 0.5);
+   tiger2->scale = vec3(0.45f);
+   scene.set_parent(tiger2, cube_planet, true);
+
+   Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+   tiger3->position = vec3(0, 0, 0.5);
+   tiger3->scale = vec3(0.45f);
+   scene.set_parent(tiger3, cube_moon, true);
 
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1,1,1,1)";
+  material.roughness = "";
   cone_light1 = scene.add_aiscene("sphere.obj", &material);
   cone_light1->name = "conelight1";
 
@@ -316,23 +345,13 @@ void Render_Test_State::handle_input_events(
 
 void Render_Test_State::update()
 {
-  static bool show_render_test_state_window = true;
-  if (show_render_test_state_window)
-  {
-    ImGui::Begin(
-        "render_test_state.cpp Window", &show_render_test_state_window);
-    ImGui::Text("Hello from render_test_state.cpp window!");
-    if (ImGui::Button("Close Me"))
-      show_render_test_state_window = false;
-    ImGui::End();
-  }
 
   const float32 height = 1.25;
 
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
   cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
   const float32 anglestar = wrap_to_range(
-      pi<float32>() * sin(current_time / 2), 0, 2 * pi<float32>());
+      pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
   // cube_star->visible = sin(current_time * 1.2) > -.25;
   cube_star->propagate_visibility = true;
   cube_star->orientation = angleAxis(anglestar,
@@ -346,7 +365,7 @@ void Render_Test_State::update()
   cube_planet->position =
       planet_distance *
       vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
-  const float32 angle = wrap_to_range(current_time, 0, 2 * pi<float32>());
+  const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
   cube_planet->orientation =
       angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
   cube_planet->visible = sin(current_time * 6) > 0;
@@ -366,14 +385,13 @@ void Render_Test_State::update()
   sphere->scale = vec3(0.4);
 
   auto &lights = scene.lights.lights;
-  scene.lights.light_count = 4;
   // float32 time_of_day = 12.;
   const vec4 night = vec4(0);
   const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1., 0.f);
   const vec4 sun_low = vec4(235.f / 255.f, 28.f / 255., 0.f / 255.f, 0.f);
   const float time_day_scale = 0.12f;
   float32 time_of_day =
-      wrap_to_range((time_day_scale * current_time) + 135.f, 0.0f, 24.0f);
+      wrap_to_range((time_day_scale * (float32)current_time) + 135.f, 0.0f, 24.0f);
   // time_of_day = 12.f;
   float32 day_range = clamp(time_of_day, 5.85f, 18.85f); // 5:30am to 7:30pm
   float32 day_t = (day_range - 5.85f) / 12.7f;           // 0-1 daytime
@@ -398,56 +416,73 @@ void Render_Test_State::update()
   sky_sphere->scale = vec3(500);
   sky_sphere->position = vec3(0, 0, -350);
   sky_sphere->visible = true;
-  sky_sphere->owned_children[0]->model[0].second.albedo_mod =
+  sky_sphere->owned_children[0]->model[0].second.m.albedo.mod =
       1.5f * vec4(clear_color, 1);
-
-  scene.lights.light_count = 3;
+  /*
+    scene.lights.light_count = 3;*/
 
   vec3 sun_pos =
       180.f * vec3(cos(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0,
                   sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)));
   sun_light->position = sun_pos;
   sun_light->scale = vec3(10.);
+
+  static bool first = true;
+  if (false)
+  {
+    scene.lights.light_count = 4;
+
+    lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
+    lights[0].cone_angle =
+        0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
+    lights[0].shadow_blur_iterations = 6;
+    lights[0].shadow_blur_radius = 1.25005f;
+    lights[0].max_variance = 0.0000002;
+    lights[0].shadow_near_plane = 110.f;
+    lights[0].shadow_far_plane = 350.f;
+    lights[0].shadow_fov = radians(15.5f);
+    lights[0].casts_shadows = true;
+
+    lights[1].type = Light_Type::spot;
+    lights[1].direction = vec3(0);
+    lights[1].color = 150.f * vec3(1.0, 1.00, 1.0);
+    lights[1].cone_angle = 0.151; //+ 0.14*sin(current_time);
+    lights[1].ambient = 0.0004;
+    lights[1].casts_shadows = true;
+    lights[1].max_variance = 0.0000002;
+    lights[1].shadow_near_plane = .5f;
+    lights[1].shadow_far_plane = 200.f;
+    lights[1].shadow_fov = radians(90.f);
+    lights[1].shadow_blur_iterations = 4;
+    lights[1].shadow_blur_radius = 2.12;
+
+    lights[2].color = 111.f * vec3(1, 0.05, 1.05);
+    lights[2].type = Light_Type::omnidirectional;
+    lights[2].attenuation = vec3(1.0, 1.7, 2.4);
+    lights[2].ambient = 0.0001f;
+
+    first = false;
+  }
+
   lights[0].position = sun_pos;
   lights[0].type = Light_Type::spot;
   lights[0].direction = vec3(0);
-  lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
-  lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);
   lights[0].ambient =
-      0.003 *
-      clamp(sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
-  lights[0].casts_shadows = true;
-  lights[0].shadow_blur_iterations = 6;
-  lights[0].shadow_blur_radius = 1.25005f;
-  lights[0].max_variance = 0.0000002;
-  lights[0].shadow_near_plane = 110.f;
-  lights[0].shadow_far_plane = 350.f;
-  lights[0].shadow_fov = radians(15.5f);
+      0.003f *
+      clamp((float32)sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
 
   lights[1].position =
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-  lights[1].type = Light_Type::spot;
-  lights[1].direction = vec3(0);
-  lights[1].color = 150.f * vec3(1.0, 1.00, 1.0);
-  lights[1].cone_angle = 0.151; //+ 0.14*sin(current_time);
-  lights[1].ambient = 0.0004;
-  lights[1].casts_shadows = true;
-  lights[1].max_variance = 0.0000002;
-  lights[1].shadow_near_plane = .5f;
-  lights[1].shadow_far_plane = 200.f;
-  lights[1].shadow_fov = radians(90.f);
-  lights[1].shadow_blur_iterations = 4;
-  lights[1].shadow_blur_radius = 2.12;
+
   cone_light1->position =
       lights[1].position + 0.5f * normalize(lights[1].position);
   cone_light1->scale = vec3(.25);
 
   lights[2].position =
       vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-  lights[2].color = 111.f * vec3(1, 0.05, 1.05);
-  lights[2].type = Light_Type::omnidirectional;
-  lights[2].attenuation = vec3(1.0, 1.7, 2.4);
-  lights[2].ambient = 0.0001f;
+
   small_light->position = lights[2].position;
   small_light->scale = vec3(0.1);
+
+  imgui_light_array(scene.lights);
 }
