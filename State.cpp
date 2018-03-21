@@ -21,14 +21,11 @@ State::~State()
   if (save_graph_on_exit)
   {
     json j = jsonify(scene);
-    std::string str = j.dump();
-    std::string pretty;
-    size_t pos = 0;
-    pretty_json(pretty, str, pos);
+    std::string str = pretty_dump(j);
     set_message("state destructor saved scene graph: ", str, 1.0f);
     std::fstream file(
         scene_graph_json_filename, std::ios::out | std::ios::trunc);
-    file.write(pretty.c_str(), pretty.size());
+    file.write(str.c_str(), str.size());
   }
 }
 

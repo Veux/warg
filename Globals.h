@@ -14,8 +14,6 @@ using namespace glm;
 using namespace gl33core;
 struct aiString;
 
-//todo: config file
-
 #define MAX_INSTANCE_COUNT 100
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS                                                             \
@@ -29,6 +27,7 @@ struct aiString;
 #define MAX_TEXTURE_SAMPLERS 20
 #define MAX_ANISOTROPY 8
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
+
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
 #elif _WIN32
@@ -142,7 +141,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
         "Assertion failed in:" + std::string(file) +
             "\non line:" + std::to_string(line),
         1.0);
-    push_log_to_disk(); 
+    push_log_to_disk();
     std::string message_log = get_message_log();
     std::string end_of_log;
     uint32 length = message_log.size();
@@ -173,10 +172,8 @@ std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
 std::string mtos(glm::mat4 m);
 
-
 enum struct Light_Type;
 template <typename T> std::string s(T value) { return std::to_string(value); }
-
 
 template <typename T, typename... Args> std::string s(T first, Args... args)
 {
@@ -220,3 +217,15 @@ struct Bezier_Curve
 private:
   std::vector<glm::vec4> remainder;
 };
+
+struct Config
+{ // if you add more settings, be sure to put them in load() and save()
+  ivec2 resolution = ivec2(1280, 720);
+  float32 render_scale = 1.0f;
+  float32 fov = 60;
+  ivec2 shadow_map_size = ivec2(1024);
+
+  void load(std::string filename);
+  void save(std::string filename);
+};
+extern Config CONFIG;

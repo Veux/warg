@@ -5,6 +5,7 @@
 #include <assimp/scene.h>
 #include <assimp/types.h>
 #include "Render.h"
+#include "Json.h"
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
@@ -23,6 +24,7 @@ const std::string ERROR_TEXTURE_PATH = BASE_TEXTURE_PATH + "err.png";
 Timer PERF_TIMER = Timer(1000);
 Timer FRAME_TIMER = Timer(60);
 Timer SWAP_TIMER = Timer(60);
+Config CONFIG;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
@@ -468,4 +470,37 @@ UID uid()
   static UID i = 0;
   ASSERT(i >= 0);
   return i++;
+}
+
+void Config::load(std::string filename)
+{
+  std::string str = read_file(filename.c_str());
+  json j = json::parse(str);
+  auto i = j.end();
+
+  if ((i = j.find("Resolution")) != j.end())
+    resolution = *i;
+
+  if ((i = j.find("Render Scale")) != j.end())
+    render_scale = *i;
+
+  if ((i = j.find("Fov")) != j.end())
+    fov = *i;
+
+  if ((i = j.find("Shadow Map Resolution")) != j.end())
+    shadow_map_size = *i;
+
+}
+
+void Config::save(std::string filename)
+{
+  json j;
+  j["Resolution"] = resolution;
+  j["Render Scale"] = render_scale;
+  j["Fov"] = fov;
+  j["Shadow Map Resolution"] = shadow_map_size;
+
+  std::string str = pretty_dump(j);
+  std::fstream file(filename, std::ios::out);
+  file.write(str.c_str(), str.size());
 }

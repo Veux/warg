@@ -83,6 +83,8 @@ void server_main()
 
 int main(int argc, char *argv[])
 {
+  const char* config_filename = "config.json";
+  CONFIG.load(config_filename);
   SDL_Delay(1000);
   bool client = false;
   std::string address;
@@ -131,7 +133,7 @@ int main(int argc, char *argv[])
   }
   set_message(s.str());
 
-  ivec2 window_size = {1280, 720};
+  ivec2 window_size = {CONFIG.resolution.x, CONFIG.resolution.y };
   int32 flags = SDL_WINDOW_OPENGL;
   // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -328,5 +330,6 @@ int main(int argc, char *argv[])
   push_log_to_disk();
   imgui.destroy();
   SDL_Quit();
+  CONFIG.save(config_filename);
   return 0;
 }

@@ -2,74 +2,11 @@
 
 extern std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 
-namespace nlohmann
-{
-template <> struct adl_serializer<glm::ivec2>
-{
-  static void to_json(json &result, const glm::ivec2 &p);
-  static void from_json(const json &j, glm::ivec2 &p);
-};
-
-template <> struct adl_serializer<glm::vec2>
-{
-  static void to_json(json &result, const glm::vec2 &p);
-  static void from_json(const json &j, glm::vec2 &p);
-};
-
-template <> struct adl_serializer<glm::vec3>
-{
-  static void to_json(json &result, const glm::vec3 &p);
-  static void from_json(const json &j, glm::vec3 &p);
-};
-
-template <> struct adl_serializer<glm::vec4>
-{
-  static void to_json(json &result, const glm::vec4 &p);
-  static void from_json(const json &j, glm::vec4 &p);
-};
-template <> struct adl_serializer<glm::quat>
-{
-  static void to_json(json &result, const glm::quat &p);
-  static void from_json(const json &j, glm::quat &p);
-};
-
-template <> struct adl_serializer<glm::mat4>
-{
-  static void to_json(json &result, const glm::mat4 &p);
-  static void from_json(const json &j, glm::mat4 &p);
-};
-}
-
-void to_json(json &result, const Mesh &p);
-void from_json(const json &j, Mesh &p);
-
-void to_json(json &result, const Material &p) { result = p.m; }
-void from_json(const json &j, Material &p);
-
-void to_json(json &result, const Texture_Descriptor &p);
-void from_json(const json &j, Texture_Descriptor &p);
-
-void to_json(json &result, const Material_Descriptor &p);
-void from_json(const json &j, Material_Descriptor &p);
-
-void to_json(json &result, const Light_Array &p);
-void from_json(const json &j, Light_Array &p);
-
-void to_json(json &result, const std::shared_ptr<Scene_Graph_Node> &node_ptr);
-void to_json(json &result, const Scene_Graph_Node &node);
-Node_Ptr build_node_graph_from_json(const json &j, Scene_Graph &scene);
-
-void to_json(json &result, const Scene_Graph &scene);
-void from_json(const json &k, Scene_Graph &scene);
-
-void to_json(json &result, const Light &p);
-void from_json(const json &j, Light &p);
-
 json jsonify(Scene_Graph &scene) { return scene; }
 
 void dejsonificate(Scene_Graph *scene, json j) { *scene = j; }
 
-void pretty_json(std::string &result, const std::string &input,
+void _pretty_json(std::string &result, const std::string &input,
     std::string::size_type &pos, size_t le, size_t indent)
 {
   bool in_string = false;
@@ -89,7 +26,7 @@ void pretty_json(std::string &result, const std::string &input,
       result.append(1, curr_char);
       result.append(1, '\n');
       result.append((le + 1) * indent, ' ');
-      pretty_json(result, input, ++pos, le + 1, indent);
+      _pretty_json(result, input, ++pos, le + 1, indent);
     }
     else if ((curr_char == '}' || curr_char == ']') && !in_string)
     {
@@ -125,125 +62,12 @@ void pretty_json(std::string &result, const std::string &input,
   }
 }
 
-namespace nlohmann
+std::string pretty_dump(const json &j)
 {
-void adl_serializer<glm::vec2>::to_json(json &r, const glm::vec2 &p)
-{
-  json j;
-  for (uint32 i = 0; i < 2; ++i)
-  {
-    j.push_back(p[i]);
-  }
-  r = j;
-}
-void adl_serializer<glm::vec2>::from_json(const json &j, glm::vec2 &p)
-{
-  vec2 v;
-  for (uint32 i = 0; i < 2; ++i)
-  {
-    v[i] = j.at(i);
-  }
-  p = v;
-}
-void adl_serializer<glm::vec3>::to_json(json &r, const glm::vec3 &p)
-{
-  json j;
-  for (uint32 i = 0; i < 3; ++i)
-  {
-    j.push_back(p[i]);
-  }
-  r = j;
-}
-void adl_serializer<glm::vec3>::from_json(const json &j, glm::vec3 &p)
-{
-  vec3 v;
-  for (uint32 i = 0; i < 3; ++i)
-  {
-    v[i] = j.at(i);
-  }
-  p = v;
-}
-void adl_serializer<glm::vec4>::to_json(json &r, const glm::vec4 &p)
-{
-  json j;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    j.push_back(p[i]);
-  }
-  r = j;
-}
-void adl_serializer<glm::vec4>::from_json(const json &j, glm::vec4 &p)
-{
-  vec4 v;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    v[i] = j.at(i);
-  }
-  p = v;
-}
-void adl_serializer<glm::quat>::to_json(json &r, const glm::quat &p)
-{
-  json j;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    j.push_back(p[i]);
-  }
-  r = j;
-}
-void adl_serializer<glm::quat>::from_json(const json &j, glm::quat &p)
-{
-  quat v;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    v[i] = j.at(i);
-  }
-  p = v;
-}
-void adl_serializer<glm::mat4>::to_json(json &r, const glm::mat4 &p)
-{ // todo: change this to use 4 vec4s instead so its easier to read in the json
-  // file
-  json j;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    for (uint32 k = 0; k < 4; ++k)
-    {
-      float f = p[i][k];
-      j.push_back(f);
-    }
-  }
-  r = j;
-}
-void adl_serializer<glm::mat4>::from_json(const json &j, glm::mat4 &p)
-{
-  mat4 v;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    for (uint32 k = 0; k < 4; ++k)
-    {
-      float f = j.at(i * 4 + k);
-      v[i][k] = f;
-    }
-  }
-  p = v;
-}
-void adl_serializer<glm::ivec2>::to_json(json &r, const glm::ivec2 &p)
-{
-  json j;
-  for (uint32 i = 0; i < 2; ++i)
-  {
-    j.push_back(p[i]);
-  }
-  r = j;
-}
-void adl_serializer<glm::ivec2>::from_json(const json &j, glm::ivec2 &p)
-{
-  ivec2 v;
-  for (uint32 i = 0; i < 2; ++i)
-  {
-    v[i] = j.at(i);
-  }
-  p = v;
-}
+  size_t pos = 0;
+  std::string result;
+  _pretty_json(result, j.dump(), pos);
+  return result;
 }
 
 void to_json(json &result, const Light &p)
@@ -346,6 +170,8 @@ void from_json(const json &j, Mesh &p)
     }
   }
 }
+
+void to_json(json &result, const Material &p) { result = p.m; }
 
 void from_json(const json &j, Material &p)
 {
@@ -545,21 +371,18 @@ void set_import_materials(Node_Ptr ptr, json json_for_ptr)
   const uint32 import_children_size = ptr->owned_children.size();
   const uint32 jchildren_size = jchildren.size();
 
-
-
   // we need the full json for the child that matches this already-constructed
   // child in order to recurse
   for (uint32 i = 0; i < import_children_size; ++i)
   {
     if (i >= jchildren_size)
     {
-      //problem: if the user added something to this node's owned-children
-      //before the final import child, the order will be ruined, and the
-      //remaining nodes will never have their materials restored
-      //unless you implement heuristics or save the vertex data raw
+      // problem: if the user added something to this node's owned-children
+      // before the final import child, the order will be ruined, and the
+      // remaining nodes will never have their materials restored
+      // unless you implement heuristics or save the vertex data raw
       break;
     }
-     
 
     Node_Ptr child = ptr->owned_children[i];
     json jchild = jchildren[i];
@@ -692,10 +515,7 @@ void from_json(const json &k, Scene_Graph &scene)
   }
   catch (std::exception &e)
   {
-    std::string dump = k.dump();
-    std::string pretty;
-    size_t pos = 0;
-    pretty_json(pretty, dump, pos);
+    std::string pretty = pretty_dump(k);
     set_message(s("Warning: JSON for Scene_Graph::root load failed.",
                     "Exception: ", e.what(), " JSON:\n"),
         pretty, 15.0f);
@@ -707,10 +527,7 @@ void from_json(const json &k, Scene_Graph &scene)
   }
   catch (std::exception &e)
   {
-    std::string dump = k.dump();
-    std::string pretty;
-    size_t pos = 0;
-    pretty_json(pretty, dump, pos);
+    std::string pretty = pretty_dump(k);
     set_message(s("Warning: JSON for Scene_Graph::lights load failed.",
                     "Exception: ", e.what(), " JSON:\n"),
         pretty, 15.0f);

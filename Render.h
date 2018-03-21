@@ -403,11 +403,11 @@ private:
   void init_render_targets();
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
-  float32 render_scale = 1.0f;
+  float32 render_scale = CONFIG.render_scale;
   ivec2 window_size; // actual window size
   ivec2 size;        // render target size
-  float32 vfov = 60;
-  ivec2 shadow_map_size = ivec2(2048, 2048) / 2;
+  float32 vfov = CONFIG.fov;
+  ivec2 shadow_map_size = CONFIG.shadow_map_size;
   mat4 camera;
   mat4 projection;
   vec3 camera_position = vec3(0);
