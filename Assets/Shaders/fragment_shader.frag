@@ -207,6 +207,7 @@ void main()
   result += m.emissive;
   result += additional_ambient * m.albedo;
   debug.rgb = texture(environment,m.normal).rgb;
+  debug.rgb = m.normal;
   //result += m.shininess*env;//hack
 
   // debug.rgb = vec3(texture2D(shadow_maps[1],

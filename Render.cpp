@@ -2074,12 +2074,12 @@ Cubemap::Cubemap(Cubemap_Descriptor d)
   {
     return;
   }
-
-  handle = std::make_shared<Texture_Handle>();
+  handle = std::make_shared<Texture_Handle>(); 
   TEXTURECUBEMAP_CACHE[key] = handle;
 
   for (uint32 i = 0; i < 6; ++i)
   {
+    set_message(s(i));
     int32 width, height, n;
     auto *data = stbi_load(d.faces[i].c_str(), &width, &height, &n, 4);
     if (!data)
