@@ -40,7 +40,10 @@ GLuint *FINAL_OUTPUT_TEXTURE = nullptr;
 std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
-    TEXTURE_CACHE;
+    TEXTURE2D_CACHE;
+
+static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
+    TEXTURECUBEMAP_CACHE;
 
 void check_FBO_status();
 
@@ -282,8 +285,8 @@ Render::~Render()
 
 void check_and_clear_expired_textures()
 {
-  auto it = TEXTURE_CACHE.begin();
-  while (it != TEXTURE_CACHE.end())
+  auto it = TEXTURE2D_CACHE.begin();
+  while (it != TEXTURE2D_CACHE.end())
   {
     auto texture_handle = *it;
     const std::string *path = &texture_handle.first;
@@ -297,7 +300,7 @@ void check_and_clear_expired_textures()
       time_t t1 = ptr.get()->file_mod_t;
       if (t1 != t)
       {
-        it = TEXTURE_CACHE.erase(it);
+        it = TEXTURE2D_CACHE.erase(it);
         continue;
       }
     }
@@ -469,7 +472,7 @@ void Texture::load()
       static uint32 i = 0;
       ++i;
       std::string unique_key = t.name = s("Generated texture: ", i);
-      TEXTURE_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
+      TEXTURE2D_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
       glGenTextures(1, &texture->texture);
       texture.get()->filename = t.name;
     }
@@ -504,7 +507,7 @@ void Texture::load()
     texture = nullptr;
     return;
   }
-  auto ptr = TEXTURE_CACHE[t.name].lock();
+  auto ptr = TEXTURE2D_CACHE[t.name].lock();
   if (ptr)
   {
     texture = ptr;
@@ -516,7 +519,7 @@ void Texture::load()
   }
 
   texture = std::make_shared<Texture_Handle>();
-  TEXTURE_CACHE[t.name] = texture;
+  TEXTURE2D_CACHE[t.name] = texture;
   int32 width, height, n;
 
   // todo: other software procedural texture generators here?
@@ -1056,6 +1059,8 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   passthrough = Shader("passthrough.vert", "passthrough.frag");
   variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
   gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
+  Cubemap_Descriptor cube_descriptor("skybox");
+  environment = Cubemap(cube_descriptor);
 
   set_message("Initializing instance buffers");
   const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
@@ -1161,7 +1166,7 @@ void Render::set_uniform_shadowmaps(Shader &shader)
 
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
     /*
-        
+        
         if (!shadow_map->enabled)
           continue;*/
 
@@ -1474,6 +1479,11 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", true);
+
+    shader.set_uniform("environment", (GLint)21);
+
+    environment.bind(21);
+
     set_uniform_lights(shader);
     // set_message("SETTING SHADOW MAPS:");
     set_uniform_shadowmaps(shader);
@@ -1635,7 +1645,7 @@ void Render::render(float64 state_time)
     if (ImGui::Button("Close Me"))
       show_renderer_window = false;
 
-    for (auto &tex : TEXTURE_CACHE)
+    for (auto &tex : TEXTURE2D_CACHE)
     {
       auto ptr = tex.second.lock();
       if (ptr)
@@ -2046,3 +2056,111 @@ void Spotlight_Shadow_Map::init(ivec2 size)
 }
 
 Renderbuffer_Handle::~Renderbuffer_Handle() { glDeleteRenderbuffers(1, &rbo); }
+
+// these must be in the order:
+
+// these must be in the order:
+
+Cubemap::Cubemap() {}
+
+Cubemap::Cubemap(Cubemap_Descriptor d)
+{
+  descriptor = d;
+  std::string key = d.faces[0] + d.faces[1] + d.faces[2] + d.faces[3] +
+                    d.faces[4] + d.faces[5];
+
+  handle = TEXTURECUBEMAP_CACHE[key].lock();
+  if (handle)
+  {
+    return;
+  }
+
+  handle = std::make_shared<Texture_Handle>();
+  TEXTURECUBEMAP_CACHE[key] = handle;
+
+  for (uint32 i = 0; i < 6; ++i)
+  {
+    int32 width, height, n;
+    auto *data = stbi_load(d.faces[i].c_str(), &width, &height, &n, 4);
+    if (!data)
+    { // error loading file...
+#if DYNAMIC_TEXTURE_RELOADING
+      // retry next frame
+      set_message("Warning: missing Cubemap Texture:" + d.faces[i]);
+      handle = nullptr;
+      return;
+#else
+      if (!data)
+      {
+        set_message("STBI failed to find or load texture: " + d.faces[i], 3.0);
+        handle = nullptr;
+        // initialized = true;
+        return;
+      }
+#endif
+    }
+    set_message(
+        "Cubemap load cache miss. Texture from disk: ", d.faces[i], 1.0);
+    // struct stat attr;
+    // stat(t.name.c_str(), &attr);
+    //(*handle).get()->file_mod_t = attr.st_mtime;
+
+    if (descriptor.process_premultiply)
+    {
+      for (int32 i = 0; i < width * height; ++i)
+      {
+        uint32 pixel = data[i];
+        uint8 r = (uint8)(0x000000FF & pixel);
+        uint8 g = (uint8)((0x0000FF00 & pixel) >> 8);
+        uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
+        uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
+
+        r = (uint8)round(r * ((float)a / 255));
+        g = (uint8)round(g * ((float)a / 255));
+        b = (uint8)round(b * ((float)a / 255));
+
+        data[i] = (24 << a) | (16 << b) | (8 << g) | r;
+      }
+    }
+
+    if (i == 0)
+    {
+      glGenTextures(1, &handle->texture);
+      glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
+    }
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height,
+        0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    stbi_image_free(data);
+  }
+  glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+}
+
+void Cubemap::bind(GLuint texture_unit)
+{
+  if (handle)
+  {
+    glActiveTexture(GL_TEXTURE0 + texture_unit);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
+  }
+}
+
+// filenames ordered: right left top bottom back front
+
+Cubemap_Descriptor::Cubemap_Descriptor() {}
+
+Cubemap_Descriptor::Cubemap_Descriptor(std::string directory)
+{
+  directory = BASE_TEXTURE_PATH + directory;
+  faces[0] = directory + "/right.jpg";
+  faces[1] = directory + "/left.jpg";
+  faces[2] = directory + "/top.jpg";
+  faces[3] = directory + "/bottom.jpg";
+  faces[4] = directory + "/back.jpg";
+  faces[5] = directory + "/front.jpg";
+}

@@ -4,6 +4,8 @@ uniform sampler2D texture1; // specular;
 uniform sampler2D texture2; // normal;
 uniform sampler2D texture3; // emissive;
 uniform sampler2D texture4; // roughness;
+uniform samplerCube environment;
+
 uniform vec4 texture0_mod;
 uniform vec4 texture3_mod;
 uniform vec4 texture4_mod;
@@ -204,6 +206,8 @@ void main()
   }
   result += m.emissive;
   result += additional_ambient * m.albedo;
+  debug.rgb = texture(environment,m.normal).rgb;
+  //result += m.shininess*env;//hack
 
   // debug.rgb = vec3(texture2D(shadow_maps[1],
   // frag_in_shadow_space_postw[1].xy).rg,0);

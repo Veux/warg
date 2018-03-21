@@ -141,8 +141,8 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
         "Assertion failed in:" + std::string(file) +
             "\non line:" + std::to_string(line),
         1.0);
-    push_log_to_disk();
     std::string message_log = get_message_log();
+    push_log_to_disk();
     std::string end_of_log;
     uint32 length = message_log.size();
     uint32 char_count = 1000;
@@ -153,6 +153,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
       end_of_log = message_log.substr(length - char_count, std::string::npos);
     }
     std::cout << end_of_log << std::endl;
+    SDL_Delay(500);
     throw;
   }
 #endif

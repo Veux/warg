@@ -66,6 +66,7 @@ struct Texture_Handle
 
 private:
   friend struct Texture;
+  friend struct Cubemap;
 
   // last bound dynamic state:
   GLenum magnification_filter = GLenum(0);
@@ -130,6 +131,30 @@ private:
   bool initialized = false;
   bool has_img_file_extension(std::string name);
 };
+
+struct Cubemap_Descriptor
+{
+  //filenames ordered: right left top bottom back front
+  Cubemap_Descriptor();
+  Cubemap_Descriptor(std::string directory);
+  std::array<std::string, 6> faces;
+  bool process_premultiply = false;
+};
+
+struct Cubemap
+{
+  Cubemap();
+
+  //todo: dynamic reloading: just keep track of the latest-modified file of the 6
+  //and if one of them has a newer mod, nuke all 6
+
+  //these must be in the order: 
+  Cubemap(Cubemap_Descriptor d);
+  void bind(GLuint texture_unit);
+  Cubemap_Descriptor descriptor;
+  std::shared_ptr<Texture_Handle> handle;
+};
+
 
 struct Mesh_Handle
 {
@@ -254,7 +279,6 @@ struct Light_Array
   std::array<Light, MAX_LIGHTS> lights;
   vec3 additional_ambient = vec3(0);
   uint32 light_count = 0;
-  json jsonify();
 };
 
 // A render entity/render instance is a complete prepared representation of an
@@ -385,6 +409,7 @@ struct Render
   Shader variance_shadow_map;
   Shader gamma_correction;
   Bloom_Shader bloom;
+  Cubemap environment;
 
 private:
   Light_Array lights;
