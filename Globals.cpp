@@ -474,8 +474,16 @@ UID uid()
 
 void Config::load(std::string filename)
 {
-  std::string str = read_file(filename.c_str());
-  json j = json::parse(str);
+  json j;
+  try
+  {
+    std::string str = read_file(filename.c_str());
+    j = json::parse(str);
+  }
+  catch (...)
+  {
+    return;
+  }
   auto i = j.end();
 
   if ((i = j.find("Resolution")) != j.end())
