@@ -15,6 +15,8 @@ const float32 MOUSE_Y_SENS = .0041f;
 const float32 ZOOM_STEP = 0.2f;
 const float32 ATK_RANGE = 5.0f;
 
+//a change
+
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
 const std::string BASE_TEXTURE_PATH =
     BASE_ASSET_PATH + std::string("Textures/");
