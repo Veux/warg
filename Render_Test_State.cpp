@@ -45,21 +45,32 @@ Render_Test_State::Render_Test_State(
   ground->position = {0.0f, 0.0f, -5.f};
   ground->scale = {40.0f, 40.0f, 10.f};
 
+  material.normal = "color(0.5,.5,1,0)";
+  material.roughness = "";
+  
+  auto testerbox = scene.add_primitive_mesh(cube, "world_cube", material);
+  testerbox->position = { 10.f,0.0f,1.5f };
+  scene.set_parent(testerbox, scene.root, true);
+  auto testerbox2 = scene.add_primitive_mesh(cube, "world_cube", material);
+  testerbox2->position = { 10.f,10.0f,1.5f };
+  scene.set_parent(testerbox2, scene.root, true);
+
+
   Material_Descriptor sky_mat;
   sky_mat.uv_scale = vec3(1.f);
   sky_mat.backface_culling = false;
   sky_mat.albedo = "skybox.jpg";
   sky_mat.vertex_shader = "vertex_shader.vert";
   sky_mat.frag_shader = "passthrough.frag";
-  sky_sphere = scene.add_aiscene("sphere.obj", &sky_mat);
+  sky_sphere = scene.add_aiscene("smoothsphere.obj", &sky_mat);
 
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
-  sphere = scene.add_aiscene("sphere.obj", nullptr, &material);
+  sphere = scene.add_aiscene("smoothsphere.obj", nullptr, &material);
 
   material.albedo = "crate_diffuse.png";
   material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
+  //material.normal = "test_normal.png";
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
@@ -113,17 +124,17 @@ Render_Test_State::Render_Test_State(
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1,1,1,1)";
   material.roughness = "";
-  cone_light1 = scene.add_aiscene("sphere.obj", &material);
+  cone_light1 = scene.add_aiscene("smoothsphere.obj", &material);
   cone_light1->name = "conelight1";
 
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(3,3,1.5,1)";
-  sun_light = scene.add_aiscene("sphere.obj", &material);
+  sun_light = scene.add_aiscene("smoothsphere.obj", &material);
   sun_light->name = "sun";
 
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1.15,0,1.15,1)";
-  small_light = scene.add_aiscene("sphere.obj", &material);
+  small_light = scene.add_aiscene("smoothsphere.obj", &material);
 }
 
 void Render_Test_State::handle_input_events(

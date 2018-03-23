@@ -34,6 +34,7 @@ enum Texture_Location
   normal,
   emissive,
   roughness,
+  metalness,
   s0, // shadow maps
   s1,
   s2,
@@ -132,12 +133,17 @@ private:
   bool has_img_file_extension(std::string name);
 };
 
-struct Cubemap_Descriptor
+struct Cmap_Descriptor
 {
-  //filenames ordered: right left top bottom back front
-  Cubemap_Descriptor();
-  Cubemap_Descriptor(std::string directory);
-  std::array<std::string, 6> faces;
+  Cmap_Descriptor();
+  //note: in order to import a new set of cubemap files, you must do the following in an
+  //image editor first
+  //rotate bottom.jpg 180 degrees
+  //rotate front.jpg 180 degrees
+  //rotate left.jpg 90 clockwise
+  //rotate right.jpg 90 anticlockwise
+  Cmap_Descriptor(std::string directory);
+  std::array<std::string, 6> faces = {""};
   bool process_premultiply = false;
 };
 
@@ -149,9 +155,9 @@ struct Cubemap
   //and if one of them has a newer mod, nuke all 6
 
   //these must be in the order: 
-  Cubemap(Cubemap_Descriptor d);
+  Cubemap(Cmap_Descriptor d);
   void bind(GLuint texture_unit);
-  Cubemap_Descriptor descriptor;
+  Cmap_Descriptor descriptor;
   std::shared_ptr<Texture_Handle> handle;
 };
 

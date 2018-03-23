@@ -1,9 +1,10 @@
 #version 330
 uniform sampler2D texture0; // albedo
-uniform sampler2D texture1; // specular;
-uniform sampler2D texture2; // normal;
-uniform sampler2D texture3; // emissive;
-uniform sampler2D texture4; // roughness;
+uniform sampler2D texture1; // specular
+uniform sampler2D texture2; // normal
+uniform sampler2D texture3; // emissive
+uniform sampler2D texture4; // roughness
+uniform sampler2D texture5; // metalness
 uniform samplerCube environment;
 
 uniform vec4 texture0_mod;
@@ -138,11 +139,17 @@ void main()
   m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
   m.albedo = texture0_mod.rgb * to_linear(albedo_tex.rgb) / PI;
   m.emissive = texture3_mod.rgb * to_linear(texture2D(texture3, frag_uv).rgb);
-  m.shininess = 1.0 + texture4_mod.r * 64 *
-                          (1.0 - to_linear(texture2D(texture4, frag_uv).r));
+  float shininess_texture = texture4_mod.r*(1.0 - to_linear(texture2D(texture4, frag_uv).r));
+  m.shininess = 1.0 + texture4_mod.r * 64 * shininess_texture;
   vec3 n = texture2D(texture2, frag_uv).rgb;
 
   m.normal = frag_TBN * normalize((n * 2) - 1.0f);
+
+  vec3 v = normalize(camera_position - frag_world_position);
+  vec3 r = reflect(v, m.normal);
+
+  //hack to make pseudo-hdr:
+  vec3 env = 2.0f * pow(to_linear(texture(environment, r).rgb),vec3(2.0));
 
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
@@ -150,7 +157,6 @@ void main()
     vec3 l = lights[i].position - frag_world_position;
     float d = length(l);
     l = normalize(l);
-    vec3 v = normalize(camera_position - frag_world_position);
     vec3 h = normalize(l + v);
     vec3 att = lights[i].attenuation;
     float at = 1.0 / (att.x + (att.y * d) + (att.z * d * d));
@@ -201,14 +207,15 @@ void main()
     float ec = (8.0f * m.shininess) / (8.0f * PI);
     float specular = ec * pow(max(dot(h, m.normal), 0.0), m.shininess);
     vec3 ambient = vec3(lights[i].ambient * at * m.albedo);
-    result += ldotn * specular * m.albedo * lights[i].irradiance * at * alpha;
+    vec3 light = ldotn * specular * m.albedo * lights[i].irradiance * at * alpha;
+  result += light;
     result += ambient;
+    result += 15*normalize(lights[i].irradiance)* alpha * m.albedo*ldotn*shininess_texture*env;//hack af
   }
   result += m.emissive;
   result += additional_ambient * m.albedo;
-  debug.rgb = texture(environment,m.normal).rgb;
-  debug.rgb = m.normal;
-  //result += m.shininess*env;//hack
+  debug.rgb = env;
+  // debug.rgb = m.normal;
 
   // debug.rgb = vec3(texture2D(shadow_maps[1],
   // frag_in_shadow_space_postw[1].xy).rg,0);

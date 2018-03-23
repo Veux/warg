@@ -610,7 +610,7 @@ void Texture::load()
 
 void Texture::bind(GLuint binding)
 {
-  set_message(s("Texture::bind(", binding, ")"));
+  //set_message(s("Texture::bind(", binding, ")"));
 #if DYNAMIC_TEXTURE_RELOADING
   load();
 #endif
@@ -621,7 +621,7 @@ void Texture::bind(GLuint binding)
   }
   if (!texture)
   {
-    set_message("Null texture for binding:", s(binding));
+    //set_message("Null texture for binding:", s(binding));
     glActiveTexture(GL_TEXTURE0 + binding);
     glBindTexture(GL_TEXTURE_2D, 0);
     return;
@@ -675,7 +675,7 @@ void Texture::bind(GLuint binding)
 // by a file modification - if it is, it will gracefully display
 // black, or a random other texture
 
-inline GLuint Texture::get_handle()
+GLuint Texture::get_handle()
 {
   if (!initialized)
     load();
@@ -1059,7 +1059,7 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   passthrough = Shader("passthrough.vert", "passthrough.frag");
   variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
   gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
-  Cubemap_Descriptor cube_descriptor("skybox");
+  Cmap_Descriptor cube_descriptor("skybox");
   environment = Cubemap(cube_descriptor);
 
   set_message("Initializing instance buffers");
@@ -1166,7 +1166,10 @@ void Render::set_uniform_shadowmaps(Shader &shader)
 
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
     /*
-        
+        
+
+
+
         if (!shadow_map->enabled)
           continue;*/
 
@@ -2057,54 +2060,100 @@ void Spotlight_Shadow_Map::init(ivec2 size)
 
 Renderbuffer_Handle::~Renderbuffer_Handle() { glDeleteRenderbuffers(1, &rbo); }
 
-// these must be in the order:
-
-// these must be in the order:
-
 Cubemap::Cubemap() {}
 
-Cubemap::Cubemap(Cubemap_Descriptor d)
+void Cubemap::bind(GLuint texture_unit)
+{
+  if (handle)
+  {
+    glActiveTexture(GL_TEXTURE0 + texture_unit);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
+  }
+}
+
+// filenames ordered: right left top bottom back front
+
+Cmap_Descriptor::Cmap_Descriptor() {}
+
+Cmap_Descriptor::Cmap_Descriptor(std::string directory)
+{
+  directory = BASE_TEXTURE_PATH + directory;
+  //yellow means original side name
+  //red is where it should appear
+
+
+  //todo: cubemap preprocess: revert the cubemap file changes from default when implemented:
+  //necessary processing:
+
+  //note: in order to import a new set of cubemap files, you must do the following in an
+  //image editor first
+  //rotate bottom.jpg 180 degrees
+  //rotate front.jpg 180 degrees
+  //rotate left.jpg 90 clockwise
+  //rotate right.jpg 90 anticlockwise
+
+  //opengl left = right.jpg 
+  //opengl right = left.jpg 
+  //opengl top = back.jpg 
+  //opengl front = top.jpg 
+  //opengl bottom = front.jpg 
+  //opengl back = bottom.jpg
+  //
+
+  //opengl right
+  faces[0] = directory + "/left.jpg";
+
+  //opengl left
+  faces[1] = directory + "/right.jpg";
+
+  //opengl top
+  faces[2] = directory + "/back.jpg";
+
+  //opengl bottom
+  faces[3] = directory + "/front.jpg";
+
+  //opengl back
+  faces[4] = directory + "/bottom.jpg";
+
+  //opengl front
+  faces[5] = directory + "/top.jpg";
+
+
+  //opengl z-forward space is right left top bottom back front
+  //faces[0] = directory + "/right.jpg";
+  //faces[1] = directory + "/left.jpg";
+  //faces[2] = directory + "/top.jpg"; 
+  //faces[3] = directory + "/bottom.jpg"; 
+  //faces[4] = directory + "/back.jpg"; 
+  //faces[5] = directory + "/front.jpg";
+}
+
+Cubemap::Cubemap(Cmap_Descriptor d)
 {
   descriptor = d;
   std::string key = d.faces[0] + d.faces[1] + d.faces[2] + d.faces[3] +
                     d.faces[4] + d.faces[5];
-
   handle = TEXTURECUBEMAP_CACHE[key].lock();
   if (handle)
   {
     return;
   }
-  handle = std::make_shared<Texture_Handle>(); 
+  handle = std::make_shared<Texture_Handle>();
   TEXTURECUBEMAP_CACHE[key] = handle;
 
   for (uint32 i = 0; i < 6; ++i)
-  {
-    set_message(s(i));
+  { //opengl z-forward space is right left top bottom back front
     int32 width, height, n;
     auto *data = stbi_load(d.faces[i].c_str(), &width, &height, &n, 4);
     if (!data)
-    { // error loading file...
-#if DYNAMIC_TEXTURE_RELOADING
+    {
       // retry next frame
       set_message("Warning: missing Cubemap Texture:" + d.faces[i]);
       handle = nullptr;
       return;
-#else
-      if (!data)
-      {
-        set_message("STBI failed to find or load texture: " + d.faces[i], 3.0);
-        handle = nullptr;
-        // initialized = true;
-        return;
-      }
-#endif
     }
     set_message(
         "Cubemap load cache miss. Texture from disk: ", d.faces[i], 1.0);
-    // struct stat attr;
-    // stat(t.name.c_str(), &attr);
-    //(*handle).get()->file_mod_t = attr.st_mtime;
-
     if (descriptor.process_premultiply)
     {
       for (int32 i = 0; i < width * height; ++i)
@@ -2139,28 +2188,4 @@ Cubemap::Cubemap(Cubemap_Descriptor d)
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-}
-
-void Cubemap::bind(GLuint texture_unit)
-{
-  if (handle)
-  {
-    glActiveTexture(GL_TEXTURE0 + texture_unit);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
-  }
-}
-
-// filenames ordered: right left top bottom back front
-
-Cubemap_Descriptor::Cubemap_Descriptor() {}
-
-Cubemap_Descriptor::Cubemap_Descriptor(std::string directory)
-{
-  directory = BASE_TEXTURE_PATH + directory;
-  faces[0] = directory + "/right.jpg";
-  faces[1] = directory + "/left.jpg";
-  faces[2] = directory + "/top.jpg";
-  faces[3] = directory + "/bottom.jpg";
-  faces[4] = directory + "/back.jpg";
-  faces[5] = directory + "/front.jpg";
 }

@@ -280,12 +280,12 @@ void to_json(json &result, const std::shared_ptr<Scene_Graph_Node> &node_ptr)
 
 void to_json(json &result, const Scene_Graph_Node &node)
 {
-  json j; /*
+  json j; 
     if (!node.include_in_save)
     {
       result = j;
       return;
-    }*/
+    }
 
   j["Name"] = node.name;
   j["Position"] = node.position;
@@ -385,6 +385,7 @@ void set_import_materials(Node_Ptr ptr, json json_for_ptr)
     }
 
     Node_Ptr child = ptr->owned_children[i];
+    child->include_in_save = true;
     json jchild = jchildren[i];
     std::string name = jchild.at("Name");
     if (child->name == name)
@@ -446,6 +447,7 @@ Node_Ptr build_node_graph_from_json(const json &j, Scene_Graph &scene)
 
     ptr->filename_of_import = filename_of_import;
     ptr->is_root_of_import = true;
+    ptr->include_in_save = true;
 
     set_import_materials(ptr, j);
   }
