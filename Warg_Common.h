@@ -51,8 +51,6 @@ struct Character
   Character_Physics physics;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
   Movement_Command last_movement_command;
-  Collision_Packet colpkt;
-  int collision_recursion_depth;
 
   std::string name;
   int team;

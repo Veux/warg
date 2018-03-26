@@ -3,8 +3,9 @@
 std::vector<Triangle> collect_colliders(const Scene_Graph &scene);
 void check_collision(
     Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
-vec3 collide_char_with_world(Character &character, const vec3 &pos,
-    const vec3 &vel, const std::vector<Triangle> &colliders);
+vec3 collide_char_with_world(Collision_Packet &colpkt,
+    int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
+    const std::vector<Triangle> &colliders);
 void collide_and_slide_char(Character &character, const vec3 &vel,
     const vec3 &gravity, const std::vector<Triangle> &colliders);
 
@@ -186,22 +187,23 @@ void check_collision(
   }
 }
 
-vec3 collide_char_with_world(Character &character, const vec3 &pos,
-    const vec3 &vel, const std::vector<Triangle> &colliders)
+vec3 collide_char_with_world(Collision_Packet &colpkt,
+    int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
+    const std::vector<Triangle> &colliders)
 {
   float epsilon = 0.005f;
 
-  if (character.collision_recursion_depth > 5)
+  if (collision_recursion_depth > 5)
     return pos;
 
-  character.colpkt.vel = vel;
-  character.colpkt.vel_normalized = normalize(character.colpkt.vel);
-  character.colpkt.base_point = pos;
-  character.colpkt.found_collision = false;
+  colpkt.vel = vel;
+  colpkt.vel_normalized = normalize(colpkt.vel);
+  colpkt.base_point = pos;
+  colpkt.found_collision = false;
 
-  check_collision(character.colpkt, colliders);
+  check_collision(colpkt, colliders);
 
-  if (!character.colpkt.found_collision)
+  if (!colpkt.found_collision)
   {
     return pos + vel;
   }
@@ -209,19 +211,18 @@ vec3 collide_char_with_world(Character &character, const vec3 &pos,
   vec3 destination_point = pos + vel;
   vec3 new_base_point = pos;
 
-  if (character.colpkt.nearest_distance >= epsilon)
+  if (colpkt.nearest_distance >= epsilon)
   {
     vec3 v = vel;
-    v = normalize(v) * (character.colpkt.nearest_distance - epsilon);
-    new_base_point = character.colpkt.base_point + v;
+    v = normalize(v) * (colpkt.nearest_distance - epsilon);
+    new_base_point = colpkt.base_point + v;
 
     v = normalize(v);
-    character.colpkt.intersection_point -= epsilon * v;
+    colpkt.intersection_point -= epsilon * v;
   }
 
-  vec3 slide_plane_origin = character.colpkt.intersection_point;
-  vec3 slide_plane_normal =
-      new_base_point - character.colpkt.intersection_point;
+  vec3 slide_plane_origin = colpkt.intersection_point;
+  vec3 slide_plane_normal = new_base_point - colpkt.intersection_point;
   slide_plane_normal = normalize(slide_plane_normal);
   Plane sliding_plane = Plane(slide_plane_origin, slide_plane_normal);
 
@@ -229,75 +230,79 @@ vec3 collide_char_with_world(Character &character, const vec3 &pos,
       destination_point -
       sliding_plane.signed_distance_to(destination_point) * slide_plane_normal;
 
-  vec3 new_vel_vec =
-      new_destination_point - character.colpkt.intersection_point;
+  vec3 new_vel_vec = new_destination_point - colpkt.intersection_point;
 
   if (length(new_vel_vec) < epsilon)
   {
     return new_base_point;
   }
 
-  character.collision_recursion_depth++;
-  return collide_char_with_world(character, new_base_point, new_vel_vec, colliders);
+  collision_recursion_depth++;
+  return collide_char_with_world(colpkt, collision_recursion_depth,
+      new_base_point, new_vel_vec, colliders);
 }
 
 void collide_and_slide_char(Character &character, const vec3 &vel,
     const vec3 &gravity, const std::vector<Triangle> &colliders)
 {
-  character.colpkt.e_radius = character.radius;
-  character.colpkt.pos_r3 = character.physics.pos;
-  character.colpkt.vel_r3 = vel;
+  Collision_Packet colpkt;
+  int collision_recursion_depth;
 
-  vec3 e_space_pos = character.colpkt.pos_r3 / character.colpkt.e_radius;
-  vec3 e_space_vel = character.colpkt.vel_r3 / character.colpkt.e_radius;
+  colpkt.e_radius = character.radius;
+  colpkt.pos_r3 = character.physics.pos;
+  colpkt.vel_r3 = vel;
 
-  character.collision_recursion_depth = 0;
+  vec3 e_space_pos = colpkt.pos_r3 / colpkt.e_radius;
+  vec3 e_space_vel = colpkt.vel_r3 / colpkt.e_radius;
 
-  vec3 final_pos = collide_char_with_world(character, e_space_pos, e_space_vel, colliders);
+  collision_recursion_depth = 0;
+
+  vec3 final_pos = collide_char_with_world(
+      colpkt, collision_recursion_depth, e_space_pos, e_space_vel, colliders);
 
   if (character.physics.grounded)
   {
-    character.colpkt.pos_r3 = final_pos * character.colpkt.e_radius;
-    character.colpkt.vel_r3 = vec3(0, 0, -0.5);
-    character.colpkt.vel = vec3(0, 0, -0.5) / character.colpkt.e_radius;
-    character.colpkt.vel_normalized = normalize(character.colpkt.vel);
-    character.colpkt.base_point = final_pos;
-    character.colpkt.found_collision = false;
+    colpkt.pos_r3 = final_pos * colpkt.e_radius;
+    colpkt.vel_r3 = vec3(0, 0, -0.5);
+    colpkt.vel = vec3(0, 0, -0.5) / colpkt.e_radius;
+    colpkt.vel_normalized = normalize(colpkt.vel);
+    colpkt.base_point = final_pos;
+    colpkt.found_collision = false;
 
-    check_collision(character.colpkt, colliders);
-    if (character.colpkt.found_collision &&
-        character.colpkt.nearest_distance > 0.05)
-      final_pos.z -= character.colpkt.nearest_distance - 0.005;
+    check_collision(colpkt, colliders);
+    if (colpkt.found_collision && colpkt.nearest_distance > 0.05)
+      final_pos.z -= colpkt.nearest_distance - 0.005;
   }
 
-  character.colpkt.pos_r3 = final_pos * character.colpkt.e_radius;
-  character.colpkt.vel_r3 = gravity;
+  colpkt.pos_r3 = final_pos * colpkt.e_radius;
+  colpkt.vel_r3 = gravity;
 
-  e_space_vel = gravity / character.colpkt.e_radius;
-  character.collision_recursion_depth = 0;
+  e_space_vel = gravity / colpkt.e_radius;
+  collision_recursion_depth = 0;
 
-  final_pos = collide_char_with_world(character, final_pos, e_space_vel, colliders);
+  final_pos = collide_char_with_world(
+      colpkt, collision_recursion_depth, final_pos, e_space_vel, colliders);
 
-  character.colpkt.pos_r3 = final_pos * character.colpkt.e_radius;
-  character.colpkt.vel_r3 = vec3(0, 0, -0.05);
-  character.colpkt.vel = vec3(0, 0, -0.05) / character.colpkt.e_radius;
-  character.colpkt.vel_normalized = normalize(character.colpkt.vel);
-  character.colpkt.base_point = final_pos;
-  character.colpkt.found_collision = false;
+  colpkt.pos_r3 = final_pos * colpkt.e_radius;
+  colpkt.vel_r3 = vec3(0, 0, -0.05);
+  colpkt.vel = vec3(0, 0, -0.05) / colpkt.e_radius;
+  colpkt.vel_normalized = normalize(colpkt.vel);
+  colpkt.base_point = final_pos;
+  colpkt.found_collision = false;
 
-  check_collision(character.colpkt, colliders);
+  check_collision(colpkt, colliders);
 
-  character.physics.grounded = character.colpkt.found_collision && gravity.z <= 0;
+  character.physics.grounded = colpkt.found_collision && gravity.z <= 0;
 
-  final_pos *= character.colpkt.e_radius;
+  final_pos *= colpkt.e_radius;
   character.physics.pos = final_pos;
 }
 
 bool Character_Physics::operator==(const Character_Physics &b) const
 {
   auto &a = *this;
-  return a.pos == b.pos && a.dir == b.dir && a.vel == b.vel
-    && a.grounded == b.grounded;
+  return a.pos == b.pos && a.dir == b.dir && a.vel == b.vel &&
+         a.grounded == b.grounded;
 }
 
 bool Character_Physics::operator!=(const Character_Physics &b) const
