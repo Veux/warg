@@ -6,8 +6,9 @@ void check_collision(
 vec3 collide_char_with_world(Collision_Packet &colpkt,
     int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
-void collide_and_slide_char(Character &character, const vec3 &vel,
-    const vec3 &gravity, const std::vector<Triangle> &colliders);
+void collide_and_slide_char(Character_Physics &phys, vec3 &radius,
+    const vec3 &vel, const vec3 &gravity,
+    const std::vector<Triangle> &colliders);
 
 Map make_blades_edge()
 {
@@ -142,7 +143,8 @@ void Character::move(float32 dt, const std::vector<Triangle> &colliders)
   if (grounded)
     vel.z = 0;
 
-  collide_and_slide_char(*this, v * dt, vec3(0, 0, vel.z) * dt, colliders);
+  collide_and_slide_char(
+      physics, radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
 }
 
 std::vector<Triangle> collect_colliders(Scene_Graph &scene)
@@ -242,14 +244,15 @@ vec3 collide_char_with_world(Collision_Packet &colpkt,
       new_base_point, new_vel_vec, colliders);
 }
 
-void collide_and_slide_char(Character &character, const vec3 &vel,
-    const vec3 &gravity, const std::vector<Triangle> &colliders)
+void collide_and_slide_char(Character_Physics &physics, vec3 &radius,
+    const vec3 &vel, const vec3 &gravity,
+    const std::vector<Triangle> &colliders)
 {
   Collision_Packet colpkt;
   int collision_recursion_depth;
 
-  colpkt.e_radius = character.radius;
-  colpkt.pos_r3 = character.physics.pos;
+  colpkt.e_radius = radius;
+  colpkt.pos_r3 = physics.pos;
   colpkt.vel_r3 = vel;
 
   vec3 e_space_pos = colpkt.pos_r3 / colpkt.e_radius;
@@ -260,7 +263,7 @@ void collide_and_slide_char(Character &character, const vec3 &vel,
   vec3 final_pos = collide_char_with_world(
       colpkt, collision_recursion_depth, e_space_pos, e_space_vel, colliders);
 
-  if (character.physics.grounded)
+  if (physics.grounded)
   {
     colpkt.pos_r3 = final_pos * colpkt.e_radius;
     colpkt.vel_r3 = vec3(0, 0, -0.5);
@@ -292,10 +295,10 @@ void collide_and_slide_char(Character &character, const vec3 &vel,
 
   check_collision(colpkt, colliders);
 
-  character.physics.grounded = colpkt.found_collision && gravity.z <= 0;
+  physics.grounded = colpkt.found_collision && gravity.z <= 0;
 
   final_pos *= colpkt.e_radius;
-  character.physics.pos = final_pos;
+  physics.pos = final_pos;
 }
 
 bool Character_Physics::operator==(const Character_Physics &b) const
