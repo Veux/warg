@@ -35,6 +35,7 @@ enum Texture_Location
   emissive,
   roughness,
   metalness,
+  environment,
   s0, // shadow maps
   s1,
   s2,
@@ -74,6 +75,7 @@ private:
   GLenum minification_filter = GLenum(0);
   GLenum wrap_s = GLenum(0);
   GLenum wrap_t = GLenum(0);
+  glm::vec4 border_color = glm::vec4(0);
 
   // should be constant for this handle after initialization:
   std::string filename = "TEXTURE_HANDLE_FILENAME_NOT_SET";
@@ -97,6 +99,7 @@ struct Texture_Descriptor
   GLenum minification_filter = GL_LINEAR;
   GLenum wrap_s = GL_TEXTURE_WRAP_S;
   GLenum wrap_t = GL_TEXTURE_WRAP_T;
+  glm::vec4 border_color = glm::vec4(0);
   bool process_premultiply = false;
   bool cache_as_unique = true;
 };
@@ -109,7 +112,7 @@ struct Texture
   Texture(std::string name, glm::ivec2 size, GLenum format = GL_RGBA32F,
       GLenum minification_filter = GL_LINEAR,
       GLenum magnification_filter = GL_LINEAR, GLenum wraps = GL_CLAMP_TO_EDGE,
-      GLenum wrapt = GL_CLAMP_TO_EDGE);
+    GLenum wrapt = GL_CLAMP_TO_EDGE, glm::vec4 border_color = glm::vec4(0));
 
   Texture(std::string file_path, bool premul = false);
 
@@ -133,16 +136,16 @@ private:
   bool has_img_file_extension(std::string name);
 };
 
-struct Cmap_Descriptor
+struct Cubemap_Descriptor
 {
-  Cmap_Descriptor();
+  Cubemap_Descriptor();
   //note: in order to import a new set of cubemap files, you must do the following in an
   //image editor first
   //rotate bottom.jpg 180 degrees
   //rotate front.jpg 180 degrees
   //rotate left.jpg 90 clockwise
   //rotate right.jpg 90 anticlockwise
-  Cmap_Descriptor(std::string directory);
+  Cubemap_Descriptor(std::string directory);
   std::array<std::string, 6> faces = {""};
   bool process_premultiply = false;
 };
@@ -155,9 +158,9 @@ struct Cubemap
   //and if one of them has a newer mod, nuke all 6
 
   //these must be in the order: 
-  Cubemap(Cmap_Descriptor d);
+  Cubemap(Cubemap_Descriptor d);
   void bind(GLuint texture_unit);
-  Cmap_Descriptor descriptor;
+  Cubemap_Descriptor descriptor;
   std::shared_ptr<Texture_Handle> handle;
 };
 
@@ -206,11 +209,12 @@ struct Material_Descriptor
       tangent; // anisotropic surface roughness    - unused for now
   Texture_Descriptor ambient_occlusion; // unused for now
   Texture_Descriptor emissive;
+  Cubemap_Descriptor environment = "skybox";
 
   std::string vertex_shader = "vertex_shader.vert";
   std::string frag_shader = "fragment_shader.frag";
   vec2 uv_scale = vec2(1);
-  uint8 albedo_alpha_override = 0;
+  float albedo_alpha_override = -1.f;
   bool backface_culling = true;
   bool uses_transparency = false;
   bool casts_shadows = true;
@@ -232,6 +236,7 @@ private:
   Texture normal;
   Texture emissive;
   Texture roughness;
+  Cubemap environment = Cubemap_Descriptor("skybox");
   Shader shader;
   void load(Material_Descriptor &m);
   void bind(Shader *shader);
@@ -333,7 +338,7 @@ struct Framebuffer
 struct Gaussian_Blur
 {
   Gaussian_Blur();
-  void init(ivec2 size, GLenum format);
+  void init(Texture_Descriptor& td);
   void draw(
       Render *renderer, Texture *src, float32 radius, uint32 iterations = 1);
   Shader gaussian_blur_shader;
@@ -415,7 +420,7 @@ struct Render
   Shader variance_shadow_map;
   Shader gamma_correction;
   Bloom_Shader bloom;
-  Cubemap environment;
+  //Cubemap environment;
 
 private:
   Light_Array lights;

@@ -56,7 +56,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
   light->cone_angle = 0.15f;
   light->type = Light_Type::spot;
   light->casts_shadows = false;
-
+   
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 }
@@ -74,6 +74,14 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   client->map.node =
       scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+
+  Material_Descriptor sky_mat;
+  sky_mat.backface_culling = false;
+  sky_mat.vertex_shader = "vertex_shader.vert";
+  sky_mat.frag_shader = "skybox.frag";
+  Node_Ptr skybox = scene.add_primitive_mesh(cube, "skybox", sky_mat);
+  skybox->scale = vec3(500);
+  scene.set_parent(skybox, scene.root, true);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
@@ -391,7 +399,8 @@ void Warg_State::update()
 
     ImGui::Image((ImTextureID)test.get_handle(), ImVec2(256, 256));
     ImGui::End();
-  }
+  }  
+  
 
   // meme
   if (client->pc >= 0)

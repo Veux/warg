@@ -5,11 +5,12 @@ uniform sampler2D texture2; // normal
 uniform sampler2D texture3; // emissive
 uniform sampler2D texture4; // roughness
 uniform sampler2D texture5; // metalness
-uniform samplerCube environment;
+uniform samplerCube texture6; //environment
 
 uniform vec4 texture0_mod;
 uniform vec4 texture3_mod;
 uniform vec4 texture4_mod;
+uniform vec4 texture5_mod;
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
@@ -22,6 +23,7 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_over_blend;
+uniform float alpha_albedo_override;
 struct Light
 {
   vec3 position;
@@ -63,7 +65,9 @@ struct Material
   vec3 specular;
   vec3 emissive;
   vec3 normal;
-  float shininess;
+  vec3 environment;
+  float roughness;
+  float metalness;
 };
 
 float chebyshevUpperBound(vec2 moments, float distance, float max_variance)
@@ -136,20 +140,23 @@ void main()
   }
 
   Material m;
-  m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
   m.albedo = texture0_mod.rgb * to_linear(albedo_tex.rgb) / PI;
+  m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
+  m.normal = frag_TBN * normalize((texture2D(texture2, frag_uv).rgb * 2) - 1.0f);
   m.emissive = texture3_mod.rgb * to_linear(texture2D(texture3, frag_uv).rgb);
-  float shininess_texture = texture4_mod.r*(1.0 - to_linear(texture2D(texture4, frag_uv).r));
-  m.shininess = 1.0 + texture4_mod.r * 64 * shininess_texture;
-  vec3 n = texture2D(texture2, frag_uv).rgb;
-
-  m.normal = frag_TBN * normalize((n * 2) - 1.0f);
-
+  m.roughness = texture4_mod.r * to_linear(texture2D(texture4, frag_uv).r);
+  m.metalness = texture4_mod.r * to_linear(texture2D(texture5, frag_uv).r);
   vec3 v = normalize(camera_position - frag_world_position);
   vec3 r = reflect(v, m.normal);
+  m.environment = 2.0f * pow(to_linear(texture(texture6, r).rgb),vec3(2.0));
+
 
   //hack to make pseudo-hdr:
-  vec3 env = 2.0f * pow(to_linear(texture(environment, r).rgb),vec3(2.0));
+  float shininess = 1.0 + texture4_mod.r * 64 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));//temp
+  
+
+  
+
 
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
@@ -204,28 +211,38 @@ void main()
       }
     }
     float ldotn = clamp(dot(l, m.normal), 0, 1);
-    float ec = (8.0f * m.shininess) / (8.0f * PI);
-    float specular = ec * pow(max(dot(h, m.normal), 0.0), m.shininess);
+    float ec = (8.0f * shininess) / (8.0f * PI);
+    float specular = ec * pow(max(dot(h, m.normal), 0.0), shininess) ;
     vec3 ambient = vec3(lights[i].ambient * at * m.albedo);
-    vec3 light = ldotn * specular * m.albedo * lights[i].irradiance * at * alpha;
-  result += light;
+    vec3 light = ldotn * specular * m.albedo * lights[i].irradiance * at * alpha ;
+    result += light;
     result += ambient;
-    result += 15*normalize(lights[i].irradiance)* alpha * m.albedo*ldotn*shininess_texture*env;//hack af
+
+    //hack af:
+    vec3 env_contrib = normalize(lights[i].irradiance) * alpha * m.albedo*ldotn*shininess*m.environment;
+    result += pow(env_contrib,vec3(.750));
+    vec3 ambient_env = 2.f*ambient * m.albedo*m.environment*shininess;
+    result += 1.8f*pow(ambient_env,vec3(0.76));
   }
   result += m.emissive;
   result += additional_ambient * m.albedo;
-  debug.rgb = env;
-  // debug.rgb = m.normal;
-
-  // debug.rgb = vec3(texture2D(shadow_maps[1],
-  // frag_in_shadow_space_postw[1].xy).rg,0);
-  // debug.rgb = n; //tangent space normal map
-  // debug.a = 1;
-  albedo_tex.a = 1;
+  
+  float result_alpha = albedo_tex.a;
+  if(alpha_albedo_override != -1.0f)
+  {
+    result_alpha = alpha_albedo_override;
+  }
+  result_alpha *= texture0_mod.a;
+  
+  //debug.rgb = m.environment;    
+ // debug.rgb = vec3(alpha_albedo_override);
+  //debug.a = 1;
+  //vec2 shadow_uv = frag_in_shadow_space_postw[0].xy;
+  //debug.rg = variance_depth[0];
   if (debug != vec4(-1))
   {
     result = debug.rgb;
-    albedo_tex.a = debug.a;
+    result_alpha = debug.a;
   }
-  RESULT = vec4(result, albedo_tex.a * texture0_mod.a);
+  RESULT = vec4(result, result_alpha);
 }

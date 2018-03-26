@@ -32,50 +32,43 @@ Render_Test_State::Render_Test_State(
   scene.root->include_in_save = true;
 
   Material_Descriptor material;
-  material.albedo = "pebbles_diffuse.png";
+  material.albedo = "ground1_diffuse.png";
   material.emissive = "";
-  material.normal = "pebbles_normal.png";
-  material.roughness = "pebbles_roughness.png";
+  material.normal = "ground1_normal.png";
+  material.roughness = "color(1,1,1,1.0)";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
-  material.uv_scale = vec2(30);
+  material.uv_scale = vec2(12);
   material.casts_shadows = true;
   material.backface_culling = false;
   ground = scene.add_primitive_mesh(cube, "world_cube", material);
-  ground->position = {0.0f, 0.0f, -5.f};
-  ground->scale = {40.0f, 40.0f, 10.f};
+  ground->position = {0.0f, 0.0f, -7.5f};
+  ground->scale = {15.0f, 15.0f, 15.f};
 
   material.normal = "color(0.5,.5,1,0)";
-  material.roughness = "";
-  
-  auto testerbox = scene.add_primitive_mesh(cube, "world_cube", material);
-  testerbox->position = { 10.f,0.0f,1.5f };
-  scene.set_parent(testerbox, scene.root, true);
-  auto testerbox2 = scene.add_primitive_mesh(cube, "world_cube", material);
-  testerbox2->position = { 10.f,10.0f,1.5f };
-  scene.set_parent(testerbox2, scene.root, true);
+  material.roughness = "color(0.75,0.75,0.75,1.0)";
+  material.albedo = "steel_diffuse.png";
+  material.normal = "steel_normal.png";
 
 
   Material_Descriptor sky_mat;
-  sky_mat.uv_scale = vec3(1.f);
   sky_mat.backface_culling = false;
-  sky_mat.albedo = "skybox.jpg";
   sky_mat.vertex_shader = "vertex_shader.vert";
-  sky_mat.frag_shader = "passthrough.frag";
-  sky_sphere = scene.add_aiscene("smoothsphere.obj", &sky_mat);
+  sky_mat.frag_shader = "skybox.frag";
+  skybox = scene.add_primitive_mesh(cube,"skybox", sky_mat);
 
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
   sphere = scene.add_aiscene("smoothsphere.obj", nullptr, &material);
 
+  //crates:
   material.albedo = "crate_diffuse.png";
   material.emissive = "test_emissive.png";
-  //material.normal = "test_normal.png";
+  material.normal = "color(0.5,.5,1,0)";
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(1);
-  material.albedo_alpha_override = 128;
   material.uses_transparency = false;
   material.casts_shadows = true;
 
@@ -85,24 +78,30 @@ Render_Test_State::Render_Test_State(
   cube_moon = scene.add_primitive_mesh(cube, "moon", material);
   scene.set_parent(cube_moon, cube_planet, false);
 
-  material.albedo_alpha_override = 0;
-  material.uses_transparency = false;
 
   cam.phi = .25;
   cam.theta = -1.5f * half_pi<float32>();
   cam.pos = vec3(3.3, 2.3, 1.4);
 
+  bool transp = false;
   for (int y = -3; y < 3; ++y)
   {
-    for (int x = -3; x < 3; ++x)
+    for (int x = -4; x < 3; ++x)
     {
       mat4 t = translate(vec3(x, y, 0.0));
       mat4 s = scale(vec3(0.25));
       mat4 basis = t * s;
       chests.push_back(scene.add_aiscene("Chest/Chest.obj", &basis));
+
+      if (transp)
+      {
+        Material_Descriptor* m = &chests.back()->owned_children[0]->model[0].second.m;
+        m->uses_transparency = true;
+        m->albedo_alpha_override = 0.4f;
+      }
+      transp = !transp;
     }
   }
-
    Material_Descriptor tiger_mat;
    tiger_mat.backface_culling = false;
    tiger = scene.add_aiscene("tiger/tiger.obj",&tiger_mat);
@@ -122,7 +121,7 @@ Render_Test_State::Render_Test_State(
 
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
-  material.emissive = "color(1,1,1,1)";
+  material.emissive = "color(11,11,11,1)";
   material.roughness = "";
   cone_light1 = scene.add_aiscene("smoothsphere.obj", &material);
   cone_light1->name = "conelight1";
@@ -396,10 +395,8 @@ void Render_Test_State::update()
   sphere->scale = vec3(0.4);
 
   auto &lights = scene.lights.lights;
-  // float32 time_of_day = 12.;
   const vec4 night = vec4(0);
   const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1., 0.f);
-  const vec4 sun_low = vec4(235.f / 255.f, 28.f / 255., 0.f / 255.f, 0.f);
   const float time_day_scale = 0.12f;
   float32 time_of_day =
       wrap_to_range((time_day_scale * (float32)current_time) + 135.f, 0.0f, 24.0f);
@@ -407,33 +404,15 @@ void Render_Test_State::update()
   float32 day_range = clamp(time_of_day, 5.85f, 18.85f); // 5:30am to 7:30pm
   float32 day_t = (day_range - 5.85f) / 12.7f;           // 0-1 daytime
 
-  Bezier_Curve time_curve;
-  time_curve.points = {vec4(1.0), vec4(0.0), vec4(1.0)};
-  vec4 sky_color_t = time_curve.lerp(day_t);
 
-  float parabola_day_t = 0.5f * (1.0f + pow((day_t - 0.5f) * 2.f, 15.f));
-
-  Bezier_Curve sky_curve;
-  sky_curve.points = {night, 1.3f * sun_low, 2.6f * day, 1.3f * sun_low, night};
-  vec4 sky_color = sky_curve.lerp(clamp(parabola_day_t, 0.f, 1.f));
-  clear_color = vec3(clamp(sky_color.r, 0.f, 1.f), clamp(sky_color.g, 0.f, 1.f),
-      clamp(sky_color.b, 0.f, 1.f));
-
-  // clear_color = day_t*vec3(1);
-  scene.lights.additional_ambient =
-      vec3(sky_color.r, sky_color.g, sky_color.b) * vec3(0.03) +
-      vec3(94.f / 255.f, 155.f / 255.f, 1.) * vec3(0.01);
-
-  sky_sphere->scale = vec3(500);
-  sky_sphere->position = vec3(0, 0, -350);
-  sky_sphere->visible = true;
-  sky_sphere->owned_children[0]->model[0].second.m.albedo.mod =
-      1.5f * vec4(clear_color, 1);
+  skybox->scale = vec3(500);
+  skybox->position = vec3(0, 0, 0);
+  skybox->visible = true;
   /*
     scene.lights.light_count = 3;*/
-
+  time_of_day = 14;
   vec3 sun_pos =
-      180.f * vec3(cos(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0,
+      180.f * vec3(cos(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), -1.f,
                   sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)));
   sun_light->position = sun_pos;
   sun_light->scale = vec3(10.);
@@ -477,10 +456,6 @@ void Render_Test_State::update()
 
   lights[0].position = sun_pos;
   lights[0].type = Light_Type::spot;
-  lights[0].direction = vec3(0);
-  lights[0].ambient =
-      0.003f *
-      clamp((float32)sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
 
   lights[1].position =
       vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);

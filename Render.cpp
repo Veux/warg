@@ -94,24 +94,22 @@ void Framebuffer::bind()
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
-void Gaussian_Blur::init(ivec2 size, GLenum format)
+void Gaussian_Blur::init(Texture_Descriptor& td)
 {
   if (!initialized)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
 
   if (!initialized)
-    intermediate_fbo.color_attachments.emplace_back(Texture(
-        s("Gaussian Blur intermediate. this==:", (uint32)this), size, format));
+    intermediate_fbo.color_attachments.emplace_back(Texture(td));
 
   intermediate_fbo.init();
 
   if (!initialized)
-    target.color_attachments.emplace_back(Texture(
-        s("Gaussian Blur target. this==:", (uint32)this), size, format));
+    target.color_attachments.emplace_back(Texture(td));
 
   target.init();
 
-  aspect_ratio_factor = (float32)size.y / (float32)size.x;
+  aspect_ratio_factor = (float32)td.size.y / (float32)td.size.x;
 
   initialized = true;
 }
@@ -232,8 +230,14 @@ void High_Pass_Filter::draw(Render *renderer, Texture *src)
 Bloom_Shader::Bloom_Shader() {}
 void Bloom_Shader::init(ivec2 size, GLenum format)
 {
+  Texture_Descriptor td;
+  td.size = size;
+  td.format = format;
+  td.name = "Bloom Shader";
+  td.wrap_s = GL_CLAMP_TO_EDGE;
+  td.wrap_t = GL_CLAMP_TO_EDGE;
   high_pass.init(size, format);
-  blur.init(size, format);
+  blur.init(td);
   target.color_attachments.emplace_back(
       Texture(s("Bloom Shader target:", (uint32)this), size, format));
   target.init();
@@ -412,7 +416,7 @@ Texture::Texture(Texture_Descriptor &td)
 
 Texture::Texture(std::string name, glm::ivec2 size, GLenum format,
     GLenum minification_filter, GLenum magnification_filter, GLenum wrap_s,
-    GLenum wrap_t)
+    GLenum wrap_t,glm::vec4 border_color)
 {
   this->t.name = name;
   this->t.size = size;
@@ -421,6 +425,7 @@ Texture::Texture(std::string name, glm::ivec2 size, GLenum format,
   this->t.magnification_filter = magnification_filter;
   this->t.wrap_t = wrap_t;
   this->t.wrap_s = wrap_s;
+  this->t.border_color = border_color;
   this->t.cache_as_unique = true;
   load();
 }
@@ -482,10 +487,12 @@ void Texture::load()
         GL_FLOAT, 0);
     glTexParameterf(
         GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
 
     texture->filename = t.name;
     texture->size = t.size;
     texture->format = t.format;
+    texture->border_color = t.border_color;
     initialized = true;
     return;
   }
@@ -536,11 +543,13 @@ void Texture::load()
     glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA,
         GL_FLOAT, &color);
 
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     texture->size = t.size;
     texture->filename = t.name;
     texture->format = t.format;
+    texture->border_color = t.border_color;
     initialized = true;
     return;
   }
@@ -588,6 +597,7 @@ void Texture::load()
     }
   }
 
+
   t.format = GL_RGBA;
   t.size = ivec2(width, height);
   glGenTextures(1, &texture->texture);
@@ -597,12 +607,14 @@ void Texture::load()
   glTexParameterf(
       GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
 
+  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
   glGenerateMipmap(GL_TEXTURE_2D);
   stbi_image_free(data);
   glBindTexture(GL_TEXTURE_2D, 0);
   texture->filename = t.name;
   texture->size = t.size;
   texture->format = t.format;
+  texture->border_color = t.border_color;
   t.magnification_filter = GL_LINEAR;
   t.minification_filter = GL_LINEAR;
   initialized = true;
@@ -643,7 +655,7 @@ void Texture::bind(GLuint binding)
   ASSERT(t.wrap_t != GLenum(0));
   ASSERT(t.wrap_s != GLenum(0));
 
-  // todo: texture mod is not right by default
+  // todo: texture mod is not right by default ???huh? put more detailed notes, is this old?
 
   if (t.magnification_filter != texture->magnification_filter)
   {
@@ -666,6 +678,11 @@ void Texture::bind(GLuint binding)
   {
     texture->wrap_s = t.wrap_s;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, t.wrap_s);
+  }
+  if (t.border_color != texture->border_color)
+  {
+    texture->border_color = t.border_color;
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
   }
 }
 
@@ -930,28 +947,32 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
 
   if (material_override)
   {
-    if (material_override->albedo.name != "")
+    Material_Descriptor defaults;
+    if (material_override->albedo.name != defaults.albedo.name)
       m.albedo = material_override->albedo;
-    if (material_override->roughness.name != "")
+    if (material_override->roughness.name != defaults.roughness.name)
       m.roughness = material_override->roughness;
-    if (material_override->specular.name != "")
+    if (material_override->specular.name != defaults.specular.name)
       m.specular = material_override->specular;
-    if (material_override->metalness.name != "")
+    if (material_override->metalness.name != defaults.metalness.name)
       m.metalness = material_override->metalness;
-    if (material_override->tangent.name != "")
+    if (material_override->tangent.name != defaults.tangent.name)
       m.tangent = material_override->tangent;
-    if (material_override->normal.name != "")
+    if (material_override->normal.name != defaults.normal.name)
       m.normal = material_override->normal;
-    if (material_override->ambient_occlusion.name != "")
+    if (material_override->ambient_occlusion.name != defaults.ambient_occlusion.name)
       m.ambient_occlusion = material_override->ambient_occlusion;
-    if (material_override->emissive.name != "")
+    if (material_override->emissive.name != defaults.emissive.name)
       m.emissive = material_override->emissive;
+
     m.vertex_shader = material_override->vertex_shader;
     m.frag_shader = material_override->frag_shader;
     m.backface_culling = material_override->backface_culling;
     m.uv_scale = material_override->uv_scale;
     m.uses_transparency = material_override->uses_transparency;
     m.casts_shadows = material_override->casts_shadows;
+    m.environment = material_override->environment;
+    m.albedo_alpha_override = material_override->albedo_alpha_override;
   }
 
   if (m.normal.name == "")
@@ -966,6 +987,7 @@ void Material::load(Material_Descriptor &m)
   normal = Texture(m.normal);
   emissive = Texture(m.emissive);
   roughness = Texture(m.roughness);
+  environment = Cubemap(m.environment);
   shader = Shader(m.vertex_shader, m.frag_shader);
 }
 void Material::bind(Shader *shader)
@@ -990,6 +1012,8 @@ void Material::bind(Shader *shader)
   // set_message("Material::bind(): binding roughness:");
   roughness.bind(Texture_Location::roughness);
   shader->set_uniform("texture4_mod", m.roughness.mod);
+
+  environment.bind(Texture_Location::environment);
 }
 void Material::unbind_textures()
 {
@@ -1002,7 +1026,9 @@ void Material::unbind_textures()
   glActiveTexture(GL_TEXTURE0 + Texture_Location::emissive);
   glBindTexture(GL_TEXTURE_2D, 0);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::roughness);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);  
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
 bool Light::operator==(const Light &rhs) const
@@ -1059,8 +1085,7 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   passthrough = Shader("passthrough.vert", "passthrough.frag");
   variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
   gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
-  Cmap_Descriptor cube_descriptor("skybox");
-  environment = Cubemap(cube_descriptor);
+
 
   set_message("Initializing instance buffers");
   const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
@@ -1394,6 +1419,7 @@ void imgui_light_array(Light_Array &lights)
         ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_RGB);
     ImGui::DragFloat3("Position", &light->position[0]);
     ImGui::DragFloat("Brightness", &light->brightness);
+    if (light->brightness == 0)light->brightness = 0.00000001f;
     ImGui::DragFloat3("Attenuation", &light->attenuation[0], 0.01f);
     ImGui::DragFloat("Ambient", &light->ambient);
     std::string current_type = s(light->type);
@@ -1428,15 +1454,15 @@ void imgui_light_array(Light_Array &lights)
         if (ImGui::TreeNode("Shadow settings"))
         {
           width = 320;
-          ImGui::DragInt(
-              "Blur Iterations", &light->shadow_blur_iterations, 1.0f, 0, 50);
-          ImGui::DragFloat(
-              "Near Plane", &light->shadow_near_plane, 1.0f, 0.0000001f);
+          ImGui::InputInt("Blur Iterations", &light->shadow_blur_iterations, 1, 0);
+          ImGui::DragFloat("Blur Radius", &light->shadow_blur_radius, 0.1f, 0.00001f, 0.0f);
+          ImGui::DragFloat("Near Plane", &light->shadow_near_plane, 1.0f, 0.00001f);
           ImGui::DragFloat("Far Plane", &light->shadow_far_plane, 1.0f, 1.0f);
-          ImGui::DragFloat(
-              "Max Variance", &light->max_variance, 0.0001f, 0.0f, 1.0f);
+          ImGui::InputFloat("Max Variance", &light->max_variance, 0.0000001f, 0.0001f, 12);
           ImGui::DragFloat("FoV", &light->shadow_fov, 1.0f, 0.0000001f, 90.f);
           ImGui::TreePop();
+          if (light->shadow_blur_iterations < 0)light->shadow_blur_iterations = 0;
+          if (light->max_variance < 0)light->max_variance = 0;
         }
       }
     }
@@ -1482,10 +1508,7 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", true);
-
-    shader.set_uniform("environment", (GLint)21);
-
-    environment.bind(21);
+    shader.set_uniform("alpha_albedo_override", -1.0f);//-1 is disabled
 
     set_uniform_lights(shader);
     // set_message("SETTING SHADOW MAPS:");
@@ -1606,7 +1629,8 @@ void Render::instance_pass(float32 time)
 void Render::translucent_pass(float32 time)
 {
   glDisable(GL_CULL_FACE);
-  glDisable(GL_DEPTH_TEST);
+  //glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_FALSE);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   for (Render_Entity &entity : translucent_entities)
@@ -1624,6 +1648,7 @@ void Render::translucent_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_over_blend", false);
+    shader.set_uniform("alpha_albedo_override", entity.material->m.albedo_alpha_override);
     set_uniform_lights(shader);
     set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
@@ -1631,6 +1656,7 @@ void Render::translucent_pass(float32 time)
         GL_UNSIGNED_INT, nullptr);
   }
   glDisable(GL_BLEND);
+  glDepthMask(GL_TRUE);
 }
 void Render::render(float64 state_time)
 {
@@ -1672,7 +1698,7 @@ void Render::render(float64 state_time)
   opaque_pass(time);
 
   // instance_pass(time);
-  // translucent_pass(time);
+  translucent_pass(time);
 
   bloom.draw(this, &draw_target.color_attachments[0], &draw_target);
 
@@ -1808,6 +1834,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
 {
   previous_render_entities = move(render_entities);
   render_entities.clear();
+  translucent_entities.clear();
 
   // calculate the distance from the camera for each entity at index in
   // new_entities  sort them  split opaque and translucent entities
@@ -1843,7 +1870,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
     if (i.second != -1.0f)
     {
       translucent_entities.push_back((*new_entities)[i.first]);
-      ASSERT(0); // test this, the furthest objects should be first
+      //todo: ASSERT(0); // test this, the furthest objects should be first
     }
     else
     {
@@ -2053,7 +2080,14 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   pre_blur.color_attachments[0].t.size = size;
   pre_blur.color_attachments[0].t.format = format;
   pre_blur.init();
-  blur.init(size, format);
+  Texture_Descriptor td;
+  td.name = "Spotlight Shadow Map";
+  td.size = size;
+  td.format = format;
+  td.border_color = glm::vec4(999999, 999999, 0, 0);
+  td.wrap_s = GL_CLAMP_TO_BORDER;
+  td.wrap_t = GL_CLAMP_TO_BORDER;
+  blur.init(td);
 
   initialized = true;
 }
@@ -2073,9 +2107,12 @@ void Cubemap::bind(GLuint texture_unit)
 
 // filenames ordered: right left top bottom back front
 
-Cmap_Descriptor::Cmap_Descriptor() {}
+Cubemap_Descriptor::Cubemap_Descriptor()
+{
+  
+}
 
-Cmap_Descriptor::Cmap_Descriptor(std::string directory)
+Cubemap_Descriptor::Cubemap_Descriptor(std::string directory)
 {
   directory = BASE_TEXTURE_PATH + directory;
   //yellow means original side name
@@ -2128,7 +2165,7 @@ Cmap_Descriptor::Cmap_Descriptor(std::string directory)
   //faces[5] = directory + "/front.jpg";
 }
 
-Cubemap::Cubemap(Cmap_Descriptor d)
+Cubemap::Cubemap(Cubemap_Descriptor d)
 {
   descriptor = d;
   std::string key = d.faces[0] + d.faces[1] + d.faces[2] + d.faces[3] +
