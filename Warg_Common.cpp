@@ -9,6 +9,8 @@ vec3 collide_char_with_world(Collision_Packet &colpkt,
 void collide_and_slide_char(Character_Physics &phys, vec3 &radius,
     const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders);
+Character_Physics move_char(Character_Physics physics, Movement_Command command,
+    vec3 radius, float32 speed, std::vector<Triangle> colliders);
 
 Map make_blades_edge()
 {
@@ -100,14 +102,15 @@ void Character::apply_modifiers()
       apply_modifier(*modifier);
 }
 
-void Character::move(float32 dt, const std::vector<Triangle> &colliders)
+Character_Physics move_char(Character_Physics physics, Movement_Command command,
+    vec3 radius, float32 speed, std::vector<Triangle> colliders)
 {
   vec3 &pos = physics.pos;
-  vec3 &dir = last_movement_command.dir;
+  vec3 &dir = command.dir;
   physics.dir = dir;
   vec3 &vel = physics.vel;
   bool &grounded = physics.grounded;
-  Move_Status move_status = last_movement_command.m;
+  Move_Status move_status = command.m;
 
   vec3 v = vec3(0);
   if (move_status & Move_Status::Forwards)
@@ -129,7 +132,7 @@ void Character::move(float32 dt, const std::vector<Triangle> &colliders)
   if (move_status & ~Move_Status::Jumping)
   {
     v = normalize(v);
-    v *= e_stats.speed;
+    v *= speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {
@@ -145,6 +148,14 @@ void Character::move(float32 dt, const std::vector<Triangle> &colliders)
 
   collide_and_slide_char(
       physics, radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
+
+  return physics;
+}
+
+void Character::move(float32 dt, const std::vector<Triangle> &colliders)
+{
+  physics = move_char(
+      physics, last_movement_command, radius, e_stats.speed, colliders);
 }
 
 std::vector<Triangle> collect_colliders(Scene_Graph &scene)
