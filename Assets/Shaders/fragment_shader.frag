@@ -5,12 +5,17 @@ uniform sampler2D texture2; // normal
 uniform sampler2D texture3; // emissive
 uniform sampler2D texture4; // roughness
 uniform sampler2D texture5; // metalness
+
+uniform sampler2D texture10; //uv map grid
 uniform samplerCube texture6; //environment
 
 uniform vec4 texture0_mod;
 uniform vec4 texture3_mod;
 uniform vec4 texture4_mod;
 uniform vec4 texture5_mod;
+uniform vec4 texture6_mod;
+uniform vec4 texture10_mod;
+
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
@@ -22,7 +27,7 @@ uniform vec3 additional_ambient;
 uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
-uniform bool discard_over_blend;
+uniform bool discard_on_alpha;
 uniform float alpha_albedo_override;
 struct Light
 {
@@ -133,7 +138,7 @@ void main()
 
   vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
 
-  if (discard_over_blend)
+  if (discard_on_alpha)
   {
     if (albedo_tex.a < 0.3)
       discard;
@@ -226,14 +231,16 @@ void main()
   }
   result += m.emissive;
   result += additional_ambient * m.albedo;
-  
+
+  vec4 uv_grid = texture2D(texture10,frag_uv);
+  result = mix(result,uv_grid.rgb,texture10_mod.a);
+
   float result_alpha = albedo_tex.a;
   if(alpha_albedo_override != -1.0f)
   {
     result_alpha = alpha_albedo_override;
   }
   result_alpha *= texture0_mod.a;
-  
   //debug.rgb = m.environment;    
  // debug.rgb = vec3(alpha_albedo_override);
   //debug.a = 1;

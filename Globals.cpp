@@ -9,11 +9,12 @@
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
-const float32 MOVE_SPEED = 2.0f * dt;
+const float32 MOVE_SPEED = 5.0f * dt;
 const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
-const float32 ZOOM_STEP = 0.2f;
+const float32 ZOOM_STEP = 0.5f;
 const float32 ATK_RANGE = 5.0f;
+const float32 JUMP_IMPULSE = 4.0f;
 
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
 const std::string BASE_TEXTURE_PATH =

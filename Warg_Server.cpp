@@ -261,7 +261,7 @@ void Warg_Server::process_jump_event(Warg_Event ev)
 
   if (c->grounded)
   {
-    c->vel.z += 4;
+    c->vel.z += JUMP_IMPULSE;
     c->grounded = false;
   }
 }

@@ -418,10 +418,11 @@ void Warg_State::update()
 
       scene.lights.light_count = 2;
       light->position = vec3{25.01f, 25.0f, 45.f};
-      light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
+      light->color = vec3(1.0f, 0.93f, 0.92f);
+      light->brightness = 550.0f;
       light->attenuation = vec3(1.0f, .045f, .0075f);
       light->ambient = 0.0005f;
-      light->cone_angle = 0.03f;
+      light->cone_angle = 0.375f;
 
       light->type = Light_Type::spot;
       light->casts_shadows = true;
@@ -447,7 +448,7 @@ void Warg_State::update()
                                       ? client->chars[client->pc].pos
                                       : vec3(0)
                                 : vec3(0);
-      light->ambient = 0.0f;
+      light->ambient = 0.002f;
       light->cone_angle = 0.012f;
       light->type = Light_Type::spot;
       light->casts_shadows = true;
@@ -572,21 +573,26 @@ Map make_blades_edge()
   Map blades_edge;
 
   // spawns
-  blades_edge.spawn_pos[0] = {5, 5, 5};
+  blades_edge.spawn_pos[0] = {0, 0, 15};
   blades_edge.spawn_pos[1] = {45, 45, 5};
   blades_edge.spawn_dir[0] = {0, 1, 0};
   blades_edge.spawn_dir[1] = {0, -1, 0};
 
   blades_edge.mesh.unique_identifier = "blades_edge_map";
   blades_edge.material.backface_culling = false;
-  blades_edge.material.albedo = "crate_diffuse.png";
+  blades_edge.material.albedo = "bea_albedo.png";
+  blades_edge.material.uses_transparency = false;
+  blades_edge.material.discard_on_alpha = false;
+  blades_edge.material.albedo.wrap_s = GL_CLAMP_TO_EDGE;
+  blades_edge.material.albedo.wrap_t = GL_CLAMP_TO_EDGE;
+  //blades_edge.material.albedo_alpha_override = 0.25f;
   blades_edge.material.emissive = "";
-  blades_edge.material.normal = "test_normal.png";
-  blades_edge.material.roughness = "crate_roughness.png";
+  //blades_edge.material.normal = "test_normal.png";
+  blades_edge.material.roughness = "bea_roughness.png";
   blades_edge.material.vertex_shader = "vertex_shader.vert";
   blades_edge.material.frag_shader = "fragment_shader.frag";
   blades_edge.material.casts_shadows = true;
-  blades_edge.material.uv_scale = vec2(16);
+  blades_edge.material.uv_scale = vec2(1);
 
   return blades_edge;
 }

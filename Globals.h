@@ -27,6 +27,8 @@ struct aiString;
 #define MAX_TEXTURE_SAMPLERS 20
 #define MAX_ANISOTROPY 8
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
+#define SHOW_UV_TEST_GRID 0
+#define POSTPROCESSING 1
 
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
@@ -48,6 +50,7 @@ extern const float32 ATK_RANGE;
 extern const float32 MOUSE_X_SENS;
 extern const float32 MOUSE_Y_SENS;
 extern const float32 ZOOM_STEP;
+extern const float32 JUMP_IMPULSE;
 extern uint32 LAST_RENDER_ENTITY_COUNT;
 
 extern const std::string BASE_ASSET_PATH;

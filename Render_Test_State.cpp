@@ -104,6 +104,7 @@ Render_Test_State::Render_Test_State(
   }
    Material_Descriptor tiger_mat;
    tiger_mat.backface_culling = false;
+   tiger_mat.discard_on_alpha = true;
    tiger = scene.add_aiscene("tiger/tiger.obj",&tiger_mat);
    tiger->position = vec3(0,0,0.5);
    tiger->scale = vec3(0.45f);

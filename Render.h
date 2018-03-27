@@ -217,6 +217,7 @@ struct Material_Descriptor
   float albedo_alpha_override = -1.f;
   bool backface_culling = true;
   bool uses_transparency = false;
+  bool discard_on_alpha = false;
   bool casts_shadows = true;
   // when adding new things here, be sure to add them in the
   // material constructor override section
@@ -420,6 +421,7 @@ struct Render
   Shader variance_shadow_map;
   Shader gamma_correction;
   Bloom_Shader bloom;
+  Texture uv_map_grid;
   //Cubemap environment;
 
 private:

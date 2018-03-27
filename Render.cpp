@@ -446,7 +446,9 @@ void Texture::load()
 {
   if (initialized && !texture)
   { // file doesnt exist
+#ifndef DYNAMIC_TEXTURE_RELOADING
     return;
+#endif
   }
 
   if (t.name == "")
@@ -998,6 +1000,8 @@ void Material::bind(Shader *shader)
   else
     glDisable(GL_CULL_FACE);
 
+  shader->set_uniform("discard_on_alpha", m.discard_on_alpha);
+
   // set_message("Material::bind(): binding albedo:");
   albedo.bind(Texture_Location::albedo);
   shader->set_uniform("texture0_mod", m.albedo.mod);
@@ -1086,6 +1090,9 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
   gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
 
+  Texture_Descriptor uvtd;
+  uvtd.name = "uvgrid.png";
+  uv_map_grid = uvtd;
 
   set_message("Initializing instance buffers");
   const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
@@ -1142,7 +1149,7 @@ void Render::set_uniform_lights(Shader &shader)
       glUniform3fv(location_cache->attenuation, 1, &new_light->attenuation[0]);
     }
 
-    const vec3 new_ambient = new_light->ambient * new_light->color;
+    const vec3 new_ambient = new_light->brightness * new_light->ambient * new_light->color;
     if (shader.program->light_values_cache[i].ambient != new_ambient)
     {
       value_cache->ambient = new_ambient;
@@ -1463,6 +1470,7 @@ void imgui_light_array(Light_Array &lights)
           ImGui::TreePop();
           if (light->shadow_blur_iterations < 0)light->shadow_blur_iterations = 0;
           if (light->max_variance < 0)light->max_variance = 0;
+          if (light->shadow_blur_radius < 0)light->shadow_blur_radius = 0;
         }
       }
     }
@@ -1507,9 +1515,11 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("uv_scale", entity.material->m.uv_scale);
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
-    shader.set_uniform("discard_over_blend", true);
     shader.set_uniform("alpha_albedo_override", -1.0f);//-1 is disabled
-
+#if SHOW_UV_TEST_GRID
+    uv_map_grid.bind(10);
+    shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
+#endif
     set_uniform_lights(shader);
     // set_message("SETTING SHADOW MAPS:");
     set_uniform_shadowmaps(shader);
@@ -1647,8 +1657,14 @@ void Render::translucent_pass(float32 time)
     shader.set_uniform("uv_scale", entity.material->m.uv_scale);
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
-    shader.set_uniform("discard_over_blend", false);
-    shader.set_uniform("alpha_albedo_override", entity.material->m.albedo_alpha_override);
+    shader.set_uniform("discard_on_alpha", false);
+    shader.set_uniform("alpha_albedo_override", entity.material->m.albedo_alpha_override); 
+
+#if SHOW_UV_TEST_GRID
+    uv_map_grid.bind(10);
+    shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
+#endif
+
     set_uniform_lights(shader);
     set_uniform_shadowmaps(shader);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
@@ -1666,7 +1682,9 @@ void Render::render(float64 state_time)
 #if DYNAMIC_TEXTURE_RELOADING
   check_and_clear_expired_textures();
 #endif
-
+#if SHOW_UV_TEST_GRID
+  uv_map_grid.t.mod = vec4(1,1,1,clamp((float32)pow(sin(state_time),.25f),0.0f,1.0f));
+#endif
   static bool show_renderer_window = true;
   if (show_renderer_window)
   {
@@ -1700,7 +1718,13 @@ void Render::render(float64 state_time)
   // instance_pass(time);
   translucent_pass(time);
 
+
+
+#if POSTPROCESSING
   bloom.draw(this, &draw_target.color_attachments[0], &draw_target);
+#else
+  
+#endif
 
   if (FINAL_OUTPUT_TEXTURE)
   {
