@@ -48,7 +48,4 @@ struct Warg_State : protected State
   vector<SpellObjectInst> spell_objs;
 
   Latency_Tracker latency_tracker;
-
-  uint32 tick = 0;
-  uint32 server_tick = 0;
 };

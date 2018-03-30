@@ -53,7 +53,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
     event.type == ENET_EVENT_TYPE_CONNECT);
 
   Buffer b;
-  auto msg = Char_Spawn_Request_Message(tick, char_name, 0);
+  auto msg = Char_Spawn_Request_Message(char_name, 0);
   msg.t = get_real_time();
   msg.serialize(b);
   ENetPacket *packet =
@@ -77,7 +77,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   server = make_unique<Warg_Server>(true);
   server->connect(&out, &in);
-  push(make_unique<Char_Spawn_Request_Message>(tick, "Cubeboi", 0));
+  push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 }
 
 void Warg_State::handle_input_events(
@@ -312,7 +312,7 @@ void Warg_State::handle_input_events(
     
     static uint32 movement_command_i = 0;
     push(
-      make_unique<Player_Movement_Message>(tick, movement_command_i,
+      make_unique<Player_Movement_Message>(movement_command_i,
       (Move_Status)m, dir));
     movement_command_i++;
 
@@ -369,8 +369,6 @@ void Warg_State::process_events()
     auto &msg = in.front();
     if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
       return;
-    if (msg->tick > server_tick)
-      server_tick = msg->tick;
     msg->handle(*this);
     in.pop();
   }
@@ -385,14 +383,12 @@ void Warg_State::push(unique_ptr<Message> msg)
 
 void Warg_State::update()
 {
-  tick += 1;
-
   if (!local)
     process_packets();
   process_events();
 
   if (latency_tracker.should_send_ping())
-    push(make_unique<Ping_Message>(tick));
+    push(make_unique<Ping_Message>());
 
   bool show_stats_bar = true;
   ImVec2 stats_bar_pos = { 10, 10 };
@@ -557,8 +553,6 @@ void Warg_State::update()
 
 void Connection_Message::handle(Warg_State &state)
 {
-  state.tick = tick;
-  state.server_tick = tick;
 }
 
 void Char_Spawn_Message::handle(Warg_State &state)
@@ -710,7 +704,7 @@ void Object_Launch_Message::handle(Warg_State &state)
 
 void Ping_Message::handle(Warg_State &state)
 {
-  state.push(make_unique<Ack_Message>(tick));
+  state.push(make_unique<Ack_Message>());
 }
 
 void Ack_Message::handle(Warg_State &state)

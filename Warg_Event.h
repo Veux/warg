@@ -3,8 +3,8 @@
 #define SIM_LATENCY 200
 
 #include "Spell.h"
-#include <map>
 #include <enet/enet.h>
+#include <map>
 
 typedef uint32_t UID;
 
@@ -48,7 +48,6 @@ struct Message
   virtual void handle(Warg_State &state) = 0;
   virtual void serialize(Buffer &buffer) = 0;
 
-  uint32_t tick;
   UID peer;
   bool reliable = true;
   float64_t t;
@@ -56,7 +55,7 @@ struct Message
 
 struct Connection_Message : Message
 {
-  Connection_Message(uint32_t tick);
+  Connection_Message();
   Connection_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -65,7 +64,7 @@ struct Connection_Message : Message
 
 struct Char_Spawn_Request_Message : Message
 {
-  Char_Spawn_Request_Message(uint32_t tick, const char *name, uint8_t team);
+  Char_Spawn_Request_Message(const char *name, uint8_t team);
   Char_Spawn_Request_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
@@ -77,7 +76,7 @@ struct Char_Spawn_Request_Message : Message
 
 struct Char_Spawn_Message : Message
 {
-  Char_Spawn_Message(uint32_t tick, UID id, const char *name_, uint8_t team_);
+  Char_Spawn_Message(UID id, const char *name_, uint8_t team_);
   Char_Spawn_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -90,7 +89,7 @@ struct Char_Spawn_Message : Message
 
 struct Player_Control_Message : Message
 {
-  Player_Control_Message(uint32_t tick, UID character_);
+  Player_Control_Message(UID character_);
   Player_Control_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -111,8 +110,7 @@ enum Move_Status
 
 struct Player_Movement_Message : Message
 {
-  Player_Movement_Message(uint32_t tick, uint32_t i_,
-    Move_Status move_status, vec3 dir);
+  Player_Movement_Message(uint32_t i_, Move_Status move_status, vec3 dir);
   Player_Movement_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
@@ -125,7 +123,7 @@ struct Player_Movement_Message : Message
 
 struct Cast_Message : Message
 {
-  Cast_Message(uint32_t tick, UID target, const char *spell);
+  Cast_Message(UID target, const char *spell);
   Cast_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
@@ -137,7 +135,7 @@ struct Cast_Message : Message
 
 struct Cast_Error_Message : Message
 {
-  Cast_Error_Message(uint32_t tick, UID caster, UID target, const char *spell, uint8_t err);
+  Cast_Error_Message(UID caster, UID target, const char *spell, uint8_t err);
   Cast_Error_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -151,7 +149,7 @@ struct Cast_Error_Message : Message
 
 struct Cast_Begin_Message : Message
 {
-  Cast_Begin_Message(uint32_t tick, UID caster, UID target, const char *spell);
+  Cast_Begin_Message(UID caster, UID target, const char *spell);
   Cast_Begin_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -164,7 +162,7 @@ struct Cast_Begin_Message : Message
 
 struct Cast_Interrupt_Message : Message
 {
-  Cast_Interrupt_Message(uint32_t tick, UID caster);
+  Cast_Interrupt_Message(UID caster);
   Cast_Interrupt_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -175,7 +173,7 @@ struct Cast_Interrupt_Message : Message
 
 struct Char_HP_Message : Message
 {
-  Char_HP_Message(uint32_t tick, UID character, int hp);
+  Char_HP_Message(UID character, int hp);
   Char_HP_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -187,7 +185,7 @@ struct Char_HP_Message : Message
 
 struct Buff_Application_Message : Message
 {
-  Buff_Application_Message(uint32_t tick, UID character, const char *buff);
+  Buff_Application_Message(UID character, const char *buff);
   Buff_Application_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -199,7 +197,7 @@ struct Buff_Application_Message : Message
 
 struct Object_Launch_Message : Message
 {
-  Object_Launch_Message(uint32_t tick, UID object, UID caster, UID target, vec3 pos);
+  Object_Launch_Message(UID object, UID caster, UID target, vec3 pos);
   Object_Launch_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -213,7 +211,7 @@ struct Object_Launch_Message : Message
 
 struct Player_Geometry_Message : Message
 {
-  Player_Geometry_Message(uint32_t tick, std::map<UID, Character> &chars);
+  Player_Geometry_Message(std::map<UID, Character> &chars);
   Player_Geometry_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -229,7 +227,7 @@ struct Player_Geometry_Message : Message
 
 struct Ping_Message : Message
 {
-  Ping_Message(uint32_t tick);
+  Ping_Message();
   Ping_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state);
@@ -238,7 +236,7 @@ struct Ping_Message : Message
 
 struct Ack_Message : Message
 {
-  Ack_Message(uint32_t tick);
+  Ack_Message();
   Ack_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state);
