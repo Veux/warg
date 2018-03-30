@@ -18,7 +18,6 @@ struct Warg_Peer
   ENetPeer *peer;
   queue<unique_ptr<Message>> *in, *out;
   UID character = 0;
-  float64 last_latency;
 };
 
 struct Warg_Server

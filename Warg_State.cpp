@@ -391,11 +391,8 @@ void Warg_State::update()
     process_packets();
   process_events();
 
-  if (tick % 300 == 0)
-  {
+  if (latency_tracker.should_send_ping())
     push(make_unique<Ping_Message>(tick));
-    last_ping_sent = get_real_time();
-  }
 
   bool show_stats_bar = true;
   ImVec2 stats_bar_pos = { 10, 10 };
@@ -404,10 +401,7 @@ void Warg_State::update()
     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
     ImGuiWindowFlags_AlwaysAutoResize);
-  ImGui::Text("Tick: %u | Server tick: %u | Ping: %dms",
-              tick,
-              server_tick,
-              (int)(last_latency * 1000));
+  ImGui::Text("Ping: %dms", latency_tracker.get_latency());
   ImGui::End();
 
   for (auto &c_ : chars)
@@ -721,7 +715,7 @@ void Ping_Message::handle(Warg_State &state)
 
 void Ack_Message::handle(Warg_State &state)
 {
-  state.last_latency = get_real_time() - state.last_ping_sent;
+  state.latency_tracker.ack_received();
 }
 
 void Warg_State::add_char(UID id, int team, const char *name)
@@ -773,4 +767,26 @@ void Warg_State::add_char(UID id, int team, const char *name)
   }
 
   chars[id] = c;
+}
+
+bool Latency_Tracker::should_send_ping()
+{
+  float64 current_time = get_real_time();
+  if (!acked || current_time < last_ping + 1)
+    return false;
+  last_ping = current_time;
+  acked = false;
+  return true;
+}
+
+void Latency_Tracker::ack_received()
+{
+  last_ack = get_real_time();
+  acked = true;
+  last_latency = last_ack - last_ping;
+}
+
+uint32 Latency_Tracker::get_latency()
+{
+  return round(last_latency * 1000);
 }

@@ -214,7 +214,6 @@ void Ack_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  peer_.last_latency = get_real_time() - server.last_ping_sent;
 }
 
 void Warg_Server::try_cast_spell(
