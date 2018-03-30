@@ -38,8 +38,7 @@ enum class Warg_Event_Type
   BuffAppl,
   ObjectLaunch,
   Ping,
-  Ack,
-  Connection
+  Ack
 };
 
 struct Message
@@ -51,15 +50,6 @@ struct Message
   UID peer;
   bool reliable = true;
   float64_t t;
-};
-
-struct Connection_Message : Message
-{
-  Connection_Message();
-  Connection_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
 };
 
 struct Char_Spawn_Request_Message : Message

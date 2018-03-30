@@ -38,8 +38,6 @@ void Warg_Server::process_packets()
         UID id = uid();
         peers[id] = {event.peer, nullptr, nullptr, 0};
 
-        unique_ptr<Message> connection_msg = make_unique<Connection_Message>();
-        send_event(peers[id], connection_msg);
         for (auto &c : chars)
         {
           unique_ptr<Message> char_spawn_msg = make_unique<Char_Spawn_Message>(

@@ -551,10 +551,6 @@ void Warg_State::update()
   }
 }
 
-void Connection_Message::handle(Warg_State &state)
-{
-}
-
 void Char_Spawn_Message::handle(Warg_State &state)
 {
   state.add_char(id, team, name.c_str());

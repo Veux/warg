@@ -52,11 +52,6 @@ void serialize_(Buffer &b, Warg_Event_Type type)
   serialize_(b, (uint8_t)type);
 }
 
-void Connection_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::Connection);
-}
-
 void Char_Spawn_Request_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CharSpawnRequest);
@@ -216,8 +211,6 @@ vec3 deserialize_vec3(Buffer &b)
 
 UID deserialize_uid(Buffer &b) { return deserialize_uint32(b); }
 
-Connection_Message::Connection_Message(Buffer &b) {}
-
 Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 {
   name = deserialize_string(b);
@@ -317,9 +310,6 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
   std::unique_ptr<Message> msg = nullptr;
   switch (type)
   {
-    case Warg_Event_Type::Connection:
-      msg = std::make_unique<Connection_Message>(b);
-      break;
     case Warg_Event_Type::CharSpawnRequest:
       msg = std::make_unique<Char_Spawn_Request_Message>(b);
       break;
@@ -469,5 +459,3 @@ Player_Geometry_Message::Player_Geometry_Message(
 Ping_Message::Ping_Message() {}
 
 Ack_Message::Ack_Message() {}
-
-Connection_Message::Connection_Message() {}
