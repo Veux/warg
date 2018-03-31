@@ -96,7 +96,7 @@ void SDL_Imgui_State::render()
       {-1.0f, 1.0f, 0.0f, 1.0f},
   };
   glUseProgram(shader_handle);
-  glUniform1i(texture_location, 0); 
+  glUniform1i(texture_location, 0);
   glUniformMatrix4fv(projection_location, 1, GL_FALSE, &ortho_projection[0][0]);
   glBindVertexArray(vao);
   glBindSampler(0, 0); // Rely on combined texture/sampler state.
@@ -125,7 +125,32 @@ void SDL_Imgui_State::render()
       }
       else
       {
-        glBindTexture(GL_TEXTURE_2D, (GLuint)(intptr_t)pcmd->TextureId);
+        const uint32 tex = (uint32)pcmd->TextureId;
+        const uint32 mask = 0xffff0000;
+        uint32 bits = mask & tex;
+        // 0x????0000
+        // any bits set in here means maybe TextureId gets high
+        // and we might stomp useful bits
+        bool test1 = (bits xor 0x0fff0000) == 0x0fff0000;
+        bool test2 = (bits xor 0xffff0000) == 0x0fff0000;
+        ASSERT((test1 || test2));
+
+        // 0x?0000000
+        bool gamma_flag_set = (tex & 0xf0000000) == 0xf0000000;
+
+        // doesnt work on the fp frame textures, theyre linear
+        // and also need to be gamma corrected to srgb
+        // to display properly.
+        // too dark means the texture is in linear space and needs
+        // to-srgb
+        // if (gamma_flag_set)
+        //  glEnable(GL_FRAMEBUFFER_SRGB);
+
+        glUniform1i(gamma_location, gamma_flag_set);
+
+        GLuint handle = tex & 0x0000ffff;
+
+        glBindTexture(GL_TEXTURE_2D, handle);
         glScissor((int)pcmd->ClipRect.x, (int)(fb_height - pcmd->ClipRect.w),
             (int)(pcmd->ClipRect.z - pcmd->ClipRect.x),
             (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
@@ -265,7 +290,7 @@ bool SDL_Imgui_State::create_device_objects()
   glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &last_vertex_array);
 
   const GLchar *vertex_shader =
-      "#version 150\n"
+      "#version 330\n"
       "uniform mat4 ProjMtx;\n"
       "in vec2 Position;\n"
       "in vec2 UV;\n"
@@ -280,14 +305,20 @@ bool SDL_Imgui_State::create_device_objects()
       "}\n";
 
   const GLchar *fragment_shader =
-      "#version 150\n"
+      "#version 330\n"
       "uniform sampler2D Texture;\n"
+      "uniform bool gamma_encode;\n"
       "in vec2 Frag_UV;\n"
       "in vec4 Frag_Color;\n"
       "out vec4 Out_Color;\n"
       "void main()\n"
       "{\n"
-      "	Out_Color = Frag_Color * texture( Texture, Frag_UV.st);\n"
+      "vec4 result = Frag_Color * texture(Texture, Frag_UV.st);\n"
+      "if (gamma_encode)\n"
+      "{\n"
+      "  result.rgb = pow(result.rgb, vec3(1.0f / 2.2f)); \n"
+      "}\n"
+      "	Out_Color = result;\n"
       "}\n";
 
   shader_handle = glCreateProgram();
@@ -306,6 +337,7 @@ bool SDL_Imgui_State::create_device_objects()
   position_location = glGetAttribLocation(shader_handle, "Position");
   uv_location = glGetAttribLocation(shader_handle, "UV");
   color_location = glGetAttribLocation(shader_handle, "Color");
+  gamma_location = glGetUniformLocation(shader_handle, "gamma_encode");
 
   glGenBuffers(1, &vbo);
   glGenBuffers(1, &element_buffer);
@@ -476,7 +508,6 @@ void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
   io.DisplaySize = ImVec2((float)w, (float)h);
   io.DisplayFramebufferScale = ImVec2(
       w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
-
 
   io.DeltaTime = (float32)dt;
 

@@ -1,11 +1,11 @@
 #include "Globals.h"
+#include "Json.h"
+#include "Render.h"
 #include <SDL2/SDL.h>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
-#include "Render.h"
-#include "Json.h"
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
@@ -473,6 +473,39 @@ UID uid()
   return i++;
 }
 
+const char *texture_format_to_string(GLenum texture_format)
+{
+  switch (texture_format)
+  {
+    case GL_SRGB8_ALPHA8:
+      return "GL_SRGB8_ALPHA8";
+    case GL_SRGB:
+      return "GL_SRGB";
+    case GL_RGBA:
+      return "GL_RGBA";
+    case GL_RGB:
+      return "GL_RGB";
+    case GL_RGBA32F:
+      return "GL_RGBA32F";
+    case GL_RGBA16F:
+      return "GL_RGBA16F";
+    case GL_RGB32F:
+      return "GL_RGB32F";
+    case GL_RGB16F:
+      return "GL_RGB16F";
+    case GL_RG32F:
+      return "GL_RG32F";
+    case GL_RG16F:
+      return "GL_RG16F";
+    case GL_R32F:
+      return "GL_R32F";
+    case GL_R16F:
+      return "GL_R16F";
+    default:
+      return "UNKNOWN";
+  }
+}
+
 void Config::load(std::string filename)
 {
   json j;
@@ -498,7 +531,6 @@ void Config::load(std::string filename)
 
   if ((i = j.find("Shadow Map Resolution")) != j.end())
     shadow_map_size = *i;
-
 }
 
 void Config::save(std::string filename)

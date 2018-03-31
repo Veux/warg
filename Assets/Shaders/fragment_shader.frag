@@ -6,8 +6,8 @@ uniform sampler2D texture3; // emissive
 uniform sampler2D texture4; // roughness
 uniform sampler2D texture5; // metalness
 
-uniform sampler2D texture10; //uv map grid
-uniform samplerCube texture6; //environment
+uniform sampler2D texture10;  // uv map grid
+uniform samplerCube texture6; // environment
 
 uniform vec4 texture0_mod;
 uniform vec4 texture3_mod;
@@ -46,17 +46,15 @@ uniform int number_of_lights;
 in vec3 frag_world_position;
 in mat3 frag_TBN;
 in vec2 frag_uv;
+in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
 
 layout(location = 0) out vec4 RESULT;
 
-const float gamma = 2.2;
 const float PI = 3.14159265358979f;
 const int max_lights = MAX_LIGHTS;
 vec3[max_lights] frag_in_shadow_space_postw;
 vec2[max_lights] variance_depth;
-vec3 to_linear(in vec3 srgb) { return pow(srgb, vec3(gamma)); }
-float to_linear(in float srgb) { return pow(srgb, gamma); }
 float linearize_depth(float z)
 {
   float near = 0.001;
@@ -92,7 +90,6 @@ void gather_shadow_moments()
       vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
   variance_depth[0] =
       texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
-
   frag_in_shadow_space_postw[1] =
       vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
   variance_depth[1] =
@@ -145,23 +142,20 @@ void main()
   }
 
   Material m;
-  m.albedo = texture0_mod.rgb * to_linear(albedo_tex.rgb) / PI;
-  m.specular = to_linear(texture2D(texture1, frag_uv).rgb);
-  m.normal = frag_TBN * normalize((texture2D(texture2, frag_uv).rgb * 2) - 1.0f);
-  m.emissive = texture3_mod.rgb * to_linear(texture2D(texture3, frag_uv).rgb);
-  m.roughness = texture4_mod.r * to_linear(texture2D(texture4, frag_uv).r);
-  m.metalness = texture4_mod.r * to_linear(texture2D(texture5, frag_uv).r);
+  m.albedo = texture0_mod.rgb * albedo_tex.rgb / PI;
+  m.specular = texture2D(texture1, frag_uv).rgb;
+  m.normal = frag_TBN *
+             normalize((texture2D(texture2, frag_normal_uv).rgb * 2) - 1.0f);
+  m.emissive = texture3_mod.rgb * texture2D(texture3, frag_uv).rgb;
+  m.roughness = texture4_mod.r * texture2D(texture4, frag_uv).r;
+  m.metalness = texture4_mod.r * texture2D(texture5, frag_uv).r;
   vec3 v = normalize(camera_position - frag_world_position);
   vec3 r = reflect(v, m.normal);
-  m.environment = 2.0f * pow(to_linear(texture(texture6, r).rgb),vec3(2.0));
+  m.environment = 2.0f * pow(texture(texture6, r).rgb, vec3(2.0));
 
-
-  //hack to make pseudo-hdr:
-  float shininess = 1.0 + texture4_mod.r * 64 * (1.0 - to_linear(texture2D(texture4, frag_uv).r));//temp
-  
-
-  
-
+  // hack to make pseudo-hdr:
+  float shininess = 1.0 + texture4_mod.r * 64 *
+                              (1.0 - texture2D(texture4, frag_uv).r); // temp
 
   vec3 result = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
@@ -217,35 +211,37 @@ void main()
     }
     float ldotn = clamp(dot(l, m.normal), 0, 1);
     float ec = (8.0f * shininess) / (8.0f * PI);
-    float specular = ec * pow(max(dot(h, m.normal), 0.0), shininess) ;
+    float specular = ec * pow(max(dot(h, m.normal), 0.0), shininess);
     vec3 ambient = vec3(lights[i].ambient * at * m.albedo);
-    vec3 light = ldotn * specular * m.albedo * lights[i].irradiance * at * alpha ;
+    vec3 light =
+        ldotn * specular * m.albedo * lights[i].irradiance * at * alpha;
     result += light;
     result += ambient;
 
-    //hack af:
-    vec3 env_contrib = normalize(lights[i].irradiance) * alpha * m.albedo*ldotn*shininess*m.environment;
-    result += pow(env_contrib,vec3(.750));
-    vec3 ambient_env = 2.f*ambient * m.albedo*m.environment*shininess;
-    result += 1.8f*pow(ambient_env,vec3(0.76));
+    // hack af:
+    vec3 env_contrib = normalize(lights[i].irradiance) * alpha * m.albedo *
+                       ldotn * shininess * m.environment;
+    result += pow(env_contrib, vec3(.750));
+    vec3 ambient_env = 2.f * ambient * m.albedo * m.environment * shininess;
+    result += 1.8f * pow(ambient_env, vec3(0.76));
   }
   result += m.emissive;
   result += additional_ambient * m.albedo;
 
-  vec4 uv_grid = texture2D(texture10,frag_uv);
-  result = mix(result,uv_grid.rgb,texture10_mod.a);
+  vec4 uv_grid = texture2D(texture10, frag_uv);
+  result = mix(result, uv_grid.rgb, texture10_mod.a);
 
   float result_alpha = albedo_tex.a;
-  if(alpha_albedo_override != -1.0f)
+  if (alpha_albedo_override != -1.0f)
   {
     result_alpha = alpha_albedo_override;
   }
   result_alpha *= texture0_mod.a;
-  //debug.rgb = m.environment;    
- // debug.rgb = vec3(alpha_albedo_override);
-  //debug.a = 1;
-  //vec2 shadow_uv = frag_in_shadow_space_postw[0].xy;
-  //debug.rg = variance_depth[0];
+  // debug.rgb = m.environment;
+  // debug.rgb = vec3(alpha_albedo_override);
+  // debug.a = 1;
+  // vec2 shadow_uv = frag_in_shadow_space_postw[0].xy;
+  // debug.rg = variance_depth[0];
   if (debug != vec4(-1))
   {
     result = debug.rgb;

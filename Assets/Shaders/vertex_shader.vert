@@ -5,6 +5,7 @@
 uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
+uniform vec2 normal_uv_scale;
 uniform mat4 txaa_jitter;
 uniform mat4 MVP;
 uniform mat4 Model;
@@ -19,6 +20,7 @@ layout(location = 4) in vec3 bitangent;
 out vec3 frag_world_position;
 out mat3 frag_TBN;
 out vec2 frag_uv;
+out vec2 frag_normal_uv;
 out vec4 frag_in_shadow_space[MAX_LIGHTS];
 void main()
 {
@@ -28,7 +30,7 @@ void main()
   frag_TBN = mat3(t, b, n);
   frag_world_position = (Model * vec4(position, 1)).xyz;
   frag_uv = uv_scale * vec2(uv.x, uv.y);
-
+  frag_normal_uv = normal_uv_scale * frag_uv;
   for(int i = 0; i < MAX_LIGHTS; ++i)
   {
     frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position, 1);

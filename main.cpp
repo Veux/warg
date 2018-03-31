@@ -190,6 +190,7 @@ int main(int argc, char *argv[])
 
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
+  Render_Test_State render_test_state("Render Test State", window, window_size);
 
   Warg_State *game_state;
   if (client)
@@ -199,7 +200,6 @@ int main(int argc, char *argv[])
     game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
   states.push_back((State *)game_state);
-  Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
   State *current_state = &*states[0];
   std::vector<SDL_Event> imgui_event_accumulator;
@@ -259,7 +259,7 @@ int main(int argc, char *argv[])
       {
         s->paused = true;
         current_state->renderer.set_render_scale(
-            current_state->renderer.get_render_scale());
+          s->renderer.get_render_scale());
         break;
       }
 

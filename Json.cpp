@@ -280,12 +280,12 @@ void to_json(json &result, const std::shared_ptr<Scene_Graph_Node> &node_ptr)
 
 void to_json(json &result, const Scene_Graph_Node &node)
 {
-  json j; 
-    if (!node.include_in_save)
-    {
-      result = j;
-      return;
-    }
+  json j;
+  if (!node.include_in_save)
+  {
+    result = j;
+    return;
+  }
 
   j["Name"] = node.name;
   j["Position"] = node.position;

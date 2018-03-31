@@ -11,7 +11,7 @@
 using namespace glm;
 
 State::State(std::string name, SDL_Window *window, ivec2 window_size)
-    : state_name(name), window(window), renderer(window, window_size)
+    : state_name(name), window(window), renderer(window, window_size,name)
 {
   reset_mouse_delta();
 }
@@ -125,6 +125,7 @@ void State::handle_input(State **current_state,
         ivec2 trash;
         SDL_GetRelativeMouseState(&trash.x, &trash.y);
         //(*current_state)->reset_mouse_delta();
+        (*current_state)->renderer.previous_color_target_missing = true;
         return;
       }
       if (e.key.keysym.sym == SDLK_F2)
@@ -142,6 +143,7 @@ void State::handle_input(State **current_state,
         ivec2 trash;
         SDL_GetRelativeMouseState(&trash.x, &trash.y);
         //(*current_state)->reset_mouse_delta();
+        (*current_state)->renderer.previous_color_target_missing = true;
         return;
       }
     }

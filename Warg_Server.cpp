@@ -61,7 +61,7 @@ void Warg_Server::process_packets()
           if (p.second.peer == event.peer)
             ev.peer = p.first;
         }
-		ASSERT(ev.peer >= 0);
+        ASSERT(ev.peer >= 0);
         process_event(ev);
         break;
       }

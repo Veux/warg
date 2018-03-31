@@ -66,13 +66,18 @@ struct Texture_Handle
 
   const std::string &peek_filename() { return filename; }
 
+  // bitflag for gamma correction or not
+  uint32 get_imgui_handle();
+
 private:
   friend struct Texture;
   friend struct Cubemap;
+  friend struct Renderer;
 
   // last bound dynamic state:
   GLenum magnification_filter = GLenum(0);
   GLenum minification_filter = GLenum(0);
+  uint32 anisotropic_filtering = 0;
   GLenum wrap_s = GLenum(0);
   GLenum wrap_t = GLenum(0);
   glm::vec4 border_color = glm::vec4(0);
@@ -97,6 +102,7 @@ struct Texture_Descriptor
   GLenum format = GL_RGBA;
   GLenum magnification_filter = GL_LINEAR;
   GLenum minification_filter = GL_LINEAR;
+  uint32 anisotropic_filtering = MAX_ANISOTROPY;
   GLenum wrap_s = GL_TEXTURE_WRAP_S;
   GLenum wrap_t = GL_TEXTURE_WRAP_T;
   glm::vec4 border_color = glm::vec4(0);
@@ -112,16 +118,16 @@ struct Texture
   Texture(std::string name, glm::ivec2 size, GLenum format = GL_RGBA32F,
       GLenum minification_filter = GL_LINEAR,
       GLenum magnification_filter = GL_LINEAR, GLenum wraps = GL_CLAMP_TO_EDGE,
-    GLenum wrapt = GL_CLAMP_TO_EDGE, glm::vec4 border_color = glm::vec4(0));
+      GLenum wrapt = GL_CLAMP_TO_EDGE, glm::vec4 border_color = glm::vec4(0));
 
   Texture(std::string file_path, bool premul = false);
 
   Texture_Descriptor t;
   void load();
 
-  // todo make sure texture.bind checks the handles last bound state, and sets
-  // necessary changes
   void bind(GLuint texture_unit);
+
+  void check_set_parameters();
 
   // not guaranteed to be constant for every call -
   // handle lifetime only guaranteed for as long as the Texture object
@@ -129,6 +135,9 @@ struct Texture
   // by a file modification - if it is, it will gracefully display
   // black, or a random other texture
   GLuint get_handle();
+
+  // use this for imgui texture drawing, all of above still applies
+  GLuint get_imgui_handle();
 
 private:
   std::shared_ptr<Texture_Handle> texture;
@@ -139,14 +148,15 @@ private:
 struct Cubemap_Descriptor
 {
   Cubemap_Descriptor();
-  //note: in order to import a new set of cubemap files, you must do the following in an
-  //image editor first
-  //rotate bottom.jpg 180 degrees
-  //rotate front.jpg 180 degrees
-  //rotate left.jpg 90 clockwise
-  //rotate right.jpg 90 anticlockwise
+  // note: in order to import a new set of cubemap files, you must do the
+  // following in an image editor first:
+  // rotate bottom.jpg 180 degrees;
+  // rotate front.jpg 180 degrees;
+  // rotate left.jpg 90 clockwise;
+  // rotate right.jpg 90 anticlockwise;
   Cubemap_Descriptor(std::string directory);
   std::array<std::string, 6> faces = {""};
+  GLenum format = GL_SRGB;
   bool process_premultiply = false;
 };
 
@@ -154,16 +164,15 @@ struct Cubemap
 {
   Cubemap();
 
-  //todo: dynamic reloading: just keep track of the latest-modified file of the 6
-  //and if one of them has a newer mod, nuke all 6
+  // todo: dynamic reloading: just keep track of the latest-modified file of the
+  // 6  and if one of them has a newer mod, nuke all 6
 
-  //these must be in the order: 
+  // these must be in the order:
   Cubemap(Cubemap_Descriptor d);
   void bind(GLuint texture_unit);
   Cubemap_Descriptor descriptor;
   std::shared_ptr<Texture_Handle> handle;
 };
-
 
 struct Mesh_Handle
 {
@@ -214,6 +223,7 @@ struct Material_Descriptor
   std::string vertex_shader = "vertex_shader.vert";
   std::string frag_shader = "fragment_shader.frag";
   vec2 uv_scale = vec2(1);
+  vec2 normal_uv_scale = vec2(1);
   float albedo_alpha_override = -1.f;
   bool backface_culling = true;
   bool uses_transparency = false;
@@ -232,7 +242,7 @@ struct Material
   Material_Descriptor m;
 
 private:
-  friend struct Render;
+  friend struct Renderer;
   Texture albedo;
   Texture normal;
   Texture emissive;
@@ -276,10 +286,11 @@ struct Light
   float32 shadow_far_plane =
       100.f; // this should be as near as possible without clipping geometry
   float32 max_variance = 0.000001f; // this value should be as low as possible
-                                  // without causing float precision noise
-  float32 shadow_fov = glm::radians(90.f); // this should be as low as possible
-                                         // without causing artifacts around the
-                                         // edge of the light field of view
+                                    // without causing float precision noise
+  float32 shadow_fov =
+      glm::radians(90.f); // this should be as low as possible
+                          // without causing artifacts around the
+                          // edge of the light field of view
 private:
 };
 
@@ -334,14 +345,15 @@ struct Framebuffer
   glm::ivec2 depth_size = glm::ivec2(0);
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
+  bool encode_srgb_on_draw = false; // only works for srgb framebuffer
 };
 
 struct Gaussian_Blur
 {
   Gaussian_Blur();
-  void init(Texture_Descriptor& td);
+  void init(Texture_Descriptor &td);
   void draw(
-      Render *renderer, Texture *src, float32 radius, uint32 iterations = 1);
+      Renderer *renderer, Texture *src, float32 radius, uint32 iterations = 1);
   Shader gaussian_blur_shader;
   Framebuffer target;
   Framebuffer intermediate_fbo;
@@ -365,11 +377,12 @@ struct High_Pass_Filter
 {
   High_Pass_Filter();
   void init(ivec2 size, GLenum format);
-  void draw(Render *renderer, Texture *src);
+  void draw(Renderer *renderer, Texture *src);
 
   Framebuffer target;
   Shader high_pass_shader;
   bool initialized = false;
+  std::string name = "Unnamed High_Pass_Filter";
 };
 
 struct Bloom_Shader
@@ -378,12 +391,13 @@ struct Bloom_Shader
   void init(ivec2 size, GLenum format);
 
   // adds the blurred src to dst
-  void draw(Render *renderer, Texture *src, Framebuffer *dst);
+  void draw(Renderer *renderer, Texture *src, Framebuffer *dst);
   Framebuffer target;
   High_Pass_Filter high_pass;
   Gaussian_Blur blur;
   float32 radius = 6.0f;
   uint32 iterations = 15;
+  std::string name = "Unnamed Bloom_Shader";
   bool initialized = false;
 };
 
@@ -392,13 +406,14 @@ void run_pixel_shader(Shader *shader, std::vector<Texture *> *src_textures,
 
 void imgui_light_array(Light_Array &lights);
 
-struct Render
+struct Renderer
 {
-  Render(SDL_Window *window, ivec2 window_size);
-  ~Render();
+  Renderer(SDL_Window *window, ivec2 window_size,std::string name);
+  ~Renderer();
   void render(float64 state_time);
-
-  bool use_txaa = false;
+  std::string name = "Unnamed Renderer";
+  bool use_txaa = true;
+  bool use_fxaa = true;
   void resize_window(ivec2 window_size);
   float32 get_render_scale() const { return render_scale; }
   float32 get_vfov() { return vfov; }
@@ -420,10 +435,11 @@ struct Render
   Shader passthrough;
   Shader variance_shadow_map;
   Shader gamma_correction;
+  Shader fxaa;
   Bloom_Shader bloom;
   Texture uv_map_grid;
-  //Cubemap environment;
 
+  bool previous_color_target_missing = true;
 private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
@@ -452,12 +468,14 @@ private:
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
-  Framebuffer previous_frame;
 
-  Framebuffer draw_target;
-  GLuint output_texture = 0;
+  Framebuffer previous_draw_target; // full render scaled, float linear
 
-  bool previous_color_target_missing = true;
+  // in order:
+  Framebuffer draw_target;       // full render scaled, float linear
+  Framebuffer draw_target_srgb8; // full render scaled, srgb
+  Framebuffer draw_target_fxaa;  // full render scaled. srgb
+
   GLuint instance_mvp_buffer = 0;   // buffer object holding MVP matrices
   GLuint instance_model_buffer = 0; // buffer object holding model matrices
 };

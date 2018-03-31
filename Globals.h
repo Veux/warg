@@ -18,7 +18,7 @@ struct aiString;
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS                                                             \
   10 // reminder to change the Texture_Location::s1...sn shadow map enums
-#define DYNAMIC_TEXTURE_RELOADING 1
+#define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define DEBUG 1
 #define ENABLE_ASSERTS 1
@@ -35,10 +35,7 @@ struct aiString;
 #elif _WIN32
 #define ROOT_PATH std::string("../")
 #endif
-// you can point FINAL_OUTPUT_TEXTURE to any Texture::texture->texture or
-// Texture_Handle::texture  to draw it to the screen for debugging purposes
-// nullptr for default
-extern GLuint *FINAL_OUTPUT_TEXTURE;
+
 
 struct Warg_State;
 struct Render_Test_State;
@@ -233,3 +230,5 @@ struct Config
   void save(std::string filename);
 };
 extern Config CONFIG;
+
+const char *texture_format_to_string(GLenum texture_format);

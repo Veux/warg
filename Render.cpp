@@ -36,7 +36,6 @@ using namespace gl33core;
 #define NORMAL_TARGET GL_COLOR_ATTACHMENT2
 #define POSITION_TARGET GL_COLOR_ATTACHMENT3
 
-GLuint *FINAL_OUTPUT_TEXTURE = nullptr;
 std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 
 static std::unordered_map<std::string, std::weak_ptr<Texture_Handle>>
@@ -60,8 +59,9 @@ void Framebuffer::init()
 
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
+    Texture_Descriptor test;
     ASSERT(color_attachments[i].t.name !=
-           ""); // texture must be named, or .load assumes null
+           test.name); // texture must be named, or .load assumes null
     color_attachments[i].load();
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
         color_attachments[i].get_handle(), 0);
@@ -91,22 +91,27 @@ void Framebuffer::bind()
   ASSERT(fbo);
   ASSERT(fbo->fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
+  check_FBO_status();
+  if (encode_srgb_on_draw)
+  {
+    glEnable(GL_FRAMEBUFFER_SRGB);
+  }
+  else
+  {
+    glDisable(GL_FRAMEBUFFER_SRGB);
+  }
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
-void Gaussian_Blur::init(Texture_Descriptor& td)
+void Gaussian_Blur::init(Texture_Descriptor &td)
 {
   if (!initialized)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");
 
-  if (!initialized)
-    intermediate_fbo.color_attachments.emplace_back(Texture(td));
-
+  intermediate_fbo.color_attachments = {Texture(td)};
   intermediate_fbo.init();
 
-  if (!initialized)
-    target.color_attachments.emplace_back(Texture(td));
-
+  target.color_attachments = {Texture(td)};
   target.init();
 
   aspect_ratio_factor = (float32)td.size.y / (float32)td.size.x;
@@ -114,10 +119,9 @@ void Gaussian_Blur::init(Texture_Descriptor& td)
   initialized = true;
 }
 void Gaussian_Blur::draw(
-    Render *renderer, Texture *src, float32 radius, uint32 iterations)
+    Renderer *renderer, Texture *src, float32 radius, uint32 iterations)
 {
-  if (!initialized)
-    ASSERT(0);
+  ASSERT(initialized);
   ASSERT(renderer);
   ASSERT(intermediate_fbo.fbo);
   ASSERT(intermediate_fbo.color_attachments.size() == 1);
@@ -144,7 +148,7 @@ void Gaussian_Blur::draw(
   gaussian_blur_shader.use();
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform(
-      "transform", Render::ortho_projection(*dst_size));
+      "transform", Renderer::ortho_projection(*dst_size));
   src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
@@ -189,17 +193,18 @@ High_Pass_Filter::High_Pass_Filter() {}
 
 void High_Pass_Filter::init(ivec2 size, GLenum format)
 {
-  target.color_attachments.emplace_back(Texture(
-      s("High Pass Filter target. this==:", (uint32)this), size, format));
+  if (!initialized)
+    high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
+
+  target.color_attachments = {Texture(name, size, format)};
   target.init();
-  high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
+
   initialized = true;
 }
 
-void High_Pass_Filter::draw(Render *renderer, Texture *src)
+void High_Pass_Filter::draw(Renderer *renderer, Texture *src)
 {
-  if (!initialized)
-    ASSERT(0);
+  ASSERT(initialized);
   ASSERT(renderer);
   ASSERT(src);
   ASSERT(src->get_handle());
@@ -215,7 +220,7 @@ void High_Pass_Filter::draw(Render *renderer, Texture *src)
   glBindVertexArray(renderer->quad.get_vao());
   high_pass_shader.use();
   high_pass_shader.set_uniform(
-      "transform", Render::ortho_projection(*dst_size));
+      "transform", Renderer::ortho_projection(*dst_size));
   src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
@@ -231,26 +236,35 @@ Bloom_Shader::Bloom_Shader() {}
 void Bloom_Shader::init(ivec2 size, GLenum format)
 {
   Texture_Descriptor td;
-  td.size = size;
+  td.name = name + s(" Bloom Shader's blur texture");
   td.format = format;
-  td.name = "Bloom Shader";
+  td.size = size;
   td.wrap_s = GL_CLAMP_TO_EDGE;
   td.wrap_t = GL_CLAMP_TO_EDGE;
+
   high_pass.init(size, format);
+
   blur.init(td);
-  target.color_attachments.emplace_back(
-      Texture(s("Bloom Shader target:", (uint32)this), size, format));
+
+  target.color_attachments = {
+      Texture(name + s(" Bloom Shader's target texture"), size, format)};
   target.init();
+
   initialized = true;
 }
-void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
+void Bloom_Shader::draw(Renderer *renderer, Texture *src, Framebuffer *dst)
 {
   ASSERT(initialized);
   ASSERT(renderer);
+
+  // high pass draws src onto its own target with the result
   high_pass.draw(renderer, src);
 
+  // blur takes the high pass as src, draws to its own target with the result
   blur.draw(
       renderer, &high_pass.target.color_attachments[0], radius, iterations);
+
+  // this bloom_shader::draw takes blur result as src, and draws it onto dst
 
   // FINAL_OUTPUT_TEXTURE = &blur.target.color_attachments[0].texture->texture;
   glEnable(GL_BLEND);
@@ -260,10 +274,8 @@ void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
   ASSERT(dst->fbo);
   ASSERT(dst->color_attachments.size() > 0);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
-
+  dst->bind();
   blur.target.color_attachments[0].bind(0);
-
   ivec2 viewport_size = dst->color_attachments[0].t.size;
   glViewport(0, 0, viewport_size.x, viewport_size.y);
   glDisable(GL_DEPTH_TEST);
@@ -281,7 +293,7 @@ void Bloom_Shader::draw(Render *renderer, Texture *src, Framebuffer *dst)
   glDisable(GL_BLEND);
 }
 
-Render::~Render()
+Renderer::~Renderer()
 {
   glDeleteBuffers(1, &instance_mvp_buffer);
   glDeleteBuffers(1, &instance_model_buffer);
@@ -416,7 +428,7 @@ Texture::Texture(Texture_Descriptor &td)
 
 Texture::Texture(std::string name, glm::ivec2 size, GLenum format,
     GLenum minification_filter, GLenum magnification_filter, GLenum wrap_s,
-    GLenum wrap_t,glm::vec4 border_color)
+    GLenum wrap_t, glm::vec4 border_color)
 {
   this->t.name = name;
   this->t.size = size;
@@ -435,11 +447,21 @@ Texture_Handle::~Texture_Handle()
   glDeleteTextures(1, &texture);
   texture = 0;
 }
+uint32 Texture_Handle::get_imgui_handle()
+{
+  if (format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
+      format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F)
+  {
+    return ((uint32)texture | 0xf0000000);
+  }
+  return (uint32)texture;
+}
 Texture::Texture(std::string path, bool premul)
 {
   t.name = path; // note this will possibly be modified within .load()
   t.cache_as_unique = false;
   t.process_premultiply = premul;
+  load();
 }
 
 void Texture::load()
@@ -464,13 +486,11 @@ void Texture::load()
   if (!initialized && !is_a_color)
     t.cache_as_unique = !has_img_file_extension(t.name);
 
+  // for generated textures
   if (t.cache_as_unique)
   {
-    // probably doesnt need the wrap checks here
-    bool requires_reallocation =
-        !((texture) && (texture->size == t.size) &&
-            (texture->format == t.format) && (texture->wrap_t == t.wrap_t) &&
-            (texture->wrap_s == t.wrap_s));
+    bool requires_reallocation = !((texture) && (texture->size == t.size) &&
+                                   (texture->format == t.format));
     if (!requires_reallocation)
       return;
 
@@ -478,24 +498,19 @@ void Texture::load()
     {
       static uint32 i = 0;
       ++i;
-      std::string unique_key = t.name = s("Generated texture: ", i);
+      std::string unique_key = s("Generated texture ID:", i, " Name:", t.name);
       TEXTURE2D_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
       glGenTextures(1, &texture->texture);
-      texture.get()->filename = t.name;
+      texture->filename = t.name;
     }
 
     glBindTexture(GL_TEXTURE_2D, texture->texture);
     glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA,
         GL_FLOAT, 0);
-    glTexParameterf(
-        GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
-
-    texture->filename = t.name;
     texture->size = t.size;
     texture->format = t.format;
-    texture->border_color = t.border_color;
     initialized = true;
+    check_set_parameters();
     return;
   }
 
@@ -535,7 +550,7 @@ void Texture::load()
   if (t.name.substr(0, 6) == "color(")
   {
     t.size = ivec2(1, 1);
-    t.format = GL_RGBA32F; // could detect and support other formats in here
+    t.format = GL_RGBA16F; // could detect and support other formats in here
     t.magnification_filter = GL_NEAREST;
     t.minification_filter = GL_NEAREST;
 
@@ -545,7 +560,8 @@ void Texture::load()
     glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA,
         GL_FLOAT, &color);
 
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
+    glTexParameterfv(
+        GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     texture->size = t.size;
@@ -567,8 +583,7 @@ void Texture::load()
 #else
     if (!data)
     {
-      set_message("STBI failed to find or load texture: " + t.filename, 3.0);
-      file_path = "TEXTURE_MISSING";
+      set_message("STBI failed to find or load texture: ", t.name, 3.0);
       texture = nullptr;
       initialized = true;
       return;
@@ -597,10 +612,9 @@ void Texture::load()
 
       data[i] = (24 << a) | (16 << b) | (8 << g) | r;
     }
+    t.format = GL_RGBA; // right?
   }
 
-
-  t.format = GL_RGBA;
   t.size = ivec2(width, height);
   glGenTextures(1, &texture->texture);
   glBindTexture(GL_TEXTURE_2D, texture->texture);
@@ -610,6 +624,7 @@ void Texture::load()
       GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
 
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
+  check_set_parameters();
   glGenerateMipmap(GL_TEXTURE_2D);
   stbi_image_free(data);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -622,42 +637,13 @@ void Texture::load()
   initialized = true;
 }
 
-void Texture::bind(GLuint binding)
+void Texture::check_set_parameters()
 {
-  //set_message(s("Texture::bind(", binding, ")"));
-#if DYNAMIC_TEXTURE_RELOADING
-  load();
-#endif
-
-  if (!initialized)
-  {
-    load();
-  }
-  if (!texture)
-  {
-    //set_message("Null texture for binding:", s(binding));
-    glActiveTexture(GL_TEXTURE0 + binding);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return;
-  }
-
-  // descriptor desync - the handle should have been dropped and reloaded:
-  ASSERT(t.name == texture->filename);
-  ASSERT(t.format == texture->format);
-  ASSERT(t.size == texture->size);
-
-  // set_message(s("Binding texture name:",texture->filename," with handle:",
-  // texture->texture, " to binding:", s(binding)));
-  glActiveTexture(GL_TEXTURE0 + binding);
-  glBindTexture(GL_TEXTURE_2D, texture->texture);
-
   // check/set desired state:
   ASSERT(t.magnification_filter != GLenum(0));
   ASSERT(t.minification_filter != GLenum(0));
   ASSERT(t.wrap_t != GLenum(0));
   ASSERT(t.wrap_s != GLenum(0));
-
-  // todo: texture mod is not right by default ???huh? put more detailed notes, is this old?
 
   if (t.magnification_filter != texture->magnification_filter)
   {
@@ -684,8 +670,47 @@ void Texture::bind(GLuint binding)
   if (t.border_color != texture->border_color)
   {
     texture->border_color = t.border_color;
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
+    glTexParameterfv(
+        GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
   }
+  if (t.anisotropic_filtering != texture->anisotropic_filtering)
+  {
+    texture->anisotropic_filtering = t.anisotropic_filtering;
+    glTexParameterf(
+        GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
+  }
+}
+
+void Texture::bind(GLuint binding)
+{
+  // set_message(s("Texture::bind(", binding, ")"));
+#if DYNAMIC_TEXTURE_RELOADING
+  load();
+#endif
+
+  if (!initialized)
+  {
+    load();
+  }
+  if (!texture)
+  {
+    // set_message("Null texture for binding:", s(binding));
+    glActiveTexture(GL_TEXTURE0 + binding);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return;
+  }
+
+  // descriptor desync - the handle should have been dropped and reloaded:
+  ASSERT(t.name == texture->filename);
+  ASSERT(t.format == texture->format);
+  ASSERT(t.size == texture->size);
+
+  // set_message(s("Binding texture name:",texture->filename," with handle:",
+  // texture->texture, " to binding:", s(binding)));
+  glActiveTexture(GL_TEXTURE0 + binding);
+  glBindTexture(GL_TEXTURE_2D, texture->texture);
+
+  check_set_parameters();
 }
 
 // not guaranteed to be constant for every call -
@@ -701,6 +726,8 @@ GLuint Texture::get_handle()
 
   return texture ? texture->texture : 0;
 }
+
+GLuint Texture::get_imgui_handle() { return texture->get_imgui_handle(); }
 
 bool Texture::has_img_file_extension(std::string name)
 {
@@ -962,7 +989,8 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
       m.tangent = material_override->tangent;
     if (material_override->normal.name != defaults.normal.name)
       m.normal = material_override->normal;
-    if (material_override->ambient_occlusion.name != defaults.ambient_occlusion.name)
+    if (material_override->ambient_occlusion.name !=
+        defaults.ambient_occlusion.name)
       m.ambient_occlusion = material_override->ambient_occlusion;
     if (material_override->emissive.name != defaults.emissive.name)
       m.emissive = material_override->emissive;
@@ -981,15 +1009,29 @@ Material::Material(aiMaterial *ai_material, std::string working_directory,
     m.normal = "color(0.5,0.5,1.0)";
   load(m);
 }
-void Material::load(Material_Descriptor &m)
+void Material::load(Material_Descriptor &mat)
 {
-  this->m = m;
+  // the formats set here may be overriden in the texture constructor
+  // based on if its a generated color or not
+
+  m = mat;
+
+  m.albedo.format = GL_SRGB8_ALPHA8;
   albedo = Texture(m.albedo);
+
   // specular_color = Texture(m.specular);
+  m.normal.format = GL_RGBA;
   normal = Texture(m.normal);
+
+  m.emissive.format = GL_SRGB8_ALPHA8;
   emissive = Texture(m.emissive);
+
+  m.roughness.format = GL_SRGB8_ALPHA8;
   roughness = Texture(m.roughness);
+
+  m.environment.format = GL_SRGB8;
   environment = Cubemap(m.environment);
+
   shader = Shader(m.vertex_shader, m.frag_shader);
 }
 void Material::bind(Shader *shader)
@@ -1030,7 +1072,7 @@ void Material::unbind_textures()
   glActiveTexture(GL_TEXTURE0 + Texture_Location::emissive);
   glBindTexture(GL_TEXTURE_2D, 0);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::roughness);
-  glBindTexture(GL_TEXTURE_2D, 0);  
+  glBindTexture(GL_TEXTURE_2D, 0);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
@@ -1070,15 +1112,19 @@ Render_Entity::Render_Entity(
   ASSERT(material);
 }
 
-Render::Render(SDL_Window *window, ivec2 window_size)
+Renderer::Renderer(SDL_Window *window, ivec2 window_size,std::string name)
 {
-  set_message("Render constructor");
+  set_message("Renderer constructor");
+  this->name = name;
   this->window = window;
   this->window_size = window_size;
   SDL_DisplayMode current;
   SDL_GetCurrentDisplayMode(0, &current);
   target_frame_time = 1.0f / (float32)current.refresh_rate;
   set_vfov(vfov);
+
+  bloom.name = name;
+
 
   set_message("Initializing renderer...");
 
@@ -1089,6 +1135,8 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   passthrough = Shader("passthrough.vert", "passthrough.frag");
   variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
   gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
+  fxaa = Shader("passthrough.vert", "fxaa.frag");
+
 
   Texture_Descriptor uvtd;
   uvtd.name = "uvgrid.png";
@@ -1115,7 +1163,7 @@ Render::Render(SDL_Window *window, ivec2 window_size)
   FRAME_TIMER.start();
 }
 
-void Render::set_uniform_lights(Shader &shader)
+void Renderer::set_uniform_lights(Shader &shader)
 {
   for (uint32 i = 0; i < lights.light_count; ++i)
   {
@@ -1149,7 +1197,8 @@ void Render::set_uniform_lights(Shader &shader)
       glUniform3fv(location_cache->attenuation, 1, &new_light->attenuation[0]);
     }
 
-    const vec3 new_ambient = new_light->brightness * new_light->ambient * new_light->color;
+    const vec3 new_ambient =
+        new_light->brightness * new_light->ambient * new_light->color;
     if (shader.program->light_values_cache[i].ambient != new_ambient)
     {
       value_cache->ambient = new_ambient;
@@ -1187,7 +1236,7 @@ void Render::set_uniform_lights(Shader &shader)
   }
 }
 
-void Render::set_uniform_shadowmaps(Shader &shader)
+void Renderer::set_uniform_shadowmaps(Shader &shader)
 {
   ASSERT(spotlight_shadow_maps.size() == MAX_LIGHTS);
 
@@ -1197,13 +1246,6 @@ void Render::set_uniform_shadowmaps(Shader &shader)
       return;
 
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
-    /*
-        
-
-
-
-        if (!shadow_map->enabled)
-          continue;*/
 
     if (shadow_map->enabled)
       spotlight_shadow_maps[i].blur.target.color_attachments[0].bind(
@@ -1239,14 +1281,14 @@ void Render::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
-mat4 Render::ortho_projection(ivec2 &dst_size)
+mat4 Renderer::ortho_projection(ivec2 &dst_size)
 {
   return ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f,
              100.0f) *
          translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1)) *
          scale(vec3(dst_size, 1));
 }
-void Render::build_shadow_maps()
+void Renderer::build_shadow_maps()
 {
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
@@ -1354,7 +1396,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
   glDisable(GL_DEPTH_TEST);
   glBindVertexArray(quad.get_vao());
   shader->use();
-  shader->set_uniform("transform", Render::ortho_projection(viewport_size));
+  shader->set_uniform("transform", Renderer::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   glDrawElements(
@@ -1426,7 +1468,8 @@ void imgui_light_array(Light_Array &lights)
         ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_RGB);
     ImGui::DragFloat3("Position", &light->position[0]);
     ImGui::DragFloat("Brightness", &light->brightness);
-    if (light->brightness == 0)light->brightness = 0.00000001f;
+    if (light->brightness == 0)
+      light->brightness = 0.00000001f;
     ImGui::DragFloat3("Attenuation", &light->attenuation[0], 0.01f);
     ImGui::DragFloat("Ambient", &light->ambient);
     std::string current_type = s(light->type);
@@ -1461,16 +1504,23 @@ void imgui_light_array(Light_Array &lights)
         if (ImGui::TreeNode("Shadow settings"))
         {
           width = 320;
-          ImGui::InputInt("Blur Iterations", &light->shadow_blur_iterations, 1, 0);
-          ImGui::DragFloat("Blur Radius", &light->shadow_blur_radius, 0.1f, 0.00001f, 0.0f);
-          ImGui::DragFloat("Near Plane", &light->shadow_near_plane, 1.0f, 0.00001f);
+          ImGui::InputInt(
+              "Blur Iterations", &light->shadow_blur_iterations, 1, 0);
+          ImGui::DragFloat(
+              "Blur Radius", &light->shadow_blur_radius, 0.1f, 0.00001f, 0.0f);
+          ImGui::DragFloat(
+              "Near Plane", &light->shadow_near_plane, 1.0f, 0.00001f);
           ImGui::DragFloat("Far Plane", &light->shadow_far_plane, 1.0f, 1.0f);
-          ImGui::InputFloat("Max Variance", &light->max_variance, 0.0000001f, 0.0001f, 12);
+          ImGui::InputFloat(
+              "Max Variance", &light->max_variance, 0.0000001f, 0.0001f, 12);
           ImGui::DragFloat("FoV", &light->shadow_fov, 1.0f, 0.0000001f, 90.f);
           ImGui::TreePop();
-          if (light->shadow_blur_iterations < 0)light->shadow_blur_iterations = 0;
-          if (light->max_variance < 0)light->max_variance = 0;
-          if (light->shadow_blur_radius < 0)light->shadow_blur_radius = 0;
+          if (light->shadow_blur_iterations < 0)
+            light->shadow_blur_iterations = 0;
+          if (light->max_variance < 0)
+            light->max_variance = 0;
+          if (light->shadow_blur_radius < 0)
+            light->shadow_blur_radius = 0;
         }
       }
     }
@@ -1483,7 +1533,7 @@ void imgui_light_array(Light_Array &lights)
   ImGui::End();
 }
 
-void Render::opaque_pass(float32 time)
+void Renderer::opaque_pass(float32 time)
 {
   // set_message("opaque_pass()");
   glViewport(0, 0, size.x, size.y);
@@ -1513,9 +1563,10 @@ void Render::opaque_pass(float32 time)
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->m.uv_scale);
+    shader.set_uniform("normal_uv_scale", entity.material->m.normal_uv_scale);
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
-    shader.set_uniform("alpha_albedo_override", -1.0f);//-1 is disabled
+    shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
 #if SHOW_UV_TEST_GRID
     uv_map_grid.bind(10);
     shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
@@ -1531,7 +1582,7 @@ void Render::opaque_pass(float32 time)
   }
 }
 
-void Render::instance_pass(float32 time)
+void Renderer::instance_pass(float32 time)
 {
   for (auto &entity : render_instances)
   {
@@ -1636,10 +1687,10 @@ void Render::instance_pass(float32 time)
   }
 }
 
-void Render::translucent_pass(float32 time)
+void Renderer::translucent_pass(float32 time)
 {
   glDisable(GL_CULL_FACE);
-  //glDisable(GL_DEPTH_TEST);
+  // glDisable(GL_DEPTH_TEST);
   glDepthMask(GL_FALSE);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1658,7 +1709,8 @@ void Render::translucent_pass(float32 time)
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_on_alpha", false);
-    shader.set_uniform("alpha_albedo_override", entity.material->m.albedo_alpha_override); 
+    shader.set_uniform(
+        "alpha_albedo_override", entity.material->m.albedo_alpha_override);
 
 #if SHOW_UV_TEST_GRID
     uv_map_grid.bind(10);
@@ -1674,8 +1726,37 @@ void Render::translucent_pass(float32 time)
   glDisable(GL_BLEND);
   glDepthMask(GL_TRUE);
 }
-void Render::render(float64 state_time)
+
+void imgui_fxaa(Shader *fxaa)
 {
+  static float EDGE_THRESHOLD_MIN = 0.0312;
+  static float EDGE_THRESHOLD_MAX = 0.125;
+  static float SUBPIXEL_QUALITY = 0.75f;
+  static int ITERATIONS = 8;
+  static int QUALITY = 1;
+
+  static bool open = true;
+  ImGui::Begin("fxaa adjustment", &open);
+  ImGui::SetWindowSize(ImVec2(300, 160));
+  ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
+  ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
+  ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
+  ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
+  ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
+
+  fxaa->set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
+  fxaa->set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
+  fxaa->set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
+  fxaa->set_uniform("ITERATIONS", ITERATIONS);
+  fxaa->set_uniform("QUALITY", QUALITY);
+
+  ImGui::End();
+}
+
+void Renderer::render(float64 state_time)
+{ /*
+   set_message("sin(time) [-1,1]:", s(sin(state_time)), 1.0f);
+   set_message("sin(time) [ 0,1]:", s(0.5f + 0.5f*sin(state_time)), 1.0f);*/
 #if DYNAMIC_FRAMERATE_TARGET
   dynamic_framerate_target();
 #endif
@@ -1683,26 +1764,68 @@ void Render::render(float64 state_time)
   check_and_clear_expired_textures();
 #endif
 #if SHOW_UV_TEST_GRID
-  uv_map_grid.t.mod = vec4(1,1,1,clamp((float32)pow(sin(state_time),.25f),0.0f,1.0f));
+  uv_map_grid.t.mod =
+      vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
 #endif
+
   static bool show_renderer_window = true;
   if (show_renderer_window)
   {
-    ImGui::Begin("renderer.cpp Window", &show_renderer_window);
-    if (ImGui::Button("Close Me"))
-      show_renderer_window = false;
+    ImGui::Begin("Renderer", &show_renderer_window);
+    ImGui::BeginChild("ScrollingRegion");
 
-    for (auto &tex : TEXTURE2D_CACHE)
-    {
-      auto ptr = tex.second.lock();
-      if (ptr)
+    uint32 height = 60;
+    float width = 200;
+    const uint32 height_per_header = 25;
+    const uint32 height_per_treenode = 15;
+
+    if (ImGui::CollapsingHeader("GPU Textures"))
+    { // todo improve texture names for generated textures
+      height += height_per_header;
+      ImGui::Indent(5);
+      std::vector<std::shared_ptr<Texture_Handle>> handles;
+
+      for (auto &tex : TEXTURE2D_CACHE)
       {
-        ImGui::Text(ptr->peek_filename().c_str());
-        ImGui::Text(s("Handle:", ptr->texture).c_str());
-        ImGui::Image((ImTextureID)ptr->texture, ImVec2(256, 256));
+        auto ptr = tex.second.lock();
+        if (ptr)
+          handles.push_back(ptr);
       }
+      std::sort(handles.begin(), handles.end(),
+          [](std::shared_ptr<Texture_Handle> a,
+              std::shared_ptr<Texture_Handle> b) {
+            return a->peek_filename().compare(b->peek_filename()) < 0;
+          });
+      for (std::shared_ptr<Texture_Handle> &ptr : handles)
+      {
+        uint32 id = (uint32) & (*ptr);
+        ImGui::PushID(s(id).c_str());
+        height += height_per_treenode;
+        width = 400;
+        if (ImGui::TreeNode(ptr->peek_filename().c_str()))
+        {
+          height = 600;
+          width = 800;
+          ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
+          ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
+          ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
+          const char *format = texture_format_to_string(ptr->format);
+
+          ImGui::Text(s("Format:", format).c_str());
+          ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
+
+          ImGui::Image((ImTextureID)ptr->get_imgui_handle(), ImVec2(256, 256),
+              ImVec2(0, 1), ImVec2(1, 0));
+          ImGui::TreePop();
+        }
+        ImGui::PopID();
+      }
+      ImGui::Unindent(5.f);
     }
 
+    ImGui::EndChild();
+
+    ImGui::SetWindowSize(ImVec2(width, height));
     ImGui::End();
   }
 
@@ -1717,44 +1840,39 @@ void Render::render(float64 state_time)
 
   // instance_pass(time);
   translucent_pass(time);
-
-
-
 #if POSTPROCESSING
-  bloom.draw(this, &draw_target.color_attachments[0], &draw_target);
+  //bloom.draw(this, &draw_target.color_attachments[0], &draw_target);
 #else
-  
+
 #endif
 
-  if (FINAL_OUTPUT_TEXTURE)
-  {
-    output_texture = *FINAL_OUTPUT_TEXTURE;
-  }
-  else
-  {
-    output_texture = draw_target.color_attachments[0].get_handle();
-  }
-
-  draw_calls_last_frame = render_entities.size();
-  set_message("COPYING TO SCREEN", "");
-
+  glDisable(GL_DEPTH_TEST);
+  // todo fix txaa
   if (use_txaa)
   {
+    txaa_jitter = get_next_TXAA_sample();
     // TODO: implement motion vector vertex attribute
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, window_size.x, window_size.y);
+    // 1: blend draw_target with previous_draw_target, store in
+    // draw_target_srgb8  2: copy draw_target to previous_draw_target  3: run
+    // fxaa on draw_target_srgb8, drawing to screen
+
+    glBindVertexArray(quad.get_vao());
+    draw_target_srgb8.bind();
+    glViewport(0, 0, size.x, size.y);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     temporalaa.use();
-    draw_target.color_attachments[0].bind(0);
-    glActiveTexture(GL_TEXTURE0 + 1);
+
+    // blend draw_target with previous_draw_target, store in draw_target_srgb8
     if (previous_color_target_missing)
     {
-      previous_frame.color_attachments[0].bind(1);
+      draw_target.color_attachments[0].bind(0);
+      draw_target.color_attachments[0].bind(1);
     }
     else
     {
-      draw_target.color_attachments[0].bind(1);
+      draw_target.color_attachments[0].bind(0);
+      previous_draw_target.color_attachments[0].bind(1);
     }
 
     temporalaa.set_uniform("transform", ortho_projection(window_size));
@@ -1763,57 +1881,90 @@ void Render::render(float64 state_time)
         GL_UNSIGNED_INT, (void *)0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0 + 1);
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
-    FRAME_TIMER.stop();
-    SWAP_TIMER.start();
-    SDL_GL_SwapWindow(window);
-    SWAP_TIMER.stop();
-    FRAME_TIMER.start();
 
+    // copy draw_target to previous_draw_target
+    previous_draw_target.bind();
     glViewport(0, 0, size.x, size.y);
-    previous_frame.bind();
-    gamma_correction.use();
+    passthrough.use();
     draw_target.color_attachments[0].bind(0);
-    gamma_correction.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", ortho_projection(window_size));
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
         GL_UNSIGNED_INT, (void *)0);
 
     previous_color_target_missing = false;
-    glFramebufferTexture(
-        GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, output_texture, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    txaa_jitter = get_next_TXAA_sample();
   }
   else
   {
-    // render to main framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, window_size.x, window_size.y);
-    glClearColor(1, 0, 0, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // draw to srgb8 framebuffer
+    glViewport(0, 0, size.x, size.y);
     glBindVertexArray(quad.get_vao());
-
-    gamma_correction.use();
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, output_texture);
-
-    gamma_correction.set_uniform("transform", ortho_projection(window_size));
+    draw_target_srgb8.bind();
+    glEnable(GL_FRAMEBUFFER_SRGB); // draw_target_srgb8 will do its own gamma
+                                   // encoding
+    passthrough.use();
+    passthrough.set_uniform("transform", ortho_projection(size));
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    draw_target.color_attachments[0].bind(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(),
         GL_UNSIGNED_INT, (void *)0);
-
     glBindTexture(GL_TEXTURE_2D, 0);
-    FRAME_TIMER.stop();
-    SWAP_TIMER.start();
-
-    glBindVertexArray(0);
   }
+
+  // do fxaa or passthrough if disabled
+  draw_target_fxaa.bind();
+  if (use_fxaa)
+  {
+    fxaa.use();
+    imgui_fxaa(&fxaa);
+    fxaa.set_uniform("transform", ortho_projection(window_size));
+    fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
+    fxaa.set_uniform("time", (float32)state_time);
+  }
+  else
+  {
+    passthrough.use();
+    passthrough.set_uniform("transform", ortho_projection(window_size));
+  }
+
+  // this is drawn to another intermediate framebuffer so fxaa uses all the
+  // fragments of the original render scale
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  draw_target_srgb8.color_attachments[0].bind(0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  glDrawElements(
+      GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  // draw draw_target_post_fxaa to screen
+  glViewport(0, 0, window_size.x, window_size.y);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glDisable(GL_FRAMEBUFFER_SRGB);
+  gamma_correction.use();
+  gamma_correction.set_uniform("transform", ortho_projection(window_size));
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  draw_target_fxaa.color_attachments[0].bind(0);
+
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer()); 
+  glDrawElements(
+      GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  FRAME_TIMER.stop();
+  SWAP_TIMER.start();
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glDisable(GL_FRAMEBUFFER_SRGB);
+  glBindVertexArray(0);
+
   frame_count += 1;
 }
 
-void Render::resize_window(ivec2 window_size)
+void Renderer::resize_window(ivec2 window_size)
 {
   ASSERT(0);
   // todo: implement window resize, must notify imgui
@@ -1821,7 +1972,7 @@ void Render::resize_window(ivec2 window_size)
   set_vfov(vfov);
 }
 
-void Render::set_render_scale(float32 scale)
+void Renderer::set_render_scale(float32 scale)
 {
   if (scale < 0.1f)
     scale = 0.1f;
@@ -1834,19 +1985,19 @@ void Render::set_render_scale(float32 scale)
   time_of_last_scale_change = get_real_time();
 }
 
-void Render::set_camera(vec3 pos, vec3 camera_gaze_dir)
+void Renderer::set_camera(vec3 pos, vec3 camera_gaze_dir)
 {
   vec3 p = pos + camera_gaze_dir;
   camera_position = pos;
   camera = glm::lookAt(pos, p, {0, 0, 1});
 }
-void Render::set_camera_gaze(vec3 pos, vec3 p)
+void Renderer::set_camera_gaze(vec3 pos, vec3 p)
 {
   camera_position = pos;
   camera = glm::lookAt(pos, p, {0, 0, 1});
 }
 
-void Render::set_vfov(float32 vfov)
+void Renderer::set_vfov(float32 vfov)
 {
   const float32 aspect = (float32)window_size.x / (float32)window_size.y;
   const float32 znear = 0.1f;
@@ -1854,7 +2005,7 @@ void Render::set_vfov(float32 vfov)
   projection = glm::perspective(radians(vfov), aspect, znear, zfar);
 }
 
-void Render::set_render_entities(vector<Render_Entity> *new_entities)
+void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
 {
   previous_render_entities = move(render_entities);
   render_entities.clear();
@@ -1875,7 +2026,6 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
     bool is_transparent = entity->material->m.uses_transparency;
     if (is_transparent)
     {
-      ASSERT(entity->material->albedo.t.format == GL_RGBA);
       index_distances.push_back({i, dist});
     }
     else
@@ -1894,7 +2044,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
     if (i.second != -1.0f)
     {
       translucent_entities.push_back((*new_entities)[i.first]);
-      //todo: ASSERT(0); // test this, the furthest objects should be first
+      // todo: ASSERT(0); // test this, the furthest objects should be first
     }
     else
     {
@@ -1903,7 +2053,7 @@ void Render::set_render_entities(vector<Render_Entity> *new_entities)
   }
 }
 
-void Render::set_lights(Light_Array new_lights) { lights = new_lights; }
+void Renderer::set_lights(Light_Array new_lights) { lights = new_lights; }
 
 void check_FBO_status()
 {
@@ -1947,7 +2097,7 @@ void check_FBO_status()
   }
 }
 
-void Render::init_render_targets()
+void Renderer::init_render_targets()
 {
   set_message("init_render_targets()");
 
@@ -1955,25 +2105,38 @@ void Render::init_render_targets()
   bloom.init(size, FRAMEBUFFER_FORMAT);
 
   Texture_Descriptor td;
-  td.name = "Render::draw_target.color[0]";
+  td.name = name + " Renderer::draw_target.color[0]";
   td.size = size;
   td.format = FRAMEBUFFER_FORMAT;
-  if (draw_target.color_attachments.size() == 0)
-  {
-    draw_target.color_attachments.emplace_back(Texture(td));
-  }
+  draw_target.color_attachments = { Texture(td) };
   draw_target.depth_enabled = true;
   draw_target.depth_size = size;
   draw_target.init();
-  td.name = "Render::previous_frame.color[0]";
-  if (previous_frame.color_attachments.size() == 0)
-  {
-    previous_frame.color_attachments.emplace_back(Texture(td));
-  }
-  previous_frame.init();
+
+  td.name = name + " Renderer::previous_frame.color[0]";
+  previous_draw_target.color_attachments = { Texture(td) };
+  previous_draw_target.init();
+
+  // full render scaled, clamped and encoded srgb
+  Texture_Descriptor srgb8;
+  srgb8.name = name + " Renderer::draw_target_srgb8.color[0]";
+  srgb8.size = size;
+  srgb8.format = GL_SRGB;
+  draw_target_srgb8.color_attachments = { Texture(srgb8) };
+  draw_target_srgb8.encode_srgb_on_draw = true;
+  draw_target_srgb8.init();
+
+  // full render scaled, fxaa or passthrough target
+  Texture_Descriptor fxaa;
+  fxaa.name = name + " Renderer::draw_target_post_fxaa.color[0]";
+  fxaa.size = size;
+  fxaa.format = GL_SRGB;
+  draw_target_fxaa.color_attachments = { Texture(fxaa) };
+  draw_target_fxaa.encode_srgb_on_draw = true;
+  draw_target_fxaa.init();
 }
 
-void Render::dynamic_framerate_target()
+void Renderer::dynamic_framerate_target()
 {
   // early out if we don't have enough samples to go by
   const uint32 min_samples = 5;
@@ -2056,7 +2219,7 @@ void Render::dynamic_framerate_target()
   }
 }
 
-mat4 Render::get_next_TXAA_sample()
+mat4 Renderer::get_next_TXAA_sample()
 {
   vec2 translation;
   if (jitter_switch)
@@ -2096,14 +2259,17 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   pre_blur.depth_format = GL_DEPTH_COMPONENT32;
 
   if (!initialized)
-    pre_blur.color_attachments.emplace_back(
-        Texture("Spotlight Shadow Map pre_blur[0]"));
+  {
+    Texture_Descriptor pre_blur_td;
+    pre_blur_td.name = "Spotlight Shadow Map pre_blur[0]";
+    pre_blur_td.size = size;
+    pre_blur_td.format = format;
+    pre_blur.color_attachments = {Texture(pre_blur_td)};
+    pre_blur.init();
+  }
 
   ASSERT(pre_blur.color_attachments.size() == 1);
 
-  pre_blur.color_attachments[0].t.size = size;
-  pre_blur.color_attachments[0].t.format = format;
-  pre_blur.init();
   Texture_Descriptor td;
   td.name = "Spotlight Shadow Map";
   td.size = size;
@@ -2131,62 +2297,55 @@ void Cubemap::bind(GLuint texture_unit)
 
 // filenames ordered: right left top bottom back front
 
-Cubemap_Descriptor::Cubemap_Descriptor()
-{
-  
-}
+Cubemap_Descriptor::Cubemap_Descriptor() {}
 
 Cubemap_Descriptor::Cubemap_Descriptor(std::string directory)
 {
   directory = BASE_TEXTURE_PATH + directory;
-  //yellow means original side name
-  //red is where it should appear
+  // yellow means original side name
+  // red is where it should appear
 
+  // todo: cubemap preprocess: revert the cubemap file changes from default when
+  // implemented:  necessary processing:
 
-  //todo: cubemap preprocess: revert the cubemap file changes from default when implemented:
-  //necessary processing:
+  // note: in order to import a new set of cubemap files, you must do the
+  // following in an  image editor first  rotate bottom.jpg 180 degrees  rotate
+  // front.jpg 180 degrees  rotate left.jpg 90 clockwise  rotate right.jpg 90
+  // anticlockwise
 
-  //note: in order to import a new set of cubemap files, you must do the following in an
-  //image editor first
-  //rotate bottom.jpg 180 degrees
-  //rotate front.jpg 180 degrees
-  //rotate left.jpg 90 clockwise
-  //rotate right.jpg 90 anticlockwise
-
-  //opengl left = right.jpg 
-  //opengl right = left.jpg 
-  //opengl top = back.jpg 
-  //opengl front = top.jpg 
-  //opengl bottom = front.jpg 
-  //opengl back = bottom.jpg
+  // opengl left = right.jpg
+  // opengl right = left.jpg
+  // opengl top = back.jpg
+  // opengl front = top.jpg
+  // opengl bottom = front.jpg
+  // opengl back = bottom.jpg
   //
 
-  //opengl right
+  // opengl right
   faces[0] = directory + "/left.jpg";
 
-  //opengl left
+  // opengl left
   faces[1] = directory + "/right.jpg";
 
-  //opengl top
+  // opengl top
   faces[2] = directory + "/back.jpg";
 
-  //opengl bottom
+  // opengl bottom
   faces[3] = directory + "/front.jpg";
 
-  //opengl back
+  // opengl back
   faces[4] = directory + "/bottom.jpg";
 
-  //opengl front
+  // opengl front
   faces[5] = directory + "/top.jpg";
 
-
-  //opengl z-forward space is right left top bottom back front
-  //faces[0] = directory + "/right.jpg";
-  //faces[1] = directory + "/left.jpg";
-  //faces[2] = directory + "/top.jpg"; 
-  //faces[3] = directory + "/bottom.jpg"; 
-  //faces[4] = directory + "/back.jpg"; 
-  //faces[5] = directory + "/front.jpg";
+  // opengl z-forward space is right left top bottom back front
+  // faces[0] = directory + "/right.jpg";
+  // faces[1] = directory + "/left.jpg";
+  // faces[2] = directory + "/top.jpg";
+  // faces[3] = directory + "/bottom.jpg";
+  // faces[4] = directory + "/back.jpg";
+  // faces[5] = directory + "/front.jpg";
 }
 
 Cubemap::Cubemap(Cubemap_Descriptor d)
@@ -2203,7 +2362,7 @@ Cubemap::Cubemap(Cubemap_Descriptor d)
   TEXTURECUBEMAP_CACHE[key] = handle;
 
   for (uint32 i = 0; i < 6; ++i)
-  { //opengl z-forward space is right left top bottom back front
+  { // opengl z-forward space is right left top bottom back front
     int32 width, height, n;
     auto *data = stbi_load(d.faces[i].c_str(), &width, &height, &n, 4);
     if (!data)
@@ -2238,7 +2397,7 @@ Cubemap::Cubemap(Cubemap_Descriptor d)
       glGenTextures(1, &handle->texture);
       glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
     }
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height,
+    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, d.format, width, height,
         0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     stbi_image_free(data);
   }

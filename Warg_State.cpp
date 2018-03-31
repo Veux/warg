@@ -65,7 +65,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
   local = true;
-
+  renderer.name = "Warg_State";
   server = std::make_unique<Warg_Server>(true);
   server->connect(&out, &in);
   out.push(char_spawn_request_event("Cubeboi", 0));
@@ -397,7 +397,8 @@ void Warg_State::update()
 
     static Texture test("../Assets/Textures/pebbles_diffuse.png");
 
-    ImGui::Image((ImTextureID)test.get_handle(), ImVec2(256, 256));
+    ImGui::Image((ImTextureID)test.get_imgui_handle(), ImVec2(25, 25));
+    ImGui::SetWindowSize(ImVec2(300, 100));
     ImGui::End();
   }  
   

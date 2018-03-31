@@ -16,7 +16,7 @@ Render_Test_State::Render_Test_State(
 {
   free_cam = true;
   save_graph_on_exit = true;
-  scene_graph_json_filename = s(ROOT_PATH,"Render_Test_State.json");
+  scene_graph_json_filename = s(ROOT_PATH, "Render_Test_State.json");
   scene.root->include_in_save = true;
   std::string str = read_file(scene_graph_json_filename.c_str());
   try
@@ -50,18 +50,17 @@ Render_Test_State::Render_Test_State(
   material.albedo = "steel_diffuse.png";
   material.normal = "steel_normal.png";
 
-
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;
   sky_mat.vertex_shader = "vertex_shader.vert";
   sky_mat.frag_shader = "skybox.frag";
-  skybox = scene.add_primitive_mesh(cube,"skybox", sky_mat);
+  skybox = scene.add_primitive_mesh(cube, "skybox", sky_mat);
 
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
   sphere = scene.add_aiscene("smoothsphere.obj", nullptr, &material);
 
-  //crates:
+  // crates:
   material.albedo = "crate_diffuse.png";
   material.emissive = "test_emissive.png";
   material.normal = "color(0.5,.5,1,0)";
@@ -77,7 +76,6 @@ Render_Test_State::Render_Test_State(
   scene.set_parent(cube_planet, cube_star, false);
   cube_moon = scene.add_primitive_mesh(cube, "moon", material);
   scene.set_parent(cube_moon, cube_planet, false);
-
 
   cam.phi = .25;
   cam.theta = -1.5f * half_pi<float32>();
@@ -95,30 +93,31 @@ Render_Test_State::Render_Test_State(
 
       if (transp)
       {
-        Material_Descriptor* m = &chests.back()->owned_children[0]->model[0].second.m;
+        Material_Descriptor *m =
+            &chests.back()->owned_children[0]->model[0].second.m;
         m->uses_transparency = true;
         m->albedo_alpha_override = 0.4f;
       }
       transp = !transp;
     }
   }
-   Material_Descriptor tiger_mat;
-   tiger_mat.backface_culling = false;
-   tiger_mat.discard_on_alpha = true;
-   tiger = scene.add_aiscene("tiger/tiger.obj",&tiger_mat);
-   tiger->position = vec3(0,0,0.5);
-   tiger->scale = vec3(0.45f);
-   scene.set_parent(tiger, cube_star, true);
+  Material_Descriptor tiger_mat;
+  tiger_mat.backface_culling = false;
+  tiger_mat.discard_on_alpha = true;
+  tiger = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+  tiger->position = vec3(0, 0, 0.5);
+  tiger->scale = vec3(0.45f);
+  scene.set_parent(tiger, cube_star, true);
 
-   Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
-   tiger2->position = vec3(0, 0, 0.5);
-   tiger2->scale = vec3(0.45f);
-   scene.set_parent(tiger2, cube_planet, true);
+  Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+  tiger2->position = vec3(0, 0, 0.5);
+  tiger2->scale = vec3(0.45f);
+  scene.set_parent(tiger2, cube_planet, true);
 
-   Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
-   tiger3->position = vec3(0, 0, 0.5);
-   tiger3->scale = vec3(0.45f);
-   scene.set_parent(tiger3, cube_moon, true);
+  Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
+  tiger3->position = vec3(0, 0, 0.5);
+  tiger3->scale = vec3(0.45f);
+  scene.set_parent(tiger3, cube_moon, true);
 
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
@@ -361,8 +360,9 @@ void Render_Test_State::update()
 
   cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
   cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
-  const float32 anglestar = wrap_to_range(
-      pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
+  const float32 anglestar =
+      wrap_to_range(pi<float32>() * (float32)sin(current_time / 2.f), 0.0f,
+          2.0f * pi<float32>());
   // cube_star->visible = sin(current_time * 1.2) > -.25;
   cube_star->propagate_visibility = true;
   cube_star->orientation = angleAxis(anglestar,
@@ -376,7 +376,8 @@ void Render_Test_State::update()
   cube_planet->position =
       planet_distance *
       vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
-  const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
+  const float32 angle =
+      wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
   cube_planet->orientation =
       angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
   cube_planet->visible = sin(current_time * 6) > 0;
@@ -399,12 +400,11 @@ void Render_Test_State::update()
   const vec4 night = vec4(0);
   const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1., 0.f);
   const float time_day_scale = 0.12f;
-  float32 time_of_day =
-      wrap_to_range((time_day_scale * (float32)current_time) + 135.f, 0.0f, 24.0f);
+  float32 time_of_day = wrap_to_range(
+      (time_day_scale * (float32)current_time) + 135.f, 0.0f, 24.0f);
   // time_of_day = 12.f;
   float32 day_range = clamp(time_of_day, 5.85f, 18.85f); // 5:30am to 7:30pm
   float32 day_t = (day_range - 5.85f) / 12.7f;           // 0-1 daytime
-
 
   skybox->scale = vec3(500);
   skybox->position = vec3(0, 0, 0);
