@@ -335,6 +335,11 @@ void Warg_State::handle_input_events(
 void Warg_State::register_move_command(Move_Status m, vec3 dir)
 {
   push(make_unique<Player_Movement_Message>(move_cmd_n, m, dir));
+  Movement_Command cmd;
+  cmd.i = move_cmd_n;
+  cmd.m = m;
+  cmd.dir = dir;
+  move_buf.add(cmd);
   move_cmd_n++;
 }
 
@@ -781,4 +786,27 @@ void Latency_Tracker::ack_received()
 uint32 Latency_Tracker::get_latency()
 {
   return round(last_latency * 1000);
+}
+
+void Move_Command_Buffer::add(Movement_Command &cmd)
+{
+  buf.push_back(cmd);
+}
+
+Movement_Command Move_Command_Buffer::get(uint32_t n)
+{
+  ASSERT(buf.size());
+  ASSERT(n < first + buf.size());
+
+  auto ret = buf[n - first];
+  ASSERT(ret.i == n);
+  return ret;
+}
+
+void Move_Command_Buffer::remove_up_to(uint32_t n)
+{
+  ASSERT(n < first + buf.size());
+  uint32 n_to_pop = n - first;
+  while (n_to_pop--)
+    buf.pop_front();
 }

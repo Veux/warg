@@ -6,6 +6,7 @@
 #include "Warg_Server.h"
 #include "Warg_Common.h"
 #include <queue>
+#include <deque>
 
 class Latency_Tracker
 {
@@ -18,6 +19,17 @@ private:
   float64 last_ack = 0;
   float64 last_latency = 0;
   bool acked = true;
+};
+
+class Move_Command_Buffer
+{
+public:
+  void add(Movement_Command &cmd);
+  Movement_Command get(uint32_t n);
+  void remove_up_to(uint32_t n);
+private:
+  std::deque<Movement_Command> buf;
+  uint32_t first = 0;
 };
 
 struct Warg_State : protected State
@@ -50,5 +62,6 @@ struct Warg_State : protected State
 
   Latency_Tracker latency_tracker;
 
+  Move_Command_Buffer move_buf;
   uint32 move_cmd_n = 0;
 };
