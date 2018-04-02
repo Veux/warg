@@ -36,10 +36,7 @@ void serialize_(Buffer &b, const char *s)
   b.insert((void *)s, len);
 }
 
-void serialize_(Buffer &b, std::string s)
-{
-  serialize_(b, s.c_str());
-}
+void serialize_(Buffer &b, std::string s) { serialize_(b, s.c_str()); }
 
 void serialize_(Buffer &b, float32_t a) { b.insert(&a, sizeof(a)); }
 
@@ -55,16 +52,9 @@ void serialize_(Buffer &b, Warg_Event_Type type)
   serialize_(b, (uint8_t)type);
 }
 
-void Connection_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::Connection);
-  serialize_(b, tick);
-}
-
 void Char_Spawn_Request_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CharSpawnRequest);
-  serialize_(b, tick);
   serialize_(b, name);
   serialize_(b, team);
 }
@@ -72,7 +62,6 @@ void Char_Spawn_Request_Message::serialize(Buffer &b)
 void Char_Spawn_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CharSpawn);
-  serialize_(b, tick);
   serialize_(b, id);
   serialize_(b, name);
   serialize_(b, team);
@@ -81,14 +70,12 @@ void Char_Spawn_Message::serialize(Buffer &b)
 void Player_Control_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerControl);
-  serialize_(b, tick);
   serialize_(b, character);
 }
 
 void Player_Movement_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerMovement);
-  serialize_(b, tick);
   serialize_(b, i);
   serialize_(b, (uint8_t)move_status);
   serialize_(b, dir);
@@ -97,7 +84,6 @@ void Player_Movement_Message::serialize(Buffer &b)
 void Cast_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::Cast);
-  serialize_(b, tick);
   serialize_(b, target);
   serialize_(b, spell);
 }
@@ -105,7 +91,6 @@ void Cast_Message::serialize(Buffer &b)
 void Cast_Error_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CastError);
-  serialize_(b, tick);
   serialize_(b, caster);
   serialize_(b, target);
   serialize_(b, spell);
@@ -115,7 +100,6 @@ void Cast_Error_Message::serialize(Buffer &b)
 void Cast_Begin_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CastBegin);
-  serialize_(b, tick);
   serialize_(b, caster);
   serialize_(b, target);
   serialize_(b, spell);
@@ -124,14 +108,12 @@ void Cast_Begin_Message::serialize(Buffer &b)
 void Cast_Interrupt_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CastInterrupt);
-  serialize_(b, tick);
   serialize_(b, caster);
 }
 
 void Char_HP_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::CharHP);
-  serialize_(b, tick);
   serialize_(b, character);
   serialize_(b, hp);
 }
@@ -139,7 +121,6 @@ void Char_HP_Message::serialize(Buffer &b)
 void Buff_Application_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::BuffAppl);
-  serialize_(b, tick);
   serialize_(b, character);
   serialize_(b, buff);
 }
@@ -147,7 +128,6 @@ void Buff_Application_Message::serialize(Buffer &b)
 void Object_Launch_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::ObjectLaunch);
-  serialize_(b, tick);
   serialize_(b, object);
   serialize_(b, caster);
   serialize_(b, target);
@@ -157,7 +137,6 @@ void Object_Launch_Message::serialize(Buffer &b)
 void Player_Geometry_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerGeometry);
-  serialize_(b, tick);
   uint8_t num_chars = id.size();
   ASSERT(pos.size() == num_chars);
   ASSERT(vel.size() == num_chars);
@@ -179,14 +158,9 @@ void Player_Geometry_Message::serialize(Buffer &b)
 void Ping_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::Ping);
-  serialize_(b, tick);
 }
 
-void Ack_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::Ack);
-  serialize_(b, tick);
-}
+void Ack_Message::serialize(Buffer &b) { serialize_(b, Warg_Event_Type::Ack); }
 
 uint8_t deserialize_uint8(Buffer &b)
 {
@@ -235,14 +209,7 @@ vec3 deserialize_vec3(Buffer &b)
   return v;
 }
 
-UID deserialize_uid(Buffer &b)
-{
-  return deserialize_uint32(b);
-}
-
-Connection_Message::Connection_Message(Buffer &b)
-{
-}
+UID deserialize_uid(Buffer &b) { return deserialize_uint32(b); }
 
 Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 {
@@ -332,25 +299,17 @@ Object_Launch_Message::Object_Launch_Message(Buffer &b)
   pos = deserialize_vec3(b);
 }
 
-Ping_Message::Ping_Message(Buffer &b)
-{
-}
+Ping_Message::Ping_Message(Buffer &b) {}
 
-Ack_Message::Ack_Message(Buffer &b)
-{
-}
+Ack_Message::Ack_Message(Buffer &b) {}
 
 std::unique_ptr<Message> deserialize_message(Buffer &b)
 {
   auto type = (Warg_Event_Type)deserialize_uint8(b);
-  auto tick = deserialize_uint32(b);
 
   std::unique_ptr<Message> msg = nullptr;
   switch (type)
   {
-    case Warg_Event_Type::Connection:
-      msg = std::make_unique<Connection_Message>(b);
-      break;
     case Warg_Event_Type::CharSpawnRequest:
       msg = std::make_unique<Char_Spawn_Request_Message>(b);
       break;
@@ -397,102 +356,91 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
       ASSERT(false);
   }
 
-  msg->tick = tick;
   return msg;
 }
 
 Char_Spawn_Request_Message::Char_Spawn_Request_Message(
-  uint32_t tick_, const char *name_, uint8_t team_)
+    const char *name_, uint8_t team_)
 {
-  tick = tick_;
   name = name_;
   team = team_;
 }
 
-Char_Spawn_Message::Char_Spawn_Message(uint32_t tick_, UID id_, const char *name_, uint8_t team_)
+Char_Spawn_Message::Char_Spawn_Message(
+    UID id_, const char *name_, uint8_t team_)
 {
-  tick = tick_;
   id = id_;
   name = name_;
   team = team_;
 }
 
-Player_Control_Message::Player_Control_Message(uint32_t tick_, UID character_)
+Player_Control_Message::Player_Control_Message(UID character_)
 {
-  tick = tick_;
   character = character_;
 }
 
-Player_Movement_Message::Player_Movement_Message
-  (uint32_t tick_, uint32_t i_, Move_Status move_status_, vec3 dir_)
+Player_Movement_Message::Player_Movement_Message(
+    uint32_t i_, Move_Status move_status_, vec3 dir_)
 {
-  tick = tick_;
   reliable = false;
   i = i_;
   move_status = move_status_;
   dir = dir_;
 }
 
-Cast_Message::Cast_Message(uint32_t tick_, UID target_, const char *spell_)
+Cast_Message::Cast_Message(UID target_, const char *spell_)
 {
-  tick = tick_;
   target = target_;
   spell = spell_;
 }
 
-Cast_Error_Message::Cast_Error_Message
-  (uint32_t tick_, UID caster_, UID target_, const char *spell_, uint8_t err_)
+Cast_Error_Message::Cast_Error_Message(
+    UID caster_, UID target_, const char *spell_, uint8_t err_)
 {
-  tick = tick_;
   caster = caster_;
   target = target_;
   spell = spell_;
   err = err_;
 }
 
-Cast_Begin_Message::Cast_Begin_Message
-  (uint32_t tick_, UID caster_, UID target_, const char *spell_)
+Cast_Begin_Message::Cast_Begin_Message(
+    UID caster_, UID target_, const char *spell_)
 {
-  tick = tick_;
   caster = caster_;
   target = target_;
   spell = spell_;
 }
 
-Cast_Interrupt_Message::Cast_Interrupt_Message(uint32_t tick_, UID caster_)
+Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_)
 {
-  tick = tick_;
   caster = caster_;
 }
 
-Char_HP_Message::Char_HP_Message(uint32_t tick_, UID character_, int hp_)
+Char_HP_Message::Char_HP_Message(UID character_, int hp_)
 {
-  tick = tick_;
   character = character_;
   hp = hp_;
 }
 
-Buff_Application_Message::Buff_Application_Message
-  (uint32_t tick_, UID character_, const char *buff_)
+Buff_Application_Message::Buff_Application_Message(
+    UID character_, const char *buff_)
 {
-  tick = tick_;
   character = character_;
   buff = buff_;
 }
 
-Object_Launch_Message::Object_Launch_Message
-  (uint32_t tick_, UID object_, UID caster_, UID target_, vec3 pos_)
+Object_Launch_Message::Object_Launch_Message(
+    UID object_, UID caster_, UID target_, vec3 pos_)
 {
-  tick = tick_;
   object = object_;
   caster = caster_;
   target = target_;
   pos = pos_;
 }
 
-Player_Geometry_Message::Player_Geometry_Message(uint32_t tick_, std::map<UID, Character> &chars_)
+Player_Geometry_Message::Player_Geometry_Message(
+    std::map<UID, Character> &chars_)
 {
-  tick = tick_;
   reliable = false;
   for (auto &c : chars_)
   {
@@ -508,17 +456,6 @@ Player_Geometry_Message::Player_Geometry_Message(uint32_t tick_, std::map<UID, C
   }
 }
 
-Ping_Message::Ping_Message(uint32_t tick_)
-{
-  tick = tick_;
-}
+Ping_Message::Ping_Message() {}
 
-Ack_Message::Ack_Message(uint32_t tick_)
-{
-  tick = tick_;
-}
-
-Connection_Message::Connection_Message(uint32_t tick_)
-{
-  tick = tick_;
-}
+Ack_Message::Ack_Message() {}

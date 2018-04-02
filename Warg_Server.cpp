@@ -38,12 +38,10 @@ void Warg_Server::process_packets()
         UID id = uid();
         peers[id] = {event.peer, nullptr, nullptr, 0};
 
-        unique_ptr<Message> connection_msg = make_unique<Connection_Message>(tick);
-        send_event(peers[id], connection_msg);
         for (auto &c : chars)
         {
           unique_ptr<Message> char_spawn_msg = make_unique<Char_Spawn_Message>(
-            tick, c.first, c.second.name.c_str(), c.second.team);
+              c.first, c.second.name.c_str(), c.second.team);
           send_event(peers[id], char_spawn_msg);
         }
 
@@ -75,7 +73,6 @@ void Warg_Server::process_packets()
 void Warg_Server::update(float32 dt)
 {
   time += dt;
-  tick += 1;
 
   if (!local)
     process_packets();
@@ -88,8 +85,8 @@ void Warg_Server::update(float32 dt)
     auto &ch = c.second;
 
     ch.move(dt, collider_cache);
-    if (_isnan(ch.physics.pos.x) || _isnan(ch.physics.pos.y)
-      || _isnan(ch.physics.pos.z))
+    if (_isnan(ch.physics.pos.x) || _isnan(ch.physics.pos.y) ||
+        _isnan(ch.physics.pos.z))
       ch.physics.pos = map.spawn_pos[ch.team];
     update_buffs(cid, dt);
     ch.apply_modifiers();
@@ -101,7 +98,7 @@ void Warg_Server::update(float32 dt)
     ch.update_global_cooldown(dt);
   }
 
-  push(make_unique<Player_Geometry_Message>(tick, chars));
+  push(make_unique<Player_Geometry_Message>(chars));
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
@@ -111,18 +108,12 @@ void Warg_Server::update(float32 dt)
       i++;
   }
 
-  if (tick % 300 == 0) {
-    push(make_unique<Ping_Message>(tick));
-    last_ping_sent = get_real_time();
-  }
-
   send_events();
 }
 
 void Warg_Server::process_events()
 {
-  auto process_peer_events = [&](UID uid, Warg_Peer &p)
-  {
+  auto process_peer_events = [&](UID uid, Warg_Peer &p) {
     ASSERT(p.in);
     while (!p.in->empty())
     {
@@ -173,9 +164,9 @@ void Char_Spawn_Request_Message::handle(Warg_Server &server)
   UID character = server.add_char(team, name.c_str());
   ASSERT(server.peers.count(peer));
   server.peers[peer].character = character;
-  unique_ptr<Message> msg = make_unique<Player_Control_Message>(tick, character);
+  unique_ptr<Message> msg = make_unique<Player_Control_Message>(character);
   server.send_event(server.peers[peer], msg);
-  server.push(make_unique<Char_Spawn_Message>(tick, character, name.c_str(), team));
+  server.push(make_unique<Char_Spawn_Message>(character, name.c_str(), team));
 }
 
 void Player_Movement_Message::handle(Warg_Server &server)
@@ -206,7 +197,7 @@ void Ping_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  unique_ptr<Message> msg = make_unique<Ack_Message>(tick);
+  unique_ptr<Message> msg = make_unique<Ack_Message>();
   server.send_event(peer_, msg);
 }
 
@@ -214,7 +205,6 @@ void Ack_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  peer_.last_latency = get_real_time() - server.last_ping_sent;
 }
 
 void Warg_Server::try_cast_spell(
@@ -229,7 +219,7 @@ void Warg_Server::try_cast_spell(
 
   CastErrorType err;
   if (static_cast<int>(err = cast_viable(caster.id, target_, spell)))
-    push(make_unique<Cast_Error_Message>(tick, caster.id, target_, spell_, (int)err));
+    push(make_unique<Cast_Error_Message>(caster.id, target_, spell_, (int)err));
   else
     cast_spell(caster.id, target_, spell);
 }
@@ -260,7 +250,8 @@ void Warg_Server::begin_cast(UID caster_, UID target_, Spell *spell)
   caster->cast_target = target_;
   caster->gcd = caster->e_stats.gcd;
 
-  push(make_unique<Cast_Begin_Message>(tick, caster_, target_, spell->def->name.c_str()));
+  push(make_unique<Cast_Begin_Message>(
+      caster_, target_, spell->def->name.c_str()));
 }
 
 void Warg_Server::interrupt_cast(UID ci)
@@ -272,7 +263,7 @@ void Warg_Server::interrupt_cast(UID ci)
   c->cast_progress = 0;
   c->casting_spell = nullptr;
   c->gcd = 0;
-  push(make_unique<Cast_Interrupt_Message>(tick, ci));
+  push(make_unique<Cast_Interrupt_Message>(ci));
 }
 
 void Warg_Server::update_cast(UID caster_, float32 dt)
@@ -317,7 +308,8 @@ CastErrorType Warg_Server::cast_viable(UID caster_, UID target_, Spell *spell)
     return CastErrorType::NotEnoughMana;
   if (!target && spell->def->targets != SpellTargets::Terrain)
     return CastErrorType::InvalidTarget;
-  if (target && length(caster->physics.pos - target->physics.pos) > spell->def->range &&
+  if (target &&
+      length(caster->physics.pos - target->physics.pos) > spell->def->range &&
       spell->def->targets != SpellTargets::Terrain)
     return CastErrorType::OutOfRange;
   if (caster->casting)
@@ -338,7 +330,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
     push(make_unique<Cast_Error_Message>(
-          tick, caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
+        caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
     return;
   }
 
@@ -397,7 +389,8 @@ void Warg_Server::invoke_spell_effect_aoe(SpellEffectInst &effect)
   {
     Character *c = &chars[ch];
 
-    bool in_range = length(c->physics.pos - effect.pos) <= effect.def.aoe.radius;
+    bool in_range =
+        length(c->physics.pos - effect.pos) <= effect.def.aoe.radius;
     bool at_ally = effect.def.aoe.targets == SpellTargets::Ally &&
                    c->team == chars[effect.caster].team;
     bool at_hostile = effect.def.aoe.targets == SpellTargets::Hostile &&
@@ -433,7 +426,8 @@ void Warg_Server::invoke_spell_effect_apply_buff(SpellEffectInst &effect)
   else
     target->debuffs.push_back(buff);
 
-  push(make_unique<Buff_Application_Message>(tick, effect.target, buff.def.name.c_str()));
+  push(make_unique<Buff_Application_Message>(
+      effect.target, buff.def.name.c_str()));
 }
 
 void Warg_Server::invoke_spell_effect_clear_debuffs(SpellEffectInst &effect)
@@ -467,7 +461,7 @@ void Warg_Server::invoke_spell_effect_damage(SpellEffectInst &effect)
     target->alive = false;
   }
 
-  push(make_unique<Char_HP_Message>(tick, effect.target, target->hp));
+  push(make_unique<Char_HP_Message>(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
@@ -490,7 +484,7 @@ void Warg_Server::invoke_spell_effect_heal(SpellEffectInst &effect)
     target->hp = target->hp_max;
   }
 
-  push(make_unique<Char_HP_Message>(tick, effect.target, target->hp));
+  push(make_unique<Char_HP_Message>(effect.target, target->hp));
 }
 
 void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
@@ -506,7 +500,7 @@ void Warg_Server::invoke_spell_effect_interrupt(SpellEffectInst &effect)
   target->cast_progress = 0;
   target->cast_target = 0;
 
-  push(make_unique<Cast_Interrupt_Message>(tick, effect.target));
+  push(make_unique<Cast_Interrupt_Message>(effect.target));
 }
 
 void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
@@ -521,7 +515,7 @@ void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
   spell_objs.push_back(obji);
 
   push(make_unique<Object_Launch_Message>(
-    tick, effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
+      effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
 }
 
 void Warg_Server::update_buffs(UID character, float32 dt)
@@ -624,7 +618,7 @@ void Warg_Server::connect(
 }
 
 void Warg_Server::push(unique_ptr<Message> ev)
-{ 
+{
   ASSERT(ev != nullptr);
   tick_events.push_back(std::move(ev));
   ASSERT(tick_events.back() != nullptr);

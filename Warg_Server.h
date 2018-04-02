@@ -18,7 +18,6 @@ struct Warg_Peer
   ENetPeer *peer;
   queue<unique_ptr<Message>> *in, *out;
   UID character = 0;
-  float64 last_latency;
 };
 
 struct Warg_Server
@@ -59,8 +58,6 @@ struct Warg_Server
   ENetHost *server;
   bool local = true;
   float64 time = 0;
-  uint32 tick = 0;
-  float64 last_ping_sent;
 
   Map map;
   vector<Triangle> collider_cache;

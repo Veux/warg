@@ -53,7 +53,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
     event.type == ENET_EVENT_TYPE_CONNECT);
 
   Buffer b;
-  auto msg = Char_Spawn_Request_Message(tick, char_name, 0);
+  auto msg = Char_Spawn_Request_Message(char_name, 0);
   msg.t = get_real_time();
   msg.serialize(b);
   ENetPacket *packet =
@@ -77,7 +77,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   server = make_unique<Warg_Server>(true);
   server->connect(&out, &in);
-  push(make_unique<Char_Spawn_Request_Message>(tick, "Cubeboi", 0));
+  push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 }
 
 void Warg_State::handle_input_events(
@@ -310,11 +310,7 @@ void Warg_State::handle_input_events(
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
     
-    static uint32 movement_command_i = 0;
-    push(
-      make_unique<Player_Movement_Message>(tick, movement_command_i,
-      (Move_Status)m, dir));
-    movement_command_i++;
+    register_move_command((Move_Status)m, dir);
 
     vec3 player_pos = chars[pc].physics.pos;
     float effective_zoom = cam.zoom;
@@ -334,6 +330,12 @@ void Warg_State::handle_input_events(
     cam.dir = -vec3(cam_rel);
   }
   previous_mouse_state = mouse_state;
+}
+
+void Warg_State::register_move_command(Move_Status m, vec3 dir)
+{
+  push(make_unique<Player_Movement_Message>(move_cmd_n, m, dir));
+  move_cmd_n++;
 }
 
 void Warg_State::process_packets()
@@ -369,8 +371,6 @@ void Warg_State::process_events()
     auto &msg = in.front();
     if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
       return;
-    if (msg->tick > server_tick)
-      server_tick = msg->tick;
     msg->handle(*this);
     in.pop();
   }
@@ -385,17 +385,12 @@ void Warg_State::push(unique_ptr<Message> msg)
 
 void Warg_State::update()
 {
-  tick += 1;
-
   if (!local)
     process_packets();
   process_events();
 
-  if (tick % 300 == 0)
-  {
-    push(make_unique<Ping_Message>(tick));
-    last_ping_sent = get_real_time();
-  }
+  if (latency_tracker.should_send_ping())
+    push(make_unique<Ping_Message>());
 
   bool show_stats_bar = true;
   ImVec2 stats_bar_pos = { 10, 10 };
@@ -404,10 +399,7 @@ void Warg_State::update()
     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
     ImGuiWindowFlags_AlwaysAutoResize);
-  ImGui::Text("Tick: %u | Server tick: %u | Ping: %dms",
-              tick,
-              server_tick,
-              (int)(last_latency * 1000));
+  ImGui::Text("Ping: %dms", latency_tracker.get_latency());
   ImGui::End();
 
   for (auto &c_ : chars)
@@ -561,12 +553,6 @@ void Warg_State::update()
   }
 }
 
-void Connection_Message::handle(Warg_State &state)
-{
-  state.tick = tick;
-  state.server_tick = tick;
-}
-
 void Char_Spawn_Message::handle(Warg_State &state)
 {
   state.add_char(id, team, name.c_str());
@@ -716,12 +702,12 @@ void Object_Launch_Message::handle(Warg_State &state)
 
 void Ping_Message::handle(Warg_State &state)
 {
-  state.push(make_unique<Ack_Message>(tick));
+  state.push(make_unique<Ack_Message>());
 }
 
 void Ack_Message::handle(Warg_State &state)
 {
-  state.last_latency = get_real_time() - state.last_ping_sent;
+  state.latency_tracker.ack_received();
 }
 
 void Warg_State::add_char(UID id, int team, const char *name)
@@ -773,4 +759,26 @@ void Warg_State::add_char(UID id, int team, const char *name)
   }
 
   chars[id] = c;
+}
+
+bool Latency_Tracker::should_send_ping()
+{
+  float64 current_time = get_real_time();
+  if (!acked || current_time < last_ping + 1)
+    return false;
+  last_ping = current_time;
+  acked = false;
+  return true;
+}
+
+void Latency_Tracker::ack_received()
+{
+  last_ack = get_real_time();
+  acked = true;
+  last_latency = last_ack - last_ping;
+}
+
+uint32 Latency_Tracker::get_latency()
+{
+  return round(last_latency * 1000);
 }

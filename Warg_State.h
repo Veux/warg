@@ -7,6 +7,19 @@
 #include "Warg_Common.h"
 #include <queue>
 
+class Latency_Tracker
+{
+public:
+  bool should_send_ping();
+  void ack_received();
+  uint32 get_latency();
+private:
+  float64 last_ping = 0;
+  float64 last_ack = 0;
+  float64 last_latency = 0;
+  bool acked = true;
+};
+
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
@@ -19,19 +32,23 @@ struct Warg_State : protected State
   void process_events();
   void push(unique_ptr<Message> msg);
   void add_char(UID id, int team, const char *name);
+  void register_move_command(Move_Status m, vec3 dir);
 
   unique_ptr<Warg_Server> server;
   queue<unique_ptr<Message>> in, out;
   bool local;
   ENetPeer *serverp;
   ENetHost *clientp;
+
   Map map;
+
   std::map<UID, Character> chars;
   UID pc = 0;
+
   unique_ptr<SpellDB> sdb;
   vector<SpellObjectInst> spell_objs;
-  uint32 tick = 0;
-  uint32 server_tick = 0;
-  float64 last_ping_sent;
-  float64 last_latency = 0;
+
+  Latency_Tracker latency_tracker;
+
+  uint32 move_cmd_n = 0;
 };
