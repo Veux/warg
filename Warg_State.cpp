@@ -310,11 +310,7 @@ void Warg_State::handle_input_events(
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
     
-    static uint32 movement_command_i = 0;
-    push(
-      make_unique<Player_Movement_Message>(movement_command_i,
-      (Move_Status)m, dir));
-    movement_command_i++;
+    register_move_command((Move_Status)m, dir);
 
     vec3 player_pos = chars[pc].physics.pos;
     float effective_zoom = cam.zoom;
@@ -334,6 +330,12 @@ void Warg_State::handle_input_events(
     cam.dir = -vec3(cam_rel);
   }
   previous_mouse_state = mouse_state;
+}
+
+void Warg_State::register_move_command(Move_Status m, vec3 dir)
+{
+  push(make_unique<Player_Movement_Message>(move_cmd_n, m, dir));
+  move_cmd_n++;
 }
 
 void Warg_State::process_packets()

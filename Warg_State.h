@@ -32,6 +32,7 @@ struct Warg_State : protected State
   void process_events();
   void push(unique_ptr<Message> msg);
   void add_char(UID id, int team, const char *name);
+  void register_move_command(Move_Status m, vec3 dir);
 
   unique_ptr<Warg_Server> server;
   queue<unique_ptr<Message>> in, out;
@@ -48,4 +49,6 @@ struct Warg_State : protected State
   vector<SpellObjectInst> spell_objs;
 
   Latency_Tracker latency_tracker;
+
+  uint32 move_cmd_n = 0;
 };
