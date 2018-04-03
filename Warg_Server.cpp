@@ -1,4 +1,5 @@
 #include "Warg_Server.h"
+#include "Third_party/imgui/imgui.h"
 #include <cstring>
 #include <memory>
 
@@ -37,10 +38,13 @@ void Warg_Server::process_packets()
         UID id = uid();
         peers[id] = {event.peer, nullptr, nullptr, 0};
 
-        
         for (auto &c : chars)
-          send_event(peers[id],
-            make_unique<Char_Spawn_Message>(c.first, c.second.name.c_str(), c.second.team));
+        {
+          unique_ptr<Message> char_spawn_msg = make_unique<Char_Spawn_Message>(
+              c.first, c.second.name.c_str(), c.second.team);
+          send_event(peers[id], char_spawn_msg);
+        }
+
         break;
       }
       case ENET_EVENT_TYPE_RECEIVE:
@@ -69,7 +73,6 @@ void Warg_Server::process_packets()
 void Warg_Server::update(float32 dt)
 {
   time += dt;
-  tick += 1;
 
   if (!local)
     process_packets();
@@ -82,6 +85,9 @@ void Warg_Server::update(float32 dt)
     auto &ch = c.second;
 
     ch.move(dt, collider_cache);
+    if (_isnan(ch.physics.pos.x) || _isnan(ch.physics.pos.y) ||
+        _isnan(ch.physics.pos.z))
+      ch.physics.pos = map.spawn_pos[ch.team];
     update_buffs(cid, dt);
     ch.apply_modifiers();
     update_cast(cid, dt);
@@ -90,8 +96,9 @@ void Warg_Server::update(float32 dt)
     ch.update_mana(dt);
     ch.update_spell_cooldowns(dt);
     ch.update_global_cooldown(dt);
-    push(make_unique<Char_Pos_Message>(cid, ch.dir, ch.pos));
   }
+
+  push(make_unique<Player_Geometry_Message>(chars));
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
@@ -106,18 +113,21 @@ void Warg_Server::update(float32 dt)
 
 void Warg_Server::process_events()
 {
-  for (auto &peer : peers)
-  {
-    auto &p = peer.second;
+  auto process_peer_events = [&](UID uid, Warg_Peer &p) {
     ASSERT(p.in);
     while (!p.in->empty())
     {
       auto &ev = p.in->front();
-      ev->peer = peer.first;
+      if (get_real_time() - ev->t < SIM_LATENCY / 2000.0f)
+        return;
+      ev->peer = uid;
       ev->handle(*this);
       p.in->pop();
     }
-  }
+  };
+
+  for (auto &peer : peers)
+    process_peer_events(peer.first, peer.second);
 }
 
 bool Warg_Server::update_spell_object(SpellObjectInst *so)
@@ -125,7 +135,7 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
   ASSERT(so->target && chars.count(so->target));
   Character *target = &chars[so->target];
 
-  float d = length(target->pos - so->pos);
+  float d = length(target->physics.pos - so->pos);
 
   if (d < 0.3)
   {
@@ -141,7 +151,7 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
     return true;
   }
 
-  vec3 a = normalize(target->pos - so->pos);
+  vec3 a = normalize(target->physics.pos - so->pos);
   a.x *= so->def.speed * dt;
   a.y *= so->def.speed * dt;
   a.z *= so->def.speed * dt;
@@ -154,7 +164,8 @@ void Char_Spawn_Request_Message::handle(Warg_Server &server)
   UID character = server.add_char(team, name.c_str());
   ASSERT(server.peers.count(peer));
   server.peers[peer].character = character;
-  server.send_event(server.peers[peer], make_unique<Player_Control_Message>(character));
+  unique_ptr<Message> msg = make_unique<Player_Control_Message>(character);
+  server.send_event(server.peers[peer], msg);
   server.push(make_unique<Char_Spawn_Message>(character, name.c_str(), team));
 }
 
@@ -165,22 +176,11 @@ void Player_Movement_Message::handle(Warg_Server &server)
   ASSERT(server.chars.count(peer_.character));
   auto &character = server.chars[peer_.character];
 
-  character.move_status = move_status;
-  character.dir = dir;
-}
-
-void Jump_Message::handle(Warg_Server &server)
-{
-  ASSERT(server.peers.count(peer));
-  auto &peer_ = server.peers[peer];
-  ASSERT(server.chars.count(peer_.character));
-  auto &character = server.chars[peer_.character];
-
-  if (character.grounded)
-  {
-    character.vel.z += 4;
-    character.grounded = false;
-  }
+  Movement_Command command;
+  command.i = i;
+  command.dir = dir;
+  command.m = move_status;
+  character.last_movement_command = command;
 }
 
 void Cast_Message::handle(Warg_Server &server)
@@ -191,6 +191,20 @@ void Cast_Message::handle(Warg_Server &server)
   auto &character = server.chars[peer_.character];
 
   server.try_cast_spell(character, target, spell.c_str());
+}
+
+void Ping_Message::handle(Warg_Server &server)
+{
+  ASSERT(server.peers.count(peer));
+  auto &peer_ = server.peers[peer];
+  unique_ptr<Message> msg = make_unique<Ack_Message>();
+  server.send_event(peer_, msg);
+}
+
+void Ack_Message::handle(Warg_Server &server)
+{
+  ASSERT(server.peers.count(peer));
+  auto &peer_ = server.peers[peer];
 }
 
 void Warg_Server::try_cast_spell(
@@ -236,7 +250,8 @@ void Warg_Server::begin_cast(UID caster_, UID target_, Spell *spell)
   caster->cast_target = target_;
   caster->gcd = caster->e_stats.gcd;
 
-  push(make_unique<Cast_Begin_Message>(caster_, target_, spell->def->name.c_str()));
+  push(make_unique<Cast_Begin_Message>(
+      caster_, target_, spell->def->name.c_str()));
 }
 
 void Warg_Server::interrupt_cast(UID ci)
@@ -293,7 +308,8 @@ CastErrorType Warg_Server::cast_viable(UID caster_, UID target_, Spell *spell)
     return CastErrorType::NotEnoughMana;
   if (!target && spell->def->targets != SpellTargets::Terrain)
     return CastErrorType::InvalidTarget;
-  if (target && length(caster->pos - target->pos) > spell->def->range &&
+  if (target &&
+      length(caster->physics.pos - target->physics.pos) > spell->def->range &&
       spell->def->targets != SpellTargets::Terrain)
     return CastErrorType::OutOfRange;
   if (caster->casting)
@@ -314,7 +330,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
     push(make_unique<Cast_Error_Message>(
-          caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
+        caster_, target_, spell->def->name.c_str(), static_cast<int>(err)));
     return;
   }
 
@@ -323,7 +339,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
     SpellEffectInst i;
     i.def = *e;
     i.caster = caster_;
-    i.pos = caster->pos;
+    i.pos = caster->physics.pos;
     i.target = target_;
 
     invoke_spell_effect(i);
@@ -373,7 +389,8 @@ void Warg_Server::invoke_spell_effect_aoe(SpellEffectInst &effect)
   {
     Character *c = &chars[ch];
 
-    bool in_range = length(c->pos - effect.pos) <= effect.def.aoe.radius;
+    bool in_range =
+        length(c->physics.pos - effect.pos) <= effect.def.aoe.radius;
     bool at_ally = effect.def.aoe.targets == SpellTargets::Ally &&
                    c->team == chars[effect.caster].team;
     bool at_hostile = effect.def.aoe.targets == SpellTargets::Hostile &&
@@ -409,7 +426,8 @@ void Warg_Server::invoke_spell_effect_apply_buff(SpellEffectInst &effect)
   else
     target->debuffs.push_back(buff);
 
-  push(make_unique<Buff_Application_Message>(effect.target, buff.def.name.c_str()));
+  push(make_unique<Buff_Application_Message>(
+      effect.target, buff.def.name.c_str()));
 }
 
 void Warg_Server::invoke_spell_effect_clear_debuffs(SpellEffectInst &effect)
@@ -497,7 +515,7 @@ void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
   spell_objs.push_back(obji);
 
   push(make_unique<Object_Launch_Message>(
-    effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
+      effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
 }
 
 void Warg_Server::update_buffs(UID character, float32 dt)
@@ -560,8 +578,8 @@ UID Warg_Server::add_char(int team, const char *name)
   c.id = id;
   c.team = team;
   c.name = std::string(name);
-  c.pos = map.spawn_pos[team];
-  c.dir = map.spawn_dir[team];
+  c.physics.pos = map.spawn_pos[team];
+  c.physics.dir = map.spawn_dir[team];
   c.hp_max = 100;
   c.hp = c.hp_max;
   c.mana_max = 500;
@@ -600,12 +618,16 @@ void Warg_Server::connect(
 }
 
 void Warg_Server::push(unique_ptr<Message> ev)
-{ 
+{
+  ASSERT(ev != nullptr);
   tick_events.push_back(std::move(ev));
+  ASSERT(tick_events.back() != nullptr);
 }
 
-void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> ev)
+void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> &ev)
 {
+  ev->t = get_real_time();
+  ASSERT(ev != nullptr);
   if (local)
   {
     ASSERT(p.out);
@@ -615,7 +637,7 @@ void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> ev)
   {
     ASSERT(p.peer);
     Buffer b;
-    ev->serialize_(b);
+    ev->serialize(b);
     ENetPacket *packet = enet_packet_create(
         &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
     enet_peer_send(p.peer, 0, packet);
@@ -626,7 +648,12 @@ void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> ev)
 void Warg_Server::send_events()
 {
   for (auto &p : peers)
+  {
     for (auto &ev : tick_events)
-      send_event(p.second, std::move(ev));
+    {
+      ASSERT(ev != nullptr);
+      send_event(p.second, ev);
+    }
+  }
   tick_events.clear();
 }

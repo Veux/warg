@@ -16,34 +16,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 {
   local = false;
 
-  ASSERT(!enet_initialize());
-  clientp = enet_host_create(NULL, 1, 2, 0, 0);
-  ASSERT(clientp);
-
-  ENetAddress address;
-  ENetEvent event;
-
-  enet_address_set_host(&address, address_);
-  address.port = 1337;
-
-  serverp = enet_host_connect(clientp, &address, 2, 0);
-  ASSERT(serverp);
-
-  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
-         event.type == ENET_EVENT_TYPE_CONNECT);
-
-  Buffer b;
-  auto msg = Char_Spawn_Request_Message("Eirich", 0);
-  msg.serialize_(b);
-  ENetPacket *packet =
-      enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
-  enet_peer_send(serverp, 0, packet);
-  enet_host_flush(clientp);
-
   map = make_blades_edge();
   sdb = make_spell_db();
 
   map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
+
+  collider_cache = collect_colliders(scene);
 
   clear_color = vec3(94. / 255., 155. / 255., 1.);
   scene.lights.light_count = 1;
@@ -59,6 +37,31 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
+
+  ASSERT(!enet_initialize());
+  clientp = enet_host_create(NULL, 1, 2, 0, 0);
+  ASSERT(clientp);
+
+  ENetAddress address;
+  ENetEvent event;
+
+  enet_address_set_host(&address, address_);
+  address.port = 1337;
+
+  serverp = enet_host_connect(clientp, &address, 2, 0);
+  ASSERT(serverp);
+
+  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
+    event.type == ENET_EVENT_TYPE_CONNECT);
+
+  Buffer b;
+  auto msg = Char_Spawn_Request_Message(char_name, 0);
+  msg.t = get_real_time();
+  msg.serialize(b);
+  ENetPacket *packet =
+    enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  enet_peer_send(serverp, 0, packet);
+  enet_host_flush(clientp);
 }
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
@@ -66,17 +69,19 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 {
   local = true;
 
-  server = make_unique<Warg_Server>(true);
-  server->connect(&out, &in);
-  out.push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
-
   map = make_blades_edge();
   sdb = make_spell_db();
 
   map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
 
+  collider_cache = collect_colliders(scene);
+
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
+
+  server = make_unique<Warg_Server>(true);
+  server->connect(&out, &in);
+  push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 }
 
 void Warg_State::handle_input_events(
@@ -103,7 +108,6 @@ void Warg_State::handle_input_events(
       }
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
-        out.push(make_unique<Jump_Message>());
       }
     }
     else if (_e.type == SDL_KEYUP)
@@ -153,7 +157,7 @@ void Warg_State::handle_input_events(
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!pc)
+  if (!pc || !chars.count(pc))
     return;
   if (free_cam)
   {
@@ -211,7 +215,6 @@ void Warg_State::handle_input_events(
   }
   else
   { // wow style camera
-    vec4 cam_rel;
     set_message(
         "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
     // grab mouse, rotate camera, restore mouse
@@ -264,7 +267,7 @@ void Warg_State::handle_input_events(
     {
       cam.phi = upper;
     }
-    const float32 lower = 100 * epsilon<float32>();
+    const float32 lower = 100 * epsilon<float32>() - half_pi<float32>();
     if (cam.phi < lower)
     {
       cam.phi = lower;
@@ -296,7 +299,7 @@ void Warg_State::handle_input_events(
 
     vec3 dir = right_button_down ?
       normalize(-vec3(cam_rel.x, cam_rel.y, 0)) :
-      chars[pc].dir;
+      chars[pc].physics.dir;
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -307,28 +310,23 @@ void Warg_State::handle_input_events(
       m |= Move_Status::Left;
     if (is_pressed(SDL_SCANCODE_D))
       m |= Move_Status::Right;
+    if (is_pressed(SDL_SCANCODE_SPACE))
+      m |= Move_Status::Jumping;
     
-    out.push(
-      make_unique<Player_Movement_Message>((Move_Status)m, dir));
-
-    vec3 player_pos = chars[pc].pos;
-    float effective_zoom = cam.zoom;
-    /* for (auto &surface : )
-      {
-        vec3 intersection_point;
-        bool intersects = ray_intersects_triangle(
-            player_pos, cam_rel, surface, &intersection_point);
-        if (intersects &&
-            length(player_pos - intersection_point) < effective_zoom)
-        {
-          effective_zoom = length(player_pos - intersection_point);
-        }
-      } */
-    cam.pos = player_pos +
-              vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
-    cam.dir = -vec3(cam_rel);
+    register_move_command((Move_Status)m, dir);
   }
   previous_mouse_state = mouse_state;
+}
+
+void Warg_State::register_move_command(Move_Status m, vec3 dir)
+{
+  push(make_unique<Player_Movement_Message>(move_cmd_n, m, dir));
+  Movement_Command cmd;
+  cmd.i = move_cmd_n;
+  cmd.m = m;
+  cmd.dir = dir;
+  movebuf.push_back(cmd);
+  move_cmd_n++;
 }
 
 void Warg_State::process_packets()
@@ -346,7 +344,7 @@ void Warg_State::process_packets()
       {
         Buffer b;
         b.insert((void *)event.packet->data, event.packet->dataLength);
-        in.push(std::move(deserialize_message(b)));
+        in.push(deserialize_message(b));
         break;
       }
       case ENET_EVENT_TYPE_DISCONNECT:
@@ -362,11 +360,18 @@ void Warg_State::process_events()
   while (!in.empty())
   {
     auto &msg = in.front();
-
+    if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
+      return;
     msg->handle(*this);
     in.pop();
   }
   return;
+}
+
+void Warg_State::push(unique_ptr<Message> msg)
+{
+  msg->t = get_real_time();
+  out.push(std::move(msg));
 }
 
 void Warg_State::update()
@@ -375,22 +380,94 @@ void Warg_State::update()
     process_packets();
   process_events();
 
+  if (latency_tracker.should_send_ping())
+    push(make_unique<Ping_Message>());
+
+  bool show_stats_bar = true;
+  ImVec2 stats_bar_pos = { 10, 10 };
+  ImGui::SetNextWindowPos(stats_bar_pos);
+  ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
+    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_AlwaysAutoResize);
+  ImGui::Text("Ping: %dms", latency_tracker.get_latency());
+  ImGui::End();
+
+  if (chars.count(pc) && chars[pc].physbuf.size() && movebuf.size())
+  {
+    auto &p = chars[pc];
+    auto &lastphys = p.physbuf.back();
+    int its = 0;
+    for (auto &cmd : movebuf)
+    {
+
+      if (cmd.i == lastphys.cmdn + 1)
+      {
+        auto newphys = move_char(lastphys, cmd, p.radius, p.e_stats.speed,
+          collider_cache);
+        newphys.cmdn = cmd.i;
+        p.physbuf.push_back(newphys);
+        lastphys = p.physbuf.back();
+        its++;
+      }
+    }
+
+    set_message("collision iterations", s(its), 5);
+    p.physics = lastphys;
+    set_message("buf size", s("phys: ", p.physbuf.size(), ", move: ", movebuf.size()), 5);
+ 
+    float effective_zoom = cam.zoom;
+    for (auto &surface : collider_cache)
+    {
+      vec3 intersection_point;
+      bool intersects = ray_intersects_triangle(
+        p.physics.pos, cam_rel, surface, &intersection_point);
+      if (intersects &&
+        length(p.physics.pos - intersection_point) < effective_zoom)
+      {
+        effective_zoom = length(p.physics.pos - intersection_point);
+      }
+    }
+    cam.pos = p.physics.pos +
+      vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.dir = -vec3(cam_rel);
+  }
+
   for (auto &c_ : chars)
   {
     auto &c = c_.second;
     if (!c.alive)
-      c.pos = {-1000, -1000, 0};
-    c.mesh->position = c.pos;
+      c.physics.pos = {-1000, -1000, 0};
+    c.mesh->position = c.physics.pos;
     c.mesh->orientation =
-        angleAxis((float32)atan2(c.dir.y, c.dir.x) - half_pi<float32>(),
+        angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(),
             vec3(0.f, 0.f, 1.f));
     c.mesh->scale = c.radius * vec3(2);
+
+    static Material_Descriptor material;
+    material.albedo = "crate_diffuse.png";
+    material.emissive = "";
+    material.normal = "test_normal.png";
+    material.roughness = "crate_roughness.png";
+    material.vertex_shader = "vertex_shader.vert";
+    material.frag_shader = "fragment_shader.frag";
+    static Node_Ptr serv_mesh =
+      scene.add_primitive_mesh(cube, "player_cube", material);
+    if (c.physbuf.size())
+    {
+      auto &phys = c.physbuf.front();
+      serv_mesh->position = phys.pos;
+      serv_mesh->scale = c.radius * vec3(2);
+      serv_mesh->orientation =
+        angleAxis((float32)atan2(phys.dir.y, phys.dir.x) - half_pi<float32>(),
+        vec3(0.f, 0.f, 1.f));
+    }
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
     auto &o = *i;
-    float32 d = length(chars[o.target].pos - o.pos);
+    float32 d = length(chars[o.target].physics.pos - o.pos);
     if (d < 0.5)
     {
       set_message("object hit",
@@ -402,7 +479,7 @@ void Warg_State::update()
     }
     else
     {
-      vec3 a = normalize(chars[o.target].pos - o.pos);
+      vec3 a = normalize(chars[o.target].physics.pos - o.pos);
       a.x *= o.def.speed * dt;
       a.y *= o.def.speed * dt;
       a.z *= o.def.speed * dt;
@@ -425,7 +502,7 @@ void Warg_State::update()
       auto ev = std::move(out.front());
 
       Buffer b;
-      ev->serialize_(b);
+      ev->serialize(b);
       enet_uint32 flags = ev->reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
       ENetPacket *packet = enet_packet_create(
           &b.data[0], b.data.size(), flags);
@@ -435,7 +512,7 @@ void Warg_State::update()
       out.pop();
     }
   }
-  static bool show_demo_window = true;
+  static bool show_demo_window = false;
   static bool show_another_window = false;
 
   static bool show_warg_state_window = true;
@@ -453,7 +530,7 @@ void Warg_State::update()
   }
 
   // meme
-  if (pc)
+  if (pc && chars.count(pc))
   {
     Light *light = &scene.lights.lights[0];
     ASSERT(chars.count(pc));
@@ -490,7 +567,7 @@ void Warg_State::update()
         1.f + cos(current_time * 1.12),
         1.f + sin(current_time * .9));
       light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+      light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
       light->ambient = 0.0f;
       light->cone_angle = 0.012f;
       light->type = Light_Type::spot;
@@ -503,7 +580,7 @@ void Warg_State::update()
       light->shadow_far_plane = 50.f;
       light->shadow_fov = radians(40.f);
     }
-    light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+    light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
 
     ImGui::Begin("lighting adjustment");
     ImGui::DragFloat("Main light shadow fov", &light->shadow_fov, 0.005f);
@@ -519,7 +596,7 @@ void Warg_State::update()
 
 
     light = &scene.lights.lights[1];
-    light->direction = chars.count(pc) ? chars[pc].pos : vec3(0);
+    light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
     light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
       1.f + cos(current_time * 1.12),
       1.f + sin(current_time * .9));
@@ -536,12 +613,43 @@ void Player_Control_Message::handle(Warg_State &state)
   state.pc = character;
 }
 
-void Char_Pos_Message::handle(Warg_State &state)
+void Player_Geometry_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(character));
-  auto &character_ = state.chars[character];
-  character_.dir = dir;
-  character_.pos = pos;
+  for (size_t i = 0; i < id.size(); i++)
+  {
+    if (state.chars.count(id[i]))
+    {
+      auto &character = state.chars[id[i]];
+      Character_Physics phys;
+      phys.pos = pos[i];
+      phys.dir = dir[i];
+      phys.vel = vel[i];
+      phys.grounded = grounded[i];
+      phys.cmdn = command_n[i];
+      character.physics = phys;
+
+      if (id[i] == state.pc)
+      {
+        while (character.physbuf.size() &&
+          character.physbuf.front().cmdn < phys.cmdn)
+          character.physbuf.pop_front();
+        if (character.physbuf.size())
+        {
+          if (character.physbuf.front() != phys)
+          {
+            character.physbuf.clear();
+            character.physbuf.push_back(phys);
+          }
+        }
+        else
+        {
+          character.physbuf.push_back(phys);
+        }
+        while (state.movebuf.size() && state.movebuf.front().i < phys.cmdn)
+          state.movebuf.pop_front();
+      }
+    }
+  }
 }
 
 void Cast_Error_Message::handle(Warg_State &state)
@@ -666,6 +774,16 @@ void Object_Launch_Message::handle(Warg_State &state)
   set_message("ObjectLaunch:", msg, 10);
 }
 
+void Ping_Message::handle(Warg_State &state)
+{
+  state.push(make_unique<Ack_Message>());
+}
+
+void Ack_Message::handle(Warg_State &state)
+{
+  state.latency_tracker.ack_received();
+}
+
 void Warg_State::add_char(UID id, int team, const char *name)
 {
   ASSERT(name);
@@ -685,8 +803,8 @@ void Warg_State::add_char(UID id, int team, const char *name)
   c.id = id;
   c.team = team;
   c.name = std::string(name);
-  c.pos = pos;
-  c.dir = dir;
+  c.physics.pos = pos;
+  c.physics.dir = dir;
   c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
   c.hp_max = 100;
   c.hp = c.hp_max;
@@ -715,4 +833,26 @@ void Warg_State::add_char(UID id, int team, const char *name)
   }
 
   chars[id] = c;
+}
+
+bool Latency_Tracker::should_send_ping()
+{
+  float64 current_time = get_real_time();
+  if (!acked || current_time < last_ping + 1)
+    return false;
+  last_ping = current_time;
+  acked = false;
+  return true;
+}
+
+void Latency_Tracker::ack_received()
+{
+  last_ack = get_real_time();
+  acked = true;
+  last_latency = last_ack - last_ping;
+}
+
+uint32 Latency_Tracker::get_latency()
+{
+  return round(last_latency * 1000);
 }

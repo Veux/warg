@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <deque>
 
 struct CharStats
 {
@@ -17,6 +18,23 @@ struct CharStats
   float32 damage_mod;
   float32 atk_dmg;
   float32 atk_speed;
+};
+
+struct Character_Physics
+{
+  bool operator==(const Character_Physics &) const;
+  bool operator!=(const Character_Physics &) const;
+
+  vec3 pos = vec3(0), dir = vec3(0), vel = vec3(0);
+  bool grounded = false;
+  uint32 cmdn = 0;
+};
+
+struct Movement_Command
+{
+  uint32 i = 0;
+  Move_Status m = Move_Status::None;
+  vec3 dir = vec3(0, 1, 0);
 };
 
 struct Character
@@ -32,14 +50,10 @@ struct Character
 
   Node_Ptr mesh;
 
-  vec3 pos;
-  vec3 dir;
-  vec3 vel;
+  Character_Physics physics;
+  std::deque<Character_Physics> physbuf;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
-  bool grounded;
-  Move_Status move_status = Move_Status::None;
-  Collision_Packet colpkt;
-  int collision_recursion_depth;
+  Movement_Command last_movement_command;
 
   std::string name;
   int team;
@@ -80,3 +94,5 @@ struct Map
 
 Map make_blades_edge();
 std::vector<Triangle> collect_colliders(Scene_Graph &scene);
+Character_Physics move_char(Character_Physics physics, Movement_Command command,
+  vec3 radius, float32 speed, std::vector<Triangle> colliders);

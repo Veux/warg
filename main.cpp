@@ -62,7 +62,6 @@ void server_main()
   float64 current_time = get_real_time();
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
-  float64 dt = 1.0 / 30.0;
   while (true)
   {
     const float64 time = get_real_time();
