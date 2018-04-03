@@ -417,6 +417,17 @@ void Warg_State::update()
     set_message("buf size", s("phys: ", p.physbuf.size(), ", move: ", movebuf.size()), 5);
  
     float effective_zoom = cam.zoom;
+    for (auto &surface : collider_cache)
+    {
+      vec3 intersection_point;
+      bool intersects = ray_intersects_triangle(
+        p.physics.pos, cam_rel, surface, &intersection_point);
+      if (intersects &&
+        length(p.physics.pos - intersection_point) < effective_zoom)
+      {
+        effective_zoom = length(p.physics.pos - intersection_point);
+      }
+    }
     cam.pos = p.physics.pos +
       vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
