@@ -21,6 +21,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 
   map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
 
+  collider_cache = collect_colliders(scene);
+
   clear_color = vec3(94. / 255., 155. / 255., 1.);
   scene.lights.light_count = 1;
   Light *light = &scene.lights.lights[0];
@@ -71,6 +73,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   sdb = make_spell_db();
 
   map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
+
+  collider_cache = collect_colliders(scene);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
@@ -211,7 +215,6 @@ void Warg_State::handle_input_events(
   }
   else
   { // wow style camera
-    vec4 cam_rel;
     set_message(
         "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
     // grab mouse, rotate camera, restore mouse
@@ -311,23 +314,6 @@ void Warg_State::handle_input_events(
       m |= Move_Status::Jumping;
     
     register_move_command((Move_Status)m, dir);
-
-    vec3 player_pos = chars[pc].physics.pos;
-    float effective_zoom = cam.zoom;
-    /* for (auto &surface : )
-      {
-        vec3 intersection_point;
-        bool intersects = ray_intersects_triangle(
-            player_pos, cam_rel, surface, &intersection_point);
-        if (intersects &&
-            length(player_pos - intersection_point) < effective_zoom)
-        {
-          effective_zoom = length(player_pos - intersection_point);
-        }
-      } */
-    cam.pos = player_pos +
-              vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
-    cam.dir = -vec3(cam_rel);
   }
   previous_mouse_state = mouse_state;
 }
@@ -339,7 +325,7 @@ void Warg_State::register_move_command(Move_Status m, vec3 dir)
   cmd.i = move_cmd_n;
   cmd.m = m;
   cmd.dir = dir;
-  move_buf.add(cmd);
+  movebuf.push_back(cmd);
   move_cmd_n++;
 }
 
@@ -407,6 +393,35 @@ void Warg_State::update()
   ImGui::Text("Ping: %dms", latency_tracker.get_latency());
   ImGui::End();
 
+  if (chars.count(pc) && chars[pc].physbuf.size() && movebuf.size())
+  {
+    auto &p = chars[pc];
+    auto &lastphys = p.physbuf.back();
+    int its = 0;
+    for (auto &cmd : movebuf)
+    {
+
+      if (cmd.i == lastphys.cmdn + 1)
+      {
+        auto newphys = move_char(lastphys, cmd, p.radius, p.e_stats.speed,
+          collider_cache);
+        newphys.cmdn = cmd.i;
+        p.physbuf.push_back(newphys);
+        lastphys = p.physbuf.back();
+        its++;
+      }
+    }
+
+    set_message("collision iterations", s(its), 5);
+    p.physics = lastphys;
+    set_message("buf size", s("phys: ", p.physbuf.size(), ", move: ", movebuf.size()), 5);
+ 
+    float effective_zoom = cam.zoom;
+    cam.pos = p.physics.pos +
+      vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.dir = -vec3(cam_rel);
+  }
+
   for (auto &c_ : chars)
   {
     auto &c = c_.second;
@@ -417,6 +432,25 @@ void Warg_State::update()
         angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(),
             vec3(0.f, 0.f, 1.f));
     c.mesh->scale = c.radius * vec3(2);
+
+    static Material_Descriptor material;
+    material.albedo = "crate_diffuse.png";
+    material.emissive = "";
+    material.normal = "test_normal.png";
+    material.roughness = "crate_roughness.png";
+    material.vertex_shader = "vertex_shader.vert";
+    material.frag_shader = "fragment_shader.frag";
+    static Node_Ptr serv_mesh =
+      scene.add_primitive_mesh(cube, "player_cube", material);
+    if (c.physbuf.size())
+    {
+      auto &phys = c.physbuf.front();
+      serv_mesh->position = phys.pos;
+      serv_mesh->scale = c.radius * vec3(2);
+      serv_mesh->orientation =
+        angleAxis((float32)atan2(phys.dir.y, phys.dir.x) - half_pi<float32>(),
+        vec3(0.f, 0.f, 1.f));
+    }
   }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
@@ -575,10 +609,34 @@ void Player_Geometry_Message::handle(Warg_State &state)
     if (state.chars.count(id[i]))
     {
       auto &character = state.chars[id[i]];
-      character.physics.pos = pos[i];
-      character.physics.dir = dir[i];
-      character.physics.vel = vel[i];
-      character.physics.grounded = grounded[i];
+      Character_Physics phys;
+      phys.pos = pos[i];
+      phys.dir = dir[i];
+      phys.vel = vel[i];
+      phys.grounded = grounded[i];
+      phys.cmdn = command_n[i];
+      character.physics = phys;
+
+      if (id[i] == state.pc)
+      {
+        while (character.physbuf.size() &&
+          character.physbuf.front().cmdn < phys.cmdn)
+          character.physbuf.pop_front();
+        if (character.physbuf.size())
+        {
+          if (character.physbuf.front() != phys)
+          {
+            character.physbuf.clear();
+            character.physbuf.push_back(phys);
+          }
+        }
+        else
+        {
+          character.physbuf.push_back(phys);
+        }
+        while (state.movebuf.size() && state.movebuf.front().i < phys.cmdn)
+          state.movebuf.pop_front();
+      }
     }
   }
 }
@@ -786,27 +844,4 @@ void Latency_Tracker::ack_received()
 uint32 Latency_Tracker::get_latency()
 {
   return round(last_latency * 1000);
-}
-
-void Move_Command_Buffer::add(Movement_Command &cmd)
-{
-  buf.push_back(cmd);
-}
-
-Movement_Command Move_Command_Buffer::get(uint32_t n)
-{
-  ASSERT(buf.size());
-  ASSERT(n < first + buf.size());
-
-  auto ret = buf[n - first];
-  ASSERT(ret.i == n);
-  return ret;
-}
-
-void Move_Command_Buffer::remove_up_to(uint32_t n)
-{
-  ASSERT(n < first + buf.size());
-  uint32 n_to_pop = n - first;
-  while (n_to_pop--)
-    buf.pop_front();
 }

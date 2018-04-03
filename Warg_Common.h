@@ -5,6 +5,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <deque>
 
 struct CharStats
 {
@@ -26,13 +27,14 @@ struct Character_Physics
 
   vec3 pos = vec3(0), dir = vec3(0), vel = vec3(0);
   bool grounded = false;
+  uint32 cmdn = 0;
 };
 
 struct Movement_Command
 {
-  uint32 i;
-  Move_Status m;
-  vec3 dir;
+  uint32 i = 0;
+  Move_Status m = Move_Status::None;
+  vec3 dir = vec3(0, 1, 0);
 };
 
 struct Character
@@ -49,6 +51,7 @@ struct Character
   Node_Ptr mesh;
 
   Character_Physics physics;
+  std::deque<Character_Physics> physbuf;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
   Movement_Command last_movement_command;
 
@@ -91,3 +94,5 @@ struct Map
 
 Map make_blades_edge();
 std::vector<Triangle> collect_colliders(Scene_Graph &scene);
+Character_Physics move_char(Character_Physics physics, Movement_Command command,
+  vec3 radius, float32 speed, std::vector<Triangle> colliders);

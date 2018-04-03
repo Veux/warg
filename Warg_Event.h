@@ -1,6 +1,6 @@
 #pragma once
 
-#define SIM_LATENCY 200
+#define SIM_LATENCY 150
 
 #include "Spell.h"
 #include <enet/enet.h>

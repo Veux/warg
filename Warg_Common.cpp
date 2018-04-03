@@ -9,8 +9,6 @@ vec3 collide_char_with_world(Collision_Packet &colpkt,
 void collide_and_slide_char(Character_Physics &phys, vec3 &radius,
     const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders);
-Character_Physics move_char(Character_Physics physics, Movement_Command command,
-    vec3 radius, float32 speed, std::vector<Triangle> colliders);
 
 Map make_blades_edge()
 {
@@ -156,6 +154,7 @@ void Character::move(float32 dt, const std::vector<Triangle> &colliders)
 {
   physics = move_char(
       physics, last_movement_command, radius, e_stats.speed, colliders);
+  physics.cmdn = last_movement_command.i;
 }
 
 std::vector<Triangle> collect_colliders(Scene_Graph &scene)

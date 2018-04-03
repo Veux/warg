@@ -21,17 +21,6 @@ private:
   bool acked = true;
 };
 
-class Move_Command_Buffer
-{
-public:
-  void add(Movement_Command &cmd);
-  Movement_Command get(uint32_t n);
-  void remove_up_to(uint32_t n);
-private:
-  std::deque<Movement_Command> buf;
-  uint32_t first = 0;
-};
-
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
@@ -62,6 +51,9 @@ struct Warg_State : protected State
 
   Latency_Tracker latency_tracker;
 
-  Move_Command_Buffer move_buf;
+  std::deque<Movement_Command> movebuf;
   uint32 move_cmd_n = 0;
+  vector<Triangle> collider_cache;
+
+  vec4 cam_rel;
 };
