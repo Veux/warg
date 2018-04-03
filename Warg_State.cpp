@@ -267,7 +267,7 @@ void Warg_State::handle_input_events(
     {
       cam.phi = upper;
     }
-    const float32 lower = 100 * epsilon<float32>();
+    const float32 lower = 100 * epsilon<float32>() - half_pi<float32>();
     if (cam.phi < lower)
     {
       cam.phi = lower;
