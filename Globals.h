@@ -232,6 +232,25 @@ struct Config
 };
 extern Config CONFIG;
 
+class File_Picker
+{
+public:
+  File_Picker(const char *directory);
+  bool run();
+  std::string get_result();
+  bool get_closed();
+private:
+  void set_dir(std::string directory);
+
+  std::string dir;
+  std::vector<std::string> dircontents;
+  size_t ndirs = 0;
+  int current_item = 0;
+  std::string result;
+  bool closed = false;
+};
+
+
 const char *texture_format_to_string(GLenum texture_format);
 
 bool has_img_file_extension(std::string name);

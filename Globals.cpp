@@ -6,6 +6,13 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
+#include "Render.h"
+#include "Json.h"
+#include "SDL_Imgui_State.h"
+#ifdef __linux__
+#elif _WIN32
+#include <Windows.h>
+#endif
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 150.0f;
@@ -580,6 +587,94 @@ void Config::save(std::string filename)
   std::string str = pretty_dump(j);
   std::fstream file(filename, std::ios::out);
   file.write(str.c_str(), str.size());
+}
+
+std::vector<std::string> lsdir(std::string dir, size_t &ndir)
+{
+  std::vector<std::string> dirs, files;
+#ifdef __linux__ 
+  ASSERT(false);
+#elif _WIN32
+  std::string search_path = dir + "/*";
+  WIN32_FIND_DATA fd;
+  HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
+  if (hFind != INVALID_HANDLE_VALUE) {
+    do {
+      if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        dirs.push_back(fd.cFileName);
+      }
+      else
+      {
+        files.push_back(fd.cFileName);
+      }
+    } while (::FindNextFile(hFind, &fd));
+    ::FindClose(hFind);
+  }
+#endif
+  ndir = dirs.size();
+  dirs.insert(dirs.end(), files.begin(), files.end());
+  return dirs;
+}
+
+File_Picker::File_Picker(const char *directory)
+{
+  set_dir(directory);
+}
+
+void File_Picker::set_dir(std::string directory)
+{
+  dir = directory;
+  dircontents = lsdir(dir.c_str(), ndirs);
+}
+
+bool File_Picker::run()
+{
+  bool clicked = false;
+  bool display = true;
+  ImGui::Begin("File Picker");
+
+  char **dirstrings = (char **)calloc(dircontents.size(), sizeof(*dirstrings));
+  int i = 0;
+  for (auto &r : dircontents)
+    dirstrings[i++] = (char *)r.c_str();
+
+  ImGui::PushItemWidth(-1);
+  ImGui::ListBox("", &current_item, dirstrings, dircontents.size(), 20);
+  clicked = ImGui::Button("Choose");
+  ImGui::SameLine();
+  if (ImGui::Button("Up"))
+    set_dir(s(dir, "//.."));
+  ImGui::SameLine();
+  closed = ImGui::Button("Close");
+  ImGui::End();
+
+  bool picked = false;
+  if (clicked) {
+    if (current_item < ndirs)
+    {
+      set_dir(s(dir, "//", dircontents[current_item]));
+      current_item = 0;
+      picked = false;
+    }
+    else
+    {
+      result = dircontents[current_item];
+      picked = true;
+    }
+  }
+
+  free(dirstrings);
+  return picked;
+}
+
+std::string File_Picker::get_result()
+{
+  return s(dir + "//" + result);
+}
+
+bool File_Picker::get_closed()
+{
+  return closed;
 }
 
 bool has_img_file_extension(std::string name)

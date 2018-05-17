@@ -327,6 +327,30 @@ void Warg_State::handle_input_events(
 
 void Warg_State::update()
 {
+  // file picker example
+  {
+    static auto picker = File_Picker(".");
+    static bool picking = false;
+    static std::string result = "";
+
+    ImGui::Begin("File Picker Test");
+    if (ImGui::Button("Choose file"))
+      picking = true;
+    bool closed = false;
+    if (picking)
+    {
+      if (picker.run()) {
+        picking = false;
+        result = picker.get_result();
+      }
+      else if (picker.get_closed()) {
+        picking = false;
+      }
+    }
+    ImGui::Text(result.c_str());
+    ImGui::End();
+  }
+
   if (local)
   {
     server->update(dt);
