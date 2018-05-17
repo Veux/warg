@@ -36,12 +36,13 @@ float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 static Assimp::Importer importer;
 
 const int default_assimp_flags = aiProcess_FlipWindingOrder |
-                                 aiProcess_Triangulate | aiProcess_FlipUVs |
+                                 // aiProcess_Triangulate | 
+                                 // aiProcess_FlipUVs |
                                  aiProcess_CalcTangentSpace |
                                  // aiProcess_MakeLeftHanded|
                                  // aiProcess_JoinIdenticalVertices |
                                  // aiProcess_PreTransformVertices |
-                                 aiProcess_GenUVCoords |
+                                 // aiProcess_GenUVCoords |
                                  // aiProcess_OptimizeGraph|
                                  // aiProcess_ImproveCacheLocality|
                                  // aiProcess_OptimizeMeshes|
@@ -457,6 +458,15 @@ template <> std::string s<Light_Type>(Light_Type value)
   return "s(): Unknown Light_Type";
 }
 
+template <> std::string s<vec4>(vec4 value)
+{
+  std::string r = std::to_string(value.r);
+  std::string g = std::to_string(value.g);
+  std::string b = std::to_string(value.b);
+  std::string a = std::to_string(value.a);
+  return "color(" + r + "," + g + "," + b + "," + "a" + ")";
+}
+
 template <> std::string s<const char *>(const char *value)
 {
   return std::string(value);
@@ -506,6 +516,32 @@ const char *texture_format_to_string(GLenum texture_format)
   }
 }
 
+
+bool is_float_format(GLenum texture_format)
+{
+  switch (texture_format)
+  {
+  case GL_RGBA32F:
+    return true;
+  case GL_RGBA16F:
+    return true;
+  case GL_RGB32F:
+    return true;
+  case GL_RGB16F:
+    return true;
+  case GL_RG32F:
+    return true;
+  case GL_RG16F:
+    return true;
+  case GL_R32F:
+    return true;
+  case GL_R16F:
+    return true;
+  default:
+    return false;
+  }
+}
+
 void Config::load(std::string filename)
 {
   json j;
@@ -529,8 +565,8 @@ void Config::load(std::string filename)
   if ((i = j.find("Fov")) != j.end())
     fov = *i;
 
-  if ((i = j.find("Shadow Map Resolution")) != j.end())
-    shadow_map_size = *i;
+  if ((i = j.find("Shadow Map Scale")) != j.end())
+    shadow_map_scale = *i;
 }
 
 void Config::save(std::string filename)
@@ -539,9 +575,30 @@ void Config::save(std::string filename)
   j["Resolution"] = resolution;
   j["Render Scale"] = render_scale;
   j["Fov"] = fov;
-  j["Shadow Map Resolution"] = shadow_map_size;
+  j["Shadow Map Scale"] = shadow_map_scale;
 
   std::string str = pretty_dump(j);
   std::fstream file(filename, std::ios::out);
   file.write(str.c_str(), str.size());
+}
+
+bool has_img_file_extension(std::string name)
+{
+  uint32 size = name.size();
+
+  if (size < 3)
+    return false;
+
+  std::string end = name.substr(size - 4, 4);
+  if (end == ".jpg" || end == ".png" || end == ".hdr" || end == ".tga")
+  {
+    return true;
+  }
+  return false;
+}
+
+std::string strip_file_extension(std::string file)
+{
+  ASSERT(file.length() > 4);
+  return file.substr(0, file.size() - 3);
 }

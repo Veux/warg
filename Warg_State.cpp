@@ -42,21 +42,9 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  client->map.node =
-      scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+  client->map.node = scene.add_aiscene(
+      "Blades_Edge/blades_edge.fbx", nullptr, &client->map.material);
 
-  clear_color = vec3(94. / 255., 155. / 255., 1.);
-  scene.lights.light_count = 1;
-  Light *light = &scene.lights.lights[0];
-  light->position = vec3{25, 25, 200.};
-  light->color = 3000.0f * vec3(1.0f, 0.93f, 0.92f);
-  light->attenuation = vec3(1.0f, .045f, .0075f);
-  light->direction = vec3(25.0f, 25.0f, 0.0f);
-  light->ambient = 0.001f;
-  light->cone_angle = 0.15f;
-  light->type = Light_Type::spot;
-  light->casts_shadows = false;
-   
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 }
@@ -72,8 +60,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  client->map.node =
-      scene.add_aiscene("blades_edge.obj", nullptr, &client->map.material);
+  client->map.node = scene.add_aiscene(
+      "Blades_Edge/blades_edge.fbx", nullptr, &client->map.material);
 
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;
@@ -96,8 +84,8 @@ void Warg_State::handle_input_events(
     return block_kb ? 0 : keys[key];
   };
 
-  set_message("warg state block kb state: ", s(block_kb), 1.0f);
-  set_message("warg state block mouse state: ", s(block_mouse), 1.0f);
+  // set_message("warg state block kb state: ", s(block_kb), 1.0f);
+  // set_message("warg state block mouse state: ", s(block_mouse), 1.0f);
 
   for (auto &_e : events)
   {
@@ -151,10 +139,10 @@ void Warg_State::handle_input_events(
   ivec2 mouse_delta = mouse - last_seen_mouse_position;
   last_seen_mouse_position = mouse;
 
-  set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
-  set_message("mouse grab position:",
-      s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
-      1.0f);
+  // set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
+  // set_message("mouse grab position:",
+  //    s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
+  //    1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -220,38 +208,39 @@ void Warg_State::handle_input_events(
   else
   { // wow style camera
     vec4 cam_rel;
-    set_message(
-        "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
+    // set_message(
+    //   "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
     // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) &&
         (last_seen_lmb || last_seen_rmb))
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
-        set_message("mouse grab event", "", 1.0f);
+        // set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_mouse_position = mouse;
         SDL_SetRelativeMouseMode(SDL_bool(true));
         SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       }
-      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      // set_message("mouse delta: ", s(mouse_delta.x, " ",
+      // mouse_delta.y), 1.0f);
       SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       cam.theta += mouse_delta.x * MOUSE_X_SENS;
       cam.phi += mouse_delta.y * MOUSE_Y_SENS;
-      set_message("mouse is grabbed", "", 1.0f);
+      // set_message("mouse is grabbed", "", 1.0f);
     }
     else
     { // not holding button
-      set_message("mouse is free", "", 1.0f);
+      // set_message("mouse is free", "", 1.0f);
       if (mouse_grabbed)
       { // first unhold
-        set_message("mouse release event", "", 1.0f);
+        // set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-        set_message("mouse warp:",
-            s("from:", mouse.x, " ", mouse.y,
-                " to:", last_grabbed_mouse_position.x, " ",
-                last_grabbed_mouse_position.y),
-            1.0f);
+        // set_message("mouse warp:",
+        //    s("from:", mouse.x, " ", mouse.y,
+        //        " to:", last_grabbed_mouse_position.x, " ",
+        //        last_grabbed_mouse_position.y),
+        //    1.0f);
         SDL_SetRelativeMouseMode(SDL_bool(false));
         SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
             last_grabbed_mouse_position.y);
@@ -387,100 +376,21 @@ void Warg_State::update()
     }
   }
 
-  static bool show_warg_state_window = true;
-  if (show_warg_state_window)
-  {
-    ImGui::Begin("warg_state.cpp Window", &show_warg_state_window);
-    ImGui::Text("Hello from warg_state.cpp window!");
-    if (ImGui::Button("Close Me"))
-      show_warg_state_window = false;
-
-    static Texture test("../Assets/Textures/pebbles_diffuse.png");
-
-    ImGui::Image((ImTextureID)test.get_imgui_handle(), ImVec2(25, 25));
-    ImGui::SetWindowSize(ImVec2(300, 100));
-    ImGui::End();
-  }  
-  
-
-  // meme
   if (client->pc >= 0)
   {
-    ASSERT(client->chars.count(client->pc));
-    Light *light = &scene.lights.lights[0];
-
-    static bool first = true;
-    if (first)
-    {
-      first = false;
-
-      clear_color = vec3(94. / 255., 155. / 255., 1.);
-      scene.lights.light_count = 2;
-
-      scene.lights.light_count = 2;
-      light->position = vec3{25.01f, 25.0f, 45.f};
-      light->color = vec3(1.0f, 0.93f, 0.92f);
-      light->brightness = 550.0f;
-      light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->ambient = 0.0005f;
-      light->cone_angle = 0.375f;
-
-      light->type = Light_Type::spot;
-      light->casts_shadows = true;
-      // there was a divide by 0 here, a camera can't point exactly straight
-      // down
-      light->direction = vec3(0);
-      // see Render.h for what these are for:
-      light->shadow_blur_iterations = 1;
-      light->shadow_blur_radius = 1.25005f;
-      light->max_variance = 0.00000001;
-      light->shadow_near_plane = 15.f;
-      light->shadow_far_plane = 80.f;
-      light->shadow_fov = radians(90.f);
-
-      light = &scene.lights.lights[1];
-
-      light->position = vec3{.5, .2, 10.10};
-      light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-                                  1.f + cos(current_time * 1.12),
-                                  1.f + sin(current_time * .9));
-      light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->direction = client ? client->chars.size() > 0
-                                      ? client->chars[client->pc].pos
-                                      : vec3(0)
-                                : vec3(0);
-      light->ambient = 0.002f;
-      light->cone_angle = 0.012f;
-      light->type = Light_Type::spot;
-      light->casts_shadows = true;
-      // see Render.h for what these are for:
-      light->shadow_blur_iterations = 1;
-      light->shadow_blur_radius = 0.55005f;
-      light->max_variance = 0.0000003;
-      light->shadow_near_plane = 4.51f;
-      light->shadow_far_plane = 50.f;
-      light->shadow_fov = radians(40.f);
-    }
-
     imgui_light_array(scene.lights);
 
-    // static float uv_scale = 14.575f;
-    // ImGui::DragFloat("map_uv_scale", &uv_scale, 0.005f);
-
-    ////->shh->bby.get()->is->ok->c++[0]->is->*->get()[0]->*(*fast);
-    // client->map.node.get()->owned_children[0].get()->model[0].second.m.uv_scale
-    // = vec2(uv_scale);
-
-    //
+    ASSERT(client->chars.count(client->pc));
+    Light *light = &scene.lights.lights[0];
 
     light = &scene.lights.lights[1];
     light->direction =
         client
             ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
             : vec3(0);
-    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-                                1.f + cos(current_time * 1.12),
-                                1.f + sin(current_time * .9));
+    light->color = 50.0f * vec3(1.f + sin(current_time * 1.35),
+                               1.f + cos(current_time * 1.12),
+                               1.f + sin(current_time * .9));
   }
 }
 
@@ -579,21 +489,23 @@ Map make_blades_edge()
   blades_edge.spawn_dir[0] = {0, 1, 0};
   blades_edge.spawn_dir[1] = {0, -1, 0};
 
-  blades_edge.mesh.unique_identifier = "blades_edge_map";
-  blades_edge.material.backface_culling = false;
-  blades_edge.material.albedo = "bea_albedo.png";
-  blades_edge.material.uses_transparency = false;
-  blades_edge.material.discard_on_alpha = false;
-  blades_edge.material.albedo.wrap_s = GL_CLAMP_TO_EDGE;
-  blades_edge.material.albedo.wrap_t = GL_CLAMP_TO_EDGE;
-  //blades_edge.material.albedo_alpha_override = 0.25f;
-  blades_edge.material.emissive = "";
-  //blades_edge.material.normal = "test_normal.png";
-  blades_edge.material.roughness = "bea_roughness.png";
-  blades_edge.material.vertex_shader = "vertex_shader.vert";
-  blades_edge.material.frag_shader = "fragment_shader.frag";
-  blades_edge.material.casts_shadows = true;
-  blades_edge.material.uv_scale = vec2(1);
+  // blades_edge.mesh.unique_identifier = "blades_edge_map";
+  // blades_edge.material.backface_culling = true;
+  // blades_edge.material.albedo = "bea_albedo.png";
+  // blades_edge.material.metalness = "color(0,0,0,0)";
+  // blades_edge.material.uses_transparency = false;
+  // blades_edge.material.discard_on_alpha = false;
+  blades_edge.material.albedo.wrap_s = GL_TEXTURE_WRAP_S;
+  blades_edge.material.albedo.wrap_t = GL_TEXTURE_WRAP_T;
+  blades_edge.material.metalness.mod = vec4(0);
+  // blades_edge.material.albedo_alpha_override = 0.25f;
+  // blades_edge.material.emissive = "";
+  // blades_edge.material.normal = "test_normal.png";
+  // blades_edge.material.roughness = "bea_roughness.png";
+  // blades_edge.material.vertex_shader = "vertex_shader.vert";
+  // blades_edge.material.frag_shader = "fragment_shader.frag";
+  // blades_edge.material.casts_shadows = true;
+  // blades_edge.material.uv_scale = vec2(1);
 
   return blades_edge;
 }

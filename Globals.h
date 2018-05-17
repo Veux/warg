@@ -183,6 +183,7 @@ template <typename T, typename... Args> std::string s(T first, Args... args)
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
 template <> std::string s<Light_Type>(Light_Type value);
+template <> std::string s<vec4>(vec4 value);
 
 typedef int32_t UID;
 UID uid();
@@ -224,7 +225,7 @@ struct Config
   ivec2 resolution = ivec2(1280, 720);
   float32 render_scale = 1.0f;
   float32 fov = 60;
-  ivec2 shadow_map_size = ivec2(1024);
+  float32 shadow_map_scale = 1.0f;
 
   void load(std::string filename);
   void save(std::string filename);
@@ -232,3 +233,7 @@ struct Config
 extern Config CONFIG;
 
 const char *texture_format_to_string(GLenum texture_format);
+
+bool has_img_file_extension(std::string name);
+bool is_float_format(GLenum texture_format);
+std::string strip_file_extension(std::string file);

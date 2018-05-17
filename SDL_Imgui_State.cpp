@@ -138,13 +138,14 @@ void SDL_Imgui_State::render()
         // 0x?0000000
         bool gamma_flag_set = (tex & 0xf0000000) == 0xf0000000;
 
-        // doesnt work on the fp frame textures, theyre linear
+        // glEnable(GL_FRAMEBUFFER_SRGB) doesnt work on the fp frame textures, theyre linear
         // and also need to be gamma corrected to srgb
         // to display properly.
+
         // too dark means the texture is in linear space and needs
         // to-srgb
-        // if (gamma_flag_set)
-        //  glEnable(GL_FRAMEBUFFER_SRGB);
+
+        
 
         glUniform1i(gamma_location, gamma_flag_set);
 

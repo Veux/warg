@@ -17,9 +17,11 @@ struct Render_Test_State : protected State
   Node_Ptr cube_moon;
   Node_Ptr sphere;
   Node_Ptr tiger;
+  Node_Ptr gun;
   Node_Ptr cone_light1;
   Node_Ptr small_light;
   Node_Ptr sun_light;
+  Node_Ptr testobjects;
 
   std::vector<Node_Ptr> chests;
 };

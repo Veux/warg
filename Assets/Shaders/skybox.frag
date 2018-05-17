@@ -8,5 +8,5 @@ in vec4 frag_world_position;
 layout(location = 0) out vec4 out0;
 void main()
 {
-  out0 = vec4(3.5f * pow(texture(texture6, -(frag_world_position.xyz)).rgb,vec3(1.4)),1);
+  out0 = vec4(textureLod(texture6, -(frag_world_position.xyz),0).rgb,1);
 }

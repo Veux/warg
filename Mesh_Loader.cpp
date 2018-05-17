@@ -7,6 +7,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <assimp/cimport.h>
  
 
 void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data& mesh)
@@ -47,10 +48,10 @@ void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data& mesh)
   {
     bitangent,bitangent,bitangent
   };
-  int32 base = mesh.positions.size();
+  int32 environment = mesh.positions.size();
   std::vector<int32> ind =
   {
-    base + 0, base + 1, base + 2
+    environment + 0, environment + 1, environment + 2
   };
   mesh.tangents.insert(mesh.tangents.end(), tan.begin(), tan.end());
   mesh.bitangents.insert(mesh.bitangents.end(), bitan.begin(), bitan.end());
@@ -106,11 +107,11 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d,
     bitangent,bitangent,bitangent,
     bitangent,bitangent,bitangent,
 	};
-	int32 base = mesh.positions.size();
+	int32 environment = mesh.positions.size();
 	std::vector<int32> ind =
 	{
-		base + 0, base + 1, base + 2,
-		base + 3, base + 4, base + 5
+		environment + 0, environment + 1, environment + 2,
+		environment + 3, environment + 4, environment + 5
 	};
 	mesh.tangents.insert(mesh.tangents.end(), tan.begin(), tan.end());
   mesh.bitangents.insert(mesh.bitangents.end(), bitan.begin(), bitan.end());
@@ -283,13 +284,19 @@ void copy_mesh_data(std::vector<vec2>& dst, aiVector3D* src, uint32 length)
 	  dst.push_back(vec2(src[i].x, src[i].y));
 }
 
-Mesh_Data load_mesh(const aiMesh* aimesh, std::string unique_identifier)
+Mesh_Data load_mesh(const aiMesh* aimesh, std::string unique_identifier, const aiScene* scene)
 {
   ASSERT(aimesh);
   ASSERT(aimesh->HasNormals());
   ASSERT(aimesh->HasPositions());
   ASSERT(aimesh->GetNumUVChannels() == 1);
   ASSERT(aimesh->HasTextureCoords(0));
+  if (!aimesh->HasTangentsAndBitangents())
+  {
+    const aiScene* s = aiApplyPostProcessing(scene, aiProcess_CalcTangentSpace);
+    std::string err = aiGetErrorString();
+    ASSERT(s == scene);//post process failed
+  }
   ASSERT(aimesh->HasTangentsAndBitangents());
   ASSERT(aimesh->HasVertexColors(0) == false); //TODO: add support for this
   ASSERT(aimesh->mNumUVComponents[0] == 2); //TODO: add support for UVW cubemaps
@@ -320,8 +327,13 @@ Mesh_Data load_mesh(const aiMesh* aimesh, std::string unique_identifier)
     }
     else
     {
-      set_message("non-triangle warning", "", 5);
+      //set_message("non-triangle error", "", 5);
     }
+  }
+  if (data.indices.size() < 3)
+  {
+    set_message("Error: No triangles in mesh:", data.name);
+    ASSERT(0);//will fail to upload
   }
   return data;
 }

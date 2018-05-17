@@ -2,7 +2,7 @@
 #include "Globals.h"
 #include "Mesh_Loader.h"
 #include "Shader.h"
-#include "stb_image.h"
+#include "Third_party/stb/stb_image.h"
 #include <SDL2/SDL.h>
 #include <array>
 #include <assimp/Importer.hpp>
@@ -27,15 +27,31 @@ struct Framebuffer;
 using json = nlohmann::json;
 using namespace glm;
 
+struct Conductor_Reflectivity
+{
+  static const vec4 iron;
+  static const vec4 copper;
+  static const vec4 gold;
+  static const vec4 aluminum;
+  static const vec4 silver;
+};
+
 enum Texture_Location
 {
   albedo,
-  specular,
-  normal,
   emissive,
   roughness,
+  normal,
   metalness,
+  ambient_occlusion,
   environment,
+  irradiance,
+
+  brdf_ibl_lut,
+  t9,
+  t10,
+  uv_grid,
+
   s0, // shadow maps
   s1,
   s2,
@@ -72,6 +88,7 @@ struct Texture_Handle
 private:
   friend struct Texture;
   friend struct Cubemap;
+  friend struct Environment_Map;
   friend struct Renderer;
 
   // last bound dynamic state:
@@ -86,6 +103,9 @@ private:
   std::string filename = "TEXTURE_HANDLE_FILENAME_NOT_SET";
   glm::ivec2 size = glm::ivec2(0, 0);
   GLenum format = GLenum(0);
+
+  //specific for specular environment maps
+  bool ibl_mipmaps_generated = false;
 };
 
 struct Texture_Descriptor
@@ -103,8 +123,8 @@ struct Texture_Descriptor
   GLenum magnification_filter = GL_LINEAR;
   GLenum minification_filter = GL_LINEAR;
   uint32 anisotropic_filtering = MAX_ANISOTROPY;
-  GLenum wrap_s = GL_TEXTURE_WRAP_S;
-  GLenum wrap_t = GL_TEXTURE_WRAP_T;
+  GLenum wrap_s = GL_REPEAT;
+  GLenum wrap_t = GL_REPEAT;
   glm::vec4 border_color = glm::vec4(0);
   bool process_premultiply = false;
   bool cache_as_unique = true;
@@ -142,36 +162,54 @@ struct Texture
 private:
   std::shared_ptr<Texture_Handle> texture;
   bool initialized = false;
-  bool has_img_file_extension(std::string name);
-};
-
-struct Cubemap_Descriptor
-{
-  Cubemap_Descriptor();
-  // note: in order to import a new set of cubemap files, you must do the
-  // following in an image editor first:
-  // rotate bottom.jpg 180 degrees;
-  // rotate front.jpg 180 degrees;
-  // rotate left.jpg 90 clockwise;
-  // rotate right.jpg 90 anticlockwise;
-  Cubemap_Descriptor(std::string directory);
-  std::array<std::string, 6> faces = {""};
-  GLenum format = GL_SRGB;
-  bool process_premultiply = false;
 };
 
 struct Cubemap
 {
   Cubemap();
-
-  // todo: dynamic reloading: just keep track of the latest-modified file of the
-  // 6  and if one of them has a newer mod, nuke all 6
-
-  // these must be in the order:
-  Cubemap(Cubemap_Descriptor d);
+  Cubemap(std::string equirectangular_filename);
+  Cubemap(std::array<std::string, 6> filenames);
   void bind(GLuint texture_unit);
-  Cubemap_Descriptor descriptor;
+  std::array<std::string, 6> filenames;
   std::shared_ptr<Texture_Handle> handle;
+  glm::ivec2 size = ivec2(0, 0);
+};
+
+struct Environment_Map_Descriptor
+{
+  Environment_Map_Descriptor() {}
+  Environment_Map_Descriptor(std::string environment, std::string irradiance,
+      bool equirectangular = true);
+  std::string environment = "NULL";
+  std::string irradiance = "NULL";
+  std::array<std::string, 6> environment_faces = {};
+  std::array<std::string, 6> irradiance_faces = {};
+  bool source_is_equirectangular = true;
+};
+
+struct Environment_Map
+{
+  Environment_Map() {}
+  Environment_Map(std::string environment, std::string irradiance,
+      bool equirectangular = true);
+  Environment_Map(Environment_Map_Descriptor d);
+  Cubemap environment;
+  Cubemap irradiance;
+
+  void load();
+  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit);
+
+  Environment_Map_Descriptor m;
+
+  // todo: irradiance map generation
+  void irradiance_convolution();
+
+  // todo: generate ibl mipmaps
+  void generate_ibl_mipmaps();
+
+  // todo: rendered environment map
+  void probe_world(glm::vec3 p, glm::vec2 resolution);
+  void blend(Environment_Map &a, Environment_Map &b); //?
 };
 
 struct Mesh_Handle
@@ -194,10 +232,12 @@ struct Mesh
   Mesh();
   Mesh(Mesh_Primitive p, std::string mesh_name);
   Mesh(Mesh_Data mesh_data, std::string mesh_name);
-  Mesh(const aiMesh *aimesh, std::string unique_identifier);
+  Mesh(const aiMesh *aimesh, std::string name, std::string unique_identifier,
+      const aiScene *scene);
   GLuint get_vao() { return mesh->vao; }
   GLuint get_indices_buffer() { return mesh->indices_buffer; }
   GLuint get_indices_buffer_size() { return mesh->indices_buffer_size; }
+  void draw();
   std::string name = "NULL";
   // private:
   std::string unique_identifier = "NULL";
@@ -207,18 +247,15 @@ struct Mesh
 
 struct Material_Descriptor
 {
-  Texture_Descriptor albedo;
+  Texture_Descriptor albedo = Texture_Descriptor("color(1,1,1,1)");
   Texture_Descriptor normal = Texture_Descriptor("color(0.5,.5,1,0)");
-  Texture_Descriptor roughness;
-  Texture_Descriptor
-      specular; // specular color for conductors   - unused for now
-  Texture_Descriptor
-      metalness; // boolean conductor or insulator - unused for now
+  Texture_Descriptor roughness = Texture_Descriptor("color(0.3,0.3,0.3,0.3)");
+  Texture_Descriptor metalness = Texture_Descriptor("color(0,0,0,0)");
+  Texture_Descriptor emissive = Texture_Descriptor("color(0,0,0,0)");
+  Texture_Descriptor ambient_occlusion = Texture_Descriptor("color(1,1,1,1)");
+
   Texture_Descriptor
       tangent; // anisotropic surface roughness    - unused for now
-  Texture_Descriptor ambient_occlusion; // unused for now
-  Texture_Descriptor emissive;
-  Cubemap_Descriptor environment = "skybox";
 
   std::string vertex_shader = "vertex_shader.vert";
   std::string frag_shader = "fragment_shader.frag";
@@ -237,8 +274,10 @@ struct Material
 {
   Material();
   Material(Material_Descriptor &m);
-  Material(aiMaterial *ai_material, std::string working_directory,
+
+  Material(aiMaterial *ai_material, std::string scene_file_path,
       Material_Descriptor *material_override);
+
   Material_Descriptor m;
 
 private:
@@ -247,7 +286,8 @@ private:
   Texture normal;
   Texture emissive;
   Texture roughness;
-  Cubemap environment = Cubemap_Descriptor("skybox");
+  Texture metalness;
+  Texture ambient_occlusion;
   Shader shader;
   void load(Material_Descriptor &m);
   void bind(Shader *shader);
@@ -267,11 +307,11 @@ struct Light
   vec3 direction = vec3(0, 0, 0);
   float32 brightness = 1.0f;
   vec3 color = vec3(1, 1, 1);
-  vec3 attenuation = vec3(1, 0.22, 0.2);
+  vec3 attenuation = vec3(1, 0.22, 0.0);
   float32 ambient = 0.0004f;
+  float radius = 0.1f;
   float32 cone_angle = .15f;
-  Light_Type type;
-  bool operator==(const Light &rhs) const;
+  Light_Type type; 
   bool casts_shadows = false;
   // these take a lot of careful tuning
   // start with max_variance at 0
@@ -291,16 +331,20 @@ struct Light
       glm::radians(90.f); // this should be as low as possible
                           // without causing artifacts around the
                           // edge of the light field of view
+  glm::ivec2 shadow_map_resolution = ivec2(1024);
 private:
 };
 
 struct Light_Array
 {
   Light_Array() {}
-  Light_Array(json *j);
-  bool operator==(const Light_Array &rhs);
+  void bind(Shader &shader);
+  // bool operator==(const Light_Array &rhs);
   std::array<Light, MAX_LIGHTS> lights;
-  vec3 additional_ambient = vec3(0);
+  Environment_Map environment =
+      Environment_Map_Descriptor("Environment_Maps/Ice_Lake/Ice_Lake_Ref.hdr",
+          "Environment_Maps/Ice_Lake/output_iem.hdr");
+  // todo: environment map json
   uint32 light_count = 0;
 };
 
@@ -408,7 +452,17 @@ void imgui_light_array(Light_Array &lights);
 
 struct Renderer
 {
-  Renderer(SDL_Window *window, ivec2 window_size,std::string name);
+  // todo: split sum approximation IBL
+  // todo: irradiance map generation
+  // todo: improved bloom
+  // todo: water shader
+  // todo: skeletal animation
+  // todo: particle system/instancing
+  // todo: deferred rendering
+  // todo: refraction
+  // todo: screen space reflections
+  // todo: parallax mapping
+  Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
   void render(float64 state_time);
   std::string name = "Unnamed Renderer";
@@ -428,7 +482,7 @@ struct Renderer
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
-  static mat4 ortho_projection(ivec2 &dst_size);
+  static mat4 ortho_projection(ivec2 dst_size);
 
   Mesh quad;
   Shader temporalaa;
@@ -436,10 +490,13 @@ struct Renderer
   Shader variance_shadow_map;
   Shader gamma_correction;
   Shader fxaa;
+  Shader equi_to_cube;
   Bloom_Shader bloom;
   Texture uv_map_grid;
+  Texture brdf_integration_lut;
 
   bool previous_color_target_missing = true;
+
 private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
@@ -447,7 +504,6 @@ private:
   std::vector<Render_Entity> render_entities;
   std::vector<Render_Instance> render_instances;
   std::vector<Render_Entity> translucent_entities;
-  void set_uniform_lights(Shader &shader);
   void set_uniform_shadowmaps(Shader &shader);
   void build_shadow_maps();
   void opaque_pass(float32 time);
@@ -461,8 +517,9 @@ private:
   ivec2 window_size; // actual window size
   ivec2 size;        // render target size
   float32 vfov = CONFIG.fov;
-  ivec2 shadow_map_size = CONFIG.shadow_map_size;
+  float shadow_map_scale = CONFIG.shadow_map_scale;
   mat4 camera;
+  mat4 previous_camera;
   mat4 projection;
   vec3 camera_position = vec3(0);
   vec3 prev_camera_position = vec3(0);

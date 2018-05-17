@@ -82,6 +82,7 @@ void to_json(json &result, const Light &p)
   j["Cone Angle"] = p.cone_angle;
   j["Light Type"] = (uint32)p.type;
   j["Casts Shadows"] = p.casts_shadows;
+  j["Shadow Map Resolution"] = p.shadow_map_resolution;
   j["Shadow Blur Iterations"] = p.shadow_blur_iterations;
   j["Shadow Blur Radius"] = p.shadow_blur_radius;
   j["Shadow Near Plane"] = p.shadow_near_plane;
@@ -102,6 +103,7 @@ void from_json(const json &j, Light &p)
   p.cone_angle = j.at("Cone Angle");
   p.type = (Light_Type)j.at("Light Type");
   p.casts_shadows = j.at("Casts Shadows");
+  p.shadow_map_resolution = j.at("Shadow Map Resolution");
   p.shadow_blur_iterations = j.at("Shadow Blur Iterations");
   p.shadow_blur_radius = j.at("Shadow Blur Radius");
   p.shadow_near_plane = j.at("Shadow Near Plane");
@@ -179,6 +181,40 @@ void from_json(const json &j, Material &p)
   p = Material(m);
 }
 
+
+void to_json(json &result, const Environment_Map &p) { result = p.m; }
+
+void from_json(const json &j, Environment_Map &p)
+{
+  Environment_Map_Descriptor m = j;
+  p = Environment_Map(m);
+}
+
+
+void to_json(json &result, const Environment_Map_Descriptor &p)
+{
+  json j;
+  j["Environment"] = p.environment;
+  j["Irradiance"] = p.irradiance;
+  j["Environment Faces"] = p.environment_faces;
+  j["Irradiance Faces"] = p.irradiance_faces;
+  j["Equirectangular"] = p.source_is_equirectangular;
+  result = j;
+}
+
+void from_json(const json &j, Environment_Map_Descriptor &p)
+{
+  Environment_Map_Descriptor result;
+  std::string value = j.at("Environment");
+  result.environment = value;
+  std::string value2 = j.at("Irradiance");
+  result.irradiance = value2;
+  result.environment_faces = j.at("Environment Faces");
+  result.irradiance_faces = j.at("Irradiance Faces");
+  result.source_is_equirectangular = j.at("Equirectangular");
+  p = result;
+}
+
 void to_json(json &result, const Texture_Descriptor &p)
 {
   json j;
@@ -216,7 +252,6 @@ void to_json(json &result, const Material_Descriptor &p)
   j["Albedo"] = p.albedo;
   j["Normal"] = p.normal;
   j["Roughness"] = p.roughness;
-  j["Specular"] = p.specular;
   j["Metalness"] = p.metalness;
   j["Tangent"] = p.tangent;
   j["Ambient Occlusion"] = p.ambient_occlusion;
@@ -231,13 +266,14 @@ void to_json(json &result, const Material_Descriptor &p)
   result = j;
 }
 
+
+
 void from_json(const json &j, Material_Descriptor &p)
 {
   Material_Descriptor result;
   result.albedo = j.at("Albedo");
   result.normal = j.at("Normal");
   result.roughness = j.at("Roughness");
-  result.specular = j.at("Specular");
   result.metalness = j.at("Metalness");
   result.tangent = j.at("Tangent");
   result.ambient_occlusion = j.at("Ambient Occlusion");
@@ -259,7 +295,7 @@ void to_json(json &result, const Light_Array &p)
   json j;
   j["Lights"] = p.lights;
   j["Light Count"] = p.light_count;
-  j["Additional Ambient"] = p.additional_ambient;
+  j["Environment"] = p.environment;
   result = j;
 }
 
@@ -268,7 +304,7 @@ void from_json(const json &j, Light_Array &p)
   Light_Array l;
   l.lights = j.at("Lights");
   l.light_count = j.at("Light Count");
-  l.additional_ambient = j.at("Additional Ambient");
+  l.environment = j.at("Environment");
   p = l;
 }
 
@@ -514,6 +550,11 @@ void from_json(const json &k, Scene_Graph &scene)
   {
     json root = k.at("SCENE_GRAPH_ROOT");
     scene.root = build_node_graph_from_json(root, scene);
+    if (!scene.root)
+    {
+      scene.root = std::make_shared<Scene_Graph_Node>();
+      scene.root->name = "SCENE_GRAPH_ROOT";
+    }
   }
   catch (std::exception &e)
   {

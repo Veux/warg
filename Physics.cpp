@@ -174,15 +174,15 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
   if (!found_collision)
   {
     vec3 vel = colpkt->vel;
-    vec3 base = colpkt->base_point;
+    vec3 environment = colpkt->base_point;
     float vel_squared_length = squared_length(vel);
     float a, b, c;
     float new_t;
 
     a = vel_squared_length;
 
-    b = 2.0f * dot(vel, base - tri.a);
-    c = squared_length(tri.a - base) - 1.0f;
+    b = 2.0f * dot(vel, environment - tri.a);
+    c = squared_length(tri.a - environment) - 1.0f;
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       t = new_t;
@@ -190,8 +190,8 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
       collision_point = tri.a;
     }
 
-    b = 2.0f * dot(vel, base - tri.b);
-    c = squared_length(tri.b - base) - 1.0f;
+    b = 2.0f * dot(vel, environment - tri.b);
+    c = squared_length(tri.b - environment) - 1.0f;
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       t = new_t;
@@ -199,8 +199,8 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
       collision_point = tri.b;
     }
 
-    b = 2.0f * dot(vel, base - tri.c);
-    c = squared_length(tri.c - base) - 1.0f;
+    b = 2.0f * dot(vel, environment - tri.c);
+    c = squared_length(tri.c - environment) - 1.0f;
     if (get_lowest_root(a, b, c, t, &new_t))
     {
       t = new_t;
@@ -209,7 +209,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     }
 
     vec3 edge = tri.b - tri.a;
-    vec3 base_to_vertex = tri.a - base;
+    vec3 base_to_vertex = tri.a - environment;
     float edge_squared_length = squared_length(edge);
     float edge_dot_vel = dot(edge, vel);
     float edge_dot_base_to_vertex = dot(edge, base_to_vertex);
@@ -233,7 +233,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     }
 
     edge = tri.c - tri.b;
-    base_to_vertex = tri.b - base;
+    base_to_vertex = tri.b - environment;
     edge_squared_length = squared_length(edge);
     edge_dot_vel = dot(edge, vel);
     edge_dot_base_to_vertex = dot(edge, base_to_vertex);
@@ -257,7 +257,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     }
 
     edge = tri.a - tri.c;
-    base_to_vertex = tri.c - base;
+    base_to_vertex = tri.c - environment;
     edge_squared_length = squared_length(edge);
     edge_dot_vel = dot(edge, vel);
     edge_dot_base_to_vertex = dot(edge, base_to_vertex);
