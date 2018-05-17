@@ -194,7 +194,7 @@ void from_json(const json &j, Environment_Map &p)
 void to_json(json &result, const Environment_Map_Descriptor &p)
 {
   json j;
-  j["Environment"] = p.environment;
+  j["Environment"] = p.radiance;
   j["Irradiance"] = p.irradiance;
   j["Environment Faces"] = p.environment_faces;
   j["Irradiance Faces"] = p.irradiance_faces;
@@ -206,7 +206,7 @@ void from_json(const json &j, Environment_Map_Descriptor &p)
 {
   Environment_Map_Descriptor result;
   std::string value = j.at("Environment");
-  result.environment = value;
+  result.radiance = value;
   std::string value2 = j.at("Irradiance");
   result.irradiance = value2;
   result.environment_faces = j.at("Environment Faces");

@@ -1452,7 +1452,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
 void imgui_light_array(Light_Array &lights)
 {
   static bool open = false;
-  const uint32 initial_height = 50;
+  const uint32 initial_height = 110;
   const uint32 height_per_inactive_light = 25;
   const uint32 max_height = 600;
   uint32 width = 243;
@@ -1461,6 +1461,61 @@ void imgui_light_array(Light_Array &lights)
       initial_height + height_per_inactive_light * lights.light_count;
 
   ImGui::Begin("lighting adjustment", &open, ImGuiWindowFlags_NoResize);
+  {
+    static auto radiance_map = File_Picker(".");
+    static auto irradiance_map = File_Picker(".");
+    static bool picking_radiance = false;
+    static bool picking_irradiance = false;
+    std::string radiance_map_result =
+        lights.environment.radiance.handle->peek_filename();
+    std::string irradiance_map_result =
+        lights.environment.irradiance.handle->peek_filename();
+
+    bool updated = false;
+    if (ImGui::Button("Radiance Map"))
+      picking_radiance = true;
+    if (ImGui::Button("Irradiance Map"))
+      picking_irradiance = true;
+    if (picking_radiance)
+    {
+      if (radiance_map.run())
+      {
+        picking_radiance = false;
+        radiance_map_result = radiance_map.get_result();
+        updated = true;
+      }
+      else if (radiance_map.get_closed())
+      {
+        picking_radiance = false;
+      }
+    }
+    if (picking_irradiance)
+    {
+      if (irradiance_map.run())
+      {
+        picking_irradiance = false;
+        irradiance_map_result = irradiance_map.get_result();
+        updated = true;
+      }
+      else if (irradiance_map.get_closed())
+      {
+        picking_irradiance = false;
+      }
+    }/*
+    ImGui::Text(s("Radiance map: ", radiance_map_result).c_str());
+    ImGui::Text(s("Irradiance map: ", irradiance_map_result).c_str());*/
+
+    if (updated)
+    {
+      Environment_Map_Descriptor d;
+      d.radiance = radiance_map_result;
+      d.irradiance = irradiance_map_result;
+      lights.environment = d;
+    }
+  }
+
+
+
   ImGui::SetWindowSize(ImVec2((float)width, (float)height));
   if (ImGui::Button("Push Light"))
   {
@@ -2509,7 +2564,7 @@ Cubemap::Cubemap(string equirectangular_filename)
 
   // load source texture
   Texture_Descriptor d;
-  d.name = BASE_TEXTURE_PATH + equirectangular_filename;
+  d.name = equirectangular_filename;
   d.format = GL_RGBA16F;
   Texture source(d);
   source.bind(0);
@@ -2611,20 +2666,20 @@ void Environment_Map::generate_ibl_mipmaps()
       lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
 
   // replace cached texture with a new one that has the filtered mipmaps
-  Cubemap source = environment;
-  environment.handle = make_shared<Texture_Handle>();
-  TEXTURECUBEMAP_CACHE[source.handle->filename] = environment.handle;
-  environment.handle->filename = source.handle->filename;
-  glGenTextures(1, &environment.handle->texture);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, environment.handle->texture);
-  ASSERT(environment.size != ivec2(0));
+  Cubemap source = radiance;
+  radiance.handle = make_shared<Texture_Handle>();
+  TEXTURECUBEMAP_CACHE[source.handle->filename] = radiance.handle;
+  radiance.handle->filename = source.handle->filename;
+  glGenTextures(1, &radiance.handle->texture);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, radiance.handle->texture);
+  ASSERT(radiance.size != ivec2(0));
   for (uint32 i = 0; i < 6; ++i)
   {
     glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F,
-        environment.size.x, environment.size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+        radiance.size.x, radiance.size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
   }
-  environment.handle->size = environment.size;
-  ASSERT(environment.handle->size != ivec2(0));
+  radiance.handle->size = radiance.size;
+  ASSERT(radiance.handle->size != ivec2(0));
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
@@ -2632,10 +2687,10 @@ void Environment_Map::generate_ibl_mipmaps()
       GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-  environment.handle->magnification_filter = GL_LINEAR;
-  environment.handle->minification_filter = GL_LINEAR_MIPMAP_LINEAR;
-  environment.handle->wrap_s = GL_CLAMP_TO_EDGE;
-  environment.handle->wrap_t = GL_CLAMP_TO_EDGE;
+  radiance.handle->magnification_filter = GL_LINEAR;
+  radiance.handle->minification_filter = GL_LINEAR_MIPMAP_LINEAR;
+  radiance.handle->wrap_s = GL_CLAMP_TO_EDGE;
+  radiance.handle->wrap_t = GL_CLAMP_TO_EDGE;
 
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mip_levels);
@@ -2664,8 +2719,8 @@ void Environment_Map::generate_ibl_mipmaps()
 
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
   {
-    uint32 width = environment.size.x * pow(0.5, mip_level);
-    uint32 height = environment.size.y * pow(0.5, mip_level);
+    uint32 width = radiance.size.x * pow(0.5, mip_level);
+    uint32 height = radiance.size.y * pow(0.5, mip_level);
     glViewport(0, 0, width, height);
     float roughness = (float)mip_level / (float)(mip_levels - 1);
     specular_filter.set_uniform("roughness", roughness);
@@ -2673,7 +2728,7 @@ void Environment_Map::generate_ibl_mipmaps()
     {
       specular_filter.set_uniform("camera", cameras[i]);
       glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-          GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, environment.handle->texture,
+          GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, radiance.handle->texture,
           mip_level);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       cube.draw();
@@ -2685,7 +2740,7 @@ void Environment_Map::generate_ibl_mipmaps()
   glDeleteFramebuffers(1, &fbo);
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   glActiveTexture(GL_TEXTURE0);
-  environment.handle->ibl_mipmaps_generated = true;
+  radiance.handle->ibl_mipmaps_generated = true;
 }
 
 Environment_Map::Environment_Map(
@@ -2693,14 +2748,14 @@ Environment_Map::Environment_Map(
 {
   Environment_Map_Descriptor d(environment, irradiance, equirectangular);
   m = d;
-  m.environment = m.environment;
+  m.radiance = m.radiance;
   m.irradiance = m.irradiance;
   load();
 }
 Environment_Map::Environment_Map(Environment_Map_Descriptor d)
 {
   m = d;
-  m.environment = m.environment;
+  m.radiance = m.radiance;
   m.irradiance = m.irradiance;
   load();
 }
@@ -2708,12 +2763,12 @@ void Environment_Map::load()
 {
   if (m.source_is_equirectangular)
   {
-    environment = Cubemap(m.environment);
+    radiance = Cubemap(m.radiance);
     irradiance = Cubemap(m.irradiance);
   }
   else
   {
-    environment = Cubemap(m.environment_faces);
+    radiance = Cubemap(m.environment_faces);
     irradiance = Cubemap(m.irradiance_faces);
   }
   bool irradiance_exists = irradiance.handle.get();
@@ -2721,7 +2776,7 @@ void Environment_Map::load()
   {
     irradiance_convolution();
   }
-  if (!environment.handle->ibl_mipmaps_generated)
+  if (!radiance.handle->ibl_mipmaps_generated)
     generate_ibl_mipmaps();
 }
 
@@ -2737,7 +2792,7 @@ void Environment_Map::bind(
   irradiance_exists = irradiance.handle.get();
   ASSERT(irradiance_exists);
 
-  environment.bind(base_texture_unit);
+  radiance.bind(base_texture_unit);
   irradiance.bind(irradiance_texture_unit);
 }
 
@@ -2745,7 +2800,7 @@ void Environment_Map::irradiance_convolution() { ASSERT(0); }
 
 Environment_Map_Descriptor::Environment_Map_Descriptor(
     std::string environment, std::string irradiance, bool equirectangular)
-    : environment(environment), irradiance(irradiance),
+    : radiance(environment), irradiance(irradiance),
       source_is_equirectangular(equirectangular)
 {
 }

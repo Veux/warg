@@ -1,7 +1,7 @@
 {
   "Lights": {
     "Environment": {
-      "Environment": "Environment_Maps/Ice_Lake/Ice_Lake_Ref.hdr",
+      "Environment": ".//.//..//Assets//Textures//Environment_Maps//Milkyway//..//GrandCanyon_C_YumaPoint//..//Frozen_Waterfall//..//Desert_Highway//..//Arches_E_PineTree//radiance.hdr",
       "Environment Faces": [
         "",
         "",
@@ -11,7 +11,7 @@
         ""
       ],
       "Equirectangular": true,
-      "Irradiance": "Environment_Maps/Ice_Lake/output_iem.hdr",
+      "Irradiance": ".//..//Assets//Textures//Environment_Maps//Milkyway//..//Arches_E_PineTree//irradiance.hdr",
       "Irradiance Faces": [
         "",
         "",
@@ -30,12 +30,12 @@
           0.2199999988079071,
           0.0
         ],
-        "Brightness": 150.8000030517578,
+        "Brightness": 316.0,
         "Casts Shadows": true,
         "Color": [
-          0.8809523582458496,
-          0.7670875191688538,
-          0.4824262857437134
+          0.920634925365448,
+          0.7494478225708008,
+          0.321491539478302
         ],
         "Cone Angle": 0.15000000596046448,
         "Direction": [
@@ -46,19 +46,19 @@
         "Light Type": 2,
         "Max Variance": 1.0000000116860974e-07,
         "Position": [
-          63.000003814697266,
-          41.000003814697266,
-          107.00000762939453
+          70.0,
+          121.00000762939453,
+          58.000003814697266
         ],
-        "Shadow Blur Iterations": 3,
-        "Shadow Blur Radius": 2.8000001907348633,
-        "Shadow Far Plane": 161.00001525878906,
+        "Shadow Blur Iterations": 4,
+        "Shadow Blur Radius": 0.6000000238418579,
+        "Shadow Far Plane": 182.00001525878906,
         "Shadow FoV": 0.6000000238418579,
         "Shadow Map Resolution": [
           4096,
           4096
         ],
-        "Shadow Near Plane": 97.10000610351563
+        "Shadow Near Plane": 102.10000610351563
       },
       {
         "Ambient": 0.00039999998989515007,
@@ -67,21 +67,21 @@
           0.2199999988079071,
           0.0
         ],
-        "Brightness": 0.30000001192092896,
-        "Casts Shadows": true,
+        "Brightness": 1.0000000116860974e-07,
+        "Casts Shadows": false,
         "Color": [
-          99.99016571044922,
-          84.0633773803711,
-          49.338905334472656
+          6.216719150543213,
+          56.41972351074219,
+          99.12264251708984
         ],
         "Cone Angle": 0.009000000543892384,
         "Direction": [
-          -2.468068838119507,
-          -2.9690773487091064,
-          6.015899658203125
+          -3.3422226905822754,
+          0.8995199799537659,
+          5.88981294631958
         ],
         "Light Type": 2,
-        "Max Variance": 2.499999993688107e-07,
+        "Max Variance": 1.500000053056283e-07,
         "Position": [
           -1.0,
           0.0,
@@ -95,7 +95,7 @@
           512,
           512
         ],
-        "Shadow Near Plane": 0.10000000149011612
+        "Shadow Near Plane": 1.100000023841858
       },
       {
         "Ambient": 0.00039999998989515007,

@@ -180,7 +180,7 @@ struct Environment_Map_Descriptor
   Environment_Map_Descriptor() {}
   Environment_Map_Descriptor(std::string environment, std::string irradiance,
       bool equirectangular = true);
-  std::string environment = "NULL";
+  std::string radiance = "NULL";
   std::string irradiance = "NULL";
   std::array<std::string, 6> environment_faces = {};
   std::array<std::string, 6> irradiance_faces = {};
@@ -193,7 +193,7 @@ struct Environment_Map
   Environment_Map(std::string environment, std::string irradiance,
       bool equirectangular = true);
   Environment_Map(Environment_Map_Descriptor d);
-  Cubemap environment;
+  Cubemap radiance;
   Cubemap irradiance;
 
   void load();

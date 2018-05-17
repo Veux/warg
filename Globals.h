@@ -232,7 +232,7 @@ struct Config
 };
 extern Config CONFIG;
 
-class File_Picker
+struct File_Picker
 {
 public:
   File_Picker(const char *directory);
