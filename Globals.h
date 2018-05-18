@@ -226,6 +226,7 @@ struct Config
   float32 render_scale = 1.0f;
   float32 fov = 60;
   float32 shadow_map_scale = 1.0f;
+  bool use_low_quality_specular = false;
 
   void load(std::string filename);
   void save(std::string filename);

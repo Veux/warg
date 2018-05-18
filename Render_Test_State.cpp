@@ -73,7 +73,7 @@ Render_Test_State::Render_Test_State(
   material.backface_culling = false;
   ground = scene.add_primitive_mesh(cube, "world_cube", material);
   ground->position = {0.0f, 0.0f, -0.5f};
-  ground->scale = {15.0f, 15.0f, 1.f};
+  ground->scale = {35.0f, 35.0f, 1.f};
 
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;

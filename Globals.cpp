@@ -574,6 +574,12 @@ void Config::load(std::string filename)
 
   if ((i = j.find("Shadow Map Scale")) != j.end())
     shadow_map_scale = *i;
+
+  if ((i = j.find("Low Quality Specular Convolution")) != j.end())
+    use_low_quality_specular = *i;
+
+
+
 }
 
 void Config::save(std::string filename)
@@ -583,6 +589,7 @@ void Config::save(std::string filename)
   j["Render Scale"] = render_scale;
   j["Fov"] = fov;
   j["Shadow Map Scale"] = shadow_map_scale;
+  j["Low Quality Specular Convolution"] = use_low_quality_specular;
 
   std::string str = pretty_dump(j);
   std::fstream file(filename, std::ios::out);

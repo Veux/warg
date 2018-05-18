@@ -1168,10 +1168,8 @@ void Material::unbind_textures()
   glBindTexture(GL_TEXTURE_2D, 0);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::roughness);
   glBindTexture(GL_TEXTURE_2D, 0);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
-  glBindTexture(GL_TEXTURE_2D, 0);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::ambient_occlusion);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  glBindTexture(GL_TEXTURE_2D, 0);
 }
 //
 // bool Light::operator==(const Light &rhs) const
@@ -1211,6 +1209,8 @@ Render_Entity::Render_Entity(
 
 Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 {
+
+  check_gl_error();
   set_message("Renderer constructor");
   this->name = name;
   this->window = window;
@@ -1452,7 +1452,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures,
 void imgui_light_array(Light_Array &lights)
 {
   static bool open = false;
-  const uint32 initial_height = 110;
+  const uint32 initial_height = 130;
   const uint32 height_per_inactive_light = 25;
   const uint32 max_height = 600;
   uint32 width = 243;
@@ -1501,9 +1501,9 @@ void imgui_light_array(Light_Array &lights)
       {
         picking_irradiance = false;
       }
-    }/*
-    ImGui::Text(s("Radiance map: ", radiance_map_result).c_str());
-    ImGui::Text(s("Irradiance map: ", irradiance_map_result).c_str());*/
+    }
+    //ImGui::Text(s("Radiance map: ", radiance_map_result).c_str());
+    //ImGui::Text(s("Irradiance map: ", irradiance_map_result).c_str());
 
     if (updated)
     {
@@ -1513,8 +1513,6 @@ void imgui_light_array(Light_Array &lights)
       lights.environment = d;
     }
   }
-
-
 
   ImGui::SetWindowSize(ImVec2((float)width, (float)height));
   if (ImGui::Button("Push Light"))
@@ -1649,6 +1647,8 @@ void Renderer::opaque_pass(float32 time)
   uv_map_grid.bind(uv_grid);
 #endif
   brdf_integration_lut.bind(brdf_ibl_lut);
+  lights.environment.bind(
+      Texture_Location::environment, Texture_Location::irradiance);
   for (Render_Entity &entity : render_entities)
   {
     ASSERT(entity.mesh);
@@ -1681,6 +1681,10 @@ void Renderer::opaque_pass(float32 time)
         GL_UNSIGNED_INT, nullptr);
     entity.material->unbind_textures();
   }
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::irradiance);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
 void Renderer::instance_pass(float32 time)
@@ -1790,11 +1794,17 @@ void Renderer::instance_pass(float32 time)
 
 void Renderer::translucent_pass(float32 time)
 {
-  glDisable(GL_CULL_FACE);
   // glDisable(GL_DEPTH_TEST);
   glDepthMask(GL_FALSE);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CW);
+  glCullFace(GL_BACK);
+  brdf_integration_lut.bind(brdf_ibl_lut);
+  lights.environment.bind(
+      Texture_Location::environment, Texture_Location::irradiance);
   for (Render_Entity &entity : translucent_entities)
   {
     ASSERT(entity.mesh);
@@ -1820,10 +1830,15 @@ void Renderer::translucent_pass(float32 time)
 
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
+
+    glDisable(GL_CULL_FACE);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(),
         GL_UNSIGNED_INT, nullptr);
+
+    entity.material->unbind_textures();
   }
+  glEnable(GL_CULL_FACE);
   glDisable(GL_BLEND);
   glDepthMask(GL_TRUE);
 }
@@ -2544,16 +2559,21 @@ Cubemap::Cubemap(string equirectangular_filename)
   glFramebufferRenderbuffer(
       GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
+  GLint value;
+  glGetIntegerv(gl::GL_ACTIVE_TEXTURE_ARB, &value);
+  value = value - (uint32)GL_TEXTURE0;
+
+  glActiveTexture(GL_TEXTURE0);
   glGenTextures(1, &handle->texture);
+  glActiveTexture(GL_TEXTURE0 + 6);
   glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   for (uint32 i = 0; i < 6; ++i)
   {
     glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size.x,
         size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
   }
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   handle->format = GL_RGB16F;
-
-  check_FBO_status();
 
   float angle = radians(0.f);
   mat4 rot = toMat4(quat(1, 0, 0, angle));
@@ -2568,7 +2588,9 @@ Cubemap::Cubemap(string equirectangular_filename)
   d.format = GL_RGBA16F;
   Texture source(d);
   source.bind(0);
-
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CW);
+  glCullFace(GL_FRONT);
   // draw to cubemap target
   for (uint32 i = 0; i < 6; ++i)
   {
@@ -2578,6 +2600,10 @@ Cubemap::Cubemap(string equirectangular_filename)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     cube.draw();
   }
+  glCullFace(GL_BACK);
+
+  glActiveTexture(GL_TEXTURE0 + 6);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(
       GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -2588,14 +2614,16 @@ Cubemap::Cubemap(string equirectangular_filename)
   handle->minification_filter = GL_LINEAR_MIPMAP_LINEAR;
   handle->wrap_s = GL_CLAMP_TO_EDGE;
   handle->wrap_t = GL_CLAMP_TO_EDGE;
-
   glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
   // cleanup targets
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDeleteRenderbuffers(1, &rbo);
   glDeleteFramebuffers(1, &fbo);
+  check_gl_error();
 }
 
 Cubemap::Cubemap(array<string, 6> filenames)
@@ -2647,8 +2675,22 @@ Cubemap::Cubemap(array<string, 6> filenames)
 
 void Environment_Map::generate_ibl_mipmaps()
 {
-  static Shader specular_filter(
-      "equi_to_cube.vert", "specular_brdf_convolution.frag");
+  static bool loaded = false;
+  static Shader specular_filter;
+  if (!loaded)
+  {
+    loaded = true;
+    if (CONFIG.use_low_quality_specular)
+    {
+      specular_filter =
+          Shader("equi_to_cube.vert", "specular_brdf_convolution - low.frag");
+    }
+    else
+    {
+      specular_filter =
+          Shader("equi_to_cube.vert", "specular_brdf_convolution.frag");
+    }
+  }
   static Mesh cube(load_mesh(cube), "generate_ibl_mipmaps()'s cube");
 
   const uint32 mip_levels = 6;
@@ -2671,6 +2713,7 @@ void Environment_Map::generate_ibl_mipmaps()
   TEXTURECUBEMAP_CACHE[source.handle->filename] = radiance.handle;
   radiance.handle->filename = source.handle->filename;
   glGenTextures(1, &radiance.handle->texture);
+  glActiveTexture(GL_TEXTURE6);
   glBindTexture(GL_TEXTURE_CUBE_MAP, radiance.handle->texture);
   ASSERT(radiance.size != ivec2(0));
   for (uint32 i = 0; i < 6; ++i)
@@ -2686,12 +2729,10 @@ void Environment_Map::generate_ibl_mipmaps()
   glTexParameteri(
       GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
   radiance.handle->magnification_filter = GL_LINEAR;
   radiance.handle->minification_filter = GL_LINEAR_MIPMAP_LINEAR;
   radiance.handle->wrap_s = GL_CLAMP_TO_EDGE;
   radiance.handle->wrap_t = GL_CLAMP_TO_EDGE;
-
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mip_levels);
   glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
@@ -2717,6 +2758,9 @@ void Environment_Map::generate_ibl_mipmaps()
   specular_filter.set_uniform("projection", projection);
   specular_filter.set_uniform("rotation", rot);
 
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CW);
+  glCullFace(GL_FRONT);
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
   {
     uint32 width = radiance.size.x * pow(0.5, mip_level);
@@ -2734,6 +2778,8 @@ void Environment_Map::generate_ibl_mipmaps()
       cube.draw();
     }
   }
+  glCullFace(GL_BACK);
+
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBindRenderbuffer(GL_RENDERBUFFER, 0);
   glDeleteRenderbuffers(1, &rbo);
@@ -2761,6 +2807,7 @@ Environment_Map::Environment_Map(Environment_Map_Descriptor d)
 }
 void Environment_Map::load()
 {
+  check_gl_error();
   if (m.source_is_equirectangular)
   {
     radiance = Cubemap(m.radiance);
@@ -2781,7 +2828,7 @@ void Environment_Map::load()
 }
 
 void Environment_Map::bind(
-    GLuint base_texture_unit, GLuint irradiance_texture_unit)
+    GLuint radiance_texture_unit, GLuint irradiance_texture_unit)
 {
   bool irradiance_exists = irradiance.handle.get();
   if (!irradiance_exists)
@@ -2792,7 +2839,7 @@ void Environment_Map::bind(
   irradiance_exists = irradiance.handle.get();
   ASSERT(irradiance_exists);
 
-  radiance.bind(base_texture_unit);
+  radiance.bind(radiance_texture_unit);
   irradiance.bind(irradiance_texture_unit);
 }
 
@@ -2867,5 +2914,4 @@ void Light_Array::bind(Shader &shader)
     shader.program->light_count = (int32)light_count;
     glUniform1i(shader.program->light_count_location, new_light_count);
   }
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
 }
