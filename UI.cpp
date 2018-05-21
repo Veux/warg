@@ -16,6 +16,8 @@ std::vector<FS_Node> lsdir(std::string dir)
   HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
   if (hFind != INVALID_HANDLE_VALUE) {
     do {
+      if (std::string(fd.cFileName) == "." || std::string(fd.cFileName) == "..")
+        continue;
       FS_Node node;
       node.path = fd.cFileName;
       node.is_dir = fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
@@ -44,28 +46,44 @@ bool File_Picker::run()
 {
   bool clicked = false;
   bool display = true;
-  ImGui::Begin("File Picker");
+  ImGui::Begin("File Picker", &display, ImVec2(586, 488), 1,
+    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_NoSavedSettings);
 
   std::vector<const char *> dirstrings;
   for (auto &r : dircontents)
     dirstrings.push_back(r.path.c_str());
 
-  ImGui::PushItemWidth(-1);
-  ImGui::ListBox("", &current_item, &dirstrings[0], dirstrings.size(), 20);
-  clicked = ImGui::Button("Choose");
-  ImGui::SameLine();
   if (ImGui::Button("Up"))
     set_dir(s(dir, "//.."));
   ImGui::SameLine();
   closed = ImGui::Button("Close");
 
-  for (auto &f : dircontents)
+  ImGui::PushID(0);
+  auto id0 = ImGui::GetID("Thumbnails");
+  ImGui::BeginChildFrame(id0, ImVec2(570, 430), 0);
+  int i = 0;
+  for (i = 0; i < dircontents.size(); i++)
   {
-    if (!f.is_dir)
+    auto &f = dircontents[i];
+    if (i % 4 != 0)
+      ImGui::SameLine();
+    auto id1 = s("thumb", i);
+    ImGui::PushID(id1.c_str());
+    auto id1_ = ImGui::GetID(id1.c_str());
+    ImGui::BeginChildFrame(id1_, ImVec2(130, 141),
+      ImGuiWindowFlags_NoScrollWithMouse);
+    if (ImGui::ImageButton((ImTextureID)f.texture.get_handle(), ImVec2(112, 112)))
     {
-      ImGui::Image((ImTextureID)f.texture.get_handle(), ImVec2(128, 128));
+      clicked = true;
+      current_item = i;
     }
+    ImGui::Text(f.path.c_str());
+    ImGui::EndChildFrame();
+    ImGui::PopID();
   }
+  ImGui::EndChildFrame();
+  ImGui::PopID();
 
   ImGui::End();
 
