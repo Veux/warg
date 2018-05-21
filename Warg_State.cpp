@@ -7,6 +7,7 @@
 #include <memory>
 #include <sstream>
 #include <thread>
+#include "UI.h"
 
 using namespace glm;
 
@@ -332,7 +333,7 @@ void Warg_State::update()
 {
   // file picker example
   {
-    static auto picker = File_Picker(".");
+    static auto picker = File_Picker("../Assets/Textures");
     static bool picking = false;
     static std::string result = "";
 

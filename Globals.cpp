@@ -518,90 +518,75 @@ void Config::save(std::string filename)
   file.write(str.c_str(), str.size());
 }
 
-std::vector<std::string> lsdir(std::string dir, size_t &ndir)
+
+void loader_loop(std::unordered_map<std::string, Image_Data> &database,
+    std::queue<std::string> &load_queue, std::mutex &db_mtx,
+    std::mutex &queue_mtx)
 {
-  std::vector<std::string> dirs, files;
-#ifdef __linux__ 
-  ASSERT(false);
-#elif _WIN32
-  std::string search_path = dir + "/*";
-  WIN32_FIND_DATA fd;
-  HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
-  if (hFind != INVALID_HANDLE_VALUE) {
-    do {
-      if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-        dirs.push_back(fd.cFileName);
-      }
-      else
-      {
-        files.push_back(fd.cFileName);
-      }
-    } while (::FindNextFile(hFind, &fd));
-    ::FindClose(hFind);
-  }
-#endif
-  ndir = dirs.size();
-  dirs.insert(dirs.end(), files.begin(), files.end());
-  return dirs;
-}
-
-File_Picker::File_Picker(const char *directory)
-{
-  set_dir(directory);
-}
-
-void File_Picker::set_dir(std::string directory)
-{
-  dir = directory;
-  dircontents = lsdir(dir.c_str(), ndirs);
-}
-
-bool File_Picker::run()
-{
-  bool clicked = false;
-  bool display = true;
-  ImGui::Begin("File Picker");
-
-  char **dirstrings = (char **)calloc(dircontents.size(), sizeof(*dirstrings));
-  int i = 0;
-  for (auto &r : dircontents)
-    dirstrings[i++] = (char *)r.c_str();
-
-  ImGui::PushItemWidth(-1);
-  ImGui::ListBox("", &current_item, dirstrings, dircontents.size(), 20);
-  clicked = ImGui::Button("Choose");
-  ImGui::SameLine();
-  if (ImGui::Button("Up"))
-    set_dir(s(dir, "//.."));
-  ImGui::SameLine();
-  closed = ImGui::Button("Close");
-  ImGui::End();
-
-  bool picked = false;
-  if (clicked) {
-    if (current_item < ndirs)
+  while (true)
+  {
+    std::string path;
+    queue_mtx.lock();
+    if (!load_queue.empty())
     {
-      set_dir(s(dir, "//", dircontents[current_item]));
-      current_item = 0;
-      picked = false;
+      path = load_queue.front();
+      load_queue.pop();
+      queue_mtx.unlock();
+
+      db_mtx.lock();
+      ASSERT(database.count(path));
+      db_mtx.unlock();
+
+      Image_Data data;
+      data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
+      db_mtx.lock();
+      database[path] = data;
+      db_mtx.unlock();
     }
     else
     {
-      result = dircontents[current_item];
-      picked = true;
+      queue_mtx.unlock();
+    }
+  }
+}
+
+void Image_Loader::init()
+{
+  loader_thread = std::thread(loader_loop, std::ref(database),
+      std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
+  loader_thread.detach();
+}
+
+bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
+{
+  std::string path(filepath);
+
+  db_mtx.lock();
+  if (database.count(path))
+  {
+    if (database[path].data)
+    {
+      *data = database[path];
+      database.erase(path);
+      db_mtx.unlock();
+      return true;
+    }
+    else
+    {
+      db_mtx.unlock();
+      return false;
     }
   }
 
-  free(dirstrings);
-  return picked;
+  Image_Data imgdata;
+  imgdata.data = nullptr;
+  database[path] = imgdata;
+  db_mtx.unlock();
+  queue_mtx.lock();
+  load_queue.push(path);
+  queue_mtx.unlock();
+
+  return false;
 }
 
-std::string File_Picker::get_result()
-{
-  return s(dir + "//" + result);
-}
-
-bool File_Picker::get_closed()
-{
-  return closed;
-}
+Image_Loader IMAGE_LOADER;
