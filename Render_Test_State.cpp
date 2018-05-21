@@ -51,11 +51,11 @@ Render_Test_State::Render_Test_State(
   sky_mat.albedo = "skybox.jpg";
   sky_mat.vertex_shader = "vertex_shader.vert";
   sky_mat.frag_shader = "passthrough.frag";
-  sky_sphere = scene.add_aiscene("sphere.obj", &sky_mat);
+  sky_sphere = scene.add_aiscene("smoothsphere.fbx", &sky_mat);
 
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
-  sphere = scene.add_aiscene("sphere.obj", nullptr, &material);
+  sphere = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
 
   material.albedo = "crate_diffuse.png";
   material.emissive = "test_emissive.png";
@@ -113,17 +113,17 @@ Render_Test_State::Render_Test_State(
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1,1,1,1)";
   material.roughness = "";
-  cone_light1 = scene.add_aiscene("sphere.obj", &material);
+  cone_light1 = scene.add_aiscene("smoothsphere.fbx", &material);
   cone_light1->name = "conelight1";
 
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(3,3,1.5,1)";
-  sun_light = scene.add_aiscene("sphere.obj", &material);
+  sun_light = scene.add_aiscene("smoothsphere.fbx", &material);
   sun_light->name = "sun";
 
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1.15,0,1.15,1)";
-  small_light = scene.add_aiscene("sphere.obj", &material);
+  small_light = scene.add_aiscene("smoothsphere.fbx", &material);
 }
 
 void Render_Test_State::handle_input_events(
