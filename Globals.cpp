@@ -526,26 +526,31 @@ void loader_loop(std::unordered_map<std::string, Image_Data> &database,
   while (true)
   {
     std::string path;
-    queue_mtx.lock();
-    if (!load_queue.empty())
-    {
-      path = load_queue.front();
-      load_queue.pop();
-      queue_mtx.unlock();
 
-      db_mtx.lock();
-      ASSERT(database.count(path));
-      db_mtx.unlock();
+    bool empty = true;
+    {
+      std::lock_guard<std::mutex> guard(queue_mtx);
+      empty = load_queue.empty();
+    }
+    if (!empty)
+    {
+      {
+        std::lock_guard<std::mutex> guard(queue_mtx);
+        path = load_queue.front();
+        load_queue.pop();
+      }
+
+      {
+        std::lock_guard<std::mutex> guard(db_mtx);
+        ASSERT(database.count(path));
+      }
 
       Image_Data data;
       data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
-      db_mtx.lock();
-      database[path] = data;
-      db_mtx.unlock();
-    }
-    else
-    {
-      queue_mtx.unlock();
+      {
+        std::lock_guard<std::mutex> guard(db_mtx);
+        database[path] = data;
+      }
     }
   }
 }
@@ -561,31 +566,37 @@ bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
 {
   std::string path(filepath);
 
-  db_mtx.lock();
-  if (database.count(path))
+  bool in_db = false;
   {
-    if (database[path].data)
+    std::lock_guard<std::mutex> guard(db_mtx);
+    in_db = database.count(path);
+  }
+  if (in_db)
+  {
+    bool ready = false;
     {
+      std::lock_guard<std::mutex> guard(db_mtx);
+      ready = database[path].data;
+    }
+    if (ready)
+    {
+      std::lock_guard<std::mutex> guard(db_mtx);
       *data = database[path];
       database.erase(path);
-      db_mtx.unlock();
-      return true;
     }
-    else
-    {
-      db_mtx.unlock();
-      return false;
-    }
+    return ready;
   }
 
   Image_Data imgdata;
   imgdata.data = nullptr;
-  database[path] = imgdata;
-  db_mtx.unlock();
-  queue_mtx.lock();
-  load_queue.push(path);
-  queue_mtx.unlock();
-
+  {
+    std::lock_guard<std::mutex> guard(db_mtx);
+    database[path] = imgdata;
+  }
+  {
+    std::lock_guard<std::mutex> guard(queue_mtx);
+    load_queue.push(path);
+  }
   return false;
 }
 
