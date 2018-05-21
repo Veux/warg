@@ -25,5 +25,5 @@ private:
   size_t ndirs = 0;
   int current_item = 0;
   std::string result;
-  bool closed = false;
+  bool display = true;
 };

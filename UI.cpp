@@ -45,7 +45,7 @@ void File_Picker::set_dir(std::string directory)
 bool File_Picker::run()
 {
   bool clicked = false;
-  bool display = true;
+  display = true;
   ImGui::Begin("File Picker", &display, ImVec2(586, 488), 1,
     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
     ImGuiWindowFlags_NoSavedSettings);
@@ -57,7 +57,6 @@ bool File_Picker::run()
   if (ImGui::Button("Up"))
     set_dir(s(dir, "//.."));
   ImGui::SameLine();
-  closed = ImGui::Button("Close");
 
   ImGui::PushID(0);
   auto id0 = ImGui::GetID("Thumbnails");
@@ -112,5 +111,5 @@ std::string File_Picker::get_result()
 
 bool File_Picker::get_closed()
 {
-  return closed;
+  return !display;
 }
