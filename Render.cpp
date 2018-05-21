@@ -541,8 +541,17 @@ void Texture::load()
     initialized = true;
     return;
   }
+  
+  uint8_t *data = nullptr;
+  Image_Data imgdata;
+  if (IMAGE_LOADER.load(t.name.c_str(), 4, &imgdata))
+  {
+    data = imgdata.data;
+    width = imgdata.x;
+    height = imgdata.y;
+    n = imgdata.comp;
+  }
 
-  auto *data = stbi_load(t.name.c_str(), &width, &height, &n, 4);
   if (!data)
   { // error loading file...
 #if DYNAMIC_TEXTURE_RELOADING

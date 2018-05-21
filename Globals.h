@@ -10,6 +10,9 @@
 #include <iostream>
 #include <random>
 #include <unordered_map>
+#include <queue>
+#include <mutex>
+#include <thread>
 using namespace glm;
 using namespace gl33core;
 struct aiString;
@@ -230,20 +233,26 @@ struct Config
 };
 extern Config CONFIG;
 
-class File_Picker
+struct Image_Data
+{
+  uint8 *data;
+  int32 x;
+  int32 y;
+  int32 comp;
+};
+
+class Image_Loader
 {
 public:
-  File_Picker(const char *directory);
-  bool run();
-  std::string get_result();
-  bool get_closed();
-private:
-  void set_dir(std::string directory);
+  void init();
+  bool load(const char *filename, int32 req_comp, Image_Data *data);
 
-  std::string dir;
-  std::vector<std::string> dircontents;
-  size_t ndirs = 0;
-  int current_item = 0;
-  std::string result;
-  bool closed = false;
+private:
+  std::unordered_map<std::string, Image_Data> database;
+  std::queue<std::string> load_queue;
+  std::mutex db_mtx;
+  std::mutex queue_mtx;
+  std::thread loader_thread;
 };
+
+extern Image_Loader IMAGE_LOADER;
