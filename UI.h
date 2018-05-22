@@ -26,4 +26,5 @@ private:
   int current_item = 0;
   std::string result;
   bool display = true;
+  Texture dir_icon;
 };

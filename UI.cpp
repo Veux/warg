@@ -34,6 +34,7 @@ std::vector<FS_Node> lsdir(std::string dir)
 File_Picker::File_Picker(const char *directory)
 {
   set_dir(directory);
+  dir_icon = Texture("../Assets/Icons/dir.png");
 }
 
 void File_Picker::set_dir(std::string directory)
@@ -76,7 +77,9 @@ bool File_Picker::run()
     auto id1_ = ImGui::GetID(id1.c_str());
     ImGui::BeginChildFrame(id1_, tframesize,
       ImGuiWindowFlags_NoScrollWithMouse);
-    if (ImGui::ImageButton((ImTextureID)f.texture.get_handle(), thumbsize))
+    auto texture = f.is_dir ? dir_icon.get_handle() :
+      f.texture.get_handle();
+    if (ImGui::ImageButton((ImTextureID)texture, thumbsize))
     {
       clicked = true;
       current_item = i;
