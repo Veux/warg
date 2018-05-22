@@ -62,7 +62,7 @@ bool File_Picker::run()
   ImGui::PushID(0);
   auto id0 = ImGui::GetID("Thumbnails");
   ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
-  auto thumbsize = ImVec2(50, 50);
+  auto thumbsize = ImVec2(128, 128);
   auto tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
   int num_horizontal = (winsize.x - 32) / (tframesize.x + 8);
   if (num_horizontal == 0)
