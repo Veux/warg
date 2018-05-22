@@ -47,8 +47,9 @@ bool File_Picker::run()
   bool clicked = false;
   display = true;
   ImGui::Begin("File Picker", &display, ImVec2(586, 488), 1,
-    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
-    ImGuiWindowFlags_NoSavedSettings);
+    ImGuiWindowFlags_NoScrollbar);
+
+  auto winsize = ImGui::GetWindowSize();
 
   std::vector<const char *> dirstrings;
   for (auto &r : dircontents)
@@ -56,23 +57,26 @@ bool File_Picker::run()
 
   if (ImGui::Button("Up"))
     set_dir(s(dir, "//.."));
-  ImGui::SameLine();
 
   ImGui::PushID(0);
   auto id0 = ImGui::GetID("Thumbnails");
-  ImGui::BeginChildFrame(id0, ImVec2(570, 430), 0);
-  int i = 0;
-  for (i = 0; i < dircontents.size(); i++)
+  ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
+  auto thumbsize = ImVec2(50, 50);
+  auto tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
+  int num_horizontal = (winsize.x - 32) / (tframesize.x + 8);
+  if (num_horizontal == 0)
+    num_horizontal = 1;
+  for (int i = 0; i < dircontents.size(); i++)
   {
     auto &f = dircontents[i];
-    if (i % 4 != 0)
+    if (i % num_horizontal != 0)
       ImGui::SameLine();
     auto id1 = s("thumb", i);
     ImGui::PushID(id1.c_str());
     auto id1_ = ImGui::GetID(id1.c_str());
-    ImGui::BeginChildFrame(id1_, ImVec2(130, 141),
+    ImGui::BeginChildFrame(id1_, tframesize,
       ImGuiWindowFlags_NoScrollWithMouse);
-    if (ImGui::ImageButton((ImTextureID)f.texture.get_handle(), ImVec2(112, 112)))
+    if (ImGui::ImageButton((ImTextureID)f.texture.get_handle(), thumbsize))
     {
       clicked = true;
       current_item = i;
