@@ -20,7 +20,6 @@ struct aiString;
   10 // reminder to change the Texture_Location::s1...sn shadow map enums
 #define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
-#define DEBUG 1
 #define ENABLE_ASSERTS 1
 #define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 0
 #define INCLUDE_FILE_LINE_IN_LOG 0
@@ -257,3 +256,4 @@ const char *texture_format_to_string(GLenum texture_format);
 bool has_img_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
 std::string strip_file_extension(std::string file);
+

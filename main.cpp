@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
   SDL_Imgui_State trash_imgui(window);
   SDL_Imgui_State imgui(window);
   ImGui::StyleColorsDark();
-
+  check_gl_error();
   trash_imgui.bind();
   trash_imgui.new_frame(window, 0.1f);
   trash_imgui.end_frame();

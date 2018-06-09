@@ -11,6 +11,7 @@
 static GLuint load_shader(
     const std::string &vertex_path, const std::string &fragment_path)
 {
+  check_gl_error();
   std::string full_vertex_path = BASE_SHADER_PATH + vertex_path;
   std::string full_fragment_path = BASE_SHADER_PATH + fragment_path;
   GLuint vert_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -79,6 +80,7 @@ static GLuint load_shader(
   }
   set_message("Shader loaded successfully");
 
+  check_gl_error();
   return program;
 }
 

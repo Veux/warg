@@ -40,8 +40,7 @@ void test_spheres(Scene_Graph scene)
         material.roughness.mod = vec4(roughness);
         material.metalness.mod = vec4(metalness);
 
-        Node_Ptr node =
-            scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
+        Node_Ptr node = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
         node->scale = vec3(0.5f);
         node->position = (node->scale * 2.f * vec3(i, k, j)) + vec3(0, 6, 1);
         scene.set_parent(node, scene.root, true);
@@ -50,16 +49,19 @@ void test_spheres(Scene_Graph scene)
   }
 }
 
-Render_Test_State::Render_Test_State(
-    std::string name, SDL_Window *window, ivec2 window_size)
+Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
   free_cam = true;
 
+#ifndef _DEBUG
   test_spheres(scene);
   gun = scene.add_aiscene("Cerberus/cerberus-warg.FBX");
   gun->position = vec3(4.0f, -3.0f, 2.0f);
   gun->scale = vec3(5);
+#else
+  gun = scene.add_primitive_mesh(cube, "debug", Material_Descriptor());
+#endif
 
   Material_Descriptor material;
   material.albedo = "ground1_diffuse.png";
@@ -128,16 +130,11 @@ Render_Test_State::Render_Test_State(
       mat4 t = translate(vec3(x, y, 0.0));
       mat4 s = scale(vec3(0.25));
       mat4 basis = t * s;
-      chests.push_back(
-          scene.add_aiscene("Chest/Chest.fbx", &basis, &chest_mat));
+      chests.push_back(scene.add_aiscene("Chest/Chest.fbx", &basis, &chest_mat));
 
       if (transp)
       {
-        Material_Descriptor *m = &chests.back()
-                                      ->owned_children[0]
-                                      ->owned_children[0]
-                                      ->model[0]
-                                      .second.m;
+        Material_Descriptor *m = &chests.back()->owned_children[0]->owned_children[0]->model[0].second.m;
         m->uses_transparency = true;
         m->albedo_alpha_override = 0.4f;
       }
@@ -181,8 +178,7 @@ Render_Test_State::Render_Test_State(
   small_light = scene.add_aiscene("smoothsphere.fbx", &material);
 }
 
-void Render_Test_State::handle_input_events(
-    const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
+void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
 {
   auto is_pressed = [block_kb](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
@@ -242,9 +238,7 @@ void Render_Test_State::handle_input_events(
   last_seen_mouse_position = mouse;
 
   set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
-  set_message("mouse grab position:",
-      s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
-      1.0f);
+  set_message("mouse grab position:", s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y), 1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -298,8 +292,7 @@ void Render_Test_State::handle_input_events(
   { // wow style camera
     vec4 cam_rel;
     // grab mouse, rotate camera, restore mouse
-    if ((left_button_down || right_button_down) &&
-        (last_seen_lmb || last_seen_rmb))
+    if ((left_button_down || right_button_down) && (last_seen_lmb || last_seen_rmb))
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
@@ -323,13 +316,11 @@ void Render_Test_State::handle_input_events(
         set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
         set_message("mouse warp:",
-            s("from:", mouse.x, " ", mouse.y,
-                " to:", last_grabbed_mouse_position.x, " ",
+            s("from:", mouse.x, " ", mouse.y, " to:", last_grabbed_mouse_position.x, " ",
                 last_grabbed_mouse_position.y),
             1.0f);
         SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
-            last_grabbed_mouse_position.y);
+        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x, last_grabbed_mouse_position.y);
       }
     }
     // wrap x
@@ -403,25 +394,18 @@ void Render_Test_State::update()
   const float32 height = 1.25;
   cube_star->scale = vec3(.85);
   cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
-  const float32 anglestar =
-      wrap_to_range(pi<float32>() * (float32)sin(current_time / 2.f), 0.0f,
-          2.0f * pi<float32>());
+  const float32 anglestar = wrap_to_range(pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
   cube_star->propagate_visibility = true;
-  cube_star->orientation = angleAxis(anglestar,
-      normalize(vec3(cos(current_time * .2), sin(current_time * .2), 1)));
+  cube_star->orientation = angleAxis(anglestar, normalize(vec3(cos(current_time * .2), sin(current_time * .2), 1)));
 
   const float32 planet_scale = 0.35;
   const float32 planet_distance = 4;
   const float32 planet_year = 5;
   const float32 planet_day = 1;
   cube_planet->scale = vec3(planet_scale);
-  cube_planet->position =
-      planet_distance *
-      vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
-  const float32 angle =
-      wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
-  cube_planet->orientation =
-      angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
+  cube_planet->position = planet_distance * vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
+  const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
+  cube_planet->orientation = angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
   cube_planet->visible = sin(current_time * 6) > 0;
   cube_planet->propagate_visibility = false;
 
@@ -430,10 +414,8 @@ void Render_Test_State::update()
   const float32 moon_year = .75;
   const float32 moon_day = .1;
   cube_moon->scale = vec3(moon_scale);
-  cube_moon->position = moon_distance * vec3(cos(current_time / moon_year),
-                                            sin(current_time / moon_year), 0);
-  cube_moon->orientation =
-      angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
+  cube_moon->position = moon_distance * vec3(cos(current_time / moon_year), sin(current_time / moon_year), 0);
+  cube_moon->orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
 
   sphere->position = vec3(-4, -2, 3.5);
   sphere->scale = vec3(1.0);
@@ -445,8 +427,7 @@ void Render_Test_State::update()
     scene.lights.light_count = 4;
 
     lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
-    lights[0].cone_angle =
-        0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
+    lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
     lights[0].shadow_blur_iterations = 6;
     lights[0].shadow_blur_radius = 1.25005f;
     lights[0].max_variance = 0.0000002;
@@ -478,10 +459,8 @@ void Render_Test_State::update()
   }
 
   imgui_light_array(scene.lights);
-  lights[1].position =
-      vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-  lights[2].position =
-      vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
+  lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
+  lights[2].position = vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
 
   sun_light->position = lights[0].position;
   sun_light->scale = vec3(lights[0].radius);
@@ -490,10 +469,8 @@ void Render_Test_State::update()
   small_light->position = lights[2].position;
   small_light->scale = vec3(lights[2].radius);
 
-  gun->orientation =
-      angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
-  tiger->orientation =
-      angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
+  gun->orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
+  tiger->orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
 
   skybox->scale = vec3(4000);
   skybox->position = vec3(0, 0, 0);

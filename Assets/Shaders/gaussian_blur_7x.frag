@@ -1,10 +1,10 @@
 #version 330
 uniform sampler2D texture0;
 uniform vec2 gauss_axis_scale;
-
+uniform uint lod;
 in vec2 frag_uv;
 
-layout(location = 0) out vec4 RESULT;
+layout(location = 0) out vec4 out0;
 
 const int kernel_width = 7;
 vec2 gauss[kernel_width];
@@ -25,7 +25,7 @@ void main()
     vec2 offset =
         vec2(gauss[i].x * gauss_axis_scale.x, gauss[i].x * gauss_axis_scale.y);
     vec2 sample_uv = frag_uv + offset;
-    color += texture2D(texture0, sample_uv) * gauss[i].y;
+    color += textureLod(texture0, sample_uv,lod) * gauss[i].y;
   }
-  RESULT = color;
+  out0 = color;
 }

@@ -9,5 +9,5 @@ layout(location = 0) out vec4 out0;
 void main()
 {
   vec4 color = texture2D(texture0,frag_uv);
-  out0 = clamp(color - vec4(0.85),0,5); 
+  out0 = clamp(color - vec4(1.00),0,15); 
 }
