@@ -596,111 +596,86 @@ void Config::save(std::string filename)
   file.write(str.c_str(), str.size());
 }
 
-std::vector<std::string> lsdir(std::string dir, size_t &ndir)
+
+void loader_loop(std::unordered_map<std::string, Image_Data> &database,
+    std::queue<std::string> &load_queue, std::mutex &db_mtx,
+    std::mutex &queue_mtx)
 {
-  std::vector<std::string> dirs, files;
-#ifdef __linux__ 
-  ASSERT(false);
-#elif _WIN32
-  std::string search_path = dir + "/*";
-  WIN32_FIND_DATA fd;
-  HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
-  if (hFind != INVALID_HANDLE_VALUE) {
-    do {
-      if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-        dirs.push_back(fd.cFileName);
-      }
-      else
-      {
-        files.push_back(fd.cFileName);
-      }
-    } while (::FindNextFile(hFind, &fd));
-    ::FindClose(hFind);
-  }
-#endif
-  ndir = dirs.size();
-  dirs.insert(dirs.end(), files.begin(), files.end());
-  return dirs;
-}
-
-File_Picker::File_Picker(const char *directory)
-{
-  set_dir(directory);
-}
-
-void File_Picker::set_dir(std::string directory)
-{
-  dir = directory;
-  dircontents = lsdir(dir.c_str(), ndirs);
-}
-
-bool File_Picker::run()
-{
-  bool clicked = false;
-  bool display = true;
-  ImGui::Begin("File Picker");
-
-  char **dirstrings = (char **)calloc(dircontents.size(), sizeof(*dirstrings));
-  int i = 0;
-  for (auto &r : dircontents)
-    dirstrings[i++] = (char *)r.c_str();
-
-  ImGui::PushItemWidth(-1);
-  ImGui::ListBox("", &current_item, dirstrings, dircontents.size(), 20);
-  clicked = ImGui::Button("Choose");
-  ImGui::SameLine();
-  if (ImGui::Button("Up"))
-    set_dir(s(dir, "//.."));
-  ImGui::SameLine();
-  closed = ImGui::Button("Close");
-  ImGui::End();
-
-  bool picked = false;
-  if (clicked) {
-    if (current_item < ndirs)
-    {
-      set_dir(s(dir, "//", dircontents[current_item]));
-      current_item = 0;
-      picked = false;
-    }
-    else
-    {
-      result = dircontents[current_item];
-      picked = true;
-    }
-  }
-
-  free(dirstrings);
-  return picked;
-}
-
-std::string File_Picker::get_result()
-{
-  return s(dir + "//" + result);
-}
-
-bool File_Picker::get_closed()
-{
-  return closed;
-}
-
-bool has_img_file_extension(std::string name)
-{
-  uint32 size = name.size();
-
-  if (size < 3)
-    return false;
-
-  std::string end = name.substr(size - 4, 4);
-  if (end == ".jpg" || end == ".png" || end == ".hdr" || end == ".tga")
+  while (true)
   {
-    return true;
+    std::string path;
+
+    bool empty = true;
+    {
+      std::lock_guard<std::mutex> guard(queue_mtx);
+      empty = load_queue.empty();
+    }
+    if (!empty)
+    {
+      {
+        std::lock_guard<std::mutex> guard(queue_mtx);
+        path = load_queue.front();
+        load_queue.pop();
+      }
+
+      {
+        std::lock_guard<std::mutex> guard(db_mtx);
+        ASSERT(database.count(path));
+      }
+
+      Image_Data data;
+      data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
+      {
+        std::lock_guard<std::mutex> guard(db_mtx);
+        database[path] = data;
+      }
+    }
+  }
+}
+
+void Image_Loader::init()
+{
+  loader_thread = std::thread(loader_loop, std::ref(database),
+      std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
+  loader_thread.detach();
+}
+
+bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
+{
+  std::string path(filepath);
+
+  bool in_db = false;
+  {
+    std::lock_guard<std::mutex> guard(db_mtx);
+    in_db = database.count(path);
+  }
+  if (in_db)
+  {
+    bool ready = false;
+    {
+      std::lock_guard<std::mutex> guard(db_mtx);
+      ready = database[path].data;
+    }
+    if (ready)
+    {
+      std::lock_guard<std::mutex> guard(db_mtx);
+      *data = database[path];
+      database.erase(path);
+    }
+    return ready;
+  }
+
+  Image_Data imgdata;
+  imgdata.data = nullptr;
+  {
+    std::lock_guard<std::mutex> guard(db_mtx);
+    database[path] = imgdata;
+  }
+  {
+    std::lock_guard<std::mutex> guard(queue_mtx);
+    load_queue.push(path);
   }
   return false;
 }
 
-std::string strip_file_extension(std::string file)
-{
-  ASSERT(file.length() > 4);
-  return file.substr(0, file.size() - 3);
-}
+Image_Loader IMAGE_LOADER;

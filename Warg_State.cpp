@@ -7,6 +7,7 @@
 #include <memory>
 #include <sstream>
 #include <thread>
+#include "UI.h"
 
 using namespace glm;
 
@@ -327,11 +328,11 @@ void Warg_State::handle_input_events(
 
 void Warg_State::update()
 {
-  //// file picker example
-  //{
-  //  static auto picker = File_Picker(".");
-  //  static bool picking = false;
-  //  static std::string result = "";
+  // file picker example
+  {
+    static auto picker = File_Picker("../Assets/Textures");
+    static bool picking = false;
+    static std::string result = "";
 
   //  ImGui::Begin("File Picker Test");
   //  if (ImGui::Button("Choose file"))

@@ -466,6 +466,16 @@ void Texture::load()
     initialized = true;
     return;
   }
+  
+  uint8_t *data = nullptr;
+  Image_Data imgdata;
+  if (IMAGE_LOADER.load(t.name.c_str(), 4, &imgdata))
+  {
+    data = imgdata.data;
+    width = imgdata.x;
+    height = imgdata.y;
+    n = imgdata.comp;
+  }
 
   const bool is_hdr = stbi_is_hdr(t.name.c_str());
   void *data = nullptr;

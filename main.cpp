@@ -91,6 +91,8 @@ int main(int argc, char *argv[])
   std::string char_name;
   uint8_t team;
 
+  IMAGE_LOADER.init();
+
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
     server_main();
