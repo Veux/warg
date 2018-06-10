@@ -145,15 +145,24 @@ void SDL_Imgui_State::render()
         // too dark means the texture is in linear space and needs
         // to-srgb
 
-
+        check_gl_error();
         if (warg_texture_flag_set)
         {
           GLuint index = tex & 0x0000ffff;
           Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
-          glUniform1i(gamma_location, tex.gamma_encode);
-          glUniform1f(mip_location, tex.mip_lod_to_draw);
-          glBindTexture(GL_TEXTURE_2D, tex.ptr->texture);
-          glUniform1i(sample_lod_location, 1);
+          if (!tex.is_cubemap)
+          {
+            glUniform1i(gamma_location, tex.gamma_encode);
+            glUniform1f(mip_location, tex.mip_lod_to_draw);
+            glBindTexture(GL_TEXTURE_2D, tex.ptr->texture);
+            glUniform1i(sample_lod_location, 1);
+            check_gl_error();
+          }
+          else
+          {
+            glBindTexture(GL_TEXTURE_2D, 0);
+            check_gl_error();
+          }
         }
         else
         {
@@ -164,6 +173,7 @@ void SDL_Imgui_State::render()
           glBindTexture(GL_TEXTURE_2D, texture);
         }
 
+        check_gl_error();
         glScissor((int)pcmd->ClipRect.x, (int)(fb_height - pcmd->ClipRect.w),
             (int)(pcmd->ClipRect.z - pcmd->ClipRect.x), (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
         glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount,
@@ -172,6 +182,8 @@ void SDL_Imgui_State::render()
       idx_buffer_offset += pcmd->ElemCount;
     }
   }
+
+  IMGUI_TEXTURE_DRAWS.clear();
 
   // Restore modified GL state
   glUseProgram(last_program);

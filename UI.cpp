@@ -4,7 +4,7 @@
 #include <Windows.h>
 #endif
 #include "SDL_Imgui_State.h"
-
+extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
 std::vector<FS_Node> lsdir(std::string dir)
 {
   std::vector<FS_Node> results;
@@ -22,7 +22,13 @@ std::vector<FS_Node> lsdir(std::string dir)
       node.path = fd.cFileName;
       node.is_dir = fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
       if (!node.is_dir)
-        node.texture = Texture(dir + "//" + node.path);
+      {
+        std::string path = dir + "//" + node.path;
+        if (has_img_file_extension(path))
+        {
+          node.texture = Texture(path);
+        }
+      }
       results.push_back(node);
     } while (::FindNextFile(hFind, &fd));
     ::FindClose(hFind);
@@ -77,9 +83,30 @@ bool File_Picker::run()
     auto id1_ = ImGui::GetID(id1.c_str());
     ImGui::BeginChildFrame(id1_, tframesize,
       ImGuiWindowFlags_NoScrollWithMouse);
-    auto texture = f.is_dir ? dir_icon.get_handle() :
-      f.texture.get_handle();
-    if (ImGui::ImageButton((ImTextureID)texture, thumbsize))
+
+
+    
+    //desired method:
+    Imgui_Texture_Descriptor descriptor;
+    descriptor.ptr = f.is_dir ? dir_icon.texture : f.texture.texture;
+    uint32 data = 0;
+    if (descriptor.ptr)
+    {
+      descriptor.gamma_encode = is_float_format(descriptor.ptr->get_format());
+      IMGUI_TEXTURE_DRAWS.push_back(descriptor);
+      data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+    }
+    //if (ImGui::ImageButton((ImTextureID)data, thumbsize))
+    //...
+    // why does this uint32 data cause the clicking to not work correctly in imgui?
+    // even if you set 'handle' to '0' instead, the clicks work fine
+    // i wasn't able to fix this with another PushID
+
+    
+
+
+    uint32 handle = f.is_dir ? dir_icon.get_handle() : f.texture.get_handle();
+    if (ImGui::ImageButton((ImTextureID)handle, thumbsize))
     {
       clicked = true;
       current_item = i;

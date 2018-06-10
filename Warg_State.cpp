@@ -3,16 +3,16 @@
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
+#include "UI.h"
 #include <atomic>
 #include <memory>
 #include <sstream>
 #include <thread>
-#include "UI.h"
 
 using namespace glm;
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
-    const char *address_, const char *char_name, uint8_t team)
+Warg_State::Warg_State(
+    std::string name, SDL_Window *window, ivec2 window_size, const char *address_, const char *char_name, uint8_t team)
     : State(name, window, window_size)
 {
   local = false;
@@ -30,28 +30,24 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
   serverp = enet_host_connect(clientp, &address, 2, 0);
   ASSERT(serverp);
 
-  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
-         event.type == ENET_EVENT_TYPE_CONNECT);
+  ASSERT(enet_host_service(clientp, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
 
   Buffer b;
   auto ev = char_spawn_request_event("Eirich", 0);
   serialize(b, ev);
-  ENetPacket *packet =
-      enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
   enet_peer_send(serverp, 0, packet);
   enet_host_flush(clientp);
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  client->map.node = scene.add_aiscene(
-      "Blades_Edge/blades_edge.fbx", nullptr, &client->map.material);
+  client->map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &client->map.material);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 }
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
-    : State(name, window, window_size)
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size) : State(name, window, window_size)
 {
   local = true;
   renderer.name = "Warg_State";
@@ -61,8 +57,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
 
   client = std::make_unique<Warg_Client>(&scene, &in);
 
-  client->map.node = scene.add_aiscene(
-      "Blades_Edge/blades_edge.fbx", nullptr, &client->map.material);
+  client->map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &client->map.material);
 
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;
@@ -76,8 +71,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   reset_mouse_delta();
 }
 
-void Warg_State::handle_input_events(
-    const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
+void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
 {
   auto is_pressed = [block_kb](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
@@ -212,8 +206,7 @@ void Warg_State::handle_input_events(
     // set_message(
     //   "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
     // grab mouse, rotate camera, restore mouse
-    if ((left_button_down || right_button_down) &&
-        (last_seen_lmb || last_seen_rmb))
+    if ((left_button_down || right_button_down) && (last_seen_lmb || last_seen_rmb))
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
@@ -243,8 +236,7 @@ void Warg_State::handle_input_events(
         //        last_grabbed_mouse_position.y),
         //    1.0f);
         SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
-            last_grabbed_mouse_position.y);
+        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x, last_grabbed_mouse_position.y);
       }
     }
     // wrap x
@@ -291,8 +283,7 @@ void Warg_State::handle_input_events(
     cam_rel = normalize(ry * cam_rel);
 
     if (right_button_down)
-      out.push(
-          dir_event(client->pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
+      out.push(dir_event(client->pc, normalize(-vec3(cam_rel.x, cam_rel.y, 0))));
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -311,16 +302,13 @@ void Warg_State::handle_input_events(
     for (auto &surface : client->map.surfaces)
     {
       vec3 intersection_point;
-      bool intersects = ray_intersects_triangle(
-          player_pos, cam_rel, surface, &intersection_point);
-      if (intersects &&
-          length(player_pos - intersection_point) < effective_zoom)
+      bool intersects = ray_intersects_triangle(player_pos, cam_rel, surface, &intersection_point);
+      if (intersects && length(player_pos - intersection_point) < effective_zoom)
       {
         effective_zoom = length(player_pos - intersection_point);
       }
     }
-    cam.pos = player_pos +
-              vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.pos = player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
   }
   previous_mouse_state = mouse_state;
@@ -329,10 +317,10 @@ void Warg_State::handle_input_events(
 void Warg_State::update()
 {
   // file picker example
-  {
-    static auto picker = File_Picker("../Assets/Textures");
-    static bool picking = false;
-    static std::string result = "";
+
+ // static auto picker = File_Picker("../Assets/Textures");
+  static bool picking = false;
+  static std::string result = "";
 
   //  ImGui::Begin("File Picker Test");
   //  if (ImGui::Button("Choose file"))
@@ -350,9 +338,6 @@ void Warg_State::update()
   //  ImGui::Text(result.c_str());
   //  ImGui::End();
   //}
-
-
-   
 
   if (local)
   {
@@ -393,8 +378,7 @@ void Warg_State::update()
 
       Buffer b;
       serialize(b, ev);
-      ENetPacket *packet = enet_packet_create(
-          &b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+      ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
       enet_peer_send(serverp, 0, packet);
       enet_host_flush(clientp);
       free_warg_event(ev);
@@ -405,19 +389,16 @@ void Warg_State::update()
 
   if (client->pc >= 0)
   {
+    check_gl_error();
     imgui_light_array(scene.lights);
-
+    check_gl_error();
     ASSERT(client->chars.count(client->pc));
     Light *light = &scene.lights.lights[0];
 
     light = &scene.lights.lights[1];
-    light->direction =
-        client
-            ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0)
-            : vec3(0);
-    light->color = 50.0f * vec3(1.f + sin(current_time * 1.35),
-                               1.f + cos(current_time * 1.12),
-                               1.f + sin(current_time * .9));
+    light->direction = client ? client->chars.size() > 0 ? client->chars[client->pc].pos : vec3(0) : vec3(0);
+    light->color =
+        50.0f * vec3(1.f + sin(current_time * 1.35), 1.f + cos(current_time * 1.12), 1.f + sin(current_time * .9));
   }
 }
 

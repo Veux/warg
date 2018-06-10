@@ -1,7 +1,7 @@
 {
   "Lights": {
     "Environment": {
-      "Environment": ".//..//Assets//Textures//Environment_Maps//Alexs_Apartment//radiance.hdr",
+      "Environment": ".//Assets//Textures//Environment_Maps//Popcorn_Lobby//radiance.hdr",
       "Environment Faces": [
         "",
         "",
@@ -11,7 +11,7 @@
         ""
       ],
       "Equirectangular": true,
-      "Irradiance": ".//..//Assets//Textures//Environment_Maps//Alexs_Apartment//irradiance.hdr",
+      "Irradiance": ".//Assets//Textures//Environment_Maps//Popcorn_Lobby//irradiance.hdr",
       "Irradiance Faces": [
         "",
         "",
@@ -83,8 +83,8 @@
         "Light Type": 2,
         "Max Variance": 9.999999974752427e-07,
         "Position": [
-          1.3772181272506714,
-          -4.806586265563965,
+          -1.0146946907043457,
+          4.895956993103027,
           2.0
         ],
         "Shadow Blur Iterations": 2,
@@ -120,8 +120,8 @@
         "Light Type": 1342887656,
         "Max Variance": 9.999999974752427e-07,
         "Position": [
-          -2.8941102027893066,
-          1.9753957986831665,
+          2.950684070587158,
+          0.13613097369670868,
           0.5
         ],
         "Shadow Blur Iterations": 2,

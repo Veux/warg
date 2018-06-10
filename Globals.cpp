@@ -1,14 +1,12 @@
 #include "Globals.h"
 #include "Json.h"
 #include "Render.h"
+#include "SDL_Imgui_State.h"
 #include <SDL2/SDL.h>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
-#include "Render.h"
-#include "Json.h"
-#include "SDL_Imgui_State.h"
 #ifdef __linux__
 #elif _WIN32
 #include <Windows.h>
@@ -24,8 +22,7 @@ const float32 ATK_RANGE = 5.0f;
 const float32 JUMP_IMPULSE = 4.0f;
 
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
-const std::string BASE_TEXTURE_PATH =
-    BASE_ASSET_PATH + std::string("Textures/");
+const std::string BASE_TEXTURE_PATH = BASE_ASSET_PATH + std::string("Textures/");
 const std::string BASE_SHADER_PATH = BASE_ASSET_PATH + std::string("Shaders/");
 const std::string BASE_MODEL_PATH = BASE_ASSET_PATH + std::string("Models/");
 const std::string ERROR_TEXTURE_PATH = BASE_TEXTURE_PATH + "err.png";
@@ -43,7 +40,7 @@ float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 static Assimp::Importer importer;
 
 const int default_assimp_flags = aiProcess_FlipWindingOrder |
-                                 // aiProcess_Triangulate | 
+                                 // aiProcess_Triangulate |
                                  // aiProcess_FlipUVs |
                                  aiProcess_CalcTangentSpace |
                                  // aiProcess_MakeLeftHanded|
@@ -74,14 +71,8 @@ const aiScene *load_aiscene(std::string path, const int *assimp_flags)
 }
 
 bool all_equal(int32 a, int32 b, int32 c) { return (a == b) && (a == c); }
-bool all_equal(int32 a, int32 b, int32 c, int32 d)
-{
-  return (a == b) && (a == c) && (a == d);
-}
-bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f)
-{
-  return (a == b) && (a == c) && (a == d) && (a == f);
-}
+bool all_equal(int32 a, int32 b, int32 c, int32 d) { return (a == b) && (a == c) && (a == d); }
+bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f) { return (a == b) && (a == c) && (a == d) && (a == f); }
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f, int32 g)
 {
   return (a == b) && (a == c) && (a == d) && (a == f) && (a == g);
@@ -92,10 +83,7 @@ float32 rand(float32 min, float32 max)
   float32 result = dist(generator);
   return result;
 }
-vec3 rand(vec3 max)
-{
-  return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z));
-}
+vec3 rand(vec3 max) { return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z)); }
 
 // used to fix double escaped or wrong-slash file paths that assimp sometimes
 // gives
@@ -149,8 +137,7 @@ std::string read_file(const char *path)
   std::ifstream f(path, std::ios::in);
   if (!f.is_open())
   {
-    std::cerr << "Could not read file " << path << ". File does not exist."
-              << std::endl;
+    std::cerr << "Could not read file " << path << ". File does not exist." << std::endl;
     return "";
   }
   std::string line = "";
@@ -348,8 +335,7 @@ struct Message
 static std::vector<Message> messages;
 static std::string message_log = "";
 std::string get_message_log() { return message_log; }
-void __set_message(std::string identifier, std::string message,
-    float64 msg_duration, const char *file, uint32 line)
+void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
   const float64 time = get_real_time();
   bool found = false;
@@ -372,12 +358,10 @@ void __set_message(std::string identifier, std::string message,
     messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
-  message_log.append("Time: " + s(time) + " Event: " + identifier + " " +
-                     message + " File: " + file + ": " + std::to_string(line) +
-                     "\n\n");
+  message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + " File: " + file + ": " +
+                     std::to_string(line) + "\n\n");
 #else
-  message_log.append(
-      "Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
+  message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
 #endif
 }
 
@@ -393,8 +377,7 @@ std::string get_messages()
       it = messages.erase(it);
       continue;
     }
-    result = result + it->identifier + std::string(" ") + it->message +
-             std::string("\n");
+    result = result + it->identifier + std::string(" ") + it->message + std::string("\n");
     ++it;
   }
   return result;
@@ -408,8 +391,7 @@ void push_log_to_disk()
     std::fstream file("warg_log.txt", std::ios::out | std::ios::trunc);
     first = false;
   }
-  std::fstream file(
-      "warg_log.txt", std::ios::in | std::ios::out | std::ios::app);
+  std::fstream file("warg_log.txt", std::ios::in | std::ios::out | std::ios::app);
   file.seekg(std::ios::end);
   file.write(message_log.c_str(), message_log.size());
   file.close();
@@ -474,10 +456,7 @@ template <> std::string s<vec4>(vec4 value)
   return "color(" + r + "," + g + "," + b + "," + "a" + ")";
 }
 
-template <> std::string s<const char *>(const char *value)
-{
-  return std::string(value);
-}
+template <> std::string s<const char *>(const char *value) { return std::string(value); }
 template <> std::string s<std::string>(std::string value) { return value; }
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
@@ -502,6 +481,14 @@ const char *texture_format_to_string(GLenum texture_format)
       return "GL_RGBA";
     case GL_RGB:
       return "GL_RGB";
+    case GL_RGBA8:
+      return "GL_RGBA8";
+    case GL_RGB8:
+      return "GL_RGB8";
+    case GL_RG8:
+      return "GL_RG8";
+    case GL_R8:
+      return "GL_R8";
     case GL_RGBA32F:
       return "GL_RGBA32F";
     case GL_RGBA16F:
@@ -523,29 +510,28 @@ const char *texture_format_to_string(GLenum texture_format)
   }
 }
 
-
 bool is_float_format(GLenum texture_format)
 {
   switch (texture_format)
   {
-  case GL_RGBA32F:
-    return true;
-  case GL_RGBA16F:
-    return true;
-  case GL_RGB32F:
-    return true;
-  case GL_RGB16F:
-    return true;
-  case GL_RG32F:
-    return true;
-  case GL_RG16F:
-    return true;
-  case GL_R32F:
-    return true;
-  case GL_R16F:
-    return true;
-  default:
-    return false;
+    case GL_RGBA32F:
+      return true;
+    case GL_RGBA16F:
+      return true;
+    case GL_RGB32F:
+      return true;
+    case GL_RGB16F:
+      return true;
+    case GL_RG32F:
+      return true;
+    case GL_RG16F:
+      return true;
+    case GL_R32F:
+      return true;
+    case GL_R16F:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -577,9 +563,6 @@ void Config::load(std::string filename)
 
   if ((i = j.find("Low Quality Specular Convolution")) != j.end())
     use_low_quality_specular = *i;
-
-
-
 }
 
 void Config::save(std::string filename)
@@ -596,15 +579,13 @@ void Config::save(std::string filename)
   file.write(str.c_str(), str.size());
 }
 
-
-void loader_loop(std::unordered_map<std::string, Image_Data> &database,
-    std::queue<std::string> &load_queue, std::mutex &db_mtx,
-    std::mutex &queue_mtx)
+void loader_loop(std::unordered_map<std::string, Image_Data> &database, std::queue<std::string> &load_queue,
+    std::mutex &db_mtx, std::mutex &queue_mtx)
 {
   while (true)
   {
     std::string path;
-
+    Sleep(5);
     bool empty = true;
     {
       std::lock_guard<std::mutex> guard(queue_mtx);
@@ -622,21 +603,29 @@ void loader_loop(std::unordered_map<std::string, Image_Data> &database,
         std::lock_guard<std::mutex> guard(db_mtx);
         ASSERT(database.count(path));
       }
-
+      const bool is_hdr = stbi_is_hdr(path.c_str());
       Image_Data data;
-      data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
+      if (is_hdr)
       {
-        std::lock_guard<std::mutex> guard(db_mtx);
-        database[path] = data;
+        data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
+        data.format = GL_FLOAT;
       }
+      else
+      {
+        data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
+        data.format = GL_UNSIGNED_BYTE;
+      }
+      data.initialized = true;
+      std::lock_guard<std::mutex> guard(db_mtx);
+      database[path] = data;
     }
   }
 }
 
 void Image_Loader::init()
 {
-  loader_thread = std::thread(loader_loop, std::ref(database),
-      std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
+  loader_thread =
+      std::thread(loader_loop, std::ref(database), std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
   loader_thread.detach();
 }
 
@@ -654,7 +643,7 @@ bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
     bool ready = false;
     {
       std::lock_guard<std::mutex> guard(db_mtx);
-      ready = database[path].data;
+      ready = database[path].initialized;
     }
     if (ready)
     {
@@ -677,5 +666,19 @@ bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
   }
   return false;
 }
+bool has_img_file_extension(std::string name)
+{
+  uint32 size = name.size();
 
+  if (size < 3)
+    return false;
+
+  std::string end = name.substr(size - 4, 4);
+  if (end == ".jpg" || end == ".png" || end == ".hdr" || end == ".JPG" || end == ".PNG" || end == ".JPG" ||
+      end == ".HDR")
+  {
+    return true;
+  }
+  return false;
+}
 Image_Loader IMAGE_LOADER;

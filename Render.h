@@ -85,6 +85,7 @@ struct Texture_Handle
   GLenum get_format() { return format; }
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
+
 private:
   friend struct Texture;
   friend struct Cubemap;
@@ -163,8 +164,12 @@ struct Texture
   // black, or a random other texture
   GLuint get_handle();
 
-private:
+  bool is_initialized() { return initialized; }
+
+  // do not modify the handle
   std::shared_ptr<Texture_Handle> texture;
+
+private:
   bool initialized = false;
 };
 
@@ -337,8 +342,9 @@ struct Light_Array
   void bind(Shader &shader);
   // bool operator==(const Light_Array &rhs);
   std::array<Light, MAX_LIGHTS> lights;
-  Environment_Map environment = Environment_Map_Descriptor(
-      "Environment_Maps/Ice_Lake/Ice_Lake_Ref.hdr", "Environment_Maps/Ice_Lake/output_iem.hdr");
+  Environment_Map environment =
+      Environment_Map_Descriptor(".//Assets/Textures/Environment_Maps/Ice_Lake/Ice_Lake_Ref.hdr",
+          ".//Assets/Textures/Environment_Maps/Ice_Lake/output_iem.hdr");
   // todo: environment map json
   uint32 light_count = 0;
 };

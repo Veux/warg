@@ -14,6 +14,7 @@
 #include "Shader.h"
 #include "Third_party/imgui/imgui.h"
 #include "Timer.h"
+#include "UI.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -439,13 +440,12 @@ void Texture::load()
     return;
   }
 
-  texture = make_shared<Texture_Handle>();
-  TEXTURE2D_CACHE[t.name] = texture;
-  int32 width, height, n;
-
   // todo: other software procedural texture generators here?
   if (t.name.substr(0, 6) == "color(")
   {
+    texture = make_shared<Texture_Handle>();
+    TEXTURE2D_CACHE[t.name] = texture;
+
     t.size = ivec2(1, 1);
     t.format = GL_RGBA16F; // could detect and support other formats in here
     t.magnification_filter = GL_NEAREST;
@@ -466,30 +466,22 @@ void Texture::load()
     initialized = true;
     return;
   }
-  
-  uint8_t *data = nullptr;
+
+  void *data = nullptr;
+  GLenum data_format = GL_UNSIGNED_BYTE;
   Image_Data imgdata;
+  int32 width, height, n;
   if (IMAGE_LOADER.load(t.name.c_str(), 4, &imgdata))
   {
+    texture = make_shared<Texture_Handle>();
+    TEXTURE2D_CACHE[t.name] = texture;
     data = imgdata.data;
     width = imgdata.x;
     height = imgdata.y;
     n = imgdata.comp;
+    data_format = imgdata.format;
   }
 
-  const bool is_hdr = stbi_is_hdr(t.name.c_str());
-  void *data = nullptr;
-  GLenum data_format = GL_UNSIGNED_BYTE;
-  if (is_hdr)
-  {
-    data = stbi_loadf(t.name.c_str(), &width, &height, &n, 4);
-    data_format = GL_FLOAT;
-  }
-  else
-  {
-    data = stbi_load(t.name.c_str(), &width, &height, &n, 4);
-    data_format = GL_UNSIGNED_BYTE;
-  }
   if (!data)
   { // error loading file...
 #if DYNAMIC_TEXTURE_RELOADING
@@ -500,9 +492,9 @@ void Texture::load()
 #else
     if (!data)
     {
-      set_message("STBI failed to find or load texture: ", t.name, 3.0);
+      // set_message("STBI failed to find or load texture: ", t.name, 3.0);
       texture = nullptr;
-      initialized = true;
+      initialized = imgdata.initialized;
       return;
     }
 #endif
@@ -515,7 +507,6 @@ void Texture::load()
   if (t.process_premultiply)
   {
     ASSERT(t.format == GL_RGBA);
-    ASSERT(!is_hdr);
     ASSERT(data_format == GL_UNSIGNED_BYTE);
     for (int32 i = 0; i < width * height; ++i)
     {
@@ -1300,16 +1291,17 @@ void imgui_light_array(Light_Array &lights)
   uint32 width = 243;
 
   uint32 height = initial_height + height_per_inactive_light * lights.light_count;
-
+  check_gl_error();
   ImGui::Begin("lighting adjustment", &open, ImGuiWindowFlags_NoResize);
   {
+    check_gl_error();
     static auto radiance_map = File_Picker(".");
     static auto irradiance_map = File_Picker(".");
     static bool picking_radiance = false;
     static bool picking_irradiance = false;
     std::string radiance_map_result = lights.environment.radiance.handle->peek_filename();
     std::string irradiance_map_result = lights.environment.irradiance.handle->peek_filename();
-
+    check_gl_error();
     bool updated = false;
     if (ImGui::Button("Radiance Map"))
       picking_radiance = true;
@@ -1341,15 +1333,16 @@ void imgui_light_array(Light_Array &lights)
         picking_irradiance = false;
       }
     }
-    // ImGui::Text(s("Radiance map: ", radiance_map_result).c_str());
-    // ImGui::Text(s("Irradiance map: ", irradiance_map_result).c_str());
-
+    ImGui::Text(s("Radiance map: ", radiance_map_result).c_str());
+    ImGui::Text(s("Irradiance map: ", irradiance_map_result).c_str());
+    check_gl_error();
     if (updated)
     {
       Environment_Map_Descriptor d;
       d.radiance = radiance_map_result;
       d.irradiance = irradiance_map_result;
       lights.environment = d;
+      check_gl_error();
     }
   }
 
@@ -1859,6 +1852,7 @@ uint32 mip_levels_for_resolution(ivec2 resolution)
 }
 void Renderer::render(float64 state_time)
 {
+  check_gl_error();
 // set_message("sin(time) [-1,1]:", s(sin(state_time)), 1.0f);
 // set_message("sin(time) [ 0,1]:", s(0.5f + 0.5f * sin(state_time)), 1.0f);
 #if DYNAMIC_FRAMERATE_TARGET
@@ -1877,15 +1871,9 @@ void Renderer::render(float64 state_time)
   {
     ImGui::Begin("Renderer", &show_renderer_window);
     ImGui::BeginChild("ScrollingRegion");
-
-    // float height = 60;
-    // float width = 200;
-    // const uint32 height_per_header = 25;
-    // const uint32 height_per_treenode = 15;
-
     if (ImGui::CollapsingHeader("GPU Textures"))
     { // todo improve texture names for generated textures
-      // height += height_per_header;
+
       ImGui::Indent(5);
       vector<Imgui_Texture_Descriptor> imgui_texture_array; // all the unique textures
       for (auto &tex : TEXTURE2D_CACHE)
@@ -1914,7 +1902,6 @@ void Renderer::render(float64 state_time)
             return a.ptr->peek_filename().compare(b.ptr->peek_filename()) < 0;
           });
 
-      IMGUI_TEXTURE_DRAWS.clear();
       for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
       {
         shared_ptr<Texture_Handle> ptr = imgui_texture_array[i].ptr;
@@ -1924,12 +1911,8 @@ void Renderer::render(float64 state_time)
         imgui_texture_array[i].gamma_encode = gamma_flag;
 
         ImGui::PushID(s(i).c_str());
-        // height += height_per_treenode;
-        // width = 400;
         if (ImGui::TreeNode(ptr->peek_filename().c_str()))
-        { /*
-           height = 600;
-           width = 800;*/
+        {
           ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
           ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
           ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
@@ -1975,10 +1958,7 @@ void Renderer::render(float64 state_time)
       }
       ImGui::Unindent(5.f);
     }
-
     ImGui::EndChild();
-
-    // ImGui::SetWindowSize(ImVec2(width, height));
     ImGui::End();
   }
 
@@ -2618,6 +2598,10 @@ Cubemap::Cubemap(string equirectangular_filename)
   d.name = equirectangular_filename;
   d.format = GL_RGBA16F;
   Texture source(d);
+  while (!source.is_initialized())
+  { // stall for resource
+    source.load();
+  }
   source.bind(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);

@@ -1,7 +1,7 @@
 {
   "Lights": {
     "Environment": {
-      "Environment": ".//.//..//Assets//Textures//Environment_Maps//Milkyway//..//GrandCanyon_C_YumaPoint//..//Frozen_Waterfall//..//Desert_Highway//..//Arches_E_PineTree//radiance.hdr",
+      "Environment": ".//Assets//Textures//Environment_Maps//Alexs_Apartment//..//Arches_E_PineTree//radiance.hdr",
       "Environment Faces": [
         "",
         "",
@@ -11,7 +11,7 @@
         ""
       ],
       "Equirectangular": true,
-      "Irradiance": ".//..//Assets//Textures//Environment_Maps//Milkyway//..//Arches_E_PineTree//irradiance.hdr",
+      "Irradiance": ".//Assets//Textures//Environment_Maps//Arches_E_PineTree//irradiance.hdr",
       "Irradiance Faces": [
         "",
         "",
@@ -70,15 +70,15 @@
         "Brightness": 1.0000000116860974e-07,
         "Casts Shadows": false,
         "Color": [
-          10.465751647949219,
-          5.065830230712891,
-          0.1777784526348114
+          40.3570671081543,
+          14.918123245239258,
+          89.71378326416016
         ],
         "Cone Angle": 0.009000000543892384,
         "Direction": [
-          0.46538597345352173,
-          -2.599362850189209,
-          5.88981294631958
+          -2.0072247982025146,
+          -8.001442909240723,
+          5.854286193847656
         ],
         "Light Type": 2,
         "Max Variance": 1.500000053056283e-07,

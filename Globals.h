@@ -237,10 +237,12 @@ extern Config CONFIG;
 
 struct Image_Data
 {
-  uint8 *data;
+  void *data;
   int32 x;
   int32 y;
   int32 comp;
+  GLenum format;
+  bool initialized = false;
 };
 
 class Image_Loader
