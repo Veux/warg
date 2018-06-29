@@ -24,7 +24,6 @@ in vec3 frag_world_position;
 in mat3 frag_TBN;
 in vec2 frag_uv;
 layout(location = 0) out vec4 out0;
-#define gamma 2.2
 
 float linearize_depth(float depth)
 {
@@ -33,7 +32,6 @@ float linearize_depth(float depth)
   float z = depth * 2.0 - 1.0;
   return (2.0 * near * far) / (far + near - z * (far - near));
 }
-vec3 to_srgb(in vec3 linear) { return pow(linear, vec3(1 / gamma)); }
 
 float epsilon = 0.00001;
 void main()
@@ -51,5 +49,5 @@ void main()
     color += 0.5f*vec3(1.000f+sin(time*10)*dist);
   }
 
-  out0 = vec4(to_srgb(color), 1);
+  out0 = vec4(color, 1);
 }

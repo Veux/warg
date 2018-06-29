@@ -195,7 +195,9 @@
         MyGameUpdate(); // may use any ImGui functions, e.g. ImGui::Begin("My
  window"); ImGui::Text("Hello, world!"); ImGui::End(); MyGameRender(); // may
  use any ImGui functions as well!
-     
+     
+
+
         // Render & swap video buffers
         ImGui::Render();
         MyImGuiRenderFunction(ImGui::GetDrawData());
@@ -907,7 +909,9 @@
       // Add default Japanese ranges
       io.Fonts->AddFontFromFileTTF("myfontfile.ttf", size_in_pixels, NULL,
  io.Fonts->GetGlyphRangesJapanese());
-   
+   
+
+
       // Or create your own custom ranges (e.g. for a game you can feed your
  entire game script and only build the characters the game need)
       ImVector<ImWchar> ranges;

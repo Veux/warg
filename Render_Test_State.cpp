@@ -10,61 +10,101 @@
 #include <thread>
 using namespace glm;
 
-Render_Test_State::Render_Test_State(
-    std::string name, SDL_Window *window, ivec2 window_size)
-    : State(name, window, window_size)
+void test_spheres(Scene_Graph scene)
 {
-  free_cam = true;
-  save_graph_on_exit = true;
-  scene_graph_json_filename = s(ROOT_PATH,"Render_Test_State.json");
-  scene.root->include_in_save = true;
-  std::string str = read_file(scene_graph_json_filename.c_str());
-  try
-  {
-    json scene_descriptor = json::parse(str);
-    dejsonificate(&scene, scene_descriptor);
-  }
-  catch (std::exception &e)
-  {
-    set_message("Exception loading scene graph json:", e.what(), 55.0f);
-    set_message("JSON:\n", str.c_str(), 55.0f);
-  }
-  scene.root->include_in_save = true;
+  Node_Ptr node;
 
   Material_Descriptor material;
-  material.albedo = "pebbles_diffuse.png";
-  material.emissive = "";
-  material.normal = "pebbles_normal.png";
-  material.roughness = "pebbles_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
-  material.uv_scale = vec2(30);
-  material.casts_shadows = true;
-  material.backface_culling = false;
-  ground = scene.add_primitive_mesh(cube, "world_cube", material);
-  ground->position = {0.0f, 0.0f, -5.f};
-  ground->scale = {40.0f, 40.0f, 10.f};
-
-  Material_Descriptor sky_mat;
-  sky_mat.uv_scale = vec3(1.f);
-  sky_mat.backface_culling = false;
-  sky_mat.albedo = "skybox.jpg";
-  sky_mat.vertex_shader = "vertex_shader.vert";
-  sky_mat.frag_shader = "passthrough.frag";
-  sky_sphere = scene.add_aiscene("smoothsphere.fbx", &sky_mat);
-
-  material.casts_shadows = true;
-  material.uv_scale = vec2(4);
-  sphere = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
-
-  material.albedo = "crate_diffuse.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
+  material.albedo = "color(1,1,1,0.9)";
+  // material.emissive = "";
+  // material.normal = "test_normal.png";
+  material.roughness = "color(1,1,1,0.9)";
+  material.metalness = "color(1,1,1,.99)";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(1);
-  material.albedo_alpha_override = 128;
+  material.casts_shadows = true;
+  material.backface_culling = false;
+
+  for (uint32 i = 0; i < 8; ++i)
+  {
+    for (uint32 j = 0; j < 8; ++j)
+    {
+      for (uint32 k = 0; k < 8; ++k)
+      {
+        float roughness = float(i) / 7.f;
+        float metalness = float(j) / 7.f;
+        float color = float(k) / 7.f;
+
+        material.albedo.mod = vec4(color, 1, 1, 1.1);
+        material.roughness.mod = vec4(roughness);
+        material.metalness.mod = vec4(metalness);
+
+        Node_Ptr node = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
+        node->scale = vec3(0.5f);
+        node->position = (node->scale * 2.f * vec3(i, k, j)) + vec3(0, 6, 1);
+        scene.set_parent(node, scene.root, true);
+      }
+    }
+  }
+}
+
+Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
+    : State(name, window, window_size)
+{
+  free_cam = true;
+
+#ifndef _DEBUG
+  test_spheres(scene);
+  gun = scene.add_aiscene("Cerberus/cerberus-warg.FBX");
+  gun->position = vec3(4.0f, -3.0f, 2.0f);
+  gun->scale = vec3(5);
+#else
+  gun = scene.add_primitive_mesh(cube, "debug", Material_Descriptor());
+#endif
+
+  Material_Descriptor material;
+  material.albedo = "ground1_diffuse.png";
+  material.emissive = "";
+  material.normal = "ground1_normal.png";
+  material.roughness = "color(1,1,1,1.0)";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+  material.uv_scale = vec2(12);
+  material.casts_shadows = true;
+  material.backface_culling = false;
+  ground = scene.add_primitive_mesh(cube, "world_cube", material);
+  ground->position = {0.0f, 0.0f, -0.5f};
+  ground->scale = {35.0f, 35.0f, 1.f};
+
+  Material_Descriptor sky_mat;
+  sky_mat.backface_culling = false;
+  sky_mat.vertex_shader = "vertex_shader.vert";
+  sky_mat.frag_shader = "skybox.frag";
+  skybox = scene.add_primitive_mesh(cube, "skybox", sky_mat);
+
+  material.casts_shadows = true;
+  material.uv_scale = vec2(4);
+  material.albedo = "color(1,1,1,1)";
+  material.normal = "steel_normal.png";
+  material.roughness = "steel_roughness.png";
+  material.roughness.mod = vec4(.02);
+  material.metalness = "color(1,1,1,1)";
+  sphere = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
+  // testobjects = scene.add_aiscene("testobjects.fbx", nullptr, &material);
+  // testobjects->position = vec3(-5, 5, 1);
+  material.roughness.mod = vec4(1);
+  material.metalness.mod = vec4(1);
+
+  // crates:
+  material.albedo = "crate_albedo.png";
+  material.emissive = "test_emissive.png";
+  material.normal = "color(0.5,.5,1,0)";
+  material.roughness = "crate_roughness.png";
+  material.metalness = "crate_metalness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+  material.uv_scale = vec2(1);
   material.uses_transparency = false;
   material.casts_shadows = true;
 
@@ -74,45 +114,57 @@ Render_Test_State::Render_Test_State(
   cube_moon = scene.add_primitive_mesh(cube, "moon", material);
   scene.set_parent(cube_moon, cube_planet, false);
 
-  material.albedo_alpha_override = 0;
-  material.uses_transparency = false;
-
   cam.phi = .25;
   cam.theta = -1.5f * half_pi<float32>();
   cam.pos = vec3(3.3, 2.3, 1.4);
 
+  bool transp = false;
+
+  Material_Descriptor chest_mat;
+  chest_mat.metalness = BASE_ASSET_PATH + "Chest/chest_metalness.png";
+  chest_mat.roughness = BASE_ASSET_PATH + "Chest/roughness.png";
   for (int y = -3; y < 3; ++y)
   {
-    for (int x = -3; x < 3; ++x)
+    for (int x = -4; x < 3; ++x)
     {
       mat4 t = translate(vec3(x, y, 0.0));
       mat4 s = scale(vec3(0.25));
       mat4 basis = t * s;
-      chests.push_back(scene.add_aiscene("Chest/Chest.obj", &basis));
+      chests.push_back(scene.add_aiscene("Chest/Chest.fbx", &basis, &chest_mat));
+
+      if (transp)
+      {
+        Material_Descriptor *m = &chests.back()->owned_children[0]->owned_children[0]->model[0].second.m;
+        m->uses_transparency = true;
+        m->albedo_alpha_override = 0.4f;
+      }
+      transp = !transp;
     }
   }
+  Material_Descriptor tiger_mat;
+  tiger_mat.backface_culling = false;
+  tiger_mat.discard_on_alpha = true;
+  tiger = scene.add_aiscene("tiger/tiger.fbx", &tiger_mat);
+  tiger->position = vec3(-6, -3, 0.0);
+  tiger->scale = vec3(2.0);
+  // tiger->scale = vec3(0.45f);
+  // scene.set_parent(tiger, cube_star, true);
 
-   Material_Descriptor tiger_mat;
-   tiger_mat.backface_culling = false;
-   tiger = scene.add_aiscene("tiger/tiger.obj",&tiger_mat);
-   tiger->position = vec3(0,0,0.5);
-   tiger->scale = vec3(0.45f);
-   scene.set_parent(tiger, cube_star, true);
+  Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.fbx", &tiger_mat);
+  tiger2->position = vec3(0, 0, 0.5);
+  tiger2->scale = vec3(0.45f);
+  scene.set_parent(tiger2, cube_planet, true);
 
-   Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
-   tiger2->position = vec3(0, 0, 0.5);
-   tiger2->scale = vec3(0.45f);
-   scene.set_parent(tiger2, cube_planet, true);
-
-   Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.obj", &tiger_mat);
-   tiger3->position = vec3(0, 0, 0.5);
-   tiger3->scale = vec3(0.45f);
-   scene.set_parent(tiger3, cube_moon, true);
+  Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.fbx", &tiger_mat);
+  tiger3->position = vec3(0, 0, 0.5);
+  tiger3->scale = vec3(0.45f);
+  scene.set_parent(tiger3, cube_moon, true);
 
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
-  material.emissive = "color(1,1,1,1)";
-  material.roughness = "";
+  material.emissive = "color(11,11,11,1)";
+  material.roughness = "color(1,1,1,1)";
+  material.metalness = "color(0,0,0,0)";
   cone_light1 = scene.add_aiscene("smoothsphere.fbx", &material);
   cone_light1->name = "conelight1";
 
@@ -126,8 +178,7 @@ Render_Test_State::Render_Test_State(
   small_light = scene.add_aiscene("smoothsphere.fbx", &material);
 }
 
-void Render_Test_State::handle_input_events(
-    const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
+void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
 {
   auto is_pressed = [block_kb](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
@@ -187,9 +238,7 @@ void Render_Test_State::handle_input_events(
   last_seen_mouse_position = mouse;
 
   set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
-  set_message("mouse grab position:",
-      s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
-      1.0f);
+  set_message("mouse grab position:", s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y), 1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -243,8 +292,7 @@ void Render_Test_State::handle_input_events(
   { // wow style camera
     vec4 cam_rel;
     // grab mouse, rotate camera, restore mouse
-    if ((left_button_down || right_button_down) &&
-        (last_seen_lmb || last_seen_rmb))
+    if ((left_button_down || right_button_down) && (last_seen_lmb || last_seen_rmb))
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
@@ -268,13 +316,11 @@ void Render_Test_State::handle_input_events(
         set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
         set_message("mouse warp:",
-            s("from:", mouse.x, " ", mouse.y,
-                " to:", last_grabbed_mouse_position.x, " ",
+            s("from:", mouse.x, " ", mouse.y, " to:", last_grabbed_mouse_position.x, " ",
                 last_grabbed_mouse_position.y),
             1.0f);
         SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
-            last_grabbed_mouse_position.y);
+        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x, last_grabbed_mouse_position.y);
       }
     }
     // wrap x
@@ -345,29 +391,21 @@ void Render_Test_State::handle_input_events(
 
 void Render_Test_State::update()
 {
-
   const float32 height = 1.25;
-
-  cube_star->scale = vec3(.85); // +0.65f*vec3(sin(current_time*.2));
+  cube_star->scale = vec3(.85);
   cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
-  const float32 anglestar = wrap_to_range(
-      pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
-  // cube_star->visible = sin(current_time * 1.2) > -.25;
+  const float32 anglestar = wrap_to_range(pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
   cube_star->propagate_visibility = true;
-  cube_star->orientation = angleAxis(anglestar,
-      normalize(vec3(cos(current_time * .2), sin(current_time * .2), 1)));
+  cube_star->orientation = angleAxis(anglestar, normalize(vec3(cos(current_time * .2), sin(current_time * .2), 1)));
 
   const float32 planet_scale = 0.35;
   const float32 planet_distance = 4;
   const float32 planet_year = 5;
   const float32 planet_day = 1;
   cube_planet->scale = vec3(planet_scale);
-  cube_planet->position =
-      planet_distance *
-      vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
+  cube_planet->position = planet_distance * vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
   const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
-  cube_planet->orientation =
-      angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
+  cube_planet->orientation = angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
   cube_planet->visible = sin(current_time * 6) > 0;
   cube_planet->propagate_visibility = false;
 
@@ -376,65 +414,20 @@ void Render_Test_State::update()
   const float32 moon_year = .75;
   const float32 moon_day = .1;
   cube_moon->scale = vec3(moon_scale);
-  cube_moon->position = moon_distance * vec3(cos(current_time / moon_year),
-                                            sin(current_time / moon_year), 0);
-  cube_moon->orientation =
-      angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
+  cube_moon->position = moon_distance * vec3(cos(current_time / moon_year), sin(current_time / moon_year), 0);
+  cube_moon->orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
 
-  sphere->position = vec3(-3, 3, 1.5);
-  sphere->scale = vec3(0.4);
+  sphere->position = vec3(-4, -2, 3.5);
+  sphere->scale = vec3(1.0);
 
   auto &lights = scene.lights.lights;
-  // float32 time_of_day = 12.;
-  const vec4 night = vec4(0);
-  const vec4 day = vec4(14.f / 255.f, 155.f / 255.f, 1., 0.f);
-  const vec4 sun_low = vec4(235.f / 255.f, 28.f / 255., 0.f / 255.f, 0.f);
-  const float time_day_scale = 0.12f;
-  float32 time_of_day =
-      wrap_to_range((time_day_scale * (float32)current_time) + 135.f, 0.0f, 24.0f);
-  // time_of_day = 12.f;
-  float32 day_range = clamp(time_of_day, 5.85f, 18.85f); // 5:30am to 7:30pm
-  float32 day_t = (day_range - 5.85f) / 12.7f;           // 0-1 daytime
-
-  Bezier_Curve time_curve;
-  time_curve.points = {vec4(1.0), vec4(0.0), vec4(1.0)};
-  vec4 sky_color_t = time_curve.lerp(day_t);
-
-  float parabola_day_t = 0.5f * (1.0f + pow((day_t - 0.5f) * 2.f, 15.f));
-
-  Bezier_Curve sky_curve;
-  sky_curve.points = {night, 1.3f * sun_low, 2.6f * day, 1.3f * sun_low, night};
-  vec4 sky_color = sky_curve.lerp(clamp(parabola_day_t, 0.f, 1.f));
-  clear_color = vec3(clamp(sky_color.r, 0.f, 1.f), clamp(sky_color.g, 0.f, 1.f),
-      clamp(sky_color.b, 0.f, 1.f));
-
-  // clear_color = day_t*vec3(1);
-  scene.lights.additional_ambient =
-      vec3(sky_color.r, sky_color.g, sky_color.b) * vec3(0.03) +
-      vec3(94.f / 255.f, 155.f / 255.f, 1.) * vec3(0.01);
-
-  sky_sphere->scale = vec3(500);
-  sky_sphere->position = vec3(0, 0, -350);
-  sky_sphere->visible = true;
-  sky_sphere->owned_children[0]->model[0].second.m.albedo.mod =
-      1.5f * vec4(clear_color, 1);
-  /*
-    scene.lights.light_count = 3;*/
-
-  vec3 sun_pos =
-      180.f * vec3(cos(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0,
-                  sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)));
-  sun_light->position = sun_pos;
-  sun_light->scale = vec3(10.);
-
   static bool first = true;
   if (false)
   {
     scene.lights.light_count = 4;
 
     lights[0].color = 150000.f * vec3(1.0, .95, 1.0);
-    lights[0].cone_angle =
-        0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
+    lights[0].cone_angle = 0.042; //+ 0.14*sin(current_time);lights[0].casts_shadows = true;
     lights[0].shadow_blur_iterations = 6;
     lights[0].shadow_blur_radius = 1.25005f;
     lights[0].max_variance = 0.0000002;
@@ -442,6 +435,7 @@ void Render_Test_State::update()
     lights[0].shadow_far_plane = 350.f;
     lights[0].shadow_fov = radians(15.5f);
     lights[0].casts_shadows = true;
+    lights[0].type = Light_Type::spot;
 
     lights[1].type = Light_Type::spot;
     lights[1].direction = vec3(0);
@@ -464,25 +458,21 @@ void Render_Test_State::update()
     first = false;
   }
 
-  lights[0].position = sun_pos;
-  lights[0].type = Light_Type::spot;
-  lights[0].direction = vec3(0);
-  lights[0].ambient =
-      0.003f *
-      clamp((float32)sin(two_pi<float32>() * ((time_of_day - 6.f) / 24.f)), 0.f, 1.f);
-
-  lights[1].position =
-      vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-
-  cone_light1->position =
-      lights[1].position + 0.5f * normalize(lights[1].position);
-  cone_light1->scale = vec3(.25);
-
-  lights[2].position =
-      vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-
-  small_light->position = lights[2].position;
-  small_light->scale = vec3(0.1);
-
   imgui_light_array(scene.lights);
+  lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
+  lights[2].position = vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
+
+  sun_light->position = lights[0].position;
+  sun_light->scale = vec3(lights[0].radius);
+  cone_light1->position = lights[1].position;
+  cone_light1->scale = vec3(lights[1].radius);
+  small_light->position = lights[2].position;
+  small_light->scale = vec3(lights[2].radius);
+
+  gun->orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
+  tiger->orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
+
+  skybox->scale = vec3(4000);
+  skybox->position = vec3(0, 0, 0);
+  skybox->visible = true;
 }

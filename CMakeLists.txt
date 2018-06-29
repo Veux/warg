@@ -19,7 +19,7 @@ file (GLOB CPP_FILES "*.cpp")
 file (GLOB HEADER_FILES "*.h" ".hpp")
 file (GLOB SHADER_FILES "Assets/Shaders/*.vert" "Assets/Shaders/*.frag")
 
-file (GLOB THIRD_PARTY "Third_party/imgui/*.h" "Third_party/imgui/*.cpp" "Third_party/utf8/*.h")
+file (GLOB THIRD_PARTY "Third_party/imgui/*.h" "Third_party/imgui/*.cpp" "Third_party/utf8/*.h" "Third_party/stb/*.h")
 
 add_executable (warg ${CPP_FILES} ${HEADER_FILES} ${SHADER_FILES} ${THIRD_PARTY})
 

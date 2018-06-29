@@ -40,4 +40,4 @@ Mesh_Primitive s_to_primitive(std::string p);
 
 void copy_mesh_data(std::vector<vec3> &dst, aiVector3D *src, uint32 length);
 void copy_mesh_data(std::vector<vec2> &dst, aiVector3D *src, uint32 length);
-Mesh_Data load_mesh(const aiMesh *aimesh, std::string unique_identifier);
+Mesh_Data load_mesh(const aiMesh *aimesh, std::string unique_identifier, const aiScene* scene);

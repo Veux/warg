@@ -1,0 +1,399 @@
+{
+  "Lights": {
+    "Environment": {
+      "Environment": ".//Assets//Textures//Environment_Maps//Alexs_Apartment//..//Arches_E_PineTree//radiance.hdr",
+      "Environment Faces": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "Equirectangular": true,
+      "Irradiance": ".//Assets//Textures//Environment_Maps//Arches_E_PineTree//irradiance.hdr",
+      "Irradiance Faces": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    "Light Count": 2,
+    "Lights": [
+      {
+        "Ambient": 0.0,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 317.4000244140625,
+        "Casts Shadows": true,
+        "Color": [
+          0.920634925365448,
+          0.7494478225708008,
+          0.321491539478302
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "Light Type": 2,
+        "Max Variance": 1.0000000116860974e-07,
+        "Position": [
+          70.0,
+          121.00000762939453,
+          58.000003814697266
+        ],
+        "Shadow Blur Iterations": 4,
+        "Shadow Blur Radius": 0.6000000238418579,
+        "Shadow Far Plane": 182.00001525878906,
+        "Shadow FoV": 0.6000000238418579,
+        "Shadow Map Resolution": [
+          4096,
+          4096
+        ],
+        "Shadow Near Plane": 102.10000610351563
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0000000116860974e-07,
+        "Casts Shadows": false,
+        "Color": [
+          40.3570671081543,
+          14.918123245239258,
+          89.71378326416016
+        ],
+        "Cone Angle": 0.009000000543892384,
+        "Direction": [
+          -2.0072247982025146,
+          -8.001442909240723,
+          5.854286193847656
+        ],
+        "Light Type": 2,
+        "Max Variance": 1.500000053056283e-07,
+        "Position": [
+          -1.0,
+          0.0,
+          15.000000953674316
+        ],
+        "Shadow Blur Iterations": 1,
+        "Shadow Blur Radius": 1.100000023841858,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 0.30000001192092896,
+        "Shadow Map Resolution": [
+          512,
+          512
+        ],
+        "Shadow Near Plane": 1.100000023841858
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.2000000476837158,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 1,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          23.000001907348633
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      },
+      {
+        "Ambient": 0.00039999998989515007,
+        "Attenuation": [
+          1.0,
+          0.2199999988079071,
+          0.0
+        ],
+        "Brightness": 1.0,
+        "Casts Shadows": false,
+        "Color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "Cone Angle": 0.15000000596046448,
+        "Direction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Light Type": 0,
+        "Max Variance": 9.999999974752427e-07,
+        "Position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Shadow Blur Iterations": 2,
+        "Shadow Blur Radius": 0.5,
+        "Shadow Far Plane": 100.0,
+        "Shadow FoV": 1.5707963705062866,
+        "Shadow Map Resolution": [
+          1024,
+          1024
+        ],
+        "Shadow Near Plane": 0.10000000149011612
+      }
+    ]
+  },
+  "SCENE_GRAPH_ROOT": null
+}

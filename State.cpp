@@ -11,9 +11,23 @@
 using namespace glm;
 
 State::State(std::string name, SDL_Window *window, ivec2 window_size)
-    : state_name(name), window(window), renderer(window, window_size)
+    : state_name(name), window(window), renderer(window, window_size,name)
 {
   reset_mouse_delta();
+  save_graph_on_exit = true;
+  scene_graph_json_filename = s(ROOT_PATH, name, ".json");
+  std::string str = read_file(scene_graph_json_filename.c_str());
+  try
+  {
+    json scene_descriptor = json::parse(str);
+    dejsonificate(&scene, scene_descriptor);
+  }
+  catch (std::exception &e)
+  {
+    set_message("Exception loading scene graph json:", e.what(), 55.0f);
+    set_message("JSON:\n", str.c_str(), 55.0f);
+  }
+  scene.root->include_in_save = false;
 }
 
 State::~State()
@@ -125,6 +139,7 @@ void State::handle_input(State **current_state,
         ivec2 trash;
         SDL_GetRelativeMouseState(&trash.x, &trash.y);
         //(*current_state)->reset_mouse_delta();
+        (*current_state)->renderer.previous_color_target_missing = true;
         return;
       }
       if (e.key.keysym.sym == SDLK_F2)
@@ -142,6 +157,7 @@ void State::handle_input(State **current_state,
         ivec2 trash;
         SDL_GetRelativeMouseState(&trash.x, &trash.y);
         //(*current_state)->reset_mouse_delta();
+        (*current_state)->renderer.previous_color_target_missing = true;
         return;
       }
     }

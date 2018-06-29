@@ -8,12 +8,12 @@ using namespace glm;
 enum struct Light_Type;
 struct Light_Uniform_Location_Cache
 {
-  GLint position, direction, irradiance, attenuation, ambient, cone_angle, type,
+  GLint position, direction, flux, attenuation, ambient, cone_angle, type,
       shadow_map_transform, max_variance, shadow_map_enabled;
 };
 struct Light_Uniform_Value_Cache
 {
-  vec3 position, direction, irradiance, attenuation, ambient;
+  vec3 position, direction, flux, attenuation, ambient;
   float cone_angle;
   Light_Type type;
   mat4 shadow_map_transform;
@@ -46,7 +46,7 @@ struct Shader
     std::unordered_map<std::string, GLint> location_cache;
     Light_Uniform_Value_Cache light_values_cache[MAX_LIGHTS] = {};
     Light_Uniform_Location_Cache light_locations_cache[MAX_LIGHTS] = {};
-    GLuint light_count_location, additional_ambient_location;
+    GLuint light_count_location;
     uint32 light_count = 0;
     vec3 additional_ambient = vec3(0);
     void set_location_cache();

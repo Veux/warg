@@ -182,7 +182,7 @@ namespace utf8
             iterator () {}
             explicit iterator (const octet_iterator& octet_it): it(octet_it) {}
             // the default "big three" are OK
-            octet_iterator base () const { return it; }
+            octet_iterator environment () const { return it; }
             uint32_t operator * () const
             {
                 octet_iterator temp = it;

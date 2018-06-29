@@ -11,6 +11,12 @@ void from_json(const json &j, Mesh &p);
 void to_json(json &result, const Material &p);
 void from_json(const json &j, Material &p);
 
+void to_json(json &result, const Environment_Map &p);
+void from_json(const json &j, Environment_Map &p);
+
+void to_json(json &result, const Environment_Map_Descriptor &p);
+void from_json(const json &j, Environment_Map_Descriptor &p);
+
 void to_json(json &result, const Texture_Descriptor &p);
 void from_json(const json &j, Texture_Descriptor &p);
 

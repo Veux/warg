@@ -68,6 +68,8 @@ struct Scene_Graph
   // resource
   // false if you will manage the ownership of the Node_Ptr yourself
   // true if you would like the parent entity to own the pointer
+  // todo: preserve_current_world_space_transformation
+  //
   void set_parent(std::weak_ptr<Scene_Graph_Node> ptr,
       std::weak_ptr<Scene_Graph_Node> desired_parent,
       bool parent_owned = false);
