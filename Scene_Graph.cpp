@@ -37,24 +37,24 @@ Scene_Graph_Node::Scene_Graph_Node(string name, const aiNode *node,
     const mat4 *import_basis_, const aiScene *scene, string scene_file_path,
     Uint32 *mesh_num, Material_Descriptor *material_override)
 {
-  ASSERT(node);
+   ASSERT(node);
   ASSERT(scene);
   this->name = name;
   basis = copy(node->mTransformation);
   if (import_basis_)
     import_basis = *import_basis_;
-  size_t slice = scene_file_path.find_last_of("/\\");
-  string dir = scene_file_path.substr(0, slice) + '/';
-  filename_of_import = scene_file_path;
+
+
+
   for (uint32 i = 0; i < node->mNumMeshes; ++i)
   {
     auto ai_i = node->mMeshes[i];
     const aiMesh *aimesh = scene->mMeshes[ai_i];
     (*mesh_num) += 1;
     string unique_id = scene_file_path + to_string(*mesh_num);
-    Mesh mesh(aimesh, unique_id);
+    Mesh mesh(aimesh, name, unique_id, scene);
     aiMaterial *ptr = scene->mMaterials[aimesh->mMaterialIndex];
-    Material material(ptr, dir, material_override);
+    Material material(ptr, scene_file_path, material_override);
     model.push_back({mesh, material});
   }
   owned_children.reserve(node->mNumChildren);
@@ -75,9 +75,9 @@ void Scene_Graph::add_graph_node(const aiNode *node,
   ASSERT(node);
   ASSERT(aiscene);
   string name = copy(&node->mName);
-  // construct just this node in the main node array
-  auto thing = Scene_Graph_Node(name, node, import_basis, aiscene,
-      scene_file_path, mesh_num, material_override);
+  //// construct just this node in the main node array
+  //auto thing = Scene_Graph_Node(name, node, import_basis, aiscene,
+  //    scene_file_path, mesh_num, material_override);
 
   shared_ptr<Scene_Graph_Node> new_node =
       make_shared<Scene_Graph_Node>(name, node, import_basis, aiscene,

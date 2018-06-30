@@ -18,7 +18,7 @@ Warg_Server::Warg_Server(bool local)
   map = make_blades_edge();
   if (local)
   {
-    map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
+    map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
     update_colliders();
   }
   else
@@ -61,7 +61,7 @@ void Warg_Server::process_packets()
           if (p.second.peer == event.peer)
             ev.peer = p.first;
         }
-		ASSERT(ev.peer >= 0);
+        ASSERT(ev.peer >= 0);
         process_event(ev);
         break;
       }
@@ -261,7 +261,7 @@ void Warg_Server::process_jump_event(Warg_Event ev)
 
   if (c->grounded)
   {
-    c->vel.z += 4;
+    c->vel.z += JUMP_IMPULSE;
     c->grounded = false;
   }
 }
@@ -404,7 +404,7 @@ void Warg_Server::update_colliders()
   for (auto &entity : entities)
   {
     auto transform = [&](vec3 p) {
-      vec4 q = vec4(p.x, p.y, p.z, 1.0) * entity.transformation;
+      vec4 q = entity.transformation*vec4(p.x, p.y, p.z, 1.0);
       return vec3(q.x, q.y, q.z);
     };
     auto &mesh_data = entity.mesh->mesh->data;
@@ -415,9 +415,9 @@ void Warg_Server::update_colliders()
       b = mesh_data.indices[i + 1];
       c = mesh_data.indices[i + 2];
       Triangle t;
-      t.a = mesh_data.positions[a];
-      t.c = mesh_data.positions[b];
-      t.b = mesh_data.positions[c];
+      t.a = transform(mesh_data.positions[a]);
+      t.c = transform(mesh_data.positions[b]);
+      t.b = transform(mesh_data.positions[c]);
       colliders.push_back(t);
     }
   }

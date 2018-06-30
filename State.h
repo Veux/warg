@@ -36,7 +36,7 @@ struct State
   bool running = true;
   void performance_output();
   std::string state_name;
-  Render renderer;
+  Renderer renderer;
   Scene_Graph scene;
 
   bool free_cam = false;
