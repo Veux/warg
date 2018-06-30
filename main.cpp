@@ -1,3 +1,6 @@
+
+#include "Json.h"
+
 #include "Globals.h"
 #include "Render.h"
 #include "Render_Test_State.h"
@@ -10,11 +13,10 @@
 #include "Third_party/imgui/imgui.h"
 #include "Third_party/imgui/imgui_internal.h"
 #include <enet/enet.h>
+#include <glbinding/Binding.h>
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
-
-#include <glbinding/Binding.h>
 
 void gl_before_check(const glbinding::FunctionCall &f)
 {
@@ -80,12 +82,17 @@ void server_main()
 
 int main(int argc, char *argv[])
 {
+  const char* config_filename = "config.json";
+  CONFIG.load(config_filename);
+  SDL_Delay(1000);
   bool client = false;
   std::string address;
   std::string char_name;
   uint8_t team;
 
   WARG_SERVER = false;
+  IMAGE_LOADER.init();
+
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
     WARG_SERVER = true;
@@ -112,7 +119,7 @@ int main(int argc, char *argv[])
   ASSERT(!WARG_SERVER);
 
   SDL_ClearError();
-  generator.seed(1234);
+  generator.seed(uint32(SDL_GetPerformanceCounter()));
   SDL_Init(SDL_INIT_EVERYTHING);
   uint32 display_count = uint32(SDL_GetNumVideoDisplays());
   std::stringstream s;
@@ -131,7 +138,7 @@ int main(int argc, char *argv[])
   }
   set_message(s.str());
 
-  ivec2 window_size = {1280, 720};
+  ivec2 window_size = {CONFIG.resolution.x, CONFIG.resolution.y };
   int32 flags = SDL_WINDOW_OPENGL;
   // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -181,13 +188,14 @@ int main(int argc, char *argv[])
   SDL_Imgui_State trash_imgui(window);
   SDL_Imgui_State imgui(window);
   ImGui::StyleColorsDark();
-
+  check_gl_error();
   trash_imgui.bind();
   trash_imgui.new_frame(window, 0.1f);
   trash_imgui.end_frame();
 
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
+  Render_Test_State render_test_state("Render Test State", window, window_size);
 
   Warg_State *game_state;
   if (client)
@@ -197,7 +205,6 @@ int main(int argc, char *argv[])
     game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
   states.push_back((State *)game_state);
-  Render_Test_State render_test_state("Render Test State", window, window_size);
   states.push_back((State *)&render_test_state);
   State *current_state = &*states[0];
   std::vector<SDL_Event> imgui_event_accumulator;
@@ -257,7 +264,7 @@ int main(int argc, char *argv[])
       {
         s->paused = true;
         current_state->renderer.set_render_scale(
-            current_state->renderer.get_render_scale());
+          s->renderer.get_render_scale());
         break;
       }
 
@@ -267,14 +274,14 @@ int main(int argc, char *argv[])
         imgui.bind();
         imgui.handle_input(&imgui_event_accumulator);
         imgui_event_accumulator.clear();
-        imgui.new_frame(window,imgui_dt_accumulator);
+        imgui.new_frame(window, imgui_dt_accumulator);
         s->update();
         renderer_requires_trashgui_wrapping = false;
       }
       else
       {
         trash_imgui.bind();
-        trash_imgui.new_frame(window,dt);
+        trash_imgui.new_frame(window, dt);
         s->update();
         trash_imgui.end_frame();
       }
@@ -286,7 +293,7 @@ int main(int argc, char *argv[])
     if (renderer_requires_trashgui_wrapping)
     {
       ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
-      trash_imgui.new_frame(window,0.1f);
+      trash_imgui.new_frame(window, 0.1f);
     }
     current_state->render(current_state->current_time);
 
@@ -328,5 +335,6 @@ int main(int argc, char *argv[])
   push_log_to_disk();
   imgui.destroy();
   SDL_Quit();
+  CONFIG.save(config_filename);
   return 0;
 }

@@ -280,7 +280,7 @@ namespace utf8
               throw std::out_of_range("Invalid utf-8 iterator position");
       }
       // the default "big three" are OK
-      octet_iterator base () const { return it; }
+      octet_iterator environment () const { return it; }
       uint32_t operator * () const
       {
           octet_iterator temp = it;

@@ -11,6 +11,7 @@
 static GLuint load_shader(
     const std::string &vertex_path, const std::string &fragment_path)
 {
+  check_gl_error();
   std::string full_vertex_path = BASE_SHADER_PATH + vertex_path;
   std::string full_fragment_path = BASE_SHADER_PATH + fragment_path;
   GLuint vert_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -22,9 +23,9 @@ static GLuint load_shader(
   GLint result = 0;
   int logLength;
   bool success = true;
-
-  set_message("Compiling vertex shader: ", vertex_path);
-  set_message("Vertex Shader Source: \n", vs);
+  set_message("Loading shader: ", s(vertex_path," ",fragment_path));
+  //set_message("Compiling vertex shader: ", vertex_path);
+  //set_message("Vertex Shader Source: \n", vs);
   glShaderSource(vert_shader, 1, &vert, NULL);
   glCompileShader(vert_shader);
   glGetShaderiv(vert_shader, GL_COMPILE_STATUS, &result);
@@ -33,11 +34,12 @@ static GLuint load_shader(
   glGetShaderiv(vert_shader, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<GLchar> vertShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(vert_shader, logLength, NULL, &vertShaderError[0]);
+  if (vertShaderError.size() !=1)
   set_message(s("Vertex shader ", vertex_path, " compilation result: "),
       &vertShaderError[0]);
 
-  set_message("Compiling fragment shader: ", fragment_path);
-  set_message("Fragment Shader Source: \n", fs);
+  //set_message("Compiling fragment shader: ", fragment_path);
+  //set_message("Fragment Shader Source: \n", fs);
   glShaderSource(frag_shader, 1, &frag, NULL);
   glCompileShader(frag_shader);
   glGetShaderiv(frag_shader, GL_COMPILE_STATUS, &result);
@@ -46,10 +48,12 @@ static GLuint load_shader(
   glGetShaderiv(frag_shader, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<GLchar> fragShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(frag_shader, logLength, NULL, &fragShaderError[0]);
+
+  if (fragShaderError.size() != 1)
   set_message(s("Fragment shader ", fragment_path, " compilation result: "),
       &fragShaderError[0]);
 
-  set_message("Linking shaders");
+  //set_message("Linking shaders");
   GLuint program = glCreateProgram();
   glAttachShader(program, vert_shader);
   glAttachShader(program, frag_shader);
@@ -60,9 +64,12 @@ static GLuint load_shader(
   glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
   std::vector<char> err((logLength > 1) ? logLength : 1);
   glGetProgramInfoLog(program, logLength, NULL, &err[0]);
+
+  if (err.size() != 1)
   set_message(
       s("GL Shader linker output for: ", vertex_path, " ", fragment_path),
       &err[0]);
+
   glDeleteShader(vert_shader);
   glDeleteShader(frag_shader);
 
@@ -71,8 +78,9 @@ static GLuint load_shader(
     set_message("GL Shader failed.");
     ASSERT(0);
   }
-  set_message("Shader linked successfully");
+  set_message("Shader loaded successfully");
 
+  check_gl_error();
   return program;
 }
 
@@ -96,7 +104,7 @@ void Shader::load(const std::string &vertex, const std::string &fragment)
     program = ptr =
         std::make_shared<Shader_Handle>(load_shader(vertex, fragment));
     cache[key] = ptr;
-    set_message("Caching light uniform locations");
+    //set_message("Caching light uniform locations");
     program->vs = vs = std::string(vertex);
     program->fs = fs = std::string(fragment);
     use();
@@ -196,17 +204,17 @@ void Shader::Shader_Handle::set_location_cache()
   glGetIntegerv(GL_CURRENT_PROGRAM, &id);
   ASSERT(id == program);
 #endif
-  set_message(s("Shader: ", vs, fs));
-  set_message("Assigning texture units to shader samplers");
+  //set_message(s("Shader: ", vs, fs));
+  //set_message("Assigning texture units to shader samplers");
   std::string str;
   for (uint32 i = 0; i < MAX_TEXTURE_SAMPLERS; ++i)
   {
     str = s("texture", i);
     GLint locationc = get_uniform_location(str.c_str());
     GLint location = glGetUniformLocation(program, str.c_str());
-    ASSERT(location == locationc);
+    ASSERT(location == locationc);/*
     set_message(s("Assigning sampler uniform name: ", str,
-        " with location: ", location, " to texture unit: ", i));
+        " with location: ", location, " to texture unit: ", i));*/
     glUniform1i(location, i);
   }
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
@@ -218,8 +226,8 @@ void Shader::Shader_Handle::set_location_cache()
 
     ASSERT(location == locationc);
 
-    set_message(s("Assigning sampler uniform name: ", str, " with location: ",
-        location, " to texture unit: ", (GLuint)Texture_Location::s0 + i));
+    //set_message(s("Assigning sampler uniform name: ", str, " with location: ",
+    //    location, " to texture unit: ", (GLuint)Texture_Location::s0 + i));
     glUniform1i(location, (GLuint)Texture_Location::s0 + i);
   }
 
@@ -236,8 +244,8 @@ void Shader::Shader_Handle::set_location_cache()
     light_locations_cache[i].direction =
         glGetUniformLocation(program, str.c_str());
 
-    str = s("lights[", i, "].color");
-    light_locations_cache[i].color = glGetUniformLocation(program, str.c_str());
+    str = s("lights[", i, "].flux");
+    light_locations_cache[i].flux = glGetUniformLocation(program, str.c_str());
 
     str = s("lights[", i, "].attenuation");
     light_locations_cache[i].attenuation =
@@ -268,7 +276,5 @@ void Shader::Shader_Handle::set_location_cache()
   }
 
   light_count_location = glGetUniformLocation(program, "number_of_lights");
-  additional_ambient_location =
-      glGetUniformLocation(program, "additional_ambient");
   light_location_cache_set = true;
 }

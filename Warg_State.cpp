@@ -3,6 +3,7 @@
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
+#include "UI.h"
 #include <atomic>
 #include <memory>
 #include <sstream>
@@ -10,8 +11,8 @@
 
 using namespace glm;
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
-    const char *address_, const char *char_name, uint8_t team)
+Warg_State::Warg_State(
+    std::string name, SDL_Window *window, ivec2 window_size, const char *address_, const char *char_name, uint8_t team)
     : State(name, window, window_size)
 {
   local = false;
@@ -19,22 +20,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
   map = make_blades_edge();
   sdb = make_spell_db();
 
-  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
-
+  map.node = scene.add_aiscene("blades_edge.fbx", nullptr, &map.material);
   collider_cache = collect_colliders(scene);
-
-  clear_color = vec3(94. / 255., 155. / 255., 1.);
-  scene.lights.light_count = 1;
-  Light *light = &scene.lights.lights[0];
-  light->position = vec3{25, 25, 200.};
-  light->color = 3000.0f * vec3(1.0f, 0.93f, 0.92f);
-  light->attenuation = vec3(1.0f, .045f, .0075f);
-  light->direction = vec3(25.0f, 25.0f, 0.0f);
-  light->ambient = 0.001f;
-  light->cone_angle = 0.15f;
-  light->type = Light_Type::spot;
-  light->casts_shadows = false;
-
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 
@@ -51,30 +38,34 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
   serverp = enet_host_connect(clientp, &address, 2, 0);
   ASSERT(serverp);
 
-  ASSERT(enet_host_service(clientp, &event, 5000) > 0 &&
-    event.type == ENET_EVENT_TYPE_CONNECT);
+  ASSERT(enet_host_service(clientp, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
 
   Buffer b;
   auto msg = Char_Spawn_Request_Message(char_name, 0);
   msg.t = get_real_time();
   msg.serialize(b);
-  ENetPacket *packet =
-    enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
   enet_peer_send(serverp, 0, packet);
   enet_host_flush(clientp);
 }
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
-    : State(name, window, window_size)
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size) : State(name, window, window_size)
 {
   local = true;
-
+  renderer.name = "Warg_State";
   map = make_blades_edge();
   sdb = make_spell_db();
 
-  map.node = scene.add_aiscene("blades_edge.obj", nullptr, &map.material);
-
+  map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
   collider_cache = collect_colliders(scene);
+
+  Material_Descriptor sky_mat;
+  sky_mat.backface_culling = false;
+  sky_mat.vertex_shader = "vertex_shader.vert";
+  sky_mat.frag_shader = "skybox.frag";
+  Node_Ptr skybox = scene.add_primitive_mesh(cube, "skybox", sky_mat);
+  skybox->scale = vec3(500);
+  scene.set_parent(skybox, scene.root, true);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
@@ -84,8 +75,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size)
   push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 }
 
-void Warg_State::handle_input_events(
-    const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
+void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
 {
   auto is_pressed = [block_kb](int key) {
     const static Uint8 *keys = SDL_GetKeyboardState(NULL);
@@ -93,8 +83,8 @@ void Warg_State::handle_input_events(
     return block_kb ? 0 : keys[key];
   };
 
-  set_message("warg state block kb state: ", s(block_kb), 1.0f);
-  set_message("warg state block mouse state: ", s(block_mouse), 1.0f);
+  // set_message("warg state block kb state: ", s(block_kb), 1.0f);
+  // set_message("warg state block mouse state: ", s(block_mouse), 1.0f);
 
   for (auto &_e : events)
   {
@@ -147,10 +137,10 @@ void Warg_State::handle_input_events(
   ivec2 mouse_delta = mouse - last_seen_mouse_position;
   last_seen_mouse_position = mouse;
 
-  set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
-  set_message("mouse grab position:",
-      s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
-      1.0f);
+  // set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
+  // set_message("mouse grab position:",
+  //    s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
+  //    1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -215,41 +205,38 @@ void Warg_State::handle_input_events(
   }
   else
   { // wow style camera
-    set_message(
-        "mouse_is_relative_mode: ", s(SDL_GetRelativeMouseMode()), 1.0f);
     // grab mouse, rotate camera, restore mouse
-    if ((left_button_down || right_button_down) &&
-        (last_seen_lmb || last_seen_rmb))
+    if ((left_button_down || right_button_down) && (last_seen_lmb || last_seen_rmb))
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
-        set_message("mouse grab event", "", 1.0f);
+        // set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_mouse_position = mouse;
         SDL_SetRelativeMouseMode(SDL_bool(true));
         SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       }
-      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      // set_message("mouse delta: ", s(mouse_delta.x, " ",
+      // mouse_delta.y), 1.0f);
       SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
       cam.theta += mouse_delta.x * MOUSE_X_SENS;
       cam.phi += mouse_delta.y * MOUSE_Y_SENS;
-      set_message("mouse is grabbed", "", 1.0f);
+      // set_message("mouse is grabbed", "", 1.0f);
     }
     else
     { // not holding button
-      set_message("mouse is free", "", 1.0f);
+      // set_message("mouse is free", "", 1.0f);
       if (mouse_grabbed)
       { // first unhold
-        set_message("mouse release event", "", 1.0f);
+        // set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-        set_message("mouse warp:",
-            s("from:", mouse.x, " ", mouse.y,
-                " to:", last_grabbed_mouse_position.x, " ",
-                last_grabbed_mouse_position.y),
-            1.0f);
+        // set_message("mouse warp:",
+        //    s("from:", mouse.x, " ", mouse.y,
+        //        " to:", last_grabbed_mouse_position.x, " ",
+        //        last_grabbed_mouse_position.y),
+        //    1.0f);
         SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x,
-            last_grabbed_mouse_position.y);
+        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x, last_grabbed_mouse_position.y);
       }
     }
     // wrap x
@@ -297,9 +284,7 @@ void Warg_State::handle_input_events(
 
     ASSERT(pc && chars.count(pc));
 
-    vec3 dir = right_button_down ?
-      normalize(-vec3(cam_rel.x, cam_rel.y, 0)) :
-      chars[pc].physics.dir;
+    vec3 dir = right_button_down ? normalize(-vec3(cam_rel.x, cam_rel.y, 0)) : chars[pc].physics.dir;
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -312,7 +297,7 @@ void Warg_State::handle_input_events(
       m |= Move_Status::Right;
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
-    
+
     register_move_command((Move_Status)m, dir);
   }
   previous_mouse_state = mouse_state;
@@ -384,12 +369,11 @@ void Warg_State::update()
     push(make_unique<Ping_Message>());
 
   bool show_stats_bar = true;
-  ImVec2 stats_bar_pos = { 10, 10 };
+  ImVec2 stats_bar_pos = {10, 10};
   ImGui::SetNextWindowPos(stats_bar_pos);
   ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
-    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-    ImGuiWindowFlags_AlwaysAutoResize);
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+          ImGuiWindowFlags_AlwaysAutoResize);
   ImGui::Text("Ping: %dms", latency_tracker.get_latency());
   ImGui::End();
 
@@ -403,8 +387,7 @@ void Warg_State::update()
 
       if (cmd.i == lastphys.cmdn + 1)
       {
-        auto newphys = move_char(lastphys, cmd, p.radius, p.e_stats.speed,
-          collider_cache);
+        auto newphys = move_char(lastphys, cmd, p.radius, p.e_stats.speed, collider_cache);
         newphys.cmdn = cmd.i;
         p.physbuf.push_back(newphys);
         lastphys = p.physbuf.back();
@@ -415,21 +398,18 @@ void Warg_State::update()
     set_message("collision iterations", s(its), 5);
     p.physics = lastphys;
     set_message("buf size", s("phys: ", p.physbuf.size(), ", move: ", movebuf.size()), 5);
- 
+
     float effective_zoom = cam.zoom;
     for (auto &surface : collider_cache)
     {
       vec3 intersection_point;
-      bool intersects = ray_intersects_triangle(
-        p.physics.pos, cam_rel, surface, &intersection_point);
-      if (intersects &&
-        length(p.physics.pos - intersection_point) < effective_zoom)
+      bool intersects = ray_intersects_triangle(p.physics.pos, cam_rel, surface, &intersection_point);
+      if (intersects && length(p.physics.pos - intersection_point) < effective_zoom)
       {
         effective_zoom = length(p.physics.pos - intersection_point);
       }
     }
-    cam.pos = p.physics.pos +
-      vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.pos = p.physics.pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
   }
 
@@ -440,8 +420,7 @@ void Warg_State::update()
       c.physics.pos = {-1000, -1000, 0};
     c.mesh->position = c.physics.pos;
     c.mesh->orientation =
-        angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(),
-            vec3(0.f, 0.f, 1.f));
+        angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
     c.mesh->scale = c.radius * vec3(2);
 
     static Material_Descriptor material;
@@ -451,16 +430,14 @@ void Warg_State::update()
     material.roughness = "crate_roughness.png";
     material.vertex_shader = "vertex_shader.vert";
     material.frag_shader = "fragment_shader.frag";
-    static Node_Ptr serv_mesh =
-      scene.add_primitive_mesh(cube, "player_cube", material);
+    static Node_Ptr serv_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
     if (c.physbuf.size())
     {
       auto &phys = c.physbuf.front();
       serv_mesh->position = phys.pos;
       serv_mesh->scale = c.radius * vec3(2);
       serv_mesh->orientation =
-        angleAxis((float32)atan2(phys.dir.y, phys.dir.x) - half_pi<float32>(),
-        vec3(0.f, 0.f, 1.f));
+          angleAxis((float32)atan2(phys.dir.y, phys.dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
     }
   }
 
@@ -470,10 +447,7 @@ void Warg_State::update()
     float32 d = length(chars[o.target].physics.pos - o.pos);
     if (d < 0.5)
     {
-      set_message("object hit",
-          chars[o.caster].name + "'s " + o.def.name + " hit " +
-              chars[o.target].name,
-          3.0f);
+      set_message("object hit", chars[o.caster].name + "'s " + o.def.name + " hit " + chars[o.target].name, 3.0f);
 
       i = spell_objs.erase(i);
     }
@@ -504,8 +478,7 @@ void Warg_State::update()
       Buffer b;
       ev->serialize(b);
       enet_uint32 flags = ev->reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
-      ENetPacket *packet = enet_packet_create(
-          &b.data[0], b.data.size(), flags);
+      ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), flags);
       enet_peer_send(serverp, 0, packet);
       enet_host_flush(clientp);
 
@@ -515,103 +488,22 @@ void Warg_State::update()
   static bool show_demo_window = false;
   static bool show_another_window = false;
 
-  static bool show_warg_state_window = true;
-  if (show_warg_state_window)
-  {
-    ImGui::Begin("warg_state.cpp Window", &show_warg_state_window);
-    ImGui::Text("Hello from warg_state.cpp window!");
-    if (ImGui::Button("Close Me"))
-      show_warg_state_window = false;
-    
-    static Texture test("../Assets/Textures/pebbles_diffuse.png");
-
-    ImGui::Image((ImTextureID)test.texture->texture, ImVec2(256, 256));
-    ImGui::End();
-  }
-
   // meme
   if (pc && chars.count(pc))
   {
-    Light *light = &scene.lights.lights[0];
-    ASSERT(chars.count(pc));
-    static bool first = true;
-    if (first)
-    {
-      first = false;
-
-      clear_color = vec3(94. / 255., 155. / 255., 1.);
-      scene.lights.light_count = 2;
-
-      light->position = vec3{ 25.01f, 25.0f, 45.f };
-      light->color = 700.0f * vec3(1.0f, 0.93f, 0.92f);
-      light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->ambient = 0.0005f;
-      light->cone_angle = 0.03f;
-
-      light->type = Light_Type::spot;
-      light->casts_shadows = true;
-      // there was a divide by 0 here, a camera can't point exactly straight down
-      light->direction = vec3(0);
-      // see Render.h for what these are for:
-      light->shadow_blur_iterations = 1;
-      light->shadow_blur_radius = 1.25005f;
-      light->max_variance = 0.00000001;
-      light->shadow_near_plane = 15.f;
-      light->shadow_far_plane = 80.f;
-      light->shadow_fov = radians(90.f);
-
-      light = &scene.lights.lights[1];
-
-      light->position = vec3{ .5, .2, 10.10 };
-      light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-        1.f + cos(current_time * 1.12),
-        1.f + sin(current_time * .9));
-      light->attenuation = vec3(1.0f, .045f, .0075f);
-      light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
-      light->ambient = 0.0f;
-      light->cone_angle = 0.012f;
-      light->type = Light_Type::spot;
-      light->casts_shadows = true;
-      // see Render.h for what these are for:
-      light->shadow_blur_iterations = 1;
-      light->shadow_blur_radius = 0.55005f;
-      light->max_variance = 0.0000003;
-      light->shadow_near_plane = 4.51f;
-      light->shadow_far_plane = 50.f;
-      light->shadow_fov = radians(40.f);
-    }
+    check_gl_error();
+    imgui_light_array(scene.lights);
+    check_gl_error();
+    Light *light = &scene.lights.lights[1];
     light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
-
-    ImGui::Begin("lighting adjustment");
-    ImGui::DragFloat("Main light shadow fov", &light->shadow_fov, 0.005f);
-
-    static float uv_scale = 14.575f;
-    ImGui::DragFloat("map_uv_scale", &uv_scale, 0.005f);
-
-
-    ImGui::End();
-
-    //->shh->bby.get()->is->ok->c++[0]->is->*->get()[0]->*(*fast);
-    map.node.get()->owned_children[0].get()->model[0].second.m.uv_scale = vec2(uv_scale);
-
-
-    light = &scene.lights.lights[1];
-    light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
-    light->color = 100.0f * vec3(1.f + sin(current_time * 1.35),
-      1.f + cos(current_time * 1.12),
-      1.f + sin(current_time * .9));
+    light->color =
+        50.0f * vec3(1.f + sin(current_time * 1.35), 1.f + cos(current_time * 1.12), 1.f + sin(current_time * .9));
   }
 }
 
-void Char_Spawn_Message::handle(Warg_State &state)
-{
-  state.add_char(id, team, name.c_str());
-}
+void Char_Spawn_Message::handle(Warg_State &state) { state.add_char(id, team, name.c_str()); }
 
-void Player_Control_Message::handle(Warg_State &state)
-{
-  state.pc = character;
-}
+void Player_Control_Message::handle(Warg_State &state) { state.pc = character; }
 
 void Player_Geometry_Message::handle(Warg_State &state)
 {
@@ -630,8 +522,7 @@ void Player_Geometry_Message::handle(Warg_State &state)
 
       if (id[i] == state.pc)
       {
-        while (character.physbuf.size() &&
-          character.physbuf.front().cmdn < phys.cmdn)
+        while (character.physbuf.size() && character.physbuf.front().cmdn < phys.cmdn)
           character.physbuf.pop_front();
         if (character.physbuf.size())
         {
@@ -664,32 +555,32 @@ void Cast_Error_Message::handle(Warg_State &state)
 
   switch (err)
   {
-  case (int)CastErrorType::Silenced:
-    msg += "silenced";
-    break;
-  case (int)CastErrorType::GCD:
-    msg += "GCD";
-    break;
-  case (int)CastErrorType::SpellCD:
-    msg += "spell on cooldown";
-    break;
-  case (int)CastErrorType::NotEnoughMana:
-    msg += "not enough mana";
-    break;
-  case (int)CastErrorType::InvalidTarget:
-    msg += "invalid target";
-    break;
-  case (int)CastErrorType::OutOfRange:
-    msg += "out of range";
-    break;
-  case (int)CastErrorType::AlreadyCasting:
-    msg += "already casting";
-    break;
-  case (int)CastErrorType::Success:
-    ASSERT(false);
-    break;
-  default:
-    ASSERT(false);
+    case (int)CastErrorType::Silenced:
+      msg += "silenced";
+      break;
+    case (int)CastErrorType::GCD:
+      msg += "GCD";
+      break;
+    case (int)CastErrorType::SpellCD:
+      msg += "spell on cooldown";
+      break;
+    case (int)CastErrorType::NotEnoughMana:
+      msg += "not enough mana";
+      break;
+    case (int)CastErrorType::InvalidTarget:
+      msg += "invalid target";
+      break;
+    case (int)CastErrorType::OutOfRange:
+      msg += "out of range";
+      break;
+    case (int)CastErrorType::AlreadyCasting:
+      msg += "already casting";
+      break;
+    case (int)CastErrorType::Success:
+      ASSERT(false);
+      break;
+    default:
+      ASSERT(false);
   }
 
   set_message("SpellError:", msg, 10);
@@ -748,22 +639,22 @@ void Object_Launch_Message::handle(Warg_State &state)
   ASSERT(state.chars.count(target));
   auto &target_ = state.chars[target];
 
-  //Material_Descriptor material;
-  //material.albedo = "crate_diffuse.png";
-  //material.emissive = "test_emissive.png";
-  //material.normal = "test_normal.png";
-  //material.roughness = "crate_roughness.png";
-  //material.vertex_shader = "vertex_shader.vert";
-  //material.frag_shader = "world_origin_distance.frag";
+  // Material_Descriptor material;
+  // material.albedo = "crate_diffuse.png";
+  // material.emissive = "test_emissive.png";
+  // material.normal = "test_normal.png";
+  // material.roughness = "crate_roughness.png";
+  // material.vertex_shader = "vertex_shader.vert";
+  // material.frag_shader = "world_origin_distance.frag";
 
-  //SpellObjectInst obji;
-  //obji.def = state.sdb->objects[object];
-  //obji.caster = caster;
-  //obji.target = target;
-  //obji.pos = pos;
-  //obji.mesh = state.scene.add_primitive_mesh(cube, "spell_object_cube", material);
-  //obji.mesh->scale = vec3(0.4f);
-  //spell_objs.push_back(obji);
+  // SpellObjectInst obji;
+  // obji.def = state.sdb->objects[object];
+  // obji.caster = caster;
+  // obji.target = target;
+  // obji.pos = pos;
+  // obji.mesh = state.scene.add_primitive_mesh(cube, "spell_object_cube", material);
+  // obji.mesh->scale = vec3(0.4f);
+  // spell_objs.push_back(obji);
 
   std::string msg;
   msg += caster_.name;
@@ -774,15 +665,9 @@ void Object_Launch_Message::handle(Warg_State &state)
   set_message("ObjectLaunch:", msg, 10);
 }
 
-void Ping_Message::handle(Warg_State &state)
-{
-  state.push(make_unique<Ack_Message>());
-}
+void Ping_Message::handle(Warg_State &state) { state.push(make_unique<Ack_Message>()); }
 
-void Ack_Message::handle(Warg_State &state)
-{
-  state.latency_tracker.ack_received();
-}
+void Ack_Message::handle(Warg_State &state) { state.latency_tracker.ack_received(); }
 
 void Warg_State::add_char(UID id, int team, const char *name)
 {
@@ -852,7 +737,4 @@ void Latency_Tracker::ack_received()
   last_latency = last_ack - last_ping;
 }
 
-uint32 Latency_Tracker::get_latency()
-{
-  return round(last_latency * 1000);
-}
+uint32 Latency_Tracker::get_latency() { return round(last_latency * 1000); }

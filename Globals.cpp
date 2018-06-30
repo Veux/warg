@@ -1,31 +1,35 @@
 #include "Globals.h"
+#include "Json.h"
+#include "Render.h"
+#include "SDL_Imgui_State.h"
 #include <SDL2/SDL.h>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
+#ifdef __linux__
+#elif _WIN32
+#include <Windows.h>
+#endif
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 20.0f;
 const float32 MOVE_SPEED = 2.0f * dt;
 const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
-const float32 ZOOM_STEP = 0.2f;
+const float32 ZOOM_STEP = 0.5f;
 const float32 ATK_RANGE = 5.0f;
-#ifdef __linux__
-#define ROOT_PATH std::string("../")
-#elif _WIN32
-#define ROOT_PATH std::string("../")
-#endif
+const float32 JUMP_IMPULSE = 4.0f;
+
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
-const std::string BASE_TEXTURE_PATH =
-    BASE_ASSET_PATH + std::string("Textures/");
+const std::string BASE_TEXTURE_PATH = BASE_ASSET_PATH + std::string("Textures/");
 const std::string BASE_SHADER_PATH = BASE_ASSET_PATH + std::string("Shaders/");
 const std::string BASE_MODEL_PATH = BASE_ASSET_PATH + std::string("Models/");
 const std::string ERROR_TEXTURE_PATH = BASE_TEXTURE_PATH + "err.png";
 Timer PERF_TIMER = Timer(1000);
 Timer FRAME_TIMER = Timer(60);
 Timer SWAP_TIMER = Timer(60);
+Config CONFIG;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
@@ -38,12 +42,13 @@ bool WARG_SERVER = false;
 static Assimp::Importer importer;
 
 const int default_assimp_flags = aiProcess_FlipWindingOrder |
-                                 aiProcess_Triangulate | aiProcess_FlipUVs |
+                                 // aiProcess_Triangulate |
+                                 // aiProcess_FlipUVs |
                                  aiProcess_CalcTangentSpace |
                                  // aiProcess_MakeLeftHanded|
                                  // aiProcess_JoinIdenticalVertices |
                                  // aiProcess_PreTransformVertices |
-                                 aiProcess_GenUVCoords |
+                                 // aiProcess_GenUVCoords |
                                  // aiProcess_OptimizeGraph|
                                  // aiProcess_ImproveCacheLocality|
                                  // aiProcess_OptimizeMeshes|
@@ -68,14 +73,8 @@ const aiScene *load_aiscene(std::string path, const int *assimp_flags)
 }
 
 bool all_equal(int32 a, int32 b, int32 c) { return (a == b) && (a == c); }
-bool all_equal(int32 a, int32 b, int32 c, int32 d)
-{
-  return (a == b) && (a == c) && (a == d);
-}
-bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f)
-{
-  return (a == b) && (a == c) && (a == d) && (a == f);
-}
+bool all_equal(int32 a, int32 b, int32 c, int32 d) { return (a == b) && (a == c) && (a == d); }
+bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f) { return (a == b) && (a == c) && (a == d) && (a == f); }
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f, int32 g)
 {
   return (a == b) && (a == c) && (a == d) && (a == f) && (a == g);
@@ -86,10 +85,7 @@ float32 rand(float32 min, float32 max)
   float32 result = dist(generator);
   return result;
 }
-vec3 rand(vec3 max)
-{
-  return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z));
-}
+vec3 rand(vec3 max) { return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z)); }
 
 // used to fix double escaped or wrong-slash file paths that assimp sometimes
 // gives
@@ -143,8 +139,7 @@ std::string read_file(const char *path)
   std::ifstream f(path, std::ios::in);
   if (!f.is_open())
   {
-    std::cerr << "Could not read file " << path << ". File does not exist."
-              << std::endl;
+    std::cerr << "Could not read file " << path << ". File does not exist." << std::endl;
     return "";
   }
   std::string line = "";
@@ -342,8 +337,7 @@ struct Message
 static std::vector<Message> messages;
 static std::string message_log = "";
 std::string get_message_log() { return message_log; }
-void __set_message(std::string identifier, std::string message,
-    float64 msg_duration, const char *file, uint32 line)
+void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
   const float64 time = get_real_time();
   bool found = false;
@@ -366,12 +360,10 @@ void __set_message(std::string identifier, std::string message,
     messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
-  message_log.append("Time: " + s(time) + " Event: " + identifier + " " +
-                     message + " File: " + file + ": " + std::to_string(line) +
-                     "\n\n");
+  message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + " File: " + file + ": " +
+                     std::to_string(line) + "\n\n");
 #else
-  message_log.append(
-      "Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
+  message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
 #endif
 }
 
@@ -387,8 +379,7 @@ std::string get_messages()
       it = messages.erase(it);
       continue;
     }
-    result = result + it->identifier + std::string(" ") + it->message +
-             std::string("\n");
+    result = result + it->identifier + std::string(" ") + it->message + std::string("\n");
     ++it;
   }
   return result;
@@ -402,8 +393,7 @@ void push_log_to_disk()
     std::fstream file("warg_log.txt", std::ios::out | std::ios::trunc);
     first = false;
   }
-  std::fstream file(
-      "warg_log.txt", std::ios::in | std::ios::out | std::ios::app);
+  std::fstream file("warg_log.txt", std::ios::in | std::ios::out | std::ios::app);
   file.seekg(std::ios::end);
   file.write(message_log.c_str(), message_log.size());
   file.close();
@@ -447,10 +437,28 @@ std::string mtos(glm::mat4 m)
   return result;
 }
 
-template <> std::string s<const char *>(const char *value)
+template <> std::string s<Light_Type>(Light_Type value)
 {
-  return std::string(value);
+  if (value == Light_Type::parallel)
+    return "Parallel";
+  if (value == Light_Type::omnidirectional)
+    return "Omnidirectional";
+  if (value == Light_Type::spot)
+    return "Spotlight";
+
+  return "s(): Unknown Light_Type";
 }
+
+template <> std::string s<vec4>(vec4 value)
+{
+  std::string r = std::to_string(value.r);
+  std::string g = std::to_string(value.g);
+  std::string b = std::to_string(value.b);
+  std::string a = std::to_string(value.a);
+  return "color(" + r + "," + g + "," + b + "," + "a" + ")";
+}
+
+template <> std::string s<const char *>(const char *value) { return std::string(value); }
 template <> std::string s<std::string>(std::string value) { return value; }
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
@@ -462,3 +470,217 @@ UID uid()
   ASSERT(i);
   return i++;
 }
+
+const char *texture_format_to_string(GLenum texture_format)
+{
+  switch (texture_format)
+  {
+    case GL_SRGB8_ALPHA8:
+      return "GL_SRGB8_ALPHA8";
+    case GL_SRGB:
+      return "GL_SRGB";
+    case GL_RGBA:
+      return "GL_RGBA";
+    case GL_RGB:
+      return "GL_RGB";
+    case GL_RGBA8:
+      return "GL_RGBA8";
+    case GL_RGB8:
+      return "GL_RGB8";
+    case GL_RG8:
+      return "GL_RG8";
+    case GL_R8:
+      return "GL_R8";
+    case GL_RGBA32F:
+      return "GL_RGBA32F";
+    case GL_RGBA16F:
+      return "GL_RGBA16F";
+    case GL_RGB32F:
+      return "GL_RGB32F";
+    case GL_RGB16F:
+      return "GL_RGB16F";
+    case GL_RG32F:
+      return "GL_RG32F";
+    case GL_RG16F:
+      return "GL_RG16F";
+    case GL_R32F:
+      return "GL_R32F";
+    case GL_R16F:
+      return "GL_R16F";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+bool is_float_format(GLenum texture_format)
+{
+  switch (texture_format)
+  {
+    case GL_RGBA32F:
+      return true;
+    case GL_RGBA16F:
+      return true;
+    case GL_RGB32F:
+      return true;
+    case GL_RGB16F:
+      return true;
+    case GL_RG32F:
+      return true;
+    case GL_RG16F:
+      return true;
+    case GL_R32F:
+      return true;
+    case GL_R16F:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void Config::load(std::string filename)
+{
+  json j;
+  try
+  {
+    std::string str = read_file(filename.c_str());
+    j = json::parse(str);
+  }
+  catch (...)
+  {
+    return;
+  }
+  auto i = j.end();
+
+  if ((i = j.find("Resolution")) != j.end())
+    resolution = *i;
+
+  if ((i = j.find("Render Scale")) != j.end())
+    render_scale = *i;
+
+  if ((i = j.find("Fov")) != j.end())
+    fov = *i;
+
+  if ((i = j.find("Shadow Map Scale")) != j.end())
+    shadow_map_scale = *i;
+
+  if ((i = j.find("Low Quality Specular Convolution")) != j.end())
+    use_low_quality_specular = *i;
+}
+
+void Config::save(std::string filename)
+{
+  json j;
+  j["Resolution"] = resolution;
+  j["Render Scale"] = render_scale;
+  j["Fov"] = fov;
+  j["Shadow Map Scale"] = shadow_map_scale;
+  j["Low Quality Specular Convolution"] = use_low_quality_specular;
+
+  std::string str = pretty_dump(j);
+  std::fstream file(filename, std::ios::out);
+  file.write(str.c_str(), str.size());
+}
+
+void loader_loop(std::unordered_map<std::string, Image_Data> &database, std::queue<std::string> &load_queue,
+    std::mutex &db_mtx, std::mutex &queue_mtx)
+{
+  while (true)
+  {
+    std::string path;
+    Sleep(5);
+    bool empty = true;
+    {
+      std::lock_guard<std::mutex> guard(queue_mtx);
+      empty = load_queue.empty();
+    }
+    if (!empty)
+    {
+      {
+        std::lock_guard<std::mutex> guard(queue_mtx);
+        path = load_queue.front();
+        load_queue.pop();
+      }
+
+      {
+        std::lock_guard<std::mutex> guard(db_mtx);
+        ASSERT(database.count(path));
+      }
+      const bool is_hdr = stbi_is_hdr(path.c_str());
+      Image_Data data;
+      if (is_hdr)
+      {
+        data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
+        data.format = GL_FLOAT;
+      }
+      else
+      {
+        data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
+        data.format = GL_UNSIGNED_BYTE;
+      }
+      data.initialized = true;
+      std::lock_guard<std::mutex> guard(db_mtx);
+      database[path] = data;
+    }
+  }
+}
+
+void Image_Loader::init()
+{
+  loader_thread =
+      std::thread(loader_loop, std::ref(database), std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
+  loader_thread.detach();
+}
+
+bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
+{
+  std::string path(filepath);
+
+  bool in_db = false;
+  {
+    std::lock_guard<std::mutex> guard(db_mtx);
+    in_db = database.count(path);
+  }
+  if (in_db)
+  {
+    bool ready = false;
+    {
+      std::lock_guard<std::mutex> guard(db_mtx);
+      ready = database[path].initialized;
+    }
+    if (ready)
+    {
+      std::lock_guard<std::mutex> guard(db_mtx);
+      *data = database[path];
+      database.erase(path);
+    }
+    return ready;
+  }
+
+  Image_Data imgdata;
+  imgdata.data = nullptr;
+  {
+    std::lock_guard<std::mutex> guard(db_mtx);
+    database[path] = imgdata;
+  }
+  {
+    std::lock_guard<std::mutex> guard(queue_mtx);
+    load_queue.push(path);
+  }
+  return false;
+}
+bool has_img_file_extension(std::string name)
+{
+  uint32 size = name.size();
+
+  if (size < 3)
+    return false;
+
+  std::string end = name.substr(size - 4, 4);
+  if (end == ".jpg" || end == ".png" || end == ".hdr" || end == ".JPG" || end == ".PNG" || end == ".JPG" ||
+      end == ".HDR")
+  {
+    return true;
+  }
+  return false;
+}
+Image_Loader IMAGE_LOADER;

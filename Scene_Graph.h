@@ -31,7 +31,6 @@ struct Scene_Graph_Node
   // tree, or just this specific node
   bool propagate_visibility = true;
 
-  Scene_Graph_Node(std::string name, const mat4 *import_basis = nullptr);
   Scene_Graph_Node(std::string name, const aiNode *node,
       const mat4 *import_basis_, const aiScene *scene, std::string scene_path,
       Uint32 *mesh_num, Material_Descriptor *material_override);
@@ -39,16 +38,22 @@ struct Scene_Graph_Node
   std::vector<std::shared_ptr<Scene_Graph_Node>> owned_children;
   std::vector<std::weak_ptr<Scene_Graph_Node>> unowned_children;
 
-protected:
-  friend Scene_Graph;
-  // assimp's import mtransformation, propagates to children
-  mat4 basis = mat4(1);
+  bool include_in_save = true;
 
   // user-defined import_basis does NOT propagate down the matrix stack
   // applied before all other transformations
   // essentially, this takes us from import basis -> our world basis
   // should be the same for every node that was part of the same import
   mat4 import_basis = mat4(1);
+
+  // is blank for non-assimp imports
+  std::string filename_of_import;
+  bool is_root_of_import = false;
+
+protected:
+  friend Scene_Graph;
+  // assimp's import mtransformation, propagates to children
+  mat4 basis = mat4(1);
 
   std::weak_ptr<Scene_Graph_Node> parent;
 };
@@ -58,9 +63,13 @@ struct Scene_Graph
   Scene_Graph();
 
   // makes all transformations applied to ptr relative to the parent
+
   // parent_owned indicates whether or not the parent owns the pointer and
-  // resource  use false if you will manage the ownership of the Node_Ptr
-  // yourself use true if you would like the parent entity to own the pointer
+  // resource
+  // false if you will manage the ownership of the Node_Ptr yourself
+  // true if you would like the parent entity to own the pointer
+  // todo: preserve_current_world_space_transformation
+  //
   void set_parent(std::weak_ptr<Scene_Graph_Node> ptr,
       std::weak_ptr<Scene_Graph_Node> desired_parent,
       bool parent_owned = false);

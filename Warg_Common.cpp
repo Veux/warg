@@ -1,13 +1,10 @@
 #include "Warg_Common.h"
 
 std::vector<Triangle> collect_colliders(const Scene_Graph &scene);
-void check_collision(
-    Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
-vec3 collide_char_with_world(Collision_Packet &colpkt,
-    int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
+void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
+vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
-void collide_and_slide_char(Character_Physics &phys, vec3 &radius,
-    const vec3 &vel, const vec3 &gravity,
+void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders);
 
 Map make_blades_edge()
@@ -15,21 +12,24 @@ Map make_blades_edge()
   Map blades_edge;
 
   // spawns
-  blades_edge.spawn_pos[0] = {5, 5, 5};
+  blades_edge.spawn_pos[0] = {0, 0, 15};
   blades_edge.spawn_pos[1] = {45, 45, 5};
   blades_edge.spawn_dir[0] = {0, 1, 0};
   blades_edge.spawn_dir[1] = {0, -1, 0};
 
-  blades_edge.mesh.unique_identifier = "blades_edge_map";
-  blades_edge.material.backface_culling = false;
-  blades_edge.material.albedo = "crate_diffuse.png";
-  blades_edge.material.emissive = "";
-  blades_edge.material.normal = "test_normal.png";
-  blades_edge.material.roughness = "crate_roughness.png";
-  blades_edge.material.vertex_shader = "vertex_shader.vert";
-  blades_edge.material.frag_shader = "fragment_shader.frag";
-  blades_edge.material.casts_shadows = true;
-  blades_edge.material.uv_scale = vec2(16);
+  // blades_edge.mesh.unique_identifier = "blades_edge_map";
+  // blades_edge.material.backface_culling = false;
+  // blades_edge.material.albedo = "crate_diffuse.png";
+  // blades_edge.material.emissive = "";
+  // blades_edge.material.normal = "test_normal.png";
+  // blades_edge.material.roughness = "crate_roughness.png";
+  // blades_edge.material.vertex_shader = "vertex_shader.vert";
+  // blades_edge.material.frag_shader = "fragment_shader.frag";
+  // blades_edge.material.casts_shadows = true;
+  // blades_edge.material.uv_scale = vec2(16);
+  blades_edge.material.albedo.wrap_s = GL_TEXTURE_WRAP_S;
+  blades_edge.material.albedo.wrap_t = GL_TEXTURE_WRAP_T;
+  blades_edge.material.metalness.mod = vec4(0);
 
   return blades_edge;
 }
@@ -100,8 +100,8 @@ void Character::apply_modifiers()
       apply_modifier(*modifier);
 }
 
-Character_Physics move_char(Character_Physics physics, Movement_Command command,
-    vec3 radius, float32 speed, std::vector<Triangle> colliders)
+Character_Physics move_char(
+    Character_Physics physics, Movement_Command command, vec3 radius, float32 speed, std::vector<Triangle> colliders)
 {
   vec3 &pos = physics.pos;
   vec3 &dir = command.dir;
@@ -144,16 +144,14 @@ Character_Physics move_char(Character_Physics physics, Movement_Command command,
   if (grounded)
     vel.z = 0;
 
-  collide_and_slide_char(
-      physics, radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
+  collide_and_slide_char(physics, radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
 
   return physics;
 }
 
 void Character::move(float32 dt, const std::vector<Triangle> &colliders)
 {
-  physics = move_char(
-      physics, last_movement_command, radius, e_stats.speed, colliders);
+  physics = move_char(physics, last_movement_command, radius, e_stats.speed, colliders);
   physics.cmdn = last_movement_command.i;
 }
 
@@ -165,7 +163,7 @@ std::vector<Triangle> collect_colliders(Scene_Graph &scene)
   for (auto &entity : entities)
   {
     auto transform = [&](vec3 p) {
-      vec4 q = vec4(p.x, p.y, p.z, 1.0) * entity.transformation;
+      vec4 q = entity.transformation * vec4(p.x, p.y, p.z, 1.0);
       return vec3(q.x, q.y, q.z);
     };
     auto &mesh_data = entity.mesh->mesh->data;
@@ -176,9 +174,9 @@ std::vector<Triangle> collect_colliders(Scene_Graph &scene)
       b = mesh_data.indices[i + 1];
       c = mesh_data.indices[i + 2];
       Triangle t;
-      t.a = mesh_data.positions[a];
-      t.c = mesh_data.positions[b];
-      t.b = mesh_data.positions[c];
+      t.a = transform(mesh_data.positions[a]);
+      t.c = transform(mesh_data.positions[b]);
+      t.b = transform(mesh_data.positions[c]);
       collider_cache.push_back(t);
     }
   }
@@ -186,8 +184,7 @@ std::vector<Triangle> collect_colliders(Scene_Graph &scene)
   return collider_cache;
 }
 
-void check_collision(
-    Collision_Packet &colpkt, const std::vector<Triangle> &colliders)
+void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders)
 {
   for (auto &surface : colliders)
   {
@@ -199,8 +196,7 @@ void check_collision(
   }
 }
 
-vec3 collide_char_with_world(Collision_Packet &colpkt,
-    int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
+vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders)
 {
   float epsilon = 0.005f;
@@ -239,8 +235,7 @@ vec3 collide_char_with_world(Collision_Packet &colpkt,
   Plane sliding_plane = Plane(slide_plane_origin, slide_plane_normal);
 
   vec3 new_destination_point =
-      destination_point -
-      sliding_plane.signed_distance_to(destination_point) * slide_plane_normal;
+      destination_point - sliding_plane.signed_distance_to(destination_point) * slide_plane_normal;
 
   vec3 new_vel_vec = new_destination_point - colpkt.intersection_point;
 
@@ -250,12 +245,10 @@ vec3 collide_char_with_world(Collision_Packet &colpkt,
   }
 
   collision_recursion_depth++;
-  return collide_char_with_world(colpkt, collision_recursion_depth,
-      new_base_point, new_vel_vec, colliders);
+  return collide_char_with_world(colpkt, collision_recursion_depth, new_base_point, new_vel_vec, colliders);
 }
 
-void collide_and_slide_char(Character_Physics &physics, vec3 &radius,
-    const vec3 &vel, const vec3 &gravity,
+void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders)
 {
   Collision_Packet colpkt;
@@ -270,8 +263,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius,
 
   collision_recursion_depth = 0;
 
-  vec3 final_pos = collide_char_with_world(
-      colpkt, collision_recursion_depth, e_space_pos, e_space_vel, colliders);
+  vec3 final_pos = collide_char_with_world(colpkt, collision_recursion_depth, e_space_pos, e_space_vel, colliders);
 
   if (physics.grounded)
   {
@@ -293,8 +285,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius,
   e_space_vel = gravity / colpkt.e_radius;
   collision_recursion_depth = 0;
 
-  final_pos = collide_char_with_world(
-      colpkt, collision_recursion_depth, final_pos, e_space_vel, colliders);
+  final_pos = collide_char_with_world(colpkt, collision_recursion_depth, final_pos, e_space_vel, colliders);
 
   colpkt.pos_r3 = final_pos * colpkt.e_radius;
   colpkt.vel_r3 = vec3(0, 0, -0.05);
@@ -314,11 +305,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius,
 bool Character_Physics::operator==(const Character_Physics &b) const
 {
   auto &a = *this;
-  return a.pos == b.pos && a.dir == b.dir && a.vel == b.vel &&
-         a.grounded == b.grounded;
+  return a.pos == b.pos && a.dir == b.dir && a.vel == b.vel && a.grounded == b.grounded;
 }
 
-bool Character_Physics::operator!=(const Character_Physics &b) const
-{
-  return !(*this == b);
-}
+bool Character_Physics::operator!=(const Character_Physics &b) const { return !(*this == b); }

@@ -10,6 +10,9 @@
 #include <iostream>
 #include <random>
 #include <unordered_map>
+#include <queue>
+#include <mutex>
+#include <thread>
 using namespace glm;
 using namespace gl33core;
 struct aiString;
@@ -18,19 +21,23 @@ struct aiString;
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS                                                             \
   10 // reminder to change the Texture_Location::s1...sn shadow map enums
-#define DYNAMIC_TEXTURE_RELOADING 1
+#define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
-#define DEBUG 1
 #define ENABLE_ASSERTS 1
 #define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 0
 #define INCLUDE_FILE_LINE_IN_LOG 0
 #define MAX_TEXTURE_SAMPLERS 20
+#define MAX_ANISOTROPY 8
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
+#define SHOW_UV_TEST_GRID 0
+#define POSTPROCESSING 1
 
-// you can point FINAL_OUTPUT_TEXTURE to any Texture::texture->texture or
-// Texture_Handle::texture  to draw it to the screen for debugging purposes
-// nullptr for default
-extern GLuint *FINAL_OUTPUT_TEXTURE;
+#ifdef __linux__
+#define ROOT_PATH std::string("../")
+#elif _WIN32
+#define ROOT_PATH std::string("../")
+#endif
+
 
 struct Warg_State;
 struct Render_Test_State;
@@ -42,6 +49,7 @@ extern const float32 ATK_RANGE;
 extern const float32 MOUSE_X_SENS;
 extern const float32 MOUSE_Y_SENS;
 extern const float32 ZOOM_STEP;
+extern const float32 JUMP_IMPULSE;
 extern uint32 LAST_RENDER_ENTITY_COUNT;
 
 extern const std::string BASE_ASSET_PATH;
@@ -137,8 +145,8 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
         "Assertion failed in:" + std::string(file) +
             "\non line:" + std::to_string(line),
         1.0);
-    push_log_to_disk(); 
     std::string message_log = get_message_log();
+    push_log_to_disk();
     std::string end_of_log;
     uint32 length = message_log.size();
     uint32 char_count = 1000;
@@ -149,6 +157,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
       end_of_log = message_log.substr(length - char_count, std::string::npos);
     }
     std::cout << end_of_log << std::endl;
+    SDL_Delay(500);
     throw;
   }
 #endif
@@ -168,6 +177,7 @@ std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
 std::string mtos(glm::mat4 m);
 
+enum struct Light_Type;
 template <typename T> std::string s(T value) { return std::to_string(value); }
 
 template <typename T, typename... Args> std::string s(T first, Args... args)
@@ -176,6 +186,8 @@ template <typename T, typename... Args> std::string s(T first, Args... args)
 }
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
+template <> std::string s<Light_Type>(Light_Type value);
+template <> std::string s<vec4>(vec4 value);
 
 typedef uint32_t UID;
 UID uid();
@@ -211,3 +223,50 @@ struct Bezier_Curve
 private:
   std::vector<glm::vec4> remainder;
 };
+
+struct Config
+{ // if you add more settings, be sure to put them in load() and save()
+  ivec2 resolution = ivec2(1280, 720);
+  float32 render_scale = 1.0f;
+  float32 fov = 60;
+  float32 shadow_map_scale = 1.0f;
+  bool use_low_quality_specular = false;
+
+  void load(std::string filename);
+  void save(std::string filename);
+};
+extern Config CONFIG;
+
+struct Image_Data
+{
+  void *data;
+  int32 x;
+  int32 y;
+  int32 comp;
+  GLenum format;
+  bool initialized = false;
+};
+
+class Image_Loader
+{
+public:
+  void init();
+  bool load(const char *filename, int32 req_comp, Image_Data *data);
+
+private:
+  std::unordered_map<std::string, Image_Data> database;
+  std::queue<std::string> load_queue;
+  std::mutex db_mtx;
+  std::mutex queue_mtx;
+  std::thread loader_thread;
+};
+
+
+const char *texture_format_to_string(GLenum texture_format);
+
+bool has_img_file_extension(std::string name);
+bool is_float_format(GLenum texture_format);
+std::string strip_file_extension(std::string file);
+
+
+extern Image_Loader IMAGE_LOADER;
