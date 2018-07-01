@@ -47,10 +47,7 @@ void serialize_(Buffer &b, vec3 v)
   serialize_(b, v.z);
 }
 
-void serialize_(Buffer &b, Warg_Event_Type type)
-{
-  serialize_(b, (uint8_t)type);
-}
+void serialize_(Buffer &b, Warg_Event_Type type) { serialize_(b, (uint8_t)type); }
 
 void Char_Spawn_Request_Message::serialize(Buffer &b)
 {
@@ -155,10 +152,7 @@ void Player_Geometry_Message::serialize(Buffer &b)
     serialize_(b, command_n_);
 }
 
-void Ping_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::Ping);
-}
+void Ping_Message::serialize(Buffer &b) { serialize_(b, Warg_Event_Type::Ping); }
 
 void Ack_Message::serialize(Buffer &b) { serialize_(b, Warg_Event_Type::Ack); }
 
@@ -224,10 +218,7 @@ Char_Spawn_Message::Char_Spawn_Message(Buffer &b)
   team = deserialize_uint8(b);
 }
 
-Player_Control_Message::Player_Control_Message(Buffer &b)
-{
-  character = deserialize_uid(b);
-}
+Player_Control_Message::Player_Control_Message(Buffer &b) { character = deserialize_uid(b); }
 
 Player_Movement_Message::Player_Movement_Message(Buffer &b)
 {
@@ -274,10 +265,7 @@ Cast_Begin_Message::Cast_Begin_Message(Buffer &b)
   spell = deserialize_string(b);
 }
 
-Cast_Interrupt_Message::Cast_Interrupt_Message(Buffer &b)
-{
-  caster = deserialize_uid(b);
-}
+Cast_Interrupt_Message::Cast_Interrupt_Message(Buffer &b) { caster = deserialize_uid(b); }
 
 Char_HP_Message::Char_HP_Message(Buffer &b)
 {
@@ -359,28 +347,22 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
   return msg;
 }
 
-Char_Spawn_Request_Message::Char_Spawn_Request_Message(
-    const char *name_, uint8_t team_)
+Char_Spawn_Request_Message::Char_Spawn_Request_Message(const char *name_, uint8_t team_)
 {
   name = name_;
   team = team_;
 }
 
-Char_Spawn_Message::Char_Spawn_Message(
-    UID id_, const char *name_, uint8_t team_)
+Char_Spawn_Message::Char_Spawn_Message(UID id_, const char *name_, uint8_t team_)
 {
   id = id_;
   name = name_;
   team = team_;
 }
 
-Player_Control_Message::Player_Control_Message(UID character_)
-{
-  character = character_;
-}
+Player_Control_Message::Player_Control_Message(UID character_) { character = character_; }
 
-Player_Movement_Message::Player_Movement_Message(
-    uint32_t i_, Move_Status move_status_, vec3 dir_)
+Player_Movement_Message::Player_Movement_Message(uint32_t i_, Move_Status move_status_, vec3 dir_)
 {
   reliable = false;
   i = i_;
@@ -394,8 +376,7 @@ Cast_Message::Cast_Message(UID target_, const char *spell_)
   spell = spell_;
 }
 
-Cast_Error_Message::Cast_Error_Message(
-    UID caster_, UID target_, const char *spell_, uint8_t err_)
+Cast_Error_Message::Cast_Error_Message(UID caster_, UID target_, const char *spell_, uint8_t err_)
 {
   caster = caster_;
   target = target_;
@@ -403,18 +384,14 @@ Cast_Error_Message::Cast_Error_Message(
   err = err_;
 }
 
-Cast_Begin_Message::Cast_Begin_Message(
-    UID caster_, UID target_, const char *spell_)
+Cast_Begin_Message::Cast_Begin_Message(UID caster_, UID target_, const char *spell_)
 {
   caster = caster_;
   target = target_;
   spell = spell_;
 }
 
-Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_)
-{
-  caster = caster_;
-}
+Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_) { caster = caster_; }
 
 Char_HP_Message::Char_HP_Message(UID character_, int hp_)
 {
@@ -422,15 +399,13 @@ Char_HP_Message::Char_HP_Message(UID character_, int hp_)
   hp = hp_;
 }
 
-Buff_Application_Message::Buff_Application_Message(
-    UID character_, const char *buff_)
+Buff_Application_Message::Buff_Application_Message(UID character_, const char *buff_)
 {
   character = character_;
   buff = buff_;
 }
 
-Object_Launch_Message::Object_Launch_Message(
-    UID object_, UID caster_, UID target_, vec3 pos_)
+Object_Launch_Message::Object_Launch_Message(UID object_, UID caster_, UID target_, vec3 pos_)
 {
   object = object_;
   caster = caster_;
@@ -438,8 +413,7 @@ Object_Launch_Message::Object_Launch_Message(
   pos = pos_;
 }
 
-Player_Geometry_Message::Player_Geometry_Message(
-    std::map<UID, Character> &chars_)
+Player_Geometry_Message::Player_Geometry_Message(std::map<UID, Character> &chars_)
 {
   reliable = false;
   for (auto &c : chars_)
