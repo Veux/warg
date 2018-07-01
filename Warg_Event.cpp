@@ -452,7 +452,8 @@ Player_Geometry_Message::Player_Geometry_Message(
     dir.push_back(character.physics.dir);
     vel.push_back(character.physics.vel);
     grounded.push_back(character.physics.grounded);
-    command_n.push_back(character.last_movement_command.i);
+    command_n.push_back(character.physics.command.i);
+    command.push_back(character.physics.command);
   }
 }
 

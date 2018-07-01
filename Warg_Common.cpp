@@ -153,6 +153,7 @@ void Character::move(float32 dt, const std::vector<Triangle> &colliders)
 {
   physics = move_char(physics, last_movement_command, radius, e_stats.speed, colliders);
   physics.cmdn = last_movement_command.i;
+  physics.command = last_movement_command;
 }
 
 std::vector<Triangle> collect_colliders(Scene_Graph &scene)
@@ -309,3 +310,16 @@ bool Character_Physics::operator==(const Character_Physics &b) const
 }
 
 bool Character_Physics::operator!=(const Character_Physics &b) const { return !(*this == b); }
+
+bool Character_Physics::operator<(const Character_Physics &b) const
+{
+  return cmdn < b.cmdn;
+}
+
+bool Movement_Command::operator==(const Movement_Command &b) const
+{
+  auto &a = *this;
+  return a.i == b.i && a.dir == b.dir && a.m == b.m;
+}
+
+bool Movement_Command::operator!=(const Movement_Command &b) const { return !(*this == b); }

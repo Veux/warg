@@ -1,6 +1,6 @@
 #pragma once
 
-#define SIM_LATENCY 150
+#define SIM_LATENCY 500
 
 #include "Spell.h"
 #include <enet/enet.h>
@@ -199,6 +199,8 @@ struct Object_Launch_Message : Message
   vec3 pos;
 };
 
+struct Movement_Command;
+
 struct Player_Geometry_Message : Message
 {
   Player_Geometry_Message(std::map<UID, Character> &chars);
@@ -211,8 +213,11 @@ struct Player_Geometry_Message : Message
   std::vector<vec3> pos;
   std::vector<vec3> dir;
   std::vector<vec3> vel;
+  std::vector<int> hp_max;
+  std::vector<vec3> radius;
   std::vector<uint8_t> grounded;
   std::vector<uint32> command_n;
+  std::vector<Movement_Command> command;
 };
 
 struct Ping_Message : Message

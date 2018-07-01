@@ -20,22 +20,28 @@ struct CharStats
   float32 atk_speed;
 };
 
-struct Character_Physics
-{
-  bool operator==(const Character_Physics &) const;
-  bool operator!=(const Character_Physics &) const;
-
-  vec3 pos = vec3(0), dir = vec3(0), vel = vec3(0);
-  bool grounded = false;
-  uint32 cmdn = 0;
-};
-
 struct Movement_Command
 {
+  bool operator==(const Movement_Command &) const;
+  bool operator!=(const Movement_Command &) const;
+
   uint32 i = 0;
   Move_Status m = Move_Status::None;
   vec3 dir = vec3(0, 1, 0);
 };
+
+struct Character_Physics
+{
+  bool operator==(const Character_Physics &) const;
+  bool operator!=(const Character_Physics &) const;
+  bool operator<(const Character_Physics &) const;
+
+  vec3 pos = vec3(0), dir = vec3(0), vel = vec3(0);
+  bool grounded = false;
+  uint32 cmdn = 0;
+  Movement_Command command;
+};
+
 
 struct Character
 {

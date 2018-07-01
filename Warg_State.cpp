@@ -357,7 +357,7 @@ void Warg_State::process_events()
 
 void Warg_State::push(unique_ptr<Message> msg)
 {
-  msg->t = get_real_time();
+  msg->t = current_time;
   out.push(std::move(msg));
 }
 
@@ -381,37 +381,40 @@ void Warg_State::update()
 
   if (chars.count(pc) && chars[pc].physbuf.size() && movebuf.size())
   {
-    auto &p = chars[pc];
-    auto &lastphys = p.physbuf.back();
-    int its = 0;
-    for (auto &cmd : movebuf)
-    {
+    Character *p = &chars[pc];
+    ASSERT(p);
 
-      if (cmd.i == lastphys.cmdn + 1)
+    Character_Physics *lastphys = &p->physbuf.back();
+    int its = 0;
+    for (size_t i = 0; i < movebuf.size(); i++)
+    {
+      Movement_Command *cmd = &movebuf[i];
+      if (cmd->i == lastphys->cmdn + 1)
       {
-        auto newphys = move_char(lastphys, cmd, p.radius, p.e_stats.speed, collider_cache);
-        newphys.cmdn = cmd.i;
-        p.physbuf.push_back(newphys);
-        lastphys = p.physbuf.back();
+        Character_Physics newphys = move_char(*lastphys, *cmd, p->radius, p->e_stats.speed, collider_cache);
+        newphys.cmdn = cmd->i;
+        newphys.command = *cmd;
+        p->physbuf.push_back(newphys);
+        lastphys = &p->physbuf.back();
         its++;
       }
     }
 
     set_message("collision iterations", s(its), 5);
-    p.physics = lastphys;
-    set_message("buf size", s("phys: ", p.physbuf.size(), ", move: ", movebuf.size()), 5);
+    p->physics = *lastphys;
+    set_message("buf size", s("phys: ", p->physbuf.size(), ", move: ", movebuf.size()), 5);
 
     float effective_zoom = cam.zoom;
-    for (auto &surface : collider_cache)
+    for (Triangle &surface : collider_cache)
     {
       vec3 intersection_point;
-      bool intersects = ray_intersects_triangle(p.physics.pos, cam_rel, surface, &intersection_point);
-      if (intersects && length(p.physics.pos - intersection_point) < effective_zoom)
+      bool intersects = ray_intersects_triangle(p->physics.pos, cam_rel, surface, &intersection_point);
+      if (intersects && length(p->physics.pos - intersection_point) < effective_zoom)
       {
-        effective_zoom = length(p.physics.pos - intersection_point);
+        effective_zoom = length(p->physics.pos - intersection_point);
       }
     }
-    cam.pos = p.physics.pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+    cam.pos = p->physics.pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
     cam.dir = -vec3(cam_rel);
   }
 
@@ -425,21 +428,25 @@ void Warg_State::update()
         angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
     c.mesh->scale = c.radius * vec3(2);
 
-    static Material_Descriptor material;
-    material.albedo = "crate_diffuse.png";
-    material.emissive = "";
-    material.normal = "test_normal.png";
-    material.roughness = "crate_roughness.png";
-    material.vertex_shader = "vertex_shader.vert";
-    material.frag_shader = "fragment_shader.frag";
-    static Node_Ptr serv_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
-    if (c.physbuf.size())
+    if (c.id == pc)
     {
-      auto &phys = c.physbuf.front();
-      serv_mesh->position = phys.pos;
-      serv_mesh->scale = c.radius * vec3(2);
-      serv_mesh->orientation =
-          angleAxis((float32)atan2(phys.dir.y, phys.dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
+      static Material_Descriptor material;
+      material.albedo = "crate_diffuse.png";
+      material.emissive = "";
+      material.normal = "test_normal.png";
+      material.roughness = "crate_roughness.png";
+      material.vertex_shader = "vertex_shader.vert";
+      material.frag_shader = "fragment_shader.frag";
+      static Node_Ptr serv_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
+      if (c.physbuf.size())
+      {
+        Character_Physics *phys = &c.physbuf.front();
+        serv_mesh->position = phys->pos;
+        serv_mesh->scale = c.radius * vec3(2);
+        serv_mesh->velocity = phys->vel;
+        serv_mesh->orientation =
+          angleAxis((float32)atan2(phys->dir.y, phys->dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
+      }
     }
   }
 
@@ -526,10 +533,14 @@ void Player_Geometry_Message::handle(Warg_State &state)
       {
         while (character.physbuf.size() && character.physbuf.front().cmdn < phys.cmdn)
           character.physbuf.pop_front();
+
         if (character.physbuf.size())
         {
+          ASSERT(character.physbuf.front().cmdn == phys.cmdn);
           if (character.physbuf.front() != phys)
           {
+            auto &front = character.physbuf.front();
+
             character.physbuf.clear();
             character.physbuf.push_back(phys);
           }
