@@ -451,6 +451,8 @@ Player_Geometry_Message::Player_Geometry_Message(
     pos.push_back(character.physics.pos);
     dir.push_back(character.physics.dir);
     vel.push_back(character.physics.vel);
+    hp_max.push_back(character.hp_max);
+    radius.push_back(character.radius);
     grounded.push_back(character.physics.grounded);
     command_n.push_back(character.physics.command.i);
     command.push_back(character.physics.command);

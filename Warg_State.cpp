@@ -521,6 +521,8 @@ void Player_Geometry_Message::handle(Warg_State &state)
     if (state.chars.count(id[i]))
     {
       auto &character = state.chars[id[i]];
+      character.hp_max = hp_max[i];
+      character.radius = radius[i];
       Character_Physics phys;
       phys.pos = pos[i];
       phys.dir = dir[i];
@@ -696,6 +698,7 @@ void Warg_State::add_char(UID id, int team, const char *name)
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
+  material.backface_culling = false;
 
   Character c;
   c.id = id;

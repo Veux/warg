@@ -21,6 +21,8 @@ Warg_Server::Warg_Server(bool local)
   //collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
   //collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
   sdb = make_spell_db();
+
+  dummy_id = add_dummy();
 }
 
 void Warg_Server::process_packets()
@@ -553,6 +555,40 @@ void Warg_Server::update_target(UID ch)
     c->target = 0;
 }
 
+UID Warg_Server::add_dummy()
+{
+  UID id = uid();
+
+  Character c;
+  c.id = id;
+  c.team = 2;
+  c.name = "Combat Dummy";
+  c.physics.pos = { 0, 0, 200 };
+  c.physics.dir = { 0, 1, 0 };
+  c.hp_max = 10000;
+  c.hp = c.hp_max;
+  c.mana_max = 10000;
+  c.mana = c.mana_max;
+  c.radius = vec3(0.5f) * vec3(.39, 0.30, 1.61) * vec3(1 + log(c.hp_max / 100));
+
+  CharStats s;
+  s.gcd = 1.5;
+  s.speed = 0.0;
+  s.cast_speed = 1;
+  s.hp_regen = 1000;
+  s.mana_regen = 1000;
+  s.damage_mod = 1;
+  s.atk_dmg = 0;
+  s.atk_dmg = 1;
+
+  c.b_stats = s;
+  c.e_stats = s;
+
+  chars[id] = c;
+
+  return id;
+}
+
 UID Warg_Server::add_char(int team, const char *name)
 {
   ASSERT(0 <= team && team < 2);
@@ -600,6 +636,11 @@ UID Warg_Server::add_char(int team, const char *name)
 void Warg_Server::connect(std::queue<unique_ptr<Message>> *in, std::queue<unique_ptr<Message>> *out)
 {
   peers[uid()] = {nullptr, in, out, 0};
+  for (auto &c : chars)
+  {
+    auto &character = c.second;
+    push(make_unique<Char_Spawn_Message>(character.id, character.name.c_str(), character.team));
+  }
 }
 
 void Warg_Server::push(unique_ptr<Message> ev)

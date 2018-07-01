@@ -34,6 +34,7 @@ struct Warg_Server
   void process_events();
 
   UID add_char(int team, const char *name);
+  UID add_dummy();
   CastErrorType cast_viable(UID caster_, UID target_, Spell *spell);
   void try_cast_spell(Character &caster, UID target, const char *spell);
   void cast_spell(UID caster, UID target, Spell *spell);
@@ -66,4 +67,6 @@ struct Warg_Server
   unique_ptr<SpellDB> sdb;
   std::map<UID, Character> chars;
   vector<SpellObjectInst> spell_objs;
+
+  UID dummy_id = 0;
 };
