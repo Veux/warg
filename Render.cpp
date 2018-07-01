@@ -1481,7 +1481,11 @@ void Renderer::opaque_pass(float32 time)
     // set_message(s("drawing entity with name:", entity.name));
     // set_message(s("binding vao:", vao));
     glBindVertexArray(vao);
+#if RENDER_SIMPLE
+    Shader &shader = simple;
+#else
     Shader &shader = entity.material->shader;
+#endif
     shader.use();
 
     entity.material->bind(&shader);
@@ -1967,13 +1971,19 @@ void Renderer::render(float64 state_time)
 
   set_message("FRAME_START", "");
   set_message("BUILDING SHADOW MAPS START", "");
+#if RENDER_SIMPLE
+#else
   build_shadow_maps();
+#endif
   set_message("OPAQUE PASS START", "");
 
   opaque_pass(time);
 
   // instance_pass(time);
+#if RENDER_SIMPLE
+#else
   translucent_pass(time);
+#endif
 #if POSTPROCESSING
   postprocess_pass(time);
 #else

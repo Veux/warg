@@ -466,6 +466,7 @@ struct Renderer
   Shader gaussian_blur_15x = Shader("passthrough.vert", "gaussian_blur_15x.frag");
   Shader bloom_mix = Shader("passthrough.vert", "bloom_mix.frag");
   Shader high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
+  Shader simple = Shader("vertex_shader.vert", "passthrough.frag");
 
   Texture uv_map_grid;
   Texture brdf_integration_lut;

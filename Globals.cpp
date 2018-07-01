@@ -276,7 +276,7 @@ Uint64 dankhash(float32 *data, uint32 size)
 //}
 void check_gl_error()
 {
-  glFlush();
+  //glFlush();
   GLenum err = glGetError();
   if (err != GL_NO_ERROR)
   {
