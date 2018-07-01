@@ -31,7 +31,6 @@ struct aiString;
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
 #define SHOW_UV_TEST_GRID 0
 #define POSTPROCESSING 1
-#define RENDER_SIMPLE 0
 
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
@@ -232,6 +231,7 @@ struct Config
   float32 fov = 60;
   float32 shadow_map_scale = 1.0f;
   bool use_low_quality_specular = false;
+  bool render_simple = false;
 
   void load(std::string filename);
   void save(std::string filename);
