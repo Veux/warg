@@ -40,14 +40,7 @@ void Warg_Server::process_packets()
       {
         UID id = uid();
         peers[id] = {event.peer, nullptr, nullptr, 0};
-
-        for (auto &c : chars)
-        {
-          unique_ptr<Message> char_spawn_msg =
-              make_unique<Char_Spawn_Message>(c.first, c.second.name.c_str(), c.second.team);
-          send_event(peers[id], char_spawn_msg);
-        }
-
+        
         break;
       }
       case ENET_EVENT_TYPE_RECEIVE:
@@ -100,7 +93,11 @@ void Warg_Server::update(float32 dt)
     ch.update_global_cooldown(dt);
   }
 
-  push(make_unique<Player_Geometry_Message>(chars));
+  for (auto &p : peers)
+  {
+    Warg_Peer &peer = p.second;
+    push_to(make_unique<State_Message>(peer.character, chars), peer);
+  }
 
   for (auto i = spell_objs.begin(); i != spell_objs.end();)
   {
@@ -166,9 +163,6 @@ void Char_Spawn_Request_Message::handle(Warg_Server &server)
   UID character = server.add_char(team, name.c_str());
   ASSERT(server.peers.count(peer));
   server.peers[peer].character = character;
-  unique_ptr<Message> msg = make_unique<Player_Control_Message>(character);
-  server.send_event(server.peers[peer], msg);
-  server.push(make_unique<Char_Spawn_Message>(character, name.c_str(), team));
 }
 
 void Player_Movement_Message::handle(Warg_Server &server)
@@ -639,7 +633,6 @@ void Warg_Server::connect(std::queue<unique_ptr<Message>> *in, std::queue<unique
   for (auto &c : chars)
   {
     auto &character = c.second;
-    push(make_unique<Char_Spawn_Message>(character.id, character.name.c_str(), character.team));
   }
 }
 
@@ -648,6 +641,13 @@ void Warg_Server::push(unique_ptr<Message> ev)
   ASSERT(ev != nullptr);
   tick_events.push_back(std::move(ev));
   ASSERT(tick_events.back() != nullptr);
+}
+
+void Warg_Server::push_to(unique_ptr<Message> ev, Warg_Peer &peer)
+{
+  ASSERT(ev != nullptr);
+  peer.tick_events.push_back(std::move(ev));
+  ASSERT(peer.tick_events.back() != nullptr);
 }
 
 void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> &ev)
@@ -674,11 +674,18 @@ void Warg_Server::send_events()
 {
   for (auto &p : peers)
   {
+    Warg_Peer &peer = p.second;
     for (auto &ev : tick_events)
     {
       ASSERT(ev != nullptr);
-      send_event(p.second, ev);
+      send_event(peer, ev);
     }
+    for (auto &ev : peer.tick_events)
+    {
+      ASSERT(ev != nullptr);
+      send_event(peer, ev);
+    }
+    peer.tick_events.clear();
   }
   tick_events.clear();
 }

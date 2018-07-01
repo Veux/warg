@@ -18,6 +18,7 @@ struct Warg_Peer
   ENetPeer *peer;
   queue<unique_ptr<Message>> *in, *out;
   UID character = 0;
+  vector<unique_ptr<Message>> tick_events;
 };
 //todo: change all built in dynamic types to static types, eg int, float
 //todo: change all instances of dt to use float64 for identical precision with game loop
@@ -28,6 +29,7 @@ struct Warg_Server
   void connect(queue<unique_ptr<Message>> *in, queue<unique_ptr<Message>> *out);
 
   void push(unique_ptr<Message> ev);
+  void push_to(unique_ptr<Message> ev, Warg_Peer &peer);
   void send_event(Warg_Peer &p, unique_ptr<Message> &ev);
   void send_events();
   void process_packets();

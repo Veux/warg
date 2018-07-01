@@ -56,20 +56,6 @@ void Char_Spawn_Request_Message::serialize(Buffer &b)
   serialize_(b, team);
 }
 
-void Char_Spawn_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::CharSpawn);
-  serialize_(b, id);
-  serialize_(b, name);
-  serialize_(b, team);
-}
-
-void Player_Control_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::PlayerControl);
-  serialize_(b, character);
-}
-
 void Player_Movement_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerMovement);
@@ -131,7 +117,7 @@ void Object_Launch_Message::serialize(Buffer &b)
   serialize_(b, pos);
 }
 
-void Player_Geometry_Message::serialize(Buffer &b)
+void State_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerGeometry);
   uint8_t num_chars = id.size();
@@ -211,15 +197,6 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
   team = deserialize_uint8(b);
 }
 
-Char_Spawn_Message::Char_Spawn_Message(Buffer &b)
-{
-  id = deserialize_uid(b);
-  name = deserialize_string(b);
-  team = deserialize_uint8(b);
-}
-
-Player_Control_Message::Player_Control_Message(Buffer &b) { character = deserialize_uid(b); }
-
 Player_Movement_Message::Player_Movement_Message(Buffer &b)
 {
   i = deserialize_uint32(b);
@@ -227,7 +204,7 @@ Player_Movement_Message::Player_Movement_Message(Buffer &b)
   dir = deserialize_vec3(b);
 }
 
-Player_Geometry_Message::Player_Geometry_Message(Buffer &b)
+State_Message::State_Message(Buffer &b)
 {
   uint8_t num_chars = deserialize_uint8(b);
   for (size_t i = 0; i < num_chars; i++)
@@ -301,17 +278,11 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
     case Warg_Event_Type::CharSpawnRequest:
       msg = std::make_unique<Char_Spawn_Request_Message>(b);
       break;
-    case Warg_Event_Type::CharSpawn:
-      msg = std::make_unique<Char_Spawn_Message>(b);
-      break;
-    case Warg_Event_Type::PlayerControl:
-      msg = std::make_unique<Player_Control_Message>(b);
-      break;
     case Warg_Event_Type::PlayerMovement:
       msg = std::make_unique<Player_Movement_Message>(b);
       break;
     case Warg_Event_Type::PlayerGeometry:
-      msg = std::make_unique<Player_Geometry_Message>(b);
+      msg = std::make_unique<State_Message>(b);
       break;
     case Warg_Event_Type::Cast:
       msg = std::make_unique<Cast_Message>(b);
@@ -352,15 +323,6 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(const char *name_, uint8_
   name = name_;
   team = team_;
 }
-
-Char_Spawn_Message::Char_Spawn_Message(UID id_, const char *name_, uint8_t team_)
-{
-  id = id_;
-  name = name_;
-  team = team_;
-}
-
-Player_Control_Message::Player_Control_Message(UID character_) { character = character_; }
 
 Player_Movement_Message::Player_Movement_Message(uint32_t i_, Move_Status move_status_, vec3 dir_)
 {
@@ -413,15 +375,19 @@ Object_Launch_Message::Object_Launch_Message(UID object_, UID caster_, UID targe
   pos = pos_;
 }
 
-Player_Geometry_Message::Player_Geometry_Message(std::map<UID, Character> &chars_)
+State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_)
 {
   reliable = false;
+
+  pc = pc_;
   for (auto &c : chars_)
   {
     UID uid = c.first;
     Character &character = c.second;
 
     id.push_back(uid);
+    team.push_back(character.team);
+    name.push_back(character.name);
     pos.push_back(character.physics.pos);
     dir.push_back(character.physics.dir);
     vel.push_back(character.physics.vel);

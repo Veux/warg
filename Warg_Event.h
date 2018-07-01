@@ -64,30 +64,6 @@ struct Char_Spawn_Request_Message : Message
   uint8_t team;
 };
 
-struct Char_Spawn_Message : Message
-{
-  Char_Spawn_Message(UID id, const char *name_, uint8_t team_);
-  Char_Spawn_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID id;
-  std::string name;
-  uint8_t team;
-};
-
-struct Player_Control_Message : Message
-{
-  Player_Control_Message(UID character_);
-  Player_Control_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID character;
-};
-
 enum Move_Status
 {
   None = 0,
@@ -201,15 +177,18 @@ struct Object_Launch_Message : Message
 
 struct Movement_Command;
 
-struct Player_Geometry_Message : Message
+struct State_Message : Message
 {
-  Player_Geometry_Message(std::map<UID, Character> &chars);
-  Player_Geometry_Message(Buffer &b);
+  State_Message(UID pc, std::map<UID, Character> &chars);
+  State_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
   virtual void serialize(Buffer &b);
 
+  UID pc;
   std::vector<UID> id;
+  std::vector<int> team;
+  std::vector<std::string> name;
   std::vector<vec3> pos;
   std::vector<vec3> dir;
   std::vector<vec3> vel;

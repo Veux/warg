@@ -510,50 +510,49 @@ void Warg_State::update()
   }
 }
 
-void Char_Spawn_Message::handle(Warg_State &state) { state.add_char(id, team, name.c_str()); }
-
-void Player_Control_Message::handle(Warg_State &state) { state.pc = character; }
-
-void Player_Geometry_Message::handle(Warg_State &state)
+void State_Message::handle(Warg_State &state)
 {
+  state.pc = pc;
   for (size_t i = 0; i < id.size(); i++)
   {
-    if (state.chars.count(id[i]))
+    if (!state.chars.count(id[i]))
     {
-      auto &character = state.chars[id[i]];
-      character.hp_max = hp_max[i];
-      character.radius = radius[i];
-      Character_Physics phys;
-      phys.pos = pos[i];
-      phys.dir = dir[i];
-      phys.vel = vel[i];
-      phys.grounded = grounded[i];
-      phys.cmdn = command_n[i];
-      character.physics = phys;
+      state.add_char(id[i], team[i], name[i].c_str());
+    }
 
-      if (id[i] == state.pc)
+    auto &character = state.chars[id[i]];
+    character.hp_max = hp_max[i];
+    character.radius = radius[i];
+    Character_Physics phys;
+    phys.pos = pos[i];
+    phys.dir = dir[i];
+    phys.vel = vel[i];
+    phys.grounded = grounded[i];
+    phys.cmdn = command_n[i];
+    character.physics = phys;
+
+    if (id[i] == state.pc)
+    {
+      while (character.physbuf.size() && character.physbuf.front().cmdn < phys.cmdn)
+        character.physbuf.pop_front();
+
+      if (character.physbuf.size())
       {
-        while (character.physbuf.size() && character.physbuf.front().cmdn < phys.cmdn)
-          character.physbuf.pop_front();
-
-        if (character.physbuf.size())
+        ASSERT(character.physbuf.front().cmdn == phys.cmdn);
+        if (character.physbuf.front() != phys)
         {
-          ASSERT(character.physbuf.front().cmdn == phys.cmdn);
-          if (character.physbuf.front() != phys)
-          {
-            auto &front = character.physbuf.front();
+          auto &front = character.physbuf.front();
 
-            character.physbuf.clear();
-            character.physbuf.push_back(phys);
-          }
-        }
-        else
-        {
+          character.physbuf.clear();
           character.physbuf.push_back(phys);
         }
-        while (state.movebuf.size() && state.movebuf.front().i < phys.cmdn)
-          state.movebuf.pop_front();
       }
+      else
+      {
+        character.physbuf.push_back(phys);
+      }
+      while (state.movebuf.size() && state.movebuf.front().i < phys.cmdn)
+        state.movebuf.pop_front();
     }
   }
 }
