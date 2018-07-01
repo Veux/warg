@@ -241,11 +241,11 @@ int main(int argc, char *argv[])
     while (current_state->current_time + dt < last_time + elapsed_time)
     {
       first_update = true;
-      State *s = current_state;
-      s->current_time += dt;
+      State *state_ptr = current_state;
+      state_ptr->current_time += dt;
       imgui_dt_accumulator += dt;
       bool last_state_update =
-          !(s->current_time + dt < last_time + elapsed_time);
+          !(state_ptr->current_time + dt < last_time + elapsed_time);
 
       std::vector<SDL_Event> new_events;
       SDL_Event e;
@@ -255,16 +255,16 @@ int main(int argc, char *argv[])
         imgui_event_accumulator.push_back(e);
       }
 
-      imgui.ignore_all_input = s->free_cam;
+      imgui.ignore_all_input = state_ptr->free_cam;
 
-      s->handle_input(&current_state, &states, &new_events,
+      state_ptr->handle_input(&current_state, &states, &new_events,
           imgui.context->IO.WantTextInput, imgui.context->IO.WantCaptureMouse);
 
-      if (s != current_state)
+      if (state_ptr != current_state)
       {
-        s->paused = true;
+        state_ptr->paused = true;
         current_state->renderer.set_render_scale(
-          s->renderer.get_render_scale());
+          state_ptr->renderer.get_render_scale());
         break;
       }
 
@@ -275,14 +275,14 @@ int main(int argc, char *argv[])
         imgui.handle_input(&imgui_event_accumulator);
         imgui_event_accumulator.clear();
         imgui.new_frame(window, imgui_dt_accumulator);
-        s->update();
+        state_ptr->update();
         renderer_requires_trashgui_wrapping = false;
       }
       else
       {
         trash_imgui.bind();
         trash_imgui.new_frame(window, dt);
-        s->update();
+        state_ptr->update();
         trash_imgui.end_frame();
       }
     }
