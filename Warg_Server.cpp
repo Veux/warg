@@ -18,6 +18,8 @@ Warg_Server::Warg_Server(bool local)
   map = make_blades_edge();
   map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
   collider_cache = collect_colliders(scene);
+  //collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
+  //collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
   sdb = make_spell_db();
 }
 

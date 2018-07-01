@@ -58,6 +58,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size) 
 
   map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
   collider_cache = collect_colliders(scene);
+  //collider_cache.push_back({ { 1000, 1000, 0 },{ -1000,1000,0 },{ -1000,-1000,0 } });
+  //collider_cache.push_back({ { -1000, -1000, 0 },{ 1000, -1000, 0 },{ 1000, 1000, 0 } });
 
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;
