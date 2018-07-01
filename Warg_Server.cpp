@@ -165,7 +165,7 @@ void Char_Spawn_Request_Message::handle(Warg_Server &server)
   server.peers[peer].character = character;
 }
 
-void Player_Movement_Message::handle(Warg_Server &server)
+void Input_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];

@@ -307,7 +307,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
 
 void Warg_State::register_move_command(Move_Status m, vec3 dir)
 {
-  push(make_unique<Player_Movement_Message>(move_cmd_n, m, dir));
+  push(make_unique<Input_Message>(move_cmd_n, m, dir));
   Movement_Command cmd;
   cmd.i = move_cmd_n;
   cmd.m = m;

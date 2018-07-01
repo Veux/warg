@@ -74,10 +74,10 @@ enum Move_Status
   Jumping = 1 << 4
 };
 
-struct Player_Movement_Message : Message
+struct Input_Message : Message
 {
-  Player_Movement_Message(uint32_t i_, Move_Status move_status, vec3 dir);
-  Player_Movement_Message(Buffer &b);
+  Input_Message(uint32_t i_, Move_Status move_status, vec3 dir);
+  Input_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
   virtual void serialize(Buffer &b);
