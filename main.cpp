@@ -82,7 +82,7 @@ void server_main()
 
 int main(int argc, char *argv[])
 {
-  const char* config_filename = "config.json";
+  const char *config_filename = "config.json";
   CONFIG.load(config_filename);
   SDL_Delay(1000);
   bool client = false;
@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
     WARG_SERVER = true;
-	ASSERT(WARG_SERVER);
+    ASSERT(WARG_SERVER);
     server_main();
     return 0;
   }
@@ -131,30 +131,27 @@ int main(int argc, char *argv[])
     for (uint32 j = 0; j < mode_count; ++j)
     {
       SDL_GetDisplayMode(i, j, &mode);
-      s << "Supported resolution: " << mode.w << "x" << mode.h << " "
-        << mode.refresh_rate << "hz  " << SDL_GetPixelFormatName(mode.format)
-        << "\n";
+      s << "Supported resolution: " << mode.w << "x" << mode.h << " " << mode.refresh_rate << "hz  "
+        << SDL_GetPixelFormatName(mode.format) << "\n";
     }
   }
   set_message(s.str());
 
-  ivec2 window_size = {CONFIG.resolution.x, CONFIG.resolution.y };
+  ivec2 window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
   int32 flags = SDL_WINDOW_OPENGL;
   // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-  SDL_Window *window =
-      SDL_CreateWindow("title", 100, 130, window_size.x, window_size.y, flags);
+  SDL_Window *window = SDL_CreateWindow("title", 100, 130, window_size.x, window_size.y, flags);
 
   SDL_GLContext context = SDL_GL_CreateContext(window);
 
   int32 major, minor;
   SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
   SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
-  set_message(
-      "OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
+  set_message("OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
   if (major <= 3)
   {
     if (major < 3 || minor < 1)
@@ -173,9 +170,7 @@ int main(int argc, char *argv[])
 
   glbinding::Binding::initialize();
   glbinding::setCallbackMaskExcept(
-      glbinding::CallbackMask::After |
-          glbinding::CallbackMask::ParametersAndReturnValue,
-      {"glGetError", "glFlush"});
+      glbinding::CallbackMask::After | glbinding::CallbackMask::ParametersAndReturnValue, {"glGetError", "glFlush"});
 #if ENABLE_OPENGL_ERROR_CATCHING_AND_LOG
   glbinding::setBeforeCallback(gl_before_check);
   glbinding::setAfterCallback(gl_after_check);
@@ -199,8 +194,7 @@ int main(int argc, char *argv[])
 
   Warg_State *game_state;
   if (client)
-    game_state = new Warg_State(
-        "Warg", window, window_size, address.c_str(), char_name.c_str(), team);
+    game_state = new Warg_State("Warg", window, window_size, address.c_str(), char_name.c_str(), team);
   else
     game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
@@ -220,10 +214,8 @@ int main(int argc, char *argv[])
     if (current_state->paused)
     {
       float64 past_accum = current_state->paused_time_accumulator;
-      float64 real_time_of_last_update =
-          current_state->current_time + past_accum;
-      float64 real_time_since_last_update =
-          real_time - real_time_of_last_update;
+      float64 real_time_of_last_update = current_state->current_time + past_accum;
+      float64 real_time_since_last_update = real_time - real_time_of_last_update;
       current_state->paused_time_accumulator += real_time_since_last_update;
       current_state->paused = false;
       continue;
@@ -244,8 +236,7 @@ int main(int argc, char *argv[])
       State *state_ptr = current_state;
       state_ptr->current_time += dt;
       imgui_dt_accumulator += dt;
-      bool last_state_update =
-          !(state_ptr->current_time + dt < last_time + elapsed_time);
+      bool last_state_update = !(state_ptr->current_time + dt < last_time + elapsed_time);
 
       std::vector<SDL_Event> new_events;
       SDL_Event e;
@@ -257,14 +248,13 @@ int main(int argc, char *argv[])
 
       imgui.ignore_all_input = state_ptr->free_cam;
 
-      state_ptr->handle_input(&current_state, &states, &new_events,
-          imgui.context->IO.WantTextInput, imgui.context->IO.WantCaptureMouse);
+      state_ptr->handle_input(
+          &current_state, &states, &new_events, imgui.context->IO.WantTextInput, imgui.context->IO.WantCaptureMouse);
 
       if (state_ptr != current_state)
       {
         state_ptr->paused = true;
-        current_state->renderer.set_render_scale(
-          state_ptr->renderer.get_render_scale());
+        current_state->renderer.set_render_scale(state_ptr->renderer.get_render_scale());
         break;
       }
 
