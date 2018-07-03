@@ -19,6 +19,7 @@ struct Warg_Peer
   queue<unique_ptr<Message>> *in, *out;
   UID character = 0;
   vector<unique_ptr<Message>> tick_events;
+  Input last_input;
 };
 //todo: change all built in dynamic types to static types, eg int, float
 //todo: change all instances of dt to use float64 for identical precision with game loop
@@ -62,12 +63,13 @@ struct Warg_Server
   ENetHost *server;
   bool local = true;
   float64 time = 0;
+  uint32 tick = 0;
 
   Map map;
   vector<Triangle> collider_cache;
   Scene_Graph scene;
   unique_ptr<SpellDB> sdb;
-  std::map<UID, Character> chars;
+  Game_State game_state;
   vector<SpellObjectInst> spell_objs;
 
   UID dummy_id = 0;

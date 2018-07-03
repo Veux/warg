@@ -49,3 +49,5 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri);
 
 bool ray_intersects_triangle(
     vec3 origin, vec3 dir, Triangle tri, vec3 *intersection_point);
+
+bool vec3_has_nan(vec3 v);

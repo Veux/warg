@@ -100,14 +100,13 @@ void Character::apply_modifiers()
       apply_modifier(*modifier);
 }
 
-Character_Physics move_char(
-    Character_Physics physics, Movement_Command command, vec3 radius, float32 speed, std::vector<Triangle> colliders)
+void move_char(Character &character, Input command, std::vector<Triangle> colliders)
 {
-  vec3 &pos = physics.pos;
+  vec3 &pos = character.physics.pos;
   vec3 &dir = command.dir;
-  physics.dir = dir;
-  vec3 &vel = physics.vel;
-  bool &grounded = physics.grounded;
+  character.physics.dir = dir;
+  vec3 &vel = character.physics.vel;
+  bool &grounded = character.physics.grounded;
   Move_Status move_status = command.m;
 
   vec3 v = vec3(0);
@@ -130,7 +129,7 @@ Character_Physics move_char(
   if (move_status & ~Move_Status::Jumping)
   {
     v = normalize(v);
-    v *= speed;
+    v *= character.e_stats.speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {
@@ -144,16 +143,7 @@ Character_Physics move_char(
   if (grounded)
     vel.z = 0;
 
-  collide_and_slide_char(physics, radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
-
-  return physics;
-}
-
-void Character::move(float32 dt, const std::vector<Triangle> &colliders)
-{
-  physics = move_char(physics, last_movement_command, radius, e_stats.speed, colliders);
-  physics.cmdn = last_movement_command.i;
-  physics.command = last_movement_command;
+  collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
 }
 
 std::vector<Triangle> collect_colliders(Scene_Graph &scene)
@@ -316,10 +306,65 @@ bool Character_Physics::operator<(const Character_Physics &b) const
   return cmdn < b.cmdn;
 }
 
-bool Movement_Command::operator==(const Movement_Command &b) const
+bool Input::operator==(const Input &b) const
 {
   auto &a = *this;
-  return a.i == b.i && a.dir == b.dir && a.m == b.m;
+  return a.number == b.number && a.dir == b.dir && a.m == b.m;
 }
 
-bool Movement_Command::operator!=(const Movement_Command &b) const { return !(*this == b); }
+bool Input::operator!=(const Input &b) const { return !(*this == b); }
+
+size_t Input_Buffer::size()
+{
+  if (start <= end)
+    return end - start;
+  else
+    return (capacity - start) + end;
+}
+
+Input &Input_Buffer::operator[](size_t i)
+{
+  ASSERT(i < size());
+
+  if (start + i < capacity)
+    return buffer[start + i];
+  else
+    return buffer[i - (capacity - start)];
+}
+
+void Input_Buffer::push(Input &input)
+{
+  size_t size_ = size();
+
+  if (size_ < capacity)
+  {
+    if (end < capacity)
+      buffer[end++] = input;
+    else
+    {
+      buffer[0] = input;
+      end = 1;
+    }
+    return;
+  }
+
+  buffer[start] = input;
+  end = start + 1;
+  if (start < capacity - 1)
+    start++;
+  else
+    start = 0;
+}
+
+void Input_Buffer::pop_older_than(uint32 input_number)
+{
+  uint32 delta = input_number - buffer[start].number + 1;
+  size_t size_ = size();
+
+  if (delta > size_)
+    start = end = 0;
+  else if (start + delta < capacity)
+    start += delta;
+  else
+    start = delta - (capacity - start);
+}

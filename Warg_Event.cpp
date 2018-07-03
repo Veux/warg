@@ -59,7 +59,7 @@ void Char_Spawn_Request_Message::serialize(Buffer &b)
 void Input_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::PlayerMovement);
-  serialize_(b, i);
+  serialize_(b, input_number);
   serialize_(b, (uint8_t)move_status);
   serialize_(b, dir);
 }
@@ -119,23 +119,7 @@ void Object_Launch_Message::serialize(Buffer &b)
 
 void State_Message::serialize(Buffer &b)
 {
-  serialize_(b, Warg_Event_Type::PlayerGeometry);
-  uint8_t num_chars = id.size();
-  ASSERT(pos.size() == num_chars);
-  ASSERT(vel.size() == num_chars);
-  serialize_(b, num_chars);
-  for (UID &id_ : id)
-    serialize_(b, id_);
-  for (vec3 &pos_ : pos)
-    serialize_(b, pos_);
-  for (vec3 &dir_ : dir)
-    serialize_(b, dir_);
-  for (vec3 &vel_ : vel)
-    serialize_(b, vel_);
-  for (uint8_t &grounded_ : grounded)
-    serialize_(b, grounded_);
-  for (uint32_t &command_n_ : command_n)
-    serialize_(b, command_n_);
+  // sponge
 }
 
 void Ping_Message::serialize(Buffer &b) { serialize_(b, Warg_Event_Type::Ping); }
@@ -199,26 +183,14 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 
 Input_Message::Input_Message(Buffer &b)
 {
-  i = deserialize_uint32(b);
+  input_number = deserialize_uint32(b);
   move_status = (Move_Status)deserialize_uint8(b);
   dir = deserialize_vec3(b);
 }
 
 State_Message::State_Message(Buffer &b)
 {
-  uint8_t num_chars = deserialize_uint8(b);
-  for (size_t i = 0; i < num_chars; i++)
-    id.push_back(deserialize_uid(b));
-  for (size_t i = 0; i < num_chars; i++)
-    pos.push_back(deserialize_vec3(b));
-  for (size_t i = 0; i < num_chars; i++)
-    dir.push_back(deserialize_vec3(b));
-  for (size_t i = 0; i < num_chars; i++)
-    vel.push_back(deserialize_vec3(b));
-  for (size_t i = 0; i < num_chars; i++)
-    grounded.push_back(deserialize_uint8(b));
-  for (size_t i = 0; i < num_chars; i++)
-    command_n.push_back(deserialize_uint32(b));
+  // sponge
 }
 
 Cast_Message::Cast_Message(Buffer &b)
@@ -327,7 +299,7 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(const char *name_, uint8_
 Input_Message::Input_Message(uint32_t i_, Move_Status move_status_, vec3 dir_)
 {
   reliable = false;
-  i = i_;
+  input_number = i_;
   move_status = move_status_;
   dir = dir_;
 }
@@ -375,28 +347,14 @@ Object_Launch_Message::Object_Launch_Message(UID object_, UID caster_, UID targe
   pos = pos_;
 }
 
-State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_)
+State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, uint32 tick_, uint32 input_number_)
 {
   reliable = false;
 
+  tick = tick_;
+  input_number = input_number_;
   pc = pc_;
-  for (auto &c : chars_)
-  {
-    UID uid = c.first;
-    Character &character = c.second;
-
-    id.push_back(uid);
-    team.push_back(character.team);
-    name.push_back(character.name);
-    pos.push_back(character.physics.pos);
-    dir.push_back(character.physics.dir);
-    vel.push_back(character.physics.vel);
-    hp_max.push_back(character.hp_max);
-    radius.push_back(character.radius);
-    grounded.push_back(character.physics.grounded);
-    command_n.push_back(character.physics.command.i);
-    command.push_back(character.physics.command);
-  }
+  characters = chars_;
 }
 
 Ping_Message::Ping_Message() {}

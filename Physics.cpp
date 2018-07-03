@@ -336,3 +336,8 @@ bool ray_intersects_triangle(
     return false;
   }
 }
+
+bool vec3_has_nan(vec3 v)
+{
+  return _isnan(v.x) || _isnan(v.y) || _isnan(v.z);
+}

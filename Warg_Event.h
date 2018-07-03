@@ -82,7 +82,7 @@ struct Input_Message : Message
   virtual void handle(Warg_State &state) { ASSERT(false); };
   virtual void serialize(Buffer &b);
 
-  uint32_t i;
+  uint32_t input_number;
   Move_Status move_status;
   vec3 dir;
 };
@@ -175,28 +175,20 @@ struct Object_Launch_Message : Message
   vec3 pos;
 };
 
-struct Movement_Command;
+struct Input;
 
 struct State_Message : Message
 {
-  State_Message(UID pc, std::map<UID, Character> &chars);
+  State_Message(UID pc, std::map<UID, Character> &chars, uint32 tick_, uint32 input_number_);
   State_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
   virtual void serialize(Buffer &b);
 
   UID pc;
-  std::vector<UID> id;
-  std::vector<int> team;
-  std::vector<std::string> name;
-  std::vector<vec3> pos;
-  std::vector<vec3> dir;
-  std::vector<vec3> vel;
-  std::vector<int> hp_max;
-  std::vector<vec3> radius;
-  std::vector<uint8_t> grounded;
-  std::vector<uint32> command_n;
-  std::vector<Movement_Command> command;
+  uint32 tick;
+  uint32 input_number;
+  std::map<UID, Character> characters;
 };
 
 struct Ping_Message : Message

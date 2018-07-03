@@ -149,7 +149,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!pc || !chars.count(pc))
+  if (!pc || !game_state.characters.count(pc))
     return;
   if (free_cam)
   {
@@ -284,9 +284,11 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
 
-    ASSERT(pc && chars.count(pc));
+    ASSERT(pc && game_state.characters.count(pc));
+    Character *player_character = &game_state.characters[pc];
+    ASSERT(player_character);
 
-    vec3 dir = right_button_down ? normalize(-vec3(cam_rel.x, cam_rel.y, 0)) : chars[pc].physics.dir;
+    vec3 dir = right_button_down ? normalize(-vec3(cam_rel.x, cam_rel.y, 0)) : player_character->physics.dir;
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -307,13 +309,13 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
 
 void Warg_State::register_move_command(Move_Status m, vec3 dir)
 {
-  push(make_unique<Input_Message>(move_cmd_n, m, dir));
-  Movement_Command cmd;
-  cmd.i = move_cmd_n;
+  push(make_unique<Input_Message>(input_number, m, dir));
+  Input cmd;
+  cmd.number = input_number;
   cmd.m = m;
   cmd.dir = dir;
-  movebuf.push_back(cmd);
-  move_cmd_n++;
+  input_buffer.push(cmd);
+  input_number++;
 }
 
 void Warg_State::process_packets()
@@ -361,119 +363,130 @@ void Warg_State::push(unique_ptr<Message> msg)
   out.push(std::move(msg));
 }
 
-void Warg_State::update()
+void Warg_State::set_camera_geometry()
+{
+  if (!game_state.characters.count(pc))
+    return;
+  Character *player_character = &game_state.characters[pc];
+  ASSERT(player_character);
+
+  float effective_zoom = cam.zoom;
+  for (Triangle &surface : collider_cache)
+  {
+    vec3 intersection_point;
+    bool intersects = ray_intersects_triangle(player_character->physics.pos, cam_rel, surface, &intersection_point);
+    if (intersects && length(player_character->physics.pos - intersection_point) < effective_zoom)
+    {
+      effective_zoom = length(player_character->physics.pos - intersection_point);
+    }
+  }
+  cam.pos = player_character->physics.pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
+  cam.dir = -vec3(cam_rel);
+}
+
+void Warg_State::draw_characters()
+{
+  for (auto &c : game_state.characters)
+  {
+    Character *character = &c.second;
+    Character_Physics *physics = &character->physics;
+    if (!character->alive)
+      physics->pos = { -1000, -1000, 0 };
+
+    Node_Ptr character_node = character_nodes[character->id];
+
+    character_node->position = character->physics.pos;
+    character_node->orientation =
+      angleAxis((float32)atan2(physics->dir.y, physics->dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
+    character_node->scale = character->radius * vec3(2);
+  }
+}
+
+void Warg_State::draw_prediction_ghost()
+{
+  if (!game_state.characters.count(pc))
+    return;
+  Character *player_character = &server_state.characters[pc];
+  ASSERT(player_character);
+
+  Character_Physics *physics = &player_character->physics;
+
+  static Material_Descriptor material;
+  material.albedo = "crate_diffuse.png";
+  material.emissive = "";
+  material.normal = "test_normal.png";
+  material.roughness = "crate_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+
+  static Node_Ptr ghost_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
+  ghost_mesh->position = physics->pos;
+  ghost_mesh->scale = player_character->radius * vec3(2);
+  ghost_mesh->velocity = physics->vel;
+  ghost_mesh->orientation =
+     angleAxis((float32)atan2(physics->dir.y, physics->dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
+}
+
+void Warg_State::draw_stats_bar()
+{
+  bool show_stats_bar = true;
+  ImVec2 stats_bar_pos = { 10, 10 };
+  ImGui::SetNextWindowPos(stats_bar_pos);
+  ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
+    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+    ImGuiWindowFlags_AlwaysAutoResize);
+  ImGui::Text("Ping: %dms", latency_tracker.get_latency());
+  ImGui::End();
+}
+
+void Warg_State::predict_player_character()
+{
+  //if (!game_state.characters.count(pc))
+  //  return;
+  //Character *character = &game_state.characters[pc];
+  //ASSERT(character);
+
+  //if (character->physbuf.size() == 0)
+  //  return;
+  //if (input_buffer.size() == 0)
+  //  return;
+
+  //Character_Physics *lastphys = &character->physbuf.back();
+  //int its = 0;
+  //for (size_t i = 0; i < input_buffer.size(); i++)
+  //{
+  //  Input *cmd = &input_buffer[i];
+  //  if (cmd->number == lastphys->cmdn + 1)
+  //  {
+  //    Character_Physics newphys = move_char(*lastphys, *cmd, character->radius, character->e_stats.speed, collider_cache);
+  //    newphys.cmdn = cmd->number;
+  //    newphys.command = *cmd;
+  //    character->physbuf.push_back(newphys);
+  //    lastphys = &character->physbuf.back();
+  //    its++;
+  //  }
+  //}
+
+  //set_message("collision iterations", s(its), 5);
+  //character->physics = *lastphys;
+  //set_message("buf size", s("phys: ", character->physbuf.size(), ", move: ", input_buffer.size()), 5);
+}
+
+void Warg_State::send_ping()
+{
+  if (latency_tracker.should_send_ping())
+    push(make_unique<Ping_Message>());
+}
+
+void Warg_State::process_messages()
 {
   if (!local)
     process_packets();
   process_events();
+}
 
-  if (latency_tracker.should_send_ping())
-    push(make_unique<Ping_Message>());
-
-  bool show_stats_bar = true;
-  ImVec2 stats_bar_pos = {10, 10};
-  ImGui::SetNextWindowPos(stats_bar_pos);
-  ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
-      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-          ImGuiWindowFlags_AlwaysAutoResize);
-  ImGui::Text("Ping: %dms", latency_tracker.get_latency());
-  ImGui::End();
-
-  if (chars.count(pc) && chars[pc].physbuf.size() && movebuf.size())
-  {
-    Character *p = &chars[pc];
-    ASSERT(p);
-
-    Character_Physics *lastphys = &p->physbuf.back();
-    int its = 0;
-    for (size_t i = 0; i < movebuf.size(); i++)
-    {
-      Movement_Command *cmd = &movebuf[i];
-      if (cmd->i == lastphys->cmdn + 1)
-      {
-        Character_Physics newphys = move_char(*lastphys, *cmd, p->radius, p->e_stats.speed, collider_cache);
-        newphys.cmdn = cmd->i;
-        newphys.command = *cmd;
-        p->physbuf.push_back(newphys);
-        lastphys = &p->physbuf.back();
-        its++;
-      }
-    }
-
-    set_message("collision iterations", s(its), 5);
-    p->physics = *lastphys;
-    set_message("buf size", s("phys: ", p->physbuf.size(), ", move: ", movebuf.size()), 5);
-
-    float effective_zoom = cam.zoom;
-    for (Triangle &surface : collider_cache)
-    {
-      vec3 intersection_point;
-      bool intersects = ray_intersects_triangle(p->physics.pos, cam_rel, surface, &intersection_point);
-      if (intersects && length(p->physics.pos - intersection_point) < effective_zoom)
-      {
-        effective_zoom = length(p->physics.pos - intersection_point);
-      }
-    }
-    cam.pos = p->physics.pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * (effective_zoom * 0.98f);
-    cam.dir = -vec3(cam_rel);
-  }
-
-  for (auto &c_ : chars)
-  {
-    auto &c = c_.second;
-    if (!c.alive)
-      c.physics.pos = {-1000, -1000, 0};
-    c.mesh->position = c.physics.pos;
-    c.mesh->orientation =
-        angleAxis((float32)atan2(c.physics.dir.y, c.physics.dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
-    c.mesh->scale = c.radius * vec3(2);
-
-    if (c.id == pc)
-    {
-      static Material_Descriptor material;
-      material.albedo = "crate_diffuse.png";
-      material.emissive = "";
-      material.normal = "test_normal.png";
-      material.roughness = "crate_roughness.png";
-      material.vertex_shader = "vertex_shader.vert";
-      material.frag_shader = "fragment_shader.frag";
-      static Node_Ptr serv_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
-      if (c.physbuf.size())
-      {
-        Character_Physics *phys = &c.physbuf.front();
-        serv_mesh->position = phys->pos;
-        serv_mesh->scale = c.radius * vec3(2);
-        serv_mesh->velocity = phys->vel;
-        serv_mesh->orientation =
-          angleAxis((float32)atan2(phys->dir.y, phys->dir.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
-      }
-    }
-  }
-
-  for (auto i = spell_objs.begin(); i != spell_objs.end();)
-  {
-    auto &o = *i;
-    float32 d = length(chars[o.target].physics.pos - o.pos);
-    if (d < 0.5)
-    {
-      set_message("object hit", chars[o.caster].name + "'s " + o.def.name + " hit " + chars[o.target].name, 3.0f);
-
-      i = spell_objs.erase(i);
-    }
-    else
-    {
-      vec3 a = normalize(chars[o.target].physics.pos - o.pos);
-      a.x *= o.def.speed * dt;
-      a.y *= o.def.speed * dt;
-      a.z *= o.def.speed * dt;
-      o.pos += a;
-
-      o.mesh->position = o.pos;
-
-      ++i;
-    }
-  }
-
+void Warg_State::send_messages()
+{
   if (local)
   {
     server->update(dt);
@@ -494,75 +507,162 @@ void Warg_State::update()
       out.pop();
     }
   }
-  static bool show_demo_window = false;
-  static bool show_another_window = false;
+}
 
-  // meme
-  if (pc && chars.count(pc))
+bool prediction_correct(UID player_character_id, Game_State &server_state, Game_State &predicted_state)
+{
+  bool same_input = server_state.input_number == predicted_state.input_number;
+
+  if (server_state.characters.count(player_character_id) == 0 &&
+      predicted_state.characters.count(player_character_id) == 0)
+    return same_input;
+
+  if (server_state.characters.count(player_character_id) != predicted_state.characters.count(player_character_id))
+    return false;
+
+  ASSERT(server_state.characters.count(player_character_id));
+  ASSERT(predicted_state.characters.count(player_character_id));
+
+  Character_Physics *server_physics = &server_state.characters[player_character_id].physics;
+  Character_Physics *predicted_physics = &predicted_state.characters[player_character_id].physics;
+  bool same_player_physics = *server_physics == *predicted_physics;
+
+  return same_input && same_player_physics;
+}
+
+void Warg_State::predict_state()
+{
+  game_state = server_state;
+
+  if (server_state.characters.count(pc) == 0)
+    return;
+
+  if (input_buffer.size() == 0)
+    return;
+
+  while (state_buffer.size() > 0 && state_buffer.front().input_number < server_state.input_number)
+    state_buffer.pop_front();
+
+  Game_State predicted_state = server_state;
+  size_t prediction_start = 0;
+  if (state_buffer.size() && prediction_correct(pc, server_state, state_buffer.front()))
   {
-    check_gl_error();
-    imgui_light_array(scene.lights);
-    check_gl_error();
-    Light *light = &scene.lights.lights[1];
-    light->direction = chars.count(pc) ? chars[pc].physics.pos : vec3(0);
-    light->color =
-        50.0f * vec3(1.f + sin(current_time * 1.35), 1.f + cos(current_time * 1.12), 1.f + sin(current_time * .9));
+    predicted_state = state_buffer.back();
+    state_buffer.pop_front();
+    prediction_start = input_buffer.size() - 1;
   }
+  else
+  {
+    state_buffer = {};
+    predicted_state = server_state;
+  }
+
+  size_t prediction_iterations = 0;
+  for (size_t i = prediction_start; i < input_buffer.size(); i++)
+  {
+    Input &input = input_buffer[i];
+
+    Character &player_character = predicted_state.characters[pc];
+    Character_Physics &physics = player_character.physics;
+    vec3 radius = player_character.radius;
+    float32 movement_speed = player_character.e_stats.speed;
+
+    move_char(player_character, input, collider_cache);
+    if (vec3_has_nan(physics.pos))
+      physics.pos = map.spawn_pos[player_character.team];
+
+    predicted_state.input_number = input.number;
+    state_buffer.push_back(predicted_state);
+
+    prediction_iterations++;
+  }
+  set_message("prediction iterations:", s(prediction_iterations), 5);
+
+  game_state = state_buffer.back();
+}
+
+void Warg_State::update_meshes()
+{
+  for (auto &c : game_state.characters)
+  {
+    Character *character = &c.second;
+    if (!character_nodes.count(character->id))
+    {
+      add_character_mesh(character->id);
+    }
+  }
+}
+
+void Warg_State::update()
+{
+  process_messages();
+  send_ping();
+  draw_stats_bar();
+  predict_state();
+  set_camera_geometry();
+  update_meshes();
+  draw_characters();
+  draw_prediction_ghost();
+  send_messages();
+}
+
+void Warg_State::add_character_mesh(UID character_id)
+{
+  Material_Descriptor material;
+  material.albedo = "crate_diffuse.png";
+  material.emissive = "";
+  material.normal = "test_normal.png";
+  material.roughness = "crate_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+  material.backface_culling = false;
+  character_nodes[character_id] = scene.add_primitive_mesh(cube, "player_cube", material);
 }
 
 void State_Message::handle(Warg_State &state)
 {
   state.pc = pc;
-  for (size_t i = 0; i < id.size(); i++)
-  {
-    if (!state.chars.count(id[i]))
-    {
-      state.add_char(id[i], team[i], name[i].c_str());
-    }
+  state.server_state.characters = characters;
+  state.server_state.tick = tick;
+  state.server_state.input_number = input_number;
 
-    auto &character = state.chars[id[i]];
-    character.hp_max = hp_max[i];
-    character.radius = radius[i];
-    Character_Physics phys;
-    phys.pos = pos[i];
-    phys.dir = dir[i];
-    phys.vel = vel[i];
-    phys.grounded = grounded[i];
-    phys.cmdn = command_n[i];
-    character.physics = phys;
+  state.input_buffer.pop_older_than(input_number);
 
-    if (id[i] == state.pc)
-    {
-      while (character.physbuf.size() && character.physbuf.front().cmdn < phys.cmdn)
-        character.physbuf.pop_front();
+  //if (state.pc == 0)
+  //  return;
 
-      if (character.physbuf.size())
-      {
-        ASSERT(character.physbuf.front().cmdn == phys.cmdn);
-        if (character.physbuf.front() != phys)
-        {
-          auto &front = character.physbuf.front();
+  //ASSERT(state.game_state.characters.count(state.pc));
+  //Character *player_character = &state.game_state.characters[state.pc];
 
-          character.physbuf.clear();
-          character.physbuf.push_back(phys);
-        }
-      }
-      else
-      {
-        character.physbuf.push_back(phys);
-      }
-      while (state.movebuf.size() && state.movebuf.front().i < phys.cmdn)
-        state.movebuf.pop_front();
-    }
-  }
+  //while (player_character->physbuf.size() && player_character->physbuf.front().cmdn < player_character->physics.cmdn)
+  //  player_character->physbuf.pop_front();
+
+  //if (player_character->physbuf.size())
+  //{
+  //  ASSERT(player_character->physbuf.front().cmdn == player_character->physics.cmdn);
+  //  if (player_character->physbuf.front() != player_character->physics)
+  //  {
+  //    auto &front = player_character->physbuf.front();
+
+  //    player_character->physbuf.clear();
+  //    player_character->physbuf.push_back(player_character->physics);
+  //  }
+  //}
+  //else
+  //{
+  //  player_character->physbuf.push_back(player_character->physics);
+  //}
+
+  //while (state.movebuf.size() && state.movebuf.front().i < player_character->physics.cmdn)
+  //  state.movebuf.pop_front();
 }
 
 void Cast_Error_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(caster));
+  ASSERT(state.game_state.characters.count(caster));
 
   std::string msg;
-  msg += state.chars[caster].name;
+  msg += state.game_state.characters[caster].name;
   msg += " failed to cast ";
   msg += spell;
   msg += ": ";
@@ -602,10 +702,10 @@ void Cast_Error_Message::handle(Warg_State &state)
 
 void Cast_Begin_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(caster));
+  ASSERT(state.game_state.characters.count(caster));
 
   std::string msg;
-  msg += state.chars[caster].name;
+  msg += state.game_state.characters[caster].name;
   msg += " begins casting ";
   msg += spell;
   set_message("CastBegin:", msg, 10);
@@ -613,18 +713,18 @@ void Cast_Begin_Message::handle(Warg_State &state)
 
 void Cast_Interrupt_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(caster));
+  ASSERT(state.game_state.characters.count(caster));
 
   std::string msg;
-  msg += state.chars[caster].name;
+  msg += state.game_state.characters[caster].name;
   msg += "'s casting was interrupted";
   set_message("CastInterrupt:", msg, 10);
 }
 
 void Char_HP_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(character));
-  auto &character_ = state.chars[character];
+  ASSERT(state.game_state.characters.count(character));
+  auto &character_ = state.game_state.characters[character];
 
   character_.alive = hp > 0;
 
@@ -637,21 +737,21 @@ void Char_HP_Message::handle(Warg_State &state)
 
 void Buff_Application_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(character));
+  ASSERT(state.game_state.characters.count(character));
 
   std::string msg;
   msg += buff;
   msg += " applied to ";
-  msg += state.chars[character].name;
+  msg += state.game_state.characters[character].name;
   set_message("ApplyBuff:", msg, 10);
 }
 
 void Object_Launch_Message::handle(Warg_State &state)
 {
-  ASSERT(state.chars.count(caster));
-  auto &caster_ = state.chars[caster];
-  ASSERT(state.chars.count(target));
-  auto &target_ = state.chars[target];
+  ASSERT(state.game_state.characters.count(caster));
+  auto &caster_ = state.game_state.characters[caster];
+  ASSERT(state.game_state.characters.count(target));
+  auto &target_ = state.game_state.characters[target];
 
   // Material_Descriptor material;
   // material.albedo = "crate_diffuse.png";
@@ -698,6 +798,7 @@ void Warg_State::add_char(UID id, int team, const char *name)
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.backface_culling = false;
+  character_nodes[id] = scene.add_primitive_mesh(cube, "player_cube", material);
 
   Character c;
   c.id = id;
@@ -705,7 +806,6 @@ void Warg_State::add_char(UID id, int team, const char *name)
   c.name = std::string(name);
   c.physics.pos = pos;
   c.physics.dir = dir;
-  c.mesh = scene.add_primitive_mesh(cube, "player_cube", material);
   c.hp_max = 100;
   c.hp = c.hp_max;
   c.mana_max = 500;
@@ -732,7 +832,7 @@ void Warg_State::add_char(UID id, int team, const char *name)
     c.spellbook[s.def->name] = s;
   }
 
-  chars[id] = c;
+  game_state.characters[id] = c;
 }
 
 bool Latency_Tracker::should_send_ping()
