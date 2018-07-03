@@ -1655,7 +1655,7 @@ void Renderer::translucent_pass(float32 time)
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
     glBindVertexArray(vao);
-    Shader &shader = entity.material->shader;
+    Shader &shader = CONFIG.render_simple ? simple : entity.material->shader;
     shader.use();
     entity.material->bind(&shader);
     shader.set_uniform("time", time);
@@ -1976,10 +1976,9 @@ void Renderer::render(float64 state_time)
   opaque_pass(time);
 
   // instance_pass(time);
-  if (!CONFIG.render_simple)
-  {
-    translucent_pass(time);
-  }
+
+  translucent_pass(time);
+
 #if POSTPROCESSING
   postprocess_pass(time);
 #else
