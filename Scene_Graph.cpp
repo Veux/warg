@@ -200,6 +200,7 @@ void Scene_Graph::visit_nodes(
   const mat4 I = entity->import_basis;
 
   mat4 STACK = mat4(1);
+
   if (entity->propagate_scale)
   {
     STACK = S;
@@ -212,6 +213,8 @@ void Scene_Graph::visit_nodes(
   {
     STACK = T * STACK;
   }
+  STACK = M * B * STACK;
+
   const mat4 final_transformation = M * B * T * R * S * I;
 
   const uint32 num_meshes = entity->model.size();
