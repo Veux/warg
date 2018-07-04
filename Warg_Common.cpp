@@ -92,12 +92,18 @@ void Character::apply_modifiers()
   e_stats = b_stats;
   silenced = false;
 
-  for (auto &buff : buffs)
-    for (auto &modifier : buff.def.char_mods)
-      apply_modifier(*modifier);
-  for (auto &debuff : debuffs)
-    for (auto &modifier : debuff.def.char_mods)
-      apply_modifier(*modifier);
+  for (size_t i = 0; i < buffs.size(); i++)
+  {
+    Buff *buff = &buffs[i];
+    for (size_t j = 0; j < buff->def.char_mods.size(); j++)
+      apply_modifier(buff->def.char_mods[j]);
+  }
+  for (size_t i = 0; i < buffs.size(); i++)
+  {
+    Buff *debuff = &debuffs[i];
+    for (size_t j = 0; j < debuff->def.char_mods.size(); j++)
+      apply_modifier(debuff->def.char_mods[j]);
+  }
 }
 
 void move_char(Character &character, Input command, std::vector<Triangle> colliders)

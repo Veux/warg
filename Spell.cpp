@@ -284,21 +284,21 @@ std::unique_ptr<SpellDB> make_spell_db()
   fb_slow_.type = CharModType::Speed;
   fb_slow_.speed.m = 0.2;
   db->char_mods.push_back(fb_slow_);
-  CharMod *fb_slow = &db->char_mods.back();
+  size_t fb_slow = db->char_mods.size() - 1;
 
   BuffDef fb_debuff_;
   fb_debuff_.name = "FrostboltSlowDebuff";
   fb_debuff_.duration = 10;
-  fb_debuff_.char_mods.push_back(fb_slow);
+  fb_debuff_.char_mods.push_back(fb_slow_);
   db->buffs.push_back(fb_debuff_);
-  BuffDef *fb_debuff = &db->buffs.back();
+  size_t fb_debuff = db->buffs.size() - 1;
 
   SpellEffect fb_debuff_appl_;
   fb_debuff_appl_.name = "FrostboltDebuffApplyEffect";
   fb_debuff_appl_.type = SpellEffectType::ApplyDebuff;
   fb_debuff_appl_.applydebuff.debuff = fb_debuff;
   db->effects.push_back(fb_debuff_appl_);
-  SpellEffect *fb_debuff_appl = &db->effects.back();
+  size_t fb_debuff_appl = db->effects.size() - 1;
 
   SpellEffect fb_damage_;
   fb_damage_.name = "FrostboltDamageEffect";
@@ -307,22 +307,22 @@ std::unique_ptr<SpellDB> make_spell_db()
   fb_damage_.damage.pierce_absorb = false;
   fb_damage_.damage.pierce_mod = false;
   db->effects.push_back(fb_damage_);
-  SpellEffect *fb_damage = &db->effects.back();
+  size_t fb_damage = db->effects.size() - 1;
 
-  int fb_object = db->objects.size();
   SpellObjectDef fb_object_;
   fb_object_.name = "Frostbolt";
   fb_object_.speed = 30;
   fb_object_.effects.push_back(fb_debuff_appl);
   fb_object_.effects.push_back(fb_damage);
   db->objects.push_back(fb_object_);
+  size_t fb_object = db->objects.size() - 1;
 
   SpellEffect fb_object_launch_;
   fb_object_launch_.name = "FrostboltObjectLaunchEffect";
   fb_object_launch_.type = SpellEffectType::ObjectLaunch;
   fb_object_launch_.objectlaunch.object = fb_object;
   db->effects.push_back(fb_object_launch_);
-  SpellEffect *fb_object_launch = &db->effects.back();
+  size_t fb_object_launch = db->effects.size() - 1;
 
   SpellDef frostbolt_;
   frostbolt_.name = "Frostbolt";

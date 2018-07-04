@@ -150,7 +150,7 @@ bool Warg_Server::update_spell_object(SpellObjectInst *so)
     for (auto &e : so->def.effects)
     {
       SpellEffectInst i;
-      i.def = *e;
+      i.def = sdb->effects[e];
       i.caster = so->caster;
       i.pos = so->pos;
       i.target = so->target;
@@ -336,7 +336,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   for (auto &e : spell->def->effects)
   {
     SpellEffectInst i;
-    i.def = *e;
+    i.def = sdb->effects[e];
     i.caster = caster_;
     i.pos = caster->physics.pos;
     i.target = target_;
@@ -395,7 +395,7 @@ void Warg_Server::invoke_spell_effect_aoe(SpellEffectInst &effect)
     if (in_range && (at_ally || at_hostile))
     {
       SpellEffectInst i;
-      i.def = *effect.def.aoe.effect;
+      i.def = sdb->effects[effect.def.aoe.effect];
       i.caster = effect.caster;
       i.pos = {0, 0, 0};
       i.target = ch;
@@ -413,7 +413,7 @@ void Warg_Server::invoke_spell_effect_apply_buff(SpellEffectInst &effect)
   bool is_buff = effect.def.type == SpellEffectType::ApplyBuff;
 
   Buff buff;
-  buff.def = is_buff ? *effect.def.applybuff.buff : *effect.def.applydebuff.debuff;
+  buff.def = sdb->buffs[is_buff ? effect.def.applybuff.buff : effect.def.applydebuff.debuff];
   buff.duration = buff.def.duration;
   buff.ticks_left = (int)glm::floor(buff.def.duration * buff.def.tick_freq);
   if (is_buff)
@@ -525,7 +525,7 @@ void Warg_Server::update_buffs(UID character, float32 dt)
         for (auto &e : b->def.tick_effects)
         {
           SpellEffectInst i;
-          i.def = *e;
+          i.def = sdb->effects[e];
           i.caster = 0;
           i.target = character;
           i.pos = {0, 0, 0};

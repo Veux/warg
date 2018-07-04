@@ -12,7 +12,7 @@ struct SpellObjectDef
 {
   std::string name;
   float32 speed;
-  std::vector<SpellEffect *> effects;
+  std::vector<size_t> effects;
 };
 
 struct SpellObjectInst
@@ -39,7 +39,7 @@ struct SpellDef
   SpellTargets targets;
   float32 cooldown;
   float32 cast_time;
-  std::vector<SpellEffect *> effects;
+  std::vector<size_t> effects;
 };
 
 struct Spell
@@ -62,19 +62,19 @@ struct HealEffect
 
 struct ApplyBuffEffect
 {
-  BuffDef *buff;
+  size_t buff;
 };
 
 struct ApplyDebuffEffect
 {
-  BuffDef *debuff;
+  size_t debuff;
 };
 
 struct AoEEffect
 {
   SpellTargets targets;
   float32 radius;
-  SpellEffect *effect;
+  size_t effect;
 };
 
 struct ClearDebuffsEffect
@@ -170,8 +170,8 @@ struct BuffDef
   std::string name;
   float32 duration;
   float32 tick_freq;
-  std::vector<SpellEffect *> tick_effects;
-  std::vector<CharMod *> char_mods;
+  std::vector<size_t> tick_effects;
+  std::vector<CharMod> char_mods;
 };
 
 struct Buff
