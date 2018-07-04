@@ -21,7 +21,6 @@ struct SpellObjectInst
   int caster;
   int target;
   vec3 pos;
-  Node_Ptr mesh;
 };
 
 enum class SpellTargets
