@@ -70,10 +70,10 @@ bool File_Picker::run()
   ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
   auto thumbsize = ImVec2(128, 128);
   auto tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
-  int num_horizontal = (winsize.x - 32) / (tframesize.x + 8);
+  int num_horizontal = (int)floor((winsize.x - 32) / (tframesize.x + 8));
   if (num_horizontal == 0)
     num_horizontal = 1;
-  for (int i = 0; i < dircontents.size(); i++)
+  for (size_t i = 0; i < dircontents.size(); i++)
   {
     auto &f = dircontents[i];
     if (i % num_horizontal != 0)

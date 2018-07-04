@@ -29,8 +29,9 @@ void serialize_(Buffer &b, uint32_t n) { b.insert(&n, sizeof(n)); }
 void serialize_(Buffer &b, const char *s)
 {
   ASSERT(s);
-  uint16_t len = strlen(s);
+  size_t len = strlen(s);
   ASSERT(len <= UINT16_MAX);
+  uint16 len_ = (uint16_t)len;
   b.reserve(sizeof(len) + len);
   b.insert(&len, sizeof(len));
   b.insert((void *)s, len);

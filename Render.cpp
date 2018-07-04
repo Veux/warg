@@ -1944,7 +1944,7 @@ void Renderer::render(float64 state_time)
             for (uint32 i = 0; i < mip_levels; ++i)
             {
               Imgui_Texture_Descriptor d = descriptor;
-              d.mip_lod_to_draw = i;
+              d.mip_lod_to_draw = (float)i;
               IMGUI_TEXTURE_DRAWS.push_back(d);
               uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
               ImGui::Image((ImTextureID)data, ImVec2(ptr->imgui_size_scale * aspect * 256, ptr->imgui_size_scale * 256),
@@ -2772,8 +2772,8 @@ void Environment_Map::generate_ibl_mipmaps()
   glCullFace(GL_FRONT);
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
   {
-    uint32 width = radiance.size.x * pow(0.5, mip_level);
-    uint32 height = radiance.size.y * pow(0.5, mip_level);
+    uint32 width = (uint32)floor(radiance.size.x * pow(0.5, mip_level));
+    uint32 height = (uint32)floor(radiance.size.y * pow(0.5, mip_level));
     glViewport(0, 0, width, height);
     float roughness = (float)mip_level / (float)(mip_levels - 1);
     specular_filter.set_uniform("roughness", roughness);

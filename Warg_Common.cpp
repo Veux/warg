@@ -36,7 +36,7 @@ Map make_blades_edge()
 
 void Character::update_hp(float32 dt)
 {
-  hp += e_stats.hp_regen * dt;
+  hp += (int)round(e_stats.hp_regen * dt); // todo: fix dis shit
   if (hp > hp_max)
     hp = hp_max;
 }
@@ -137,7 +137,7 @@ void move_char(Character &character, Input command, std::vector<Triangle> collid
     grounded = false;
   }
 
-  vel.z -= 9.81 * dt;
+  vel.z -= 9.81f * dt;
   if (vel.z < -53)
     vel.z = -53;
   if (grounded)
@@ -158,7 +158,7 @@ std::vector<Triangle> collect_colliders(Scene_Graph &scene)
       return vec3(q.x, q.y, q.z);
     };
     auto &mesh_data = entity.mesh->mesh->data;
-    for (int i = 0; i < mesh_data.indices.size(); i += 3)
+    for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
     {
       uint32 a, b, c;
       a = mesh_data.indices[i];
@@ -266,8 +266,8 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
     colpkt.found_collision = false;
 
     check_collision(colpkt, colliders);
-    if (colpkt.found_collision && colpkt.nearest_distance > 0.05)
-      final_pos.z -= colpkt.nearest_distance - 0.005;
+    if (colpkt.found_collision && colpkt.nearest_distance > 0.05f)
+      final_pos.z -= colpkt.nearest_distance - 0.005f;
   }
 
   colpkt.pos_r3 = final_pos * colpkt.e_radius;

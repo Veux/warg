@@ -81,7 +81,6 @@ void Warg_Server::update(float32 dt)
     auto &cid = c.first;
     auto &ch = c.second;
 
-    bool found_peer;
     Input last_input;
     for (auto &peer_ : peers)
     {
@@ -314,6 +313,8 @@ CastErrorType Warg_Server::cast_viable(UID caster_, UID target_, Spell *spell)
     return CastErrorType::OutOfRange;
   if (caster->casting)
     return CastErrorType::AlreadyCasting;
+
+  return CastErrorType::Success;
 }
 
 void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
@@ -383,7 +384,7 @@ void Warg_Server::invoke_spell_effect_aoe(SpellEffectInst &effect)
 {
   ASSERT(effect.caster && game_state.characters.count(effect.caster));
 
-  for (int ch = 0; ch < game_state.characters.size(); ch++)
+  for (size_t ch = 0; ch < game_state.characters.size(); ch++)
   {
     Character *c = &game_state.characters[ch];
 
@@ -442,7 +443,7 @@ void Warg_Server::invoke_spell_effect_damage(SpellEffectInst &effect)
   int overkill = 0;
 
   if (!d->pierce_mod)
-    effective *= target->e_stats.damage_mod;
+    effective = (int)round(effective * target->e_stats.damage_mod);
 
   target->hp -= effective;
 
@@ -573,7 +574,7 @@ UID Warg_Server::add_dummy()
   c.hp = c.hp_max;
   c.mana_max = 10000;
   c.mana = c.mana_max;
-  c.radius = vec3(0.5f) * vec3(.39, 0.30, 1.61) * vec3(1 + log(c.hp_max / 100));
+  c.radius = vec3(0.5f) * vec3(.39f, 0.30f, 1.61f) * vec3(1 + (float)log(c.hp_max / 100));
 
   CharStats s;
   s.gcd = 1.5;
@@ -624,7 +625,7 @@ UID Warg_Server::add_char(int team, const char *name)
   c.b_stats = s;
   c.e_stats = s;
 
-  for (int i = 0; i < sdb->spells.size(); i++)
+  for (size_t i = 0; i < sdb->spells.size(); i++)
   {
     Spell s;
     s.def = &sdb->spells[i];

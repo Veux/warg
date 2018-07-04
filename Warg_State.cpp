@@ -824,7 +824,7 @@ void Warg_State::add_char(UID id, int team, const char *name)
   c.b_stats = s;
   c.e_stats = s;
 
-  for (int i = 0; i < sdb->spells.size(); i++)
+  for (size_t i = 0; i < sdb->spells.size(); i++)
   {
     Spell s;
     s.def = &sdb->spells[i];
@@ -852,4 +852,4 @@ void Latency_Tracker::ack_received()
   last_latency = last_ack - last_ping;
 }
 
-uint32 Latency_Tracker::get_latency() { return round(last_latency * 1000); }
+uint32 Latency_Tracker::get_latency() { return (uint32)round(last_latency * 1000); }
