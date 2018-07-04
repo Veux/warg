@@ -418,6 +418,8 @@ void Warg_State::draw_prediction_ghost()
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
+  material.uses_transparency = true;
+  material.albedo.mod = vec4(1, 1, 1, 0.5);
 
   static Node_Ptr ghost_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
   ghost_mesh->position = physics->pos;
