@@ -614,7 +614,7 @@ UID Warg_Server::add_char(int team, const char *name)
 
   CharStats s;
   s.gcd = 1.5;
-  s.speed = 4.0;
+  s.speed = MOVE_SPEED;
   s.cast_speed = 1;
   s.hp_regen = 2;
   s.mana_regen = 10;
