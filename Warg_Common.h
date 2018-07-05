@@ -66,7 +66,7 @@ struct Character
   UID id;
 
   Character_Physics physics;
-  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
+  vec3 radius = vec3(0.5f) * vec3(1.f); /*vec3(.39, 0.30, 1.61);*/ // avg human in meters
 
   std::string name;
   int team;
@@ -110,6 +110,7 @@ struct Game_State
   uint32 tick = 0;
   uint32 input_number = 0;
   std::map<UID, Character> characters;
+  std::map<UID, SpellObjectInst> spell_objects;
 };
 
 Map make_blades_edge();

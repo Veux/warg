@@ -30,6 +30,8 @@ Map make_blades_edge()
   blades_edge.material.albedo.wrap_s = GL_TEXTURE_WRAP_S;
   blades_edge.material.albedo.wrap_t = GL_TEXTURE_WRAP_T;
   blades_edge.material.metalness.mod = vec4(0);
+  if (CONFIG.render_simple)
+    blades_edge.material.albedo.mod = vec4(0.4f);
 
   return blades_edge;
 }

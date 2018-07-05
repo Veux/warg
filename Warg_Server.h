@@ -70,7 +70,6 @@ struct Warg_Server
   Scene_Graph scene;
   unique_ptr<SpellDB> sdb;
   Game_State game_state;
-  vector<SpellObjectInst> spell_objs;
 
   UID dummy_id = 0;
 };

@@ -1,6 +1,6 @@
 #pragma once
 
-#define SIM_LATENCY 500
+#define SIM_LATENCY 100
 
 #include "Spell.h"
 #include <enet/enet.h>
@@ -179,7 +179,7 @@ struct Input;
 
 struct State_Message : Message
 {
-  State_Message(UID pc, std::map<UID, Character> &chars, uint32 tick_, uint32 input_number_);
+  State_Message(UID pc, std::map<UID, Character> &chars, std::map<UID, SpellObjectInst> spell_objects, uint32 tick_, uint32 input_number_);
   State_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -189,6 +189,7 @@ struct State_Message : Message
   uint32 tick;
   uint32 input_number;
   std::map<UID, Character> characters;
+  std::map<UID, SpellObjectInst> spell_objects;
 };
 
 struct Ping_Message : Message

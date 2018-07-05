@@ -272,3 +272,7 @@ std::string strip_file_extension(std::string file);
 
 
 extern Image_Loader IMAGE_LOADER;
+
+vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
+
+void *get_child_node(void *parent, const char *name);

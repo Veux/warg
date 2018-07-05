@@ -14,7 +14,7 @@
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 60.0f;
-const float32 MOVE_SPEED = 6.0f;
+const float32 MOVE_SPEED = 6.f;
 const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
 const float32 ZOOM_STEP = 0.5f;
@@ -688,3 +688,17 @@ bool has_img_file_extension(std::string name)
   return false;
 }
 Image_Loader IMAGE_LOADER;
+
+vec4 rgb_vec4(uint8 r, uint8 g, uint8 b)
+{
+  return vec4(r, g, b, 255.f) / vec4(255.f);
+}
+
+void *get_child_node(void *parent, const char *name)
+{
+  Node_Ptr *child = nullptr;
+  for (Node_Ptr &child_node : (*(Node_Ptr *)parent)->owned_children)
+    if (child_node->name == name)
+      child = &child_node;
+  return child;
+}

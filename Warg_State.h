@@ -21,6 +21,12 @@ private:
   bool acked = true;
 };
 
+struct HP_Bar_Nodes
+{
+  Node_Ptr max;
+  Node_Ptr current;
+};
+
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
@@ -35,15 +41,19 @@ struct Warg_State : protected State
   void register_move_command(Move_Status m, vec3 dir);
   void add_character_mesh(UID character_id);
   void set_camera_geometry();
-  void draw_characters();
-  void draw_prediction_ghost();
-  void draw_stats_bar();
+  void update_character_nodes();
+  void update_prediction_ghost();
+  void update_stats_bar();
   void predict_player_character();
   void send_messages();
   void process_messages();
   void send_ping();
   void predict_state();
   void update_meshes();
+  void update_spell_object_nodes();
+  void update_hp_bar(UID character_id);
+  void animate_character(UID character_id);
+
 
   unique_ptr<Warg_Server> server;
   queue<unique_ptr<Message>> in, out;
@@ -65,10 +75,10 @@ struct Warg_State : protected State
   uint32 input_number = 0;
 
   unique_ptr<SpellDB> sdb;
-  vector<SpellObjectInst> spell_objs;
 
   std::map<UID, Node_Ptr> character_nodes;
   std::map<UID, Node_Ptr> spell_object_nodes;
+  std::map<UID, HP_Bar_Nodes> hp_bar_nodes;
 
   vec4 cam_rel;
 };

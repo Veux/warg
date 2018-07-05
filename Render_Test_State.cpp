@@ -272,20 +272,20 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     cam.dir = normalize(vec3(ry * vr));
 
     if (is_pressed(SDL_SCANCODE_W))
-      cam.pos += MOVE_SPEED * cam.dir;
+      cam.pos += MOVE_SPEED * dt * cam.dir;
     if (is_pressed(SDL_SCANCODE_S))
-      cam.pos -= MOVE_SPEED * cam.dir;
+      cam.pos -= MOVE_SPEED * dt * cam.dir;
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * r * v);
+      cam.pos += vec3(MOVE_SPEED * dt * r * v);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * r * v);
+      cam.pos += vec3(MOVE_SPEED * dt * r * v);
     }
   }
   else
@@ -364,24 +364,24 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     if (is_pressed(SDL_SCANCODE_W))
     {
       vec3 v = vec3(player_dir.x, player_dir.y, 0.0f);
-      player_pos += MOVE_SPEED * v;
+      player_pos += MOVE_SPEED * dt * v;
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
       vec3 v = vec3(player_dir.x, player_dir.y, 0.0f);
-      player_pos -= MOVE_SPEED * v;
+      player_pos -= MOVE_SPEED * dt * v;
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(player_dir.x, player_dir.y, 0, 0);
-      player_pos += MOVE_SPEED * vec3(r * v);
+      player_pos += MOVE_SPEED * dt * vec3(r * v);
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(player_dir.x, player_dir.y, 0, 0);
-      player_pos += MOVE_SPEED * vec3(r * v);
+      player_pos += MOVE_SPEED * dt * vec3(r * v);
     }
     cam.pos = player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
     cam.dir = -vec3(cam_rel);
@@ -471,6 +471,7 @@ void Render_Test_State::update()
 
   gun->orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
   tiger->orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
+  tiger->scale = vec3(2, 0.5, 0.5f);
 
   skybox->scale = vec3(4000);
   skybox->position = vec3(0, 0, 0);

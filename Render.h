@@ -433,6 +433,7 @@ struct Renderer
   // todo: refraction
   // todo: screen space reflections
   // todo: parallax mapping
+  // todo: negative glow
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
   void render(float64 state_time);

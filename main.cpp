@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
     current_state->render(current_state->current_time);
 
     std::string messages = get_messages();
-    ImGui::Text(messages.c_str());
+    ImGui::Text("%s", messages.c_str());
 
     static bool show_demo_window = true;
     if (show_demo_window)

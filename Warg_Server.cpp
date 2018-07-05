@@ -105,13 +105,14 @@ void Warg_Server::update(float32 dt)
   for (auto &p : peers)
   {
     Warg_Peer &peer = p.second;
-    push_to(make_unique<State_Message>(peer.character, game_state.characters, tick, peer.last_input.number), peer);
+    push_to(make_unique<State_Message>(peer.character, game_state.characters, game_state.spell_objects, tick, peer.last_input.number), peer);
   }
 
-  for (auto i = spell_objs.begin(); i != spell_objs.end();)
+  for (auto i = game_state.spell_objects.begin(); i != game_state.spell_objects.end();)
   {
-    if (update_spell_object(&*i))
-      i = spell_objs.erase(i);
+    SpellObjectInst *spell_object = &i->second;
+    if (update_spell_object(spell_object))
+      i = game_state.spell_objects.erase(i);
     else
       i++;
   }
@@ -194,6 +195,8 @@ void Cast_Message::handle(Warg_Server &server)
   auto &peer_ = server.peers[peer];
   ASSERT(server.game_state.characters.count(peer_.character));
   auto &character = server.game_state.characters[peer_.character];
+
+  set_message("server received cast message on tick:", s(server.tick), 100);
 
   server.try_cast_spell(character, target, spell.c_str());
 }
@@ -319,7 +322,7 @@ CastErrorType Warg_Server::cast_viable(UID caster_, UID target_, Spell *spell)
 
 void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
 {
-  ASSERT(0 <= caster_ && caster_ < game_state.characters.size());
+  ASSERT(game_state.characters.count(caster_));
   ASSERT(spell);
   ASSERT(spell->def);
 
@@ -506,7 +509,7 @@ void Warg_Server::invoke_spell_effect_object_launch(SpellEffectInst &effect)
   obji.caster = effect.caster;
   obji.target = effect.target;
   obji.pos = effect.pos;
-  spell_objs.push_back(obji);
+  game_state.spell_objects[uid()] = obji;
 
   push(make_unique<Object_Launch_Message>(effect.def.objectlaunch.object, obji.caster, obji.target, obji.pos));
 }
@@ -574,7 +577,6 @@ UID Warg_Server::add_dummy()
   c.hp = c.hp_max;
   c.mana_max = 10000;
   c.mana = c.mana_max;
-  c.radius = vec3(0.5f) * vec3(.39f, 0.30f, 1.61f) * vec3(1 + (float)log(c.hp_max / 100));
 
   CharStats s;
   s.gcd = 1.5;

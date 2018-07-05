@@ -348,7 +348,7 @@ Object_Launch_Message::Object_Launch_Message(UID object_, UID caster_, UID targe
   pos = pos_;
 }
 
-State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, uint32 tick_, uint32 input_number_)
+State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, std::map<UID, SpellObjectInst> spell_objects_, uint32 tick_, uint32 input_number_)
 {
   reliable = false;
 
@@ -356,6 +356,7 @@ State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, uint32 t
   input_number = input_number_;
   pc = pc_;
   characters = chars_;
+  spell_objects = spell_objects_;
 }
 
 Ping_Message::Ping_Message() {}
