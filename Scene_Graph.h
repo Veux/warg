@@ -49,14 +49,15 @@ struct Scene_Graph_Node
   // should be the same for every node that was part of the same import
   mat4 import_basis = mat4(1);
 
+  // assimp's import mtransformation, propagates to children
+  mat4 basis = mat4(1);
+
   // is blank for non-assimp imports
   std::string filename_of_import;
   bool is_root_of_import = false;
 
 protected:
   friend Scene_Graph;
-  // assimp's import mtransformation, propagates to children
-  mat4 basis = mat4(1);
 
   std::weak_ptr<Scene_Graph_Node> parent;
 };

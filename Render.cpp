@@ -2563,7 +2563,7 @@ Cubemap::Cubemap(string equirectangular_filename)
   mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
       lookAt(origin, negy, negz), lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
 
-  size = ivec2(2048, 2048);
+  size = CONFIG.use_low_quality_specular ? ivec2(1024, 1024) : ivec2(2048, 2048);
   handle->size = size;
 
   // initialize targets and result cubemap
