@@ -343,8 +343,8 @@ struct Light_Array
   // bool operator==(const Light_Array &rhs);
   std::array<Light, MAX_LIGHTS> lights;
   Environment_Map environment =
-      Environment_Map_Descriptor(".//Assets/Textures/Environment_Maps/Ice_Lake/Ice_Lake_Ref.hdr",
-          ".//Assets/Textures/Environment_Maps/Ice_Lake/output_iem.hdr");
+      Environment_Map_Descriptor(".//Assets/Textures/Environment_Maps/Arches_E_PineTree/radiance.hdr",
+          ".//Assets/Textures/Environment_Maps/Arches_E_PineTree/irradiance.hdr");
   // todo: environment map json
   uint32 light_count = 0;
 };

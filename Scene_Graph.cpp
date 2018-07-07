@@ -215,7 +215,7 @@ void Scene_Graph::visit_nodes(
   }
   STACK = M * B * STACK;
 
-  const mat4 final_transformation = M * B * T * R * S * I;
+  const mat4 final_transformation = M * T * R * S * B * I;
 
   const uint32 num_meshes = entity->model.size();
   for (uint32 i = 0; i < num_meshes; ++i)
