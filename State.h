@@ -22,15 +22,12 @@ struct State
   ~State();
   virtual void render(float64 t) final;
   virtual void update() = 0;
-  virtual void handle_input(State **current_state,
-      std::vector<State *> *available_states, std::vector<SDL_Event> *input,
-      bool block_kb, bool block_mouse) final;
-  virtual void handle_input_events(const std::vector<SDL_Event> &events,
-      bool block_kb, bool block_mouse) = 0;
+  virtual void handle_input(State **current_state, std::vector<State *> *available_states,
+      std::vector<SDL_Event> *input, bool block_kb, bool block_mouse) final;
+  virtual void handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse) = 0;
   float64 current_time = 0;
   bool paused = true;
-  float64 paused_time_accumulator =
-      0; // how far the sim is behind 'real' process time
+  float64 paused_time_accumulator = 0; // how far the sim is behind 'real' process time
   float64 last_performance_output = 0;
   uint64 frames_at_last_report = 0;
   void reset_mouse_delta();
@@ -38,7 +35,7 @@ struct State
   void performance_output();
   std::string state_name;
   Renderer renderer;
-  Scene_Graph scene;
+  Flat_Scene_Graph scene;
 
   bool free_cam = false;
 

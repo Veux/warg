@@ -21,8 +21,8 @@ struct Warg_Peer
   vector<unique_ptr<Message>> tick_events;
   Input last_input;
 };
-//todo: change all built in dynamic types to static types, eg int, float
-//todo: change all instances of dt to use float64 for identical precision with game loop
+// todo: change all built in dynamic types to static types, eg int, float
+// todo: change all instances of dt to use float64 for identical precision with game loop
 struct Warg_Server
 {
   Warg_Server(bool local);
@@ -68,10 +68,9 @@ struct Warg_Server
   uint32 tick = 0;
 
   Map map;
-  vector<Triangle> collider_cache;
-  Scene_Graph scene;
+  Flat_Scene_Graph scene;
   unique_ptr<Spell_Database> sdb;
   Game_State game_state;
-
   UID dummy_id = 0;
+  vector<Triangle> collider_cache;
 };

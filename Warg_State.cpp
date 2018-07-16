@@ -67,9 +67,9 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size) 
   sky_mat.backface_culling = false;
   sky_mat.vertex_shader = "vertex_shader.vert";
   sky_mat.frag_shader = "skybox.frag";
-  Node_Ptr skybox = scene.add_primitive_mesh(cube, "skybox", sky_mat);
-  skybox->scale = vec3(500);
-  scene.set_parent(skybox, scene.root, true);
+  Node_Index skybox = scene.add_mesh(cube, "skybox", &sky_mat);
+  scene.nodes[skybox].scale = vec3(500);
+  scene.set_parent(skybox, NODE_NULL);
 
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();

@@ -3,7 +3,7 @@
 #include <cstring>
 #include <memory>
 
-Warg_Server::Warg_Server(bool local)
+Warg_Server::Warg_Server(bool local) : scene(&GL_DISABLED_RESOURCE_MANAGER)
 {
   this->local = local;
   if (!local)
@@ -16,6 +16,7 @@ Warg_Server::Warg_Server(bool local)
     ASSERT(server);
   }
   map = make_blades_edge();
+    map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
   collider_cache = collect_colliders(scene);
   //collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });

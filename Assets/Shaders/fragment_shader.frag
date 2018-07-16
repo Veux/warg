@@ -1,5 +1,5 @@
 ﻿#version 330
-uniform sampler2D texture0; // albedo or specular color
+uniform sampler2D texture0; //  albedo or specular color
 uniform sampler2D texture1; // emissive
 uniform sampler2D texture2; // roughness
 uniform sampler2D texture3; // normal
@@ -204,8 +204,8 @@ vec3 F_schlick(vec3 F0, float ndotv)
 
 // includes Cook-Torrance denominator
 // http://graphicrants.blogspot.co.uk/2013/08/specular-brdf-reference.html
-//??above uses the surface normal, below uses the half vector
-// http://www.trentreed.net/blog/physically-based-shading-and-image-based-lighting/
+// above uses the surface normal, below uses the half vector??
+//  http://www.trentreed.net/blog/physically-based-shading-and-image-based-lighting/
 float G_smith_GGX_denom(float a, float NoV, float NoL)
 {
   //                           2(ndotv)
@@ -224,7 +224,7 @@ float G_smith_GGX_denom(float a, float NoV, float NoL)
 }
 
 // http://graphicrants.blogspot.co.uk/2013/08/specular-brdf-reference.html
-//??above uses the surface normal, below uses the half vector
+// above uses the surface normal, below uses the half vector??
 // http://www.trentreed.net/blog/physically-based-shading-and-image-based-lighting/
 float G_smith_GGX(float a, float NoV, float NoL)
 {
@@ -356,9 +356,11 @@ void main()
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
   vec3 F0 = vec3(0.04); // default dielectrics
+  //todo: could put dielectric reflectivity in a uniform
+  //this would let us specify more light absorbant materials
   F0 = mix(F0, m.albedo, m.metalness);
 
-  float ndotv = saturate(dot(m.normal, v));
+  float ndotv = clamp(dot(m.normal, v),0,1);
 
   float roughnessclamp = clamp(m.roughness, 0.01, 1);
 

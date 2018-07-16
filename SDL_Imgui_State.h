@@ -49,3 +49,6 @@ private:
   unsigned int vbo = 0, vao = 0, element_buffer = 0;
   SDL_Cursor *sdl_cursors[ImGuiMouseCursor_Count_] = {0};
 };
+
+void put_imgui_texture(Texture *t, glm::vec2 size);
+void put_imgui_texture(Texture_Descriptor *td, glm::vec2 pos);

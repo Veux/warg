@@ -1,7 +1,6 @@
-
-#include "Json.h"
-
+#include "Forward_Declarations.h"
 #include "Globals.h"
+#include "Json.h"
 #include "Render.h"
 #include "Render_Test_State.h"
 #include "State.h"
@@ -83,8 +82,9 @@ void server_main()
 int main(int argc, char *argv[])
 {
   const char *config_filename = "config.json";
+  SCRATCH_STRING.reserve(5000);
   CONFIG.load(config_filename);
-  SDL_Delay(1000);
+  // SDL_Delay(1000); ??
   bool client = false;
   std::string address;
   std::string char_name;
@@ -143,9 +143,7 @@ int main(int argc, char *argv[])
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
   SDL_Window *window = SDL_CreateWindow("title", 100, 130, window_size.x, window_size.y, flags);
-
   SDL_GLContext context = SDL_GL_CreateContext(window);
 
   int32 major, minor;
@@ -177,7 +175,6 @@ int main(int argc, char *argv[])
 #endif
   glClearColor(0, 0, 0, 1);
   checkSDLError(__LINE__);
-
   SDL_ClearError();
 
   SDL_Imgui_State trash_imgui(window);
@@ -188,10 +185,10 @@ int main(int argc, char *argv[])
   trash_imgui.new_frame(window, 0.1f);
   trash_imgui.end_frame();
 
-  float64 last_time = 0.0;
-  float64 elapsed_time = 0.0;
-  Render_Test_State render_test_state("Render Test State", window, window_size);
+  GL_ENABLED_RESOURCE_MANAGER.init();
+  GL_DISABLED_RESOURCE_MANAGER.init();
 
+  Render_Test_State *render_test_state = new Render_Test_State("Render Test State", window, window_size);
   Warg_State *game_state;
   if (client)
     game_state = new Warg_State("Warg", window, window_size, address.c_str(), char_name.c_str(), team);
@@ -199,14 +196,15 @@ int main(int argc, char *argv[])
     game_state = new Warg_State("Warg", window, window_size);
   std::vector<State *> states;
   states.push_back((State *)game_state);
-  states.push_back((State *)&render_test_state);
+  states.push_back((State *)render_test_state);
   State *current_state = &*states[0];
   std::vector<SDL_Event> imgui_event_accumulator;
 
-  bool first_update = false;
-  // todo: compositor for n state/renderer pairs with ui
-
   SDL_SetRelativeMouseMode(SDL_bool(false));
+
+  bool first_update = false;
+  float64 last_time = 0.0;
+  float64 elapsed_time = 0.0;
   bool renderer_requires_trashgui_wrapping = false;
   while (current_state->running)
   {
@@ -322,6 +320,7 @@ int main(int argc, char *argv[])
     current_state->performance_output();
   }
   delete game_state;
+  delete render_test_state;
   push_log_to_disk();
   imgui.destroy();
   SDL_Quit();
