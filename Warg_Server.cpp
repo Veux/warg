@@ -16,11 +16,10 @@ Warg_Server::Warg_Server(bool local) : scene(&GL_DISABLED_RESOURCE_MANAGER)
     ASSERT(server);
   }
   map = make_blades_edge();
-    map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
-  map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
+  map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   collider_cache = collect_colliders(scene);
-  //collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
-  //collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
+  // collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
+  // collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
   sdb = make_spell_db();
   add_dummy();
 }
@@ -40,7 +39,7 @@ void Warg_Server::process_packets()
       {
         UID id = uid();
         peers[id] = {event.peer, nullptr, nullptr, 0};
-        
+
         break;
       }
       case ENET_EVENT_TYPE_RECEIVE:
@@ -75,7 +74,7 @@ void Warg_Server::update(float32 dt)
     process_packets();
   else
     process_events();
-  
+
   bool found_living_dummy = false;
   for (auto &character : game_state.characters)
     if (character.second.name == "Combat Dummy" && character.second.alive)
@@ -127,7 +126,9 @@ void Warg_Server::update(float32 dt)
   for (auto &p : peers)
   {
     Warg_Peer &peer = p.second;
-    push_to(make_unique<State_Message>(peer.character, game_state.characters, game_state.spell_objects, tick, peer.last_input.number), peer);
+    push_to(make_unique<State_Message>(
+                peer.character, game_state.characters, game_state.spell_objects, tick, peer.last_input.number),
+        peer);
   }
 
   for (auto i = game_state.spell_objects.begin(); i != game_state.spell_objects.end();)
@@ -149,7 +150,7 @@ void Warg_Server::process_events()
     while (!p.in->empty())
     {
       auto &ev = p.in->front();
-      //if (get_real_time() - ev->t < SIM_LATENCY / 2000.0f)
+      // if (get_real_time() - ev->t < SIM_LATENCY / 2000.0f)
       //  return;
       ev->peer = uid;
       ev->handle(*this);
@@ -276,7 +277,7 @@ void Warg_Server::begin_cast(UID caster_id, UID target_id, Spell *spell)
 
   Character *caster = get_character(caster_id);
   ASSERT(caster);
-  
+
   caster->casting = true;
   caster->casting_spell = spell;
   caster->cast_progress = 0;
@@ -437,8 +438,10 @@ void Warg_Server::invoke_spell_effect_aoe(Spell_Effect &effect)
     Character *c = &game_state.characters[ch];
 
     bool in_range = length(c->physics.position - effect.position) <= effect.formula.area.radius;
-    bool at_ally = effect.formula.area.targets == Spell_Targets::Ally && c->team == game_state.characters[effect.caster].team;
-    bool at_hostile = effect.formula.area.targets == Spell_Targets::Hostile && c->team != game_state.characters[effect.caster].team;
+    bool at_ally =
+        effect.formula.area.targets == Spell_Targets::Ally && c->team == game_state.characters[effect.caster].team;
+    bool at_hostile =
+        effect.formula.area.targets == Spell_Targets::Hostile && c->team != game_state.characters[effect.caster].team;
 
     if (in_range && (at_ally || at_hostile))
     {
@@ -464,7 +467,7 @@ void Warg_Server::invoke_spell_effect_apply_buff(Spell_Effect &effect)
   buff.def = sdb->buffs[is_buff ? effect.formula.apply_buff.buff_formula : effect.formula.apply_debuff.debuff_formula];
   buff.duration = buff.def.duration;
   buff.time_since_last_tick = 0.f;
-  
+
   if (is_buff)
     target->buffs.push_back(buff);
   else
@@ -554,7 +557,8 @@ void Warg_Server::invoke_spell_effect_object_launch(Spell_Effect &effect)
   obji.target = effect.target;
   Character *caster = &game_state.characters[effect.caster];
   Character *target = &game_state.characters[effect.target];
-  vec3 launch_pos = caster->physics.position + normalize(target->physics.position - caster->physics.position) * caster->radius.y * 1.5f;
+  vec3 launch_pos = caster->physics.position +
+                    normalize(target->physics.position - caster->physics.position) * caster->radius.y * 1.5f;
   obji.pos = effect.position;
   game_state.spell_objects[uid()] = obji;
 
@@ -565,7 +569,7 @@ void Warg_Server::invoke_spell_effect_blink(Spell_Effect &effect)
 {
   ASSERT(game_state.characters.count(effect.caster));
   Character *caster = &game_state.characters[effect.caster];
-  
+
   vec3 dir = caster->physics.orientation * vec3(0, 1, 0);
   vec3 delta = normalize(dir) * effect.formula.blink.distance;
   collide_and_slide_char(caster->physics, caster->radius, delta, vec3(0, 0, -100), collider_cache);
@@ -629,7 +633,7 @@ UID Warg_Server::add_dummy()
   c.id = id;
   c.team = 2;
   c.name = "Combat Dummy";
-  c.physics.position = { 1, 0, 15 };
+  c.physics.position = {1, 0, 15};
   c.physics.orientation = map.spawn_orientation[0];
   c.hp_max = 50;
   c.hp = c.hp_max;

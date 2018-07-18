@@ -35,6 +35,7 @@ Timer SWAP_TIMER = Timer(60);
 Resource_Manager GL_ENABLED_RESOURCE_MANAGER(false);
 Resource_Manager GL_DISABLED_RESOURCE_MANAGER(true);
 Config CONFIG;
+bool WARG_SERVER;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
@@ -264,7 +265,7 @@ Uint64 dankhash(const float32 *data, uint32 size)
 //}
 void check_gl_error()
 {
-  //glFlush();
+  // glFlush();
   GLenum err = glGetError();
   if (err != GL_NO_ERROR)
   {
@@ -730,19 +731,7 @@ bool has_img_file_extension(std::string name)
 }
 Image_Loader IMAGE_LOADER;
 
-vec4 rgb_vec4(uint8 r, uint8 g, uint8 b)
-{
-  return vec4(r, g, b, 255.f) / vec4(255.f);
-}
-
-void *get_child_node(void *parent, const char *name)
-{
-  Node_Ptr *child = nullptr;
-  for (Node_Ptr &child_node : (*(Node_Ptr *)parent)->owned_children)
-    if (child_node->name == name)
-      child = &child_node;
-  return child;
-}
+vec4 rgb_vec4(uint8 r, uint8 g, uint8 b) { return vec4(r, g, b, 255.f) / vec4(255.f); }
 
 float64 random_between(float64 min, float64 max)
 {
@@ -759,20 +748,20 @@ float32 random_between(float32 min, float32 max)
   std::uniform_real_distribution<float32> distribution(min, max);
   return distribution(generator);
 }
-glm::vec2 random_within(const vec2& vec)
+glm::vec2 random_within(const vec2 &vec)
 {
   std::uniform_real_distribution<float32> x(0, vec.x);
   std::uniform_real_distribution<float32> y(0, vec.y);
   return vec2(x(generator), y(generator));
 }
-glm::vec3 random_within(const vec3& vec)
+glm::vec3 random_within(const vec3 &vec)
 {
   std::uniform_real_distribution<float32> x(0, vec.x);
   std::uniform_real_distribution<float32> y(0, vec.y);
   std::uniform_real_distribution<float32> z(0, vec.z);
   return vec3(x(generator), y(generator), z(generator));
 }
-glm::vec4 random_within(const vec4& vec)
+glm::vec4 random_within(const vec4 &vec)
 {
   std::uniform_real_distribution<float32> x(0, vec.x);
   std::uniform_real_distribution<float32> y(0, vec.y);

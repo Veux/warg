@@ -23,14 +23,14 @@ private:
 
 struct HP_Bar_Nodes
 {
-  Node_Ptr max;
-  Node_Ptr current;
+  Node_Index max;
+  Node_Index current;
 };
 
 struct Animation_Object
 {
-  Node_Ptr node;
-  Node_Ptr collision_node;
+  Node_Index node;
+  Node_Index collision_node;
   Character_Physics physics;
   vec3 radius;
 };
@@ -96,8 +96,8 @@ struct Warg_State : protected State
 
   unique_ptr<Spell_Database> sdb;
 
-  std::map<UID, Node_Ptr> character_nodes;
-  std::map<UID, Node_Ptr> spell_object_nodes;
+  std::map<UID, Node_Index> character_nodes;
+  std::map<UID, Node_Index> spell_object_nodes;
   std::map<UID, HP_Bar_Nodes> hp_bar_nodes;
   std::vector<Animation_Object> animation_objects;
 

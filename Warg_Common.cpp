@@ -1,6 +1,6 @@
 #include "Warg_Common.h"
 
-std::vector<Triangle> collect_colliders(const Scene_Graph &scene);
+std::vector<Triangle> collect_colliders(const Flat_Scene_Graph &scene);
 void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
@@ -153,18 +153,18 @@ void move_char(Character &character, Input command, std::vector<Triangle> collid
   collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
 }
 
-std::vector<Triangle> collect_colliders(Scene_Graph &scene)
+std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene)
 {
   std::vector<Triangle> collider_cache;
 
-  auto entities = scene.visit_nodes_st_start();
+  auto entities = scene.visit_nodes_server_start();
   for (auto &entity : entities)
   {
     auto transform = [&](vec3 p) {
       vec4 q = entity.transformation * vec4(p.x, p.y, p.z, 1.0);
       return vec3(q.x, q.y, q.z);
     };
-    auto &mesh_data = entity.mesh->mesh->data;
+    auto &mesh_data = entity.mesh_descriptor->mesh_data;
     for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
     {
       uint32 a, b, c;
@@ -303,15 +303,13 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
 bool Character_Physics::operator==(const Character_Physics &b) const
 {
   auto &a = *this;
-  return a.position == b.position && a.orientation == b.orientation && a.velocity == b.velocity && a.grounded == b.grounded;
+  return a.position == b.position && a.orientation == b.orientation && a.velocity == b.velocity &&
+         a.grounded == b.grounded;
 }
 
 bool Character_Physics::operator!=(const Character_Physics &b) const { return !(*this == b); }
 
-bool Character_Physics::operator<(const Character_Physics &b) const
-{
-  return command_number < b.command_number;
-}
+bool Character_Physics::operator<(const Character_Physics &b) const { return command_number < b.command_number; }
 
 bool Input::operator==(const Input &b) const
 {

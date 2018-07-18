@@ -99,7 +99,7 @@ private:
 
 struct Map
 {
-  Node_Ptr node;
+  Node_Index node;
   Mesh_Data mesh;
   Material_Descriptor material;
 
@@ -116,7 +116,7 @@ struct Game_State
 };
 
 Map make_blades_edge();
-std::vector<Triangle> collect_colliders(Scene_Graph &scene);
+std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene);
 void move_char(Character &character, Input command, std::vector<Triangle> colliders);
 void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders);

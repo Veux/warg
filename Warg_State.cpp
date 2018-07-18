@@ -20,7 +20,7 @@ Warg_State::Warg_State(
   map = make_blades_edge();
   sdb = make_spell_db();
 
-  map.node = scene.add_aiscene("blades_edge.fbx", nullptr, &map.material);
+  map.node = scene.add_aiscene("Blades Edge", "blades_edge.fbx", &map.material);
   collider_cache = collect_colliders(scene);
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
@@ -56,12 +56,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size) 
   map = make_blades_edge();
   sdb = make_spell_db();
 
-  //map.material.frag_shader = "world_origin_distance.frag";
-  map.node = scene.add_aiscene("Blades_Edge/blades_edge.fbx", nullptr, &map.material);
+  // map.material.frag_shader = "world_origin_distance.frag";
+  map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   map.material.roughness = "color(8, 0, 0, 0)";
   collider_cache = collect_colliders(scene);
-  //collider_cache.push_back({ { 1000, 1000, 0 },{ -1000,1000,0 },{ -1000,-1000,0 } });
-  //collider_cache.push_back({ { -1000, -1000, 0 },{ 1000, -1000, 0 },{ 1000, 1000, 0 } });
+  // collider_cache.push_back({ { 1000, 1000, 0 },{ -1000,1000,0 },{ -1000,-1000,0 } });
+  // collider_cache.push_back({ { -1000, -1000, 0 },{ 1000, -1000, 0 },{ 1000, 1000, 0 } });
 
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;
@@ -308,7 +308,8 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
 
     quat orientation;
     if (right_button_down)
-      orientation = angleAxis(half_pi<float32>() + atan2(character_to_camera.y, character_to_camera.x), vec3(0.f, 0.f, 1.f));
+      orientation =
+          angleAxis(half_pi<float32>() + atan2(character_to_camera.y, character_to_camera.x), vec3(0.f, 0.f, 1.f));
     else
       orientation = player_character->physics.orientation;
 
@@ -371,7 +372,7 @@ void Warg_State::process_events()
   while (!in.empty())
   {
     auto &msg = in.front();
-    //if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
+    // if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
     //  return;
     msg->handle(*this);
     in.pop();
@@ -410,27 +411,17 @@ void Warg_State::set_camera_geometry()
 
 void Warg_State::update_hp_bar(UID character_id)
 {
+  set_message("update_hp_bar()");
   Character *character = &game_state.characters[character_id];
-  Node_Ptr character_node = character_nodes[character_id];
-  
-  Node_Ptr hp_bar;
-  auto &owned_children = character_nodes[character_id]->owned_children;
+  Node_Index character_node = character_nodes[character_id];
+
+  Node_Index hp_bar = scene.find_child_by_name(character_node, "hp_bar");
 
   if (!character->alive)
   {
-    bool found_hp_bars = false;
-    for (auto iterator = owned_children.begin(); iterator != owned_children.end();)
-    {
-      Node_Ptr child = *iterator;
-      if (child->name == "hp_bar")
-      {
-        iterator = owned_children.erase(iterator);
-        found_hp_bars = true;
-      }
-      else
-        iterator++;
-    }
-    //if (found_hp_bars)
+    scene.delete_node(hp_bar);
+
+    // if (found_hp_bars)
     //{
     //  const mat4 Tp = translate(character_node->position);
     //  const mat4 Sp = scale(character_node->scale);
@@ -472,13 +463,7 @@ void Warg_State::update_hp_bar(UID character_id)
     return;
   }
 
-  for (Node_Ptr &child : owned_children)
-  {
-    if (child->name == "hp_bar")
-      hp_bar = child;
-  }
-  
-  if (!hp_bar)
+  if (hp_bar == NODE_NULL)
     return;
 
   static float32 debug_hp_percent = 1.f;
@@ -487,7 +472,11 @@ void Warg_State::update_hp_bar(UID character_id)
   ImGui::End();
 
   float32 hp_percent = ((float32)character->hp) / ((float32)character->hp_max);
-  hp_bar->model[0].second.m.emissive.mod = vec4(1.f - hp_percent, hp_percent, 0.f, 1.f);
+
+  Material_Index material_index = scene.nodes[hp_bar].model[0].second;
+  Material_Descriptor *mat = scene.resource_manager->retrieve_pool_material_descriptor(material_index);
+  mat->emissive.mod = vec4(1.f - hp_percent, hp_percent, 0.f, 1.f);
+  scene.resource_manager->update_material_pool_index(material_index);
 }
 
 void Warg_State::update_character_nodes()
@@ -496,13 +485,13 @@ void Warg_State::update_character_nodes()
   {
     Character *character = &c.second;
 
-    Node_Ptr character_node = character_nodes[character->id];
+    Node_Index character_node = character_nodes[character->id];
 
-    character_node->velocity = (character->physics.position - character_node->position) / dt;
-    character_node->position = character->physics.position;
-    character_node->orientation = character->physics.orientation;
+    scene.nodes[character_node].velocity = (character->physics.position - scene.nodes[character_node].position) / dt;
+    scene.nodes[character_node].position = character->physics.position;
+    scene.nodes[character_node].orientation = character->physics.orientation;
 
-    character_node->scale = character->radius * vec3(2);
+    scene.nodes[character_node].scale = character->radius * vec3(2);
 
     update_hp_bar(c.first);
 
@@ -529,12 +518,12 @@ void Warg_State::update_prediction_ghost()
   material.uses_transparency = true;
   material.albedo.mod = vec4(1, 1, 1, 0.5);
 
-  static Node_Ptr ghost_mesh = scene.add_primitive_mesh(cube, "player_cube", material);
-  ghost_mesh->position = physics->position;
-  ghost_mesh->scale = player_character->radius * vec3(2);
-  ghost_mesh->velocity = physics->velocity;
-  ghost_mesh->orientation =
-     angleAxis((float32)atan2(physics->orientation.y, physics->orientation.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
+  static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);
+  scene.nodes[ghost_mesh].position = physics->position;
+  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2);
+  scene.nodes[ghost_mesh].velocity = physics->velocity;
+  scene.nodes[ghost_mesh].orientation = angleAxis(
+      (float32)atan2(physics->orientation.y, physics->orientation.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
 }
 
 void Warg_State::update_stats_bar()
@@ -542,11 +531,11 @@ void Warg_State::update_stats_bar()
   vec2 resolution = CONFIG.resolution;
 
   bool show_stats_bar = true;
-  ImVec2 stats_bar_pos = { resolution.x - 50, resolution.y - 30 };
+  ImVec2 stats_bar_pos = {resolution.x - 50, resolution.y - 30};
   ImGui::SetNextWindowPos(stats_bar_pos);
   ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
-    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-    ImGuiWindowFlags_AlwaysAutoResize);
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+          ImGuiWindowFlags_AlwaysAutoResize);
   ImGui::Text("Ping: %dms", latency_tracker.get_latency());
   ImGui::End();
 }
@@ -593,7 +582,7 @@ bool prediction_correct(UID player_character_id, Game_State &server_state, Game_
   bool same_input = server_state.input_number == predicted_state.input_number;
 
   if (server_state.characters.count(player_character_id) == 0 &&
-    predicted_state.characters.count(player_character_id) == 0)
+      predicted_state.characters.count(player_character_id) == 0)
     return same_input;
 
   if (server_state.characters.count(player_character_id) != predicted_state.characters.count(player_character_id))
@@ -684,12 +673,12 @@ void Warg_State::update_spell_object_nodes()
     UID spell_object_id = spell_object.first;
     if (spell_object_nodes.count(spell_object_id) == 0)
     {
-      spell_object_nodes[spell_object_id] = scene.add_primitive_mesh(cube, "spell_object_cube", material);
+      spell_object_nodes[spell_object_id] = scene.add_mesh(cube, "spell_object_cube", &material);
       set_message(s("adding spell object node on tick ", game_state.tick), "", 20);
     }
-    Node_Ptr mesh = spell_object_nodes[spell_object_id];
-    mesh->scale = vec3(0.4f);
-    mesh->position = spell_object.second.pos;
+    Node_Index mesh = spell_object_nodes[spell_object_id];
+    scene.nodes[mesh].scale = vec3(0.4f);
+    scene.nodes[mesh].position = spell_object.second.pos;
   }
 
   std::vector<UID> to_erase;
@@ -723,17 +712,20 @@ void Warg_State::animate_character(UID character_id)
     return;
 
   ASSERT(character_nodes.count(character_id));
-  Node_Ptr character_node = character_nodes[character_id];
+  Node_Index character_node = character_nodes[character_id];
   ASSERT(character_node);
 
-  Node_Ptr left_shoe = *(Node_Ptr *)get_child_node(&character_node, "left_shoe");
-  Node_Ptr right_shoe = *(Node_Ptr *)get_child_node(&character_node, "right_shoe");
-  Node_Ptr left_shoulder_joint = *(Node_Ptr *)get_child_node(&character_node, "left_shoulder_joint");
-  Node_Ptr right_shoulder_joint = *(Node_Ptr *)get_child_node(&character_node, "right_shoulder_joint");
-  ASSERT(left_shoe && right_shoe && left_shoulder_joint && right_shoulder_joint);
+  Node_Index left_shoe = scene.find_child_by_name(character_node, "left_shoe");
+  Node_Index right_shoe = scene.find_child_by_name(character_node, "right_shoe");
+  Node_Index left_shoulder_joint = scene.find_child_by_name(character_node, "left_shoulder_joint");
+  Node_Index right_shoulder_joint = scene.find_child_by_name(character_node, "right_shoulder_joint");
+  ASSERT(left_shoe != NODE_NULL);
+  ASSERT(right_shoe != NODE_NULL);
+  ASSERT(left_shoulder_joint != NODE_NULL);
+  ASSERT(right_shoulder_joint != NODE_NULL);
 
   if (!last_positions.count(character_id))
-    last_positions[character_id] = character_node->position;
+    last_positions[character_id] = scene.nodes[character_node].position;
   vec3 last_position = last_positions[character_id];
 
   if (!animation_times.count(character_id))
@@ -741,17 +733,14 @@ void Warg_State::animate_character(UID character_id)
   float32 *animation_time = &animation_times[character_id];
   *animation_time += dt;
 
-  if (character_node->position == last_position || !character->physics.grounded)
+  if (scene.nodes[character_node].position == last_position || !character->physics.grounded)
   {
-    left_shoe->position.y = right_shoe->position.y = 0.f;
+    scene.nodes[left_shoe].position.y = scene.nodes[right_shoe].position.y = 0.f;
     *animation_time = 0;
     return;
   }
 
-  auto linear_oscillate = [](float32 m, float32 x, float32 b)
-  {
-    return 4 * abs(fract(m * x + b) - 0.5) - 1;
-  };
+  auto linear_oscillate = [](float32 m, float32 x, float32 b) { return 4 * abs(fract(m * x + b) - 0.5) - 1; };
 
   float32 cadence = character->e_stats.speed / STEP_SIZE;
 
@@ -760,14 +749,14 @@ void Warg_State::animate_character(UID character_id)
   float32 b = -cadence / 4;
   float32 current_progress = linear_oscillate(m, x, b);
 
-  left_shoe->position.y = (STEP_SIZE / 2) * current_progress / character_node->scale.y;
-  right_shoe->position.y = -(STEP_SIZE / 2) * current_progress / character_node->scale.y;
-  
-  //vec3 axis = vec3(1.f, 0.f, 0.f);
-  //left_shoulder_joint->orientation = angleAxis(step, axis);
-  //right_shoulder_joint->orientation = angleAxis(-step, axis);
+  scene.nodes[left_shoe].position.y = (STEP_SIZE / 2) * current_progress / scene.nodes[character_node].scale.y;
+  scene.nodes[right_shoe].position.y = -(STEP_SIZE / 2) * current_progress / scene.nodes[character_node].scale.y;
 
-  last_positions[character_id] = character_node->position;
+  // vec3 axis = vec3(1.f, 0.f, 0.f);
+  // left_shoulder_joint->orientation = angleAxis(step, axis);
+  // right_shoulder_joint->orientation = angleAxis(-step, axis);
+
+  last_positions[character_id] = scene.nodes[character_node].position;
 }
 
 void Warg_State::update_animation_objects()
@@ -781,15 +770,15 @@ void Warg_State::update_animation_objects()
       animation_object.physics.velocity.z = 0;
 
     collide_and_slide_char(animation_object.physics, animation_object.radius, animation_object.physics.velocity,
-      vec3(0.f, 0.f, animation_object.physics.velocity.z), collider_cache);
+        vec3(0.f, 0.f, animation_object.physics.velocity.z), collider_cache);
 
-    animation_object.node->position = animation_object.physics.position;
+    scene.nodes[animation_object.node].position = animation_object.physics.position;
 
     if (animation_object.physics.grounded)
       animation_object.physics.velocity = vec3(0);
 
-    animation_object.collision_node->position = animation_object.physics.position;
-    animation_object.collision_node->scale = animation_object.radius;
+    scene.nodes[animation_object.collision_node].position = animation_object.physics.position;
+    scene.nodes[animation_object.collision_node].scale = animation_object.radius;
   }
 }
 
@@ -799,18 +788,18 @@ void Warg_State::update()
   send_ping();
   update_stats_bar();
   game_state = server_state;
-  if (!game_state.characters.count(target_id) || (game_state.characters.count(target_id) && !game_state.characters[target_id].alive))
+  if (!game_state.characters.count(target_id) ||
+      (game_state.characters.count(target_id) && !game_state.characters[target_id].alive))
     target_id = 0;
-  //predict_state();
+  // predict_state();
   set_camera_geometry();
   update_meshes();
   update_character_nodes();
-  //draw_prediction_ghost();
+  // draw_prediction_ghost();
   update_spell_object_nodes();
   update_game_interface();
-  //update_animation_objects();
+  // update_animation_objects();
   send_messages();
-  imgui_light_array(scene.lights);
 }
 
 void Warg_State::add_character_mesh(UID character_id)
@@ -818,18 +807,38 @@ void Warg_State::add_character_mesh(UID character_id)
   vec4 skin_color = rgb_vec4(253, 228, 200);
 
   Material_Descriptor material;
-  material.albedo.mod = skin_color;
-  character_nodes[character_id] = scene.add_primitive_mesh(cube, "player_cube", material);
+  // material.albedo = "crate_diffuse.png";
+  // material.emissive = "test_emissive.png";
+  // material.normal = "test_normal.png";
+  // material.roughness = "crate_roughness.png";
+  // material.vertex_shader = "vertex_shader.vert";
+  // material.frag_shader = "fragment_shader.frag";
+  // material.backface_culling = false;
 
-  Node_Ptr character_node = character_nodes[character_id];
+  material.albedo.mod = skin_color;
+  character_nodes[character_id] = scene.add_mesh(cube, "player_cube", &material);
+
+  Node_Index character_node = character_nodes[character_id];
 
   Material_Descriptor hp_bar_material;
-  hp_bar_material.emissive = "color(1, 1, 1, 1)"; 
-  Node_Ptr hp_bar = scene.add_primitive_mesh(cube, "hp_bar", hp_bar_material);
-  scene.set_parent(hp_bar, character_node, true);
+  hp_bar_material.emissive = "color(1, 1, 1, 1)";
+  Node_Index hp_bar = scene.add_mesh(cube, "hp_bar", &hp_bar_material);
+  scene.set_parent(hp_bar, character_node);
   float32 bar_z_pos = game_state.characters[character_id].radius.z;
-  hp_bar->position = vec3(0.f, 0.f, 0.6f);
-  hp_bar->scale = vec3(1.2f, 1.2f, 0.07f);
+  scene.nodes[hp_bar].position = vec3(0.f, 0.f, 0.6f);
+  scene.nodes[hp_bar].scale = vec3(1.2f, 1.2f, 0.07f);
+
+  hp_bar_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
+  Node_Index hp_bar_background = scene.add_mesh(cube, "hp_bar_background", &hp_bar_material);
+  scene.set_parent(hp_bar_background, character_node);
+  scene.nodes[hp_bar_background].position = vec3(0.f, 0.f, 0.6f);
+  scene.nodes[hp_bar_background].scale = vec3(1.2f, 1.2f, 0.07f);
+
+  hp_bar_material.albedo.mod = vec4(.4f, 100.f, .4f, 1.f);
+  Node_Index hp_bar_foreground = scene.add_mesh(cube, "hp_bar_foreground", &hp_bar_material);
+  scene.set_parent(hp_bar_foreground, character_node);
+  scene.nodes[hp_bar_foreground].position = vec3(0.f, 0.f, 0.6f);
+  scene.nodes[hp_bar_foreground].scale = vec3(1.21f, 1.21f, 0.08f);
 
   Material_Descriptor solid_material;
   Material_Descriptor suit_material;
@@ -841,211 +850,211 @@ void Warg_State::add_character_mesh(UID character_id)
   shoe_material.roughness = "color(0.05, 0.05, 0.05, 0.05)";
   shoe_material.metalness = "color(1, 1, 1, 1)";
   shoe_material.albedo.mod = Conductor_Reflectivity::gold;
-  { 
+  {
     // shirt
     solid_material.albedo.mod = vec4(1.f);
-    Node_Ptr shirt = scene.add_primitive_mesh(cube, "shirt", solid_material);
-    scene.set_parent(shirt, character_node, true);
-    shirt->position = vec3(0.f, 0.0f, 0.15f);
-    shirt->scale = vec3(1.05f, 1.05f, 0.3f);
+    Node_Index shirt = scene.add_mesh(cube, "shirt", &solid_material);
+    scene.set_parent(shirt, character_node);
+    scene.nodes[shirt].position = vec3(0.f, 0.0f, 0.15f);
+    scene.nodes[shirt].scale = vec3(1.05f, 1.05f, 0.3f);
 
     // tie
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr tie = scene.add_primitive_mesh(cube, "tie", suit_material);
-    scene.set_parent(tie, shirt, true);
-    tie->position = vec3(0.f, 0.f, 0.f);
-    tie->scale = vec3(0.2f, 1.1f, 1.f);
+    Node_Index tie = scene.add_mesh(cube, "tie", &solid_material);
+    scene.set_parent(tie, shirt);
+    scene.nodes[tie].position = vec3(0.f, 0.f, 0.f);
+    scene.nodes[tie].scale = vec3(0.2f, 1.1f, 1.f);
 
     // jacket left
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr jacket_left = scene.add_primitive_mesh(cube, "jacket_left", suit_material);
-    scene.set_parent(jacket_left, shirt, true);
-    jacket_left->position = vec3(0.425f, 0.0f, -0.1f);
-    jacket_left->scale = vec3(0.3f, 1.1f, 1.2f);
+    Node_Index jacket_left = scene.add_mesh(cube, "jacket_left", &solid_material);
+    scene.set_parent(jacket_left, shirt);
+    scene.nodes[jacket_left].position = vec3(0.425f, 0.0f, -0.1f);
+    scene.nodes[jacket_left].scale = vec3(0.3f, 1.1f, 1.2f);
 
     // jacket right
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr jacket_right = scene.add_primitive_mesh(cube, "jacket_right", suit_material);
-    scene.set_parent(jacket_right, shirt, true);
-    jacket_right->position = vec3(-0.425f, 0.0f, -0.1f);
-    jacket_right->scale = vec3(0.3f, 1.1f, 1.2f);
+    Node_Index jacket_right = scene.add_mesh(cube, "jacket_right", &solid_material);
+    scene.set_parent(jacket_right, shirt);
+    scene.nodes[jacket_right].position = vec3(-0.425f, 0.0f, -0.1f);
+    scene.nodes[jacket_right].scale = vec3(0.3f, 1.1f, 1.2f);
 
     // jacket back
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr jacket_back = scene.add_primitive_mesh(cube, "jacket_back", suit_material);
-    scene.set_parent(jacket_back, shirt, true);
-    jacket_back->position = vec3(0.f, -0.5f, -0.1f);
-    jacket_back->scale = vec3(1.f, .2f, 1.2f);
+    Node_Index jacket_back = scene.add_mesh(cube, "jacket_back", &solid_material);
+    scene.set_parent(jacket_back, shirt);
+    scene.nodes[jacket_back].position = vec3(0.f, -0.5f, -0.1f);
+    scene.nodes[jacket_back].scale = vec3(1.f, .2f, 1.2f);
 
     // belt
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr belt = scene.add_primitive_mesh(cube, "belt", suit_material);
-    scene.set_parent(belt, character_node, true);
-    belt->position = vec3(0.f, 0.f, 0.0f);
-    belt->scale = vec3(1.02f, 1.02f, 0.05f);
+    Node_Index belt = scene.add_mesh(cube, "belt", &solid_material);
+    scene.set_parent(belt, character_node);
+    scene.nodes[belt].position = vec3(0.f, 0.f, 0.0f);
+    scene.nodes[belt].scale = vec3(1.02f, 1.02f, 0.05f);
 
     // belt buckle
     solid_material.albedo.mod = vec4(0.75f, 0.75f, 0.75f, 1.f);
-    Node_Ptr belt_buckle = scene.add_primitive_mesh(cube, "belt_buckle", solid_material);
-    scene.set_parent(belt_buckle, belt, true);
-    belt_buckle->position = vec3(0.f, 0.f, 0.0f);
-    belt_buckle->scale = vec3(0.1f, 1.02f, 1.f);
+    Node_Index belt_buckle = scene.add_mesh(cube, "belt_buckle", &solid_material);
+    scene.set_parent(belt_buckle, belt);
+    scene.nodes[belt_buckle].position = vec3(0.f, 0.f, 0.0f);
+    scene.nodes[belt_buckle].scale = vec3(0.1f, 1.02f, 1.f);
 
     // pants
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr pants = scene.add_primitive_mesh(cube, "pants", suit_material);
-    scene.set_parent(pants, character_node, true);
-    pants->position = vec3(0.f, 0.f, -0.25f);
-    pants->scale = vec3(1.05f, 1.05f, 0.5f);
+    Node_Index pants = scene.add_mesh(cube, "pants", &solid_material);
+    scene.set_parent(pants, character_node);
+    scene.nodes[pants].position = vec3(0.f, 0.f, -0.25f);
+    scene.nodes[pants].scale = vec3(1.05f, 1.05f, 0.5f);
 
     // left shoe
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr left_shoe = scene.add_primitive_mesh(cube, "left_shoe", shoe_material);
-    scene.set_parent(left_shoe, character_node, true);
-    left_shoe->position = vec3(-0.25f, 0.75f, -0.47f);
-    left_shoe->scale = vec3(.4f, 1.5f, 0.06f);
+    Node_Index left_shoe = scene.add_mesh(cube, "left_shoe", &solid_material);
+    scene.set_parent(left_shoe, character_node);
+    scene.nodes[left_shoe].position = vec3(0.25f, 0.75f, -0.47f);
+    scene.nodes[left_shoe].scale = vec3(.4f, 1.5f, 0.06f);
 
     // right shoe
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr right_shoe = scene.add_primitive_mesh(cube, "right_shoe", shoe_material);
-    scene.set_parent(right_shoe, character_node, true);
-    right_shoe->position = vec3(0.25f, 0.75f, -0.47f);
-    right_shoe->scale = vec3(.4f, 1.5f, 0.06f);
+    Node_Index right_shoe = scene.add_mesh(cube, "right_shoe", &solid_material);
+    scene.set_parent(right_shoe, character_node);
+    scene.nodes[right_shoe].position = vec3(-0.25f, 0.75f, -0.47f);
+    scene.nodes[right_shoe].scale = vec3(.4f, 1.5f, 0.06f);
 
     // right shoulder_joint
     solid_material.albedo.mod = vec4(1.0f, 0.f, 0.f, 1.f);
-    Node_Ptr right_shoulder_joint = scene.add_primitive_mesh(cube, "right_shoulder_joint", solid_material);
-    scene.set_parent(right_shoulder_joint, character_node, true);
-    right_shoulder_joint->visible = false;
-    right_shoulder_joint->propagate_visibility = false;
-    right_shoulder_joint->position = vec3(0.8f, 0.f, 0.3f);
-    
+    Node_Index right_shoulder_joint = scene.add_mesh(cube, "right_shoulder_joint", &solid_material);
+    scene.set_parent(right_shoulder_joint, character_node);
+    scene.nodes[right_shoulder_joint].visible = false;
+    scene.nodes[right_shoulder_joint].propagate_visibility = false;
+    scene.nodes[right_shoulder_joint].position = vec3(0.8f, 0.f, 0.3f);
+
     // right arm
     solid_material.albedo.mod = skin_color;
-    Node_Ptr right_arm = scene.add_primitive_mesh(cube, "right_arm", solid_material);
-    scene.set_parent(right_arm, right_shoulder_joint, true);
-    right_arm->position = vec3(0.f, 0.f, -0.25f);
-    right_arm->scale = vec3(0.4f, 0.4f, 0.5f);
-    
+    Node_Index right_arm = scene.add_mesh(cube, "right_arm", &solid_material);
+    scene.set_parent(right_arm, right_shoulder_joint);
+    scene.nodes[right_arm].position = vec3(0.f, 0.f, -0.25f);
+    scene.nodes[right_arm].scale = vec3(0.4f, 0.4f, 0.5f);
+
     // right sleeve
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr right_sleeve = scene.add_primitive_mesh(cube, "right_sleeve", suit_material);
-    scene.set_parent(right_sleeve, right_arm, true);
-    right_sleeve->position = vec3(0.f, 0.f, 0.35f);
-    right_sleeve->scale = vec3(1.15f, 1.15f, 0.35f);
+    Node_Index right_sleeve = scene.add_mesh(cube, "right_sleeve", &solid_material);
+    scene.set_parent(right_sleeve, right_arm);
+    scene.nodes[right_sleeve].position = vec3(0.f, 0.f, 0.35f);
+    scene.nodes[right_sleeve].scale = vec3(1.15f, 1.15f, 0.35f);
 
     // left shoulder_joint
     solid_material.albedo.mod = vec4(1.0f, 0.f, 0.f, 1.f);
-    Node_Ptr left_shoulder_joint = scene.add_primitive_mesh(cube, "left_shoulder_joint", solid_material);
-    scene.set_parent(left_shoulder_joint, character_node, true);
-    left_shoulder_joint->visible = false;
-    left_shoulder_joint->propagate_visibility = false;
-    left_shoulder_joint->position = vec3(-0.8f, 0.f, 0.3f);
+    Node_Index left_shoulder_joint = scene.add_mesh(cube, "left_shoulder_joint", &solid_material);
+    scene.set_parent(left_shoulder_joint, character_node);
+    scene.nodes[left_shoulder_joint].visible = false;
+    scene.nodes[left_shoulder_joint].propagate_visibility = false;
+    scene.nodes[left_shoulder_joint].position = vec3(-0.8f, 0.f, 0.3f);
 
     // left arm
     solid_material.albedo.mod = skin_color;
-    Node_Ptr left_arm = scene.add_primitive_mesh(cube, "left_arm", solid_material);
-    scene.set_parent(left_arm, left_shoulder_joint, true);
-    left_arm->position = vec3(0.f, 0.f, -0.25f);
-    left_arm->scale = vec3(0.4f, 0.4f, 0.5f);
+    Node_Index left_arm = scene.add_mesh(cube, "left_arm", &solid_material);
+    scene.set_parent(left_arm, left_shoulder_joint);
+    scene.nodes[left_arm].position = vec3(0.f, 0.f, -0.25f);
+    scene.nodes[left_arm].scale = vec3(0.4f, 0.4f, 0.5f);
 
     // left sleeve
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr left_sleeve = scene.add_primitive_mesh(cube, "left_sleeve", suit_material);
-    scene.set_parent(left_sleeve, left_arm, true);
-    left_sleeve->position = vec3(0.f, 0.f, 0.1f);
-    left_sleeve->scale = vec3(1.5f, 1.5f, 0.85f);
+    Node_Index left_sleeve = scene.add_mesh(cube, "left_sleeve", &solid_material);
+    scene.set_parent(left_sleeve, left_arm);
+    scene.nodes[left_sleeve].position = vec3(0.f, 0.f, 0.1f);
+    scene.nodes[left_sleeve].scale = vec3(1.5f, 1.5f, 0.85f);
 
     // head
     solid_material.albedo.mod = skin_color;
-    Node_Ptr head = scene.add_primitive_mesh(cube, "head", solid_material);
-    scene.set_parent(head, character_node, true);
-    head->position = vec3(0.f, 0.f, 0.4f);
-    head->scale = vec3(1.1f, 1.1f, 0.2f);
+    Node_Index head = scene.add_mesh(cube, "head", &solid_material);
+    scene.set_parent(head, character_node);
+    scene.nodes[head].position = vec3(0.f, 0.f, 0.4f);
+    scene.nodes[head].scale = vec3(1.1f, 1.1f, 0.2f);
 
     // face anchor
-    Node_Ptr face = scene.add_primitive_mesh(cube, "face", solid_material);
-    scene.set_parent(face, head, true);
-    face->visible = false;
-    face->propagate_visibility = false;
-    face->position = vec3(0.f, 0.5f, 0.f);
-    face->scale = vec3(1.f, 1.f, 1.f);
+    Node_Index face = scene.add_mesh(cube, "face", &solid_material);
+    scene.set_parent(face, head);
+    scene.nodes[face].visible = false;
+    scene.nodes[face].propagate_visibility = false;
+    scene.nodes[face].position = vec3(0.f, 0.5f, 0.f);
+    scene.nodes[face].scale = vec3(1.f, 1.f, 1.f);
 
     // left eyebrow
     solid_material.albedo.mod = rgb_vec4(2, 1, 1);
-    Node_Ptr left_eyebrow = scene.add_primitive_mesh(cube, "left_eyebrow", solid_material);
-    scene.set_parent(left_eyebrow, face, true);
-    left_eyebrow->position = vec3(-0.2f, 0.f, 0.2f);
-    left_eyebrow->scale = vec3(0.3f, 0.01f, 0.05f);
+    Node_Index left_eyebrow = scene.add_mesh(cube, "left_eyebrow", &solid_material);
+    scene.set_parent(left_eyebrow, face);
+    scene.nodes[left_eyebrow].position = vec3(-0.2f, 0.f, 0.2f);
+    scene.nodes[left_eyebrow].scale = vec3(0.3f, 0.01f, 0.05f);
 
     // left eye
     solid_material.albedo.mod = vec4(1.f);
-    Node_Ptr left_eye = scene.add_primitive_mesh(cube, "left_eye", solid_material);
-    scene.set_parent(left_eye, face, true);
-    left_eye->position = vec3(-0.2f, 0.f, 0.1f);
-    left_eye->scale = vec3(0.2f, 0.01f, 0.1f);
+    Node_Index left_eye = scene.add_mesh(cube, "left_eye", &solid_material);
+    scene.set_parent(left_eye, face);
+    scene.nodes[left_eye].position = vec3(-0.2f, 0.f, 0.1f);
+    scene.nodes[left_eye].scale = vec3(0.2f, 0.01f, 0.1f);
 
     // left iris
     solid_material.albedo.mod = rgb_vec4(51, 122, 44);
-    Node_Ptr left_iris = scene.add_primitive_mesh(cube, "left_iris", solid_material);
-    scene.set_parent(left_iris, left_eye, true);
-    left_iris->position = vec3(0.f, 0.5f, 0.f);
-    left_iris->scale = vec3(0.5f, 0.1f, 1.f);
+    Node_Index left_iris = scene.add_mesh(cube, "left_iris", &solid_material);
+    scene.set_parent(left_iris, left_eye);
+    scene.nodes[left_iris].position = vec3(0.f, 0.5f, 0.f);
+    scene.nodes[left_iris].scale = vec3(0.5f, 0.1f, 1.f);
 
     // left pupil
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr left_pupil = scene.add_primitive_mesh(cube, "left_pupil", solid_material);
-    scene.set_parent(left_pupil, left_iris, true);
-    left_pupil->position = vec3(0.f);
-    left_pupil->scale = vec3(0.5f, 1.5f, 0.5f);
+    Node_Index left_pupil = scene.add_mesh(cube, "left_pupil", &solid_material);
+    scene.set_parent(left_pupil, left_iris);
+    scene.nodes[left_pupil].position = vec3(0.f);
+    scene.nodes[left_pupil].scale = vec3(0.5f, 1.5f, 0.5f);
 
     // right eyebrow
     solid_material.albedo.mod = rgb_vec4(2, 1, 1);
-    Node_Ptr right_eyebrow = scene.add_primitive_mesh(cube, "right_eyebrow", solid_material);
-    scene.set_parent(right_eyebrow, face, true);
-    right_eyebrow->position = vec3(0.2f, 0.f, 0.2f);
-    right_eyebrow->scale = vec3(0.3f, 0.01f, 0.05f);
+    Node_Index right_eyebrow = scene.add_mesh(cube, "right_eyebrow", &solid_material);
+    scene.set_parent(right_eyebrow, face);
+    scene.nodes[right_eyebrow].position = vec3(0.2f, 0.f, 0.2f);
+    scene.nodes[right_eyebrow].scale = vec3(0.3f, 0.01f, 0.05f);
 
     // right eye
     solid_material.albedo.mod = vec4(1.f);
-    Node_Ptr right_eye = scene.add_primitive_mesh(cube, "right_eye", solid_material);
-    scene.set_parent(right_eye, face, true);
-    right_eye->position = vec3(0.2f, 0.f, 0.1f);
-    right_eye->scale = vec3(0.2f, 0.01f, 0.1f);
+    Node_Index right_eye = scene.add_mesh(cube, "right_eye", &solid_material);
+    scene.set_parent(right_eye, face);
+    scene.nodes[right_eye].position = vec3(0.2f, 0.f, 0.1f);
+    scene.nodes[right_eye].scale = vec3(0.2f, 0.01f, 0.1f);
 
     // right iris
     solid_material.albedo.mod = rgb_vec4(51, 122, 44);
-    Node_Ptr right_iris = scene.add_primitive_mesh(cube, "right_iris", solid_material);
-    scene.set_parent(right_iris, right_eye, true);
-    right_iris->position = vec3(0.f, 0.5f, 0.f);
-    right_iris->scale = vec3(0.5f, 0.1f, 1.f);
+    Node_Index right_iris = scene.add_mesh(cube, "right_iris", &solid_material);
+    scene.set_parent(right_iris, right_eye);
+    scene.nodes[right_iris].position = vec3(0.f, 0.5f, 0.f);
+    scene.nodes[right_iris].scale = vec3(0.5f, 0.1f, 1.f);
 
     // right pupil
     solid_material.albedo.mod = vec4(0.f, 0.f, 0.f, 1.f);
-    Node_Ptr right_pupil = scene.add_primitive_mesh(cube, "right_pupil", solid_material);
-    scene.set_parent(right_pupil, right_iris, true);
-    right_pupil->position = vec3(0.f);
-    right_pupil->scale = vec3(0.5f, 1.5f, 0.5f);
+    Node_Index right_pupil = scene.add_mesh(cube, "right_pupil", &solid_material);
+    scene.set_parent(right_pupil, right_iris);
+    scene.nodes[right_pupil].position = vec3(0.f);
+    scene.nodes[right_pupil].scale = vec3(0.5f, 1.5f, 0.5f);
 
     // hair
     solid_material.albedo.mod = rgb_vec4(40, 20, 25);
-    Node_Ptr hair = scene.add_primitive_mesh(cube, "hair", solid_material);
-    scene.set_parent(hair, head, true);
-    hair->position = vec3(0.f, -0.1f, 0.1f);
-    hair->scale = vec3(1.2f, 1.f, 1.2f);
+    Node_Index hair = scene.add_mesh(cube, "hair", &solid_material);
+    scene.set_parent(hair, head);
+    scene.nodes[hair].position = vec3(0.f, -0.1f, 0.1f);
+    scene.nodes[hair].scale = vec3(1.2f, 1.f, 1.2f);
 
     // fringe
-    Node_Ptr fringe = scene.add_primitive_mesh(cube, "fringe", solid_material);
-    scene.set_parent(fringe, head, true);
-    fringe->position = vec3(0.f, 0.5f, 0.5f);
-    fringe->scale = vec3(1.1f, 0.2f, 0.4f);
+    Node_Index fringe = scene.add_mesh(cube, "fringe", &solid_material);
+    scene.set_parent(fringe, head);
+    scene.nodes[fringe].position = vec3(0.f, 0.5f, 0.5f);
+    scene.nodes[fringe].scale = vec3(1.1f, 0.2f, 0.4f);
 
     // lips
     solid_material.albedo.mod = rgb_vec4(200, 80, 80);
-    Node_Ptr lips = scene.add_primitive_mesh(cube, "lips", solid_material);
-    scene.set_parent(lips, head, true);
-    lips->position = vec3(0.f, 0.5f, -0.25f);
-    lips->scale = vec3(0.3f, 0.05f, 0.1f);
+    Node_Index lips = scene.add_mesh(cube, "lips", &solid_material);
+    scene.set_parent(lips, head);
+    scene.nodes[lips].position = vec3(0.f, 0.5f, -0.25f);
+    scene.nodes[lips].scale = vec3(0.3f, 0.05f, 0.1f);
   }
 }
 
@@ -1062,15 +1071,15 @@ void State_Message::handle(Warg_State &state)
 
 void Cast_Error_Message::handle(Warg_State &state)
 {
-  //ASSERT(state.game_state.characters.count(caster));
+  // ASSERT(state.game_state.characters.count(caster));
 
-  //std::string msg;
-  //msg += state.game_state.characters[caster].name;
-  //msg += " failed to cast ";
-  //msg += spell;
-  //msg += ": ";
+  // std::string msg;
+  // msg += state.game_state.characters[caster].name;
+  // msg += " failed to cast ";
+  // msg += spell;
+  // msg += ": ";
 
-  //switch (err)
+  // switch (err)
   //{
   //  case (int)CastErrorType::Silenced:
   //    msg += "silenced";
@@ -1100,28 +1109,28 @@ void Cast_Error_Message::handle(Warg_State &state)
   //    ASSERT(false);
   //}
 
-  //set_message("SpellError:", msg, 10);
+  // set_message("SpellError:", msg, 10);
 }
 
 void Cast_Begin_Message::handle(Warg_State &state)
 {
-  //ASSERT(state.game_state.characters.count(caster));
+  // ASSERT(state.game_state.characters.count(caster));
 
-  //std::string msg;
-  //msg += state.game_state.characters[caster].name;
-  //msg += " begins casting ";
-  //msg += spell;
-  //set_message("CastBegin:", msg, 10);
+  // std::string msg;
+  // msg += state.game_state.characters[caster].name;
+  // msg += " begins casting ";
+  // msg += spell;
+  // set_message("CastBegin:", msg, 10);
 }
 
 void Cast_Interrupt_Message::handle(Warg_State &state)
 {
-  //ASSERT(state.game_state.characters.count(caster));
+  // ASSERT(state.game_state.characters.count(caster));
 
-  //std::string msg;
-  //msg += state.game_state.characters[caster].name;
-  //msg += "'s casting was interrupted";
-  //set_message("CastInterrupt:", msg, 10);
+  // std::string msg;
+  // msg += state.game_state.characters[caster].name;
+  // msg += "'s casting was interrupted";
+  // set_message("CastInterrupt:", msg, 10);
 }
 
 void Buff_Application_Message::handle(Warg_State &state)
@@ -1169,8 +1178,8 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
   ImGui::Begin(name, &display_castbar,
-    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
-    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
+      ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
+          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
 
   ImGui::SetCursorPos(v(grid.get_position(0, 0)));
   ImGui::ProgressBar(progress, v(grid.get_section_size(1, 1)), "");
@@ -1188,7 +1197,7 @@ void Warg_State::update_cast_bar()
 
   if (!player_character->casting)
     return;
-  
+
   const vec2 resolution = CONFIG.resolution;
 
   ImVec2 size = ImVec2(200, 32);
@@ -1242,15 +1251,14 @@ void Warg_State::update_unit_frames()
     ImGui::PopStyleVar(3);
   };
 
-  auto make_target_buffs = [&](std::vector<Buff> *buffs, vec2 position, vec2 size, bool debuffs)
-  {
+  auto make_target_buffs = [&](std::vector<Buff> *buffs, vec2 position, vec2 size, bool debuffs) {
     uint32 num_buffs = buffs->size();
 
     Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(num_buffs, 1), vec2(1, 1), 1);
 
     for (size_t i = 0; i < num_buffs; i++)
     {
-      Layout_Grid inner_grid(outer_grid.get_section_size(1 ,1), vec2(2), vec2(0), 1, 1);
+      Layout_Grid inner_grid(outer_grid.get_section_size(1, 1), vec2(2), vec2(0), 1, 1);
 
       bool display_buff = true;
       ImGui::SetNextWindowPos(v(position + outer_grid.get_position(i, 0)));
@@ -1260,8 +1268,9 @@ void Warg_State::update_unit_frames()
       ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
       ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
       ImGui::Begin(s("target ", debuffs ? "de" : "", "buff", i).c_str(), &display_buff,
-        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
+          ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+              ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
+              ImGuiWindowFlags_NoFocusOnAppearing);
 
       ImTextureID icon = (ImTextureID)(*buffs)[i].def.icon.get_handle();
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
@@ -1276,16 +1285,16 @@ void Warg_State::update_unit_frames()
 
   make_unit_frame("player_unit_frame", player_character, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
 
-  //if (!game_state.characters.count(target_id))
+  // if (!game_state.characters.count(target_id))
   //  return;
-  //Character *target = &game_state.characters[target_id]; // sponge
+  // Character *target = &game_state.characters[target_id]; // sponge
   Character *target = player_character;
 
   make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
   make_target_buffs(&target->buffs, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
   make_target_buffs(&target->debuffs, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
   if (!target->casting)
-    return; 
+    return;
   float32 cast_progress = target->cast_progress / target->casting_spell->formula->cast_time;
   create_cast_bar("target_cast_bar", cast_progress, v(grid.get_position(1, 5)), v(grid.get_section_size(1, 1)));
 }
@@ -1308,7 +1317,7 @@ void Warg_State::update_icons()
 
     ASSERT(interface_state.action_bar_textures.size() == 0);
     ASSERT(sources.size() == 0);
-    
+
     num_spells = sdb->spells.size();
     interface_state.action_bar_textures.resize(num_spells);
     sources.resize(num_spells);
@@ -1326,7 +1335,7 @@ void Warg_State::update_icons()
 
   framebuffer.init();
   framebuffer.bind();
-  
+
   Character *player_character = &game_state.characters[pc];
 
   shader.use();
@@ -1362,7 +1371,8 @@ void Warg_State::update_action_bar()
   Layout_Grid grid(vec2(500, 40), vec2(2), vec2(1), vec2(number_abilities, 1), vec2(1, 1), 1);
 
   bool display_action_bar = true;
-  ImGui::SetNextWindowPos(ImVec2(((resolution - grid.get_total_size()) / vec2(2)).x, resolution.y - grid.get_total_size().y - 10));
+  ImGui::SetNextWindowPos(
+      ImVec2(((resolution - grid.get_total_size()) / vec2(2)).x, resolution.y - grid.get_total_size().y - 10));
   ImGui::SetNextWindowSize(v(grid.get_total_size()));
   ImGui::SetNextWindowBgAlpha(1.0f);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -1387,8 +1397,7 @@ void Warg_State::update_buff_indicators()
     player_character = &game_state.characters[pc];
   ASSERT(player_character);
 
-  auto duration_string = [](float32 seconds)
-  {
+  auto duration_string = [](float32 seconds) {
     int32 seconds_int = ceil(seconds);
 
     if (seconds_int > 3600)
@@ -1438,7 +1447,7 @@ void Warg_State::update_buff_indicators()
   for (size_t i = 0; i < player_character->buffs.size() && i < max_columns; i++)
   {
     Buff *buff = &player_character->buffs[i];
-    
+
     float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
     create_indicator(vec2(position_x, grid.get_position(i, 0).y), grid.get_section_size(1, 1),
         (ImTextureID)buff->def.icon.get_handle(), buff->duration, false, i);
@@ -1450,7 +1459,7 @@ void Warg_State::update_buff_indicators()
 
     float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
     create_indicator(vec2(position_x, grid.get_position(i, 2).y), grid.get_section_size(1, 1),
-      (ImTextureID)debuff->def.icon.get_handle(), debuff->duration, true, i);
+        (ImTextureID)debuff->def.icon.get_handle(), debuff->duration, true, i);
   }
 }
 
@@ -1464,7 +1473,7 @@ void Warg_State::update_game_interface()
     return;
 
   const vec2 resolution = CONFIG.resolution;
-  
+
   update_cast_bar();
   update_unit_frames();
   update_action_bar();

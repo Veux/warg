@@ -250,6 +250,23 @@ struct Flat_Scene_Graph
 
   Node_Index new_node();
 
+  Node_Index find_child_by_name(Node_Index parent, const char *name)
+  {
+    Flat_Scene_Graph_Node *ptr = &nodes[parent];
+    for (uint32 i = 0; i < ptr->children.size(); ++i)
+    {
+      Node_Index child = ptr->children[i];
+      if (child != NODE_NULL)
+      {
+        Flat_Scene_Graph_Node *cptr = &nodes[child];
+        if (cptr->name == Array_String(name))
+        {
+          return child;
+        }
+      }
+    }
+    return NODE_NULL;
+  }
   // grab doesnt require any particular parent/child relation before calling, it can even be a child of another parent
   void grab(Node_Index grabber, Node_Index grabee);
   // brings the node to world basis and world parent

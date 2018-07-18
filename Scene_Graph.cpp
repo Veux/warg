@@ -643,7 +643,7 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
 
     World_Object object;
 
-    ASSERT(resource_manager->opengl_disabled);
+    // ASSERT(resource_manager->opengl_disabled);
     // mesh:
     if (mesh_index.use_mesh_index_for_mesh_pool)
     { // all non-assimp meshes
