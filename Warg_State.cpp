@@ -388,6 +388,7 @@ void Warg_State::push(unique_ptr<Message> msg)
 
 void Warg_State::set_camera_geometry()
 {
+  set_message(s("set_camera_geometry(), time:", current_time), "", 1.0f);
   if (!game_state.characters.count(pc))
     return;
   Character *player_character = &game_state.characters[pc];
@@ -700,6 +701,7 @@ void Warg_State::update_spell_object_nodes()
 
 void Warg_State::animate_character(UID character_id)
 {
+  set_message("animate_character uid:", s(character_id), 1.0f);
   static std::map<UID, float32> animation_times;
   static std::map<UID, vec3> last_positions;
   static std::map<UID, bool> last_grounded;
@@ -713,7 +715,9 @@ void Warg_State::animate_character(UID character_id)
 
   ASSERT(character_nodes.count(character_id));
   Node_Index character_node = character_nodes[character_id];
-  ASSERT(character_node);
+  ASSERT(character_node != NODE_NULL);
+
+  set_message("character_node:", s(character_node), 1.0f);
 
   Node_Index left_shoe = scene.find_child_by_name(character_node, "left_shoe");
   Node_Index right_shoe = scene.find_child_by_name(character_node, "right_shoe");
@@ -784,9 +788,29 @@ void Warg_State::update_animation_objects()
 
 void Warg_State::update()
 {
+  set_message(s("Warg update. Time:", current_time), "", 1.0f);
+  set_message(s("Warg time/dt:", current_time / dt), "", 1.0f);
+
+  set_message(s("process_messages():"), "", 1.0f);
   process_messages();
   send_ping();
   update_stats_bar();
+
+  set_message(s("overwriting game_state with server_state"), "", 1.0f);
+
+  quat orientation_before;
+  quat orientation_after;
+  if (game_state.characters.count(3))
+  {
+    orientation_before = game_state.characters[3].physics.orientation;
+  }
+  if (server_state.characters.count(3))
+  {
+    orientation_after = server_state.characters[3].physics.orientation;
+  }
+  set_message(s("character3 orientation in game_state:", qtos(orientation_before)), "", 1.0f);
+  set_message(s("character3 orientation in server_state:", qtos(orientation_after)), "", 1.0f);
+
   game_state = server_state;
   if (!game_state.characters.count(target_id) ||
       (game_state.characters.count(target_id) && !game_state.characters[target_id].alive))
@@ -804,6 +828,7 @@ void Warg_State::update()
 
 void Warg_State::add_character_mesh(UID character_id)
 {
+  set_message("add_character_mesh with uid:", s(character_id), 1.0f);
   vec4 skin_color = rgb_vec4(253, 228, 200);
 
   Material_Descriptor material;
@@ -816,7 +841,7 @@ void Warg_State::add_character_mesh(UID character_id)
   // material.backface_culling = false;
 
   material.albedo.mod = skin_color;
-  character_nodes[character_id] = scene.add_mesh(cube, "player_cube", &material);
+  character_nodes[character_id] = scene.add_mesh(cube, s("character_id:", character_id), &material);
 
   Node_Index character_node = character_nodes[character_id];
 
@@ -1060,10 +1085,15 @@ void Warg_State::add_character_mesh(UID character_id)
 
 void State_Message::handle(Warg_State &state)
 {
+  set_message("State_Message::handle()");
   state.pc = pc;
   state.server_state.characters = characters;
   state.server_state.spell_objects = spell_objects;
+  set_message(s("overwriting state.server_state.tick = ", state.server_state.tick, " with: ", tick), "", 1.0f);
   state.server_state.tick = tick;
+  set_message(
+      s("overwriting state.server_state.input_number = ", state.server_state.input_number, " with: ", input_number), "",
+      1.0f);
   state.server_state.input_number = input_number;
 
   state.input_buffer.pop_older_than(input_number);

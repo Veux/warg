@@ -216,6 +216,7 @@ enum struct Light_Type;
 std::string vtos(glm::vec2 v);
 std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
+std::string qtos(glm::quat v);
 std::string to_string(glm::mat4 m);
 std::string to_string(Array_String &s);
 template <typename T> std::string s(T value)

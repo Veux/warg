@@ -261,6 +261,7 @@ Node_Index Flat_Scene_Graph::new_node()
     {
       nodes[i] = Flat_Scene_Graph_Node();
       nodes[i].exists = true;
+      set_message("Scene_Graph allocating new node:", s(i), 1.0f);
       return i;
     }
   }

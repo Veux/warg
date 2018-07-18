@@ -98,7 +98,6 @@ struct Warg_State : protected State
 
   std::map<UID, Node_Index> character_nodes;
   std::map<UID, Node_Index> spell_object_nodes;
-  std::map<UID, HP_Bar_Nodes> hp_bar_nodes;
   std::vector<Animation_Object> animation_objects;
 
   vec4 character_to_camera;

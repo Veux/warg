@@ -14,7 +14,7 @@
 #endif
 using namespace glm;
 std::mt19937 generator;
-const float32 dt = 1.0f / 60.0f;
+const float32 dt = 1.0f / 4.0f;
 const float32 MOVE_SPEED = 4.f;
 const float32 STEP_SIZE = MOVE_SPEED / 3.f;
 const float32 MOUSE_X_SENS = .0041f;
@@ -415,6 +415,25 @@ std::string vtos(glm::vec3 v)
   return result;
 }
 std::string vtos(glm::vec4 v)
+{
+  std::string result = "";
+  for (uint32 i = 0; i < 4; ++i)
+  {
+    if (v[i] >= 0.0f)
+    {
+      result += " ";
+    }
+    std::string sf = std::to_string(v[i]);
+    while (sf.length() > 6)
+      sf.pop_back();
+    while (sf.length() <= 6)
+      sf.push_back('0');
+    result += sf + " ";
+  }
+  return result;
+}
+
+std::string qtos(glm::quat v)
 {
   std::string result = "";
   for (uint32 i = 0; i < 4; ++i)
