@@ -27,6 +27,19 @@ struct HP_Bar_Nodes
   Node_Ptr current;
 };
 
+struct Animation_Object
+{
+  Node_Ptr node;
+  Node_Ptr collision_node;
+  Character_Physics physics;
+  vec3 radius;
+};
+
+struct Interface_State
+{
+  std::vector<Texture> action_bar_textures;
+};
+
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
@@ -38,7 +51,7 @@ struct Warg_State : protected State
   void process_events();
   void push(unique_ptr<Message> msg);
   void add_char(UID id, int team, const char *name);
-  void register_move_command(Move_Status m, vec3 dir);
+  void register_move_command(Move_Status m, quat orientation);
   void add_character_mesh(UID character_id);
   void set_camera_geometry();
   void update_character_nodes();
@@ -53,7 +66,13 @@ struct Warg_State : protected State
   void update_spell_object_nodes();
   void update_hp_bar(UID character_id);
   void animate_character(UID character_id);
-
+  void update_game_interface();
+  void update_cast_bar();
+  void update_unit_frames();
+  void update_animation_objects();
+  void update_action_bar();
+  void update_icons();
+  void update_buff_indicators();
 
   unique_ptr<Warg_Server> server;
   queue<unique_ptr<Message>> in, out;
@@ -66,6 +85,7 @@ struct Warg_State : protected State
   vector<Triangle> collider_cache;
 
   UID pc = 0;
+  UID target_id = 0;
 
   Game_State server_state;
   std::deque<Game_State> state_buffer;
@@ -74,11 +94,14 @@ struct Warg_State : protected State
   Input_Buffer input_buffer;
   uint32 input_number = 0;
 
-  unique_ptr<SpellDB> sdb;
+  unique_ptr<Spell_Database> sdb;
 
   std::map<UID, Node_Ptr> character_nodes;
   std::map<UID, Node_Ptr> spell_object_nodes;
   std::map<UID, HP_Bar_Nodes> hp_bar_nodes;
+  std::vector<Animation_Object> animation_objects;
 
-  vec4 cam_rel;
+  vec4 character_to_camera;
+
+  Interface_State interface_state;
 };

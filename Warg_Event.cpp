@@ -59,10 +59,10 @@ void Char_Spawn_Request_Message::serialize(Buffer &b)
 
 void Input_Message::serialize(Buffer &b)
 {
-  serialize_(b, Warg_Event_Type::PlayerMovement);
-  serialize_(b, input_number);
-  serialize_(b, (uint8_t)move_status);
-  serialize_(b, dir);
+  //serialize_(b, Warg_Event_Type::PlayerMovement);
+  //serialize_(b, input_number);
+  //serialize_(b, (uint8_t)move_status);
+  //serialize_(b, dir);
 }
 
 void Cast_Message::serialize(Buffer &b)
@@ -95,27 +95,11 @@ void Cast_Interrupt_Message::serialize(Buffer &b)
   serialize_(b, caster);
 }
 
-void Char_HP_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::CharHP);
-  serialize_(b, character);
-  serialize_(b, hp);
-}
-
 void Buff_Application_Message::serialize(Buffer &b)
 {
   serialize_(b, Warg_Event_Type::BuffAppl);
   serialize_(b, character);
   serialize_(b, buff);
-}
-
-void Object_Launch_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::ObjectLaunch);
-  serialize_(b, object);
-  serialize_(b, caster);
-  serialize_(b, target);
-  serialize_(b, pos);
 }
 
 void State_Message::serialize(Buffer &b)
@@ -184,9 +168,9 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 
 Input_Message::Input_Message(Buffer &b)
 {
-  input_number = deserialize_uint32(b);
-  move_status = (Move_Status)deserialize_uint8(b);
-  dir = deserialize_vec3(b);
+  //input_number = deserialize_uint32(b);
+  //move_status = (Move_Status)deserialize_uint8(b);
+  //dir = deserialize_vec3(b);
 }
 
 State_Message::State_Message(Buffer &b)
@@ -217,24 +201,10 @@ Cast_Begin_Message::Cast_Begin_Message(Buffer &b)
 
 Cast_Interrupt_Message::Cast_Interrupt_Message(Buffer &b) { caster = deserialize_uid(b); }
 
-Char_HP_Message::Char_HP_Message(Buffer &b)
-{
-  character = deserialize_uid(b);
-  hp = deserialize_int32(b);
-}
-
 Buff_Application_Message::Buff_Application_Message(Buffer &b)
 {
   character = deserialize_uid(b);
   buff = deserialize_string(b);
-}
-
-Object_Launch_Message::Object_Launch_Message(Buffer &b)
-{
-  object = deserialize_uid(b);
-  caster = deserialize_uid(b);
-  target = deserialize_uid(b);
-  pos = deserialize_vec3(b);
 }
 
 Ping_Message::Ping_Message(Buffer &b) {}
@@ -269,14 +239,8 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
     case Warg_Event_Type::CastInterrupt:
       msg = std::make_unique<Cast_Interrupt_Message>(b);
       break;
-    case Warg_Event_Type::CharHP:
-      msg = std::make_unique<Char_HP_Message>(b);
-      break;
     case Warg_Event_Type::BuffAppl:
       msg = std::make_unique<Buff_Application_Message>(b);
-      break;
-    case Warg_Event_Type::ObjectLaunch:
-      msg = std::make_unique<Object_Launch_Message>(b);
       break;
     case Warg_Event_Type::Ping:
       msg = std::make_unique<Ping_Message>(b);
@@ -297,12 +261,13 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(const char *name_, uint8_
   team = team_;
 }
 
-Input_Message::Input_Message(uint32_t i_, Move_Status move_status_, vec3 dir_)
+Input_Message::Input_Message(uint32_t i_, Move_Status move_status_, quat orientation_, UID target_id_)
 {
   reliable = false;
   input_number = i_;
   move_status = move_status_;
-  dir = dir_;
+  orientation = orientation_;
+  target_id = target_id_;
 }
 
 Cast_Message::Cast_Message(UID target_, const char *spell_)
@@ -328,27 +293,13 @@ Cast_Begin_Message::Cast_Begin_Message(UID caster_, UID target_, const char *spe
 
 Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_) { caster = caster_; }
 
-Char_HP_Message::Char_HP_Message(UID character_, int hp_)
-{
-  character = character_;
-  hp = hp_;
-}
-
 Buff_Application_Message::Buff_Application_Message(UID character_, const char *buff_)
 {
   character = character_;
   buff = buff_;
 }
 
-Object_Launch_Message::Object_Launch_Message(UID object_, UID caster_, UID target_, vec3 pos_)
-{
-  object = object_;
-  caster = caster_;
-  target = target_;
-  pos = pos_;
-}
-
-State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, std::map<UID, SpellObjectInst> spell_objects_, uint32 tick_, uint32 input_number_)
+State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, std::map<UID, Spell_Object> spell_objects_, uint32 tick_, uint32 input_number_)
 {
   reliable = false;
 

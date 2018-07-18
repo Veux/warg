@@ -76,7 +76,7 @@ enum Move_Status
 
 struct Input_Message : Message
 {
-  Input_Message(uint32_t i_, Move_Status move_status, vec3 dir);
+  Input_Message(uint32_t i_, Move_Status move_status, quat orientation, UID target_id);
   Input_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
@@ -84,7 +84,8 @@ struct Input_Message : Message
 
   uint32_t input_number;
   Move_Status move_status;
-  vec3 dir;
+  quat orientation;
+  UID target_id;
 };
 
 struct Cast_Message : Message
@@ -137,18 +138,6 @@ struct Cast_Interrupt_Message : Message
   UID caster;
 };
 
-struct Char_HP_Message : Message
-{
-  Char_HP_Message(UID character, int hp);
-  Char_HP_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID character;
-  int hp;
-};
-
 struct Buff_Application_Message : Message
 {
   Buff_Application_Message(UID character, const char *buff);
@@ -161,25 +150,11 @@ struct Buff_Application_Message : Message
   std::string buff;
 };
 
-struct Object_Launch_Message : Message
-{
-  Object_Launch_Message(UID object, UID caster, UID target, vec3 pos);
-  Object_Launch_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID object;
-  UID caster;
-  UID target;
-  vec3 pos;
-};
-
 struct Input;
 
 struct State_Message : Message
 {
-  State_Message(UID pc, std::map<UID, Character> &chars, std::map<UID, SpellObjectInst> spell_objects, uint32 tick_, uint32 input_number_);
+  State_Message(UID pc, std::map<UID, Character> &chars, std::map<UID, Spell_Object> spell_objects, uint32 tick_, uint32 input_number_);
   State_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
@@ -189,7 +164,7 @@ struct State_Message : Message
   uint32 tick;
   uint32 input_number;
   std::map<UID, Character> characters;
-  std::map<UID, SpellObjectInst> spell_objects;
+  std::map<UID, Spell_Object> spell_objects;
 };
 
 struct Ping_Message : Message

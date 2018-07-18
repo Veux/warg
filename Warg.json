@@ -1,7 +1,7 @@
 {
   "Lights": {
     "Environment": {
-      "Environment": ".//Assets//Textures//Environment_Maps//Alexs_Apartment//..//Arches_E_PineTree//radiance.hdr",
+      "Environment": ".//..//Assets//Textures//Environment_Maps//Milkyway//radiance.hdr",
       "Environment Faces": [
         "",
         "",
@@ -11,7 +11,7 @@
         ""
       ],
       "Equirectangular": true,
-      "Irradiance": ".//Assets//Textures//Environment_Maps//Arches_E_PineTree//irradiance.hdr",
+      "Irradiance": ".//..//Assets//Textures//Environment_Maps//Milkyway//irradiance.hdr",
       "Irradiance Faces": [
         "",
         "",
@@ -30,7 +30,7 @@
           0.2199999988079071,
           0.0
         ],
-        "Brightness": 317.4000244140625,
+        "Brightness": 1.0000000116860974e-07,
         "Casts Shadows": true,
         "Color": [
           0.920634925365448,

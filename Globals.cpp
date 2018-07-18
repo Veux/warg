@@ -14,7 +14,8 @@
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 60.0f;
-const float32 MOVE_SPEED = 6.f;
+const float32 MOVE_SPEED = 4.f;
+const float32 STEP_SIZE = MOVE_SPEED / 3.f;
 const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
 const float32 ZOOM_STEP = 0.5f;
@@ -701,4 +702,41 @@ void *get_child_node(void *parent, const char *name)
     if (child_node->name == name)
       child = &child_node;
   return child;
+}
+
+float64 random_between(float64 min, float64 max)
+{
+  std::uniform_real_distribution<float64> distribution(min, max);
+  return distribution(generator);
+}
+int32 random_between(int32 min, int32 max)
+{
+  std::uniform_int_distribution<int32> distribution(min, max);
+  return distribution(generator);
+}
+float32 random_between(float32 min, float32 max)
+{
+  std::uniform_real_distribution<float32> distribution(min, max);
+  return distribution(generator);
+}
+glm::vec2 random_within(const vec2& vec)
+{
+  std::uniform_real_distribution<float32> x(0, vec.x);
+  std::uniform_real_distribution<float32> y(0, vec.y);
+  return vec2(x(generator), y(generator));
+}
+glm::vec3 random_within(const vec3& vec)
+{
+  std::uniform_real_distribution<float32> x(0, vec.x);
+  std::uniform_real_distribution<float32> y(0, vec.y);
+  std::uniform_real_distribution<float32> z(0, vec.z);
+  return vec3(x(generator), y(generator), z(generator));
+}
+glm::vec4 random_within(const vec4& vec)
+{
+  std::uniform_real_distribution<float32> x(0, vec.x);
+  std::uniform_real_distribution<float32> y(0, vec.y);
+  std::uniform_real_distribution<float32> z(0, vec.x);
+  std::uniform_real_distribution<float32> w(0, vec.y);
+  return vec4(x(generator), y(generator), z(generator), w(generator));
 }

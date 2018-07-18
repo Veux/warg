@@ -1,7 +1,7 @@
 {
   "Lights": {
     "Environment": {
-      "Environment": ".//Assets//Textures//Environment_Maps//Popcorn_Lobby//radiance.hdr",
+      "Environment": ".//..//Assets//Textures//Environment_Maps//Arches_E_PineTree//radiance.hdr",
       "Environment Faces": [
         "",
         "",
@@ -11,7 +11,7 @@
         ""
       ],
       "Equirectangular": true,
-      "Irradiance": ".//Assets//Textures//Environment_Maps//Popcorn_Lobby//irradiance.hdr",
+      "Irradiance": ".//..//Assets//Textures//Environment_Maps//Arches_E_PineTree//irradiance.hdr",
       "Irradiance Faces": [
         "",
         "",
@@ -21,7 +21,7 @@
         ""
       ]
     },
-    "Light Count": 2,
+    "Light Count": 0,
     "Lights": [
       {
         "Ambient": 0.0,
@@ -83,8 +83,8 @@
         "Light Type": 2,
         "Max Variance": 9.999999974752427e-07,
         "Position": [
-          -4.202075481414795,
-          -2.7097158432006836,
+          -1.837264060974121,
+          -4.650210857391357,
           2.0
         ],
         "Shadow Blur Iterations": 2,
@@ -120,8 +120,8 @@
         "Light Type": 1342887656,
         "Max Variance": 9.999999974752427e-07,
         "Position": [
-          2.130080223083496,
-          0.5822267532348633,
+          1.1872141361236572,
+          2.8738884925842285,
           0.5
         ],
         "Shadow Blur Iterations": 2,

@@ -46,6 +46,7 @@ struct Render_Test_State;
 extern std::mt19937 generator;
 extern const float32 dt;
 extern const float32 MOVE_SPEED;
+extern const float32 STEP_SIZE;
 extern const float32 ATK_RANGE;
 extern const float32 MOUSE_X_SENS;
 extern const float32 MOUSE_Y_SENS;
@@ -160,6 +161,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
     std::cout << end_of_log << std::endl;
     SDL_Delay(500);
     throw;
+
   }
 #endif
 }
@@ -276,3 +278,10 @@ extern Image_Loader IMAGE_LOADER;
 vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
 
 void *get_child_node(void *parent, const char *name);
+
+float64 random_between(float64 min, float64 max);
+int32 random_between(int32 min, int32 max);
+float32 random_between(float32 min, float32 max);
+glm::vec2 random_within(const vec2& vec);
+glm::vec3 random_within(const vec3& vec);
+glm::vec4 random_within(const vec4& vec);

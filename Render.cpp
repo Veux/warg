@@ -82,14 +82,16 @@ void Framebuffer::init()
   }
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
 
+  std::vector<GLenum> draw_buffers;
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
     Texture_Descriptor test;
     ASSERT(color_attachments[i].t.name != test.name); // texture must be named, or .load assumes null
     color_attachments[i].load();
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
+    draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
+  glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
   // check_FBO_status();
   if (depth_enabled)
   {
@@ -1249,7 +1251,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   {
     ASSERT(dst->fbo);
     ASSERT(dst->color_attachments.size());
-    glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
+    dst->bind();
   }
   else
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1268,12 +1270,15 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   }
 
   glDisable(GL_DEPTH_TEST);
-  glBindVertexArray(quad.get_vao());
+  glDisable(GL_BLEND);
+  glDisable(GL_CULL_FACE);
+  //glBindVertexArray(quad.get_vao());
   shader->use();
   shader->set_uniform("transform", Renderer::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  //glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  quad.draw();
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {

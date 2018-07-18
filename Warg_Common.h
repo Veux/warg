@@ -26,7 +26,7 @@ struct Input
 
   uint32 number = 0;
   Move_Status m = Move_Status::None;
-  vec3 dir = vec3(0, 1, 0);
+  quat orientation = quat();
 };
 
 struct Input_Buffer
@@ -49,9 +49,11 @@ struct Character_Physics
   bool operator!=(const Character_Physics &) const;
   bool operator<(const Character_Physics &) const;
 
-  vec3 pos = vec3(0), dir = vec3(0), vel = vec3(0);
+  vec3 position = vec3(0.f);
+  quat orientation = quat();
+  vec3 velocity = vec3(0.f);
   bool grounded = false;
-  uint32 cmdn = 0;
+  uint32 command_number = 0;
   Input command;
 };
 
@@ -66,7 +68,7 @@ struct Character
   UID id;
 
   Character_Physics physics;
-  vec3 radius = vec3(0.5f) * vec3(1.f); /*vec3(.39, 0.30, 1.61);*/ // avg human in meters
+  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
 
   std::string name;
   int team;
@@ -102,7 +104,7 @@ struct Map
   Material_Descriptor material;
 
   vec3 spawn_pos[2];
-  vec3 spawn_dir[2];
+  quat spawn_orientation[2];
 };
 
 struct Game_State
@@ -110,9 +112,11 @@ struct Game_State
   uint32 tick = 0;
   uint32 input_number = 0;
   std::map<UID, Character> characters;
-  std::map<UID, SpellObjectInst> spell_objects;
+  std::map<UID, Spell_Object> spell_objects;
 };
 
 Map make_blades_edge();
 std::vector<Triangle> collect_colliders(Scene_Graph &scene);
 void move_char(Character &character, Input command, std::vector<Triangle> colliders);
+void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
+    const std::vector<Triangle> &colliders);
