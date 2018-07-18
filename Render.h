@@ -22,8 +22,6 @@
 #include <unordered_map>
 #include <vector>
 
-struct Framebuffer;
-
 using json = nlohmann::json;
 using namespace glm;
 
@@ -86,11 +84,12 @@ struct Texture_Handle
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
 
-private:
-  friend struct Texture;
-  friend struct Cubemap;
-  friend struct Environment_Map;
-  friend struct Renderer;
+  // private:
+  //  friend struct Texture;
+  //  friend struct Cubemap;
+  //  friend struct Environment_Map;
+  //  friend struct Renderer;
+  //  friend struct SDL_Imgui_State;
 
   // last bound dynamic state:
   GLenum magnification_filter = GLenum(0);
@@ -115,6 +114,7 @@ struct Imgui_Texture_Descriptor
   float mip_lod_to_draw = 0.f;
   bool gamma_encode = false;
   bool is_cubemap = false;
+  bool is_mipmap_list_command = false;
 };
 
 struct Texture_Descriptor
@@ -144,7 +144,7 @@ struct Texture
   Texture() {}
   Texture(Texture_Descriptor &td);
 
-  Texture(std::string name, glm::ivec2 size, GLenum format = GL_RGBA32F, GLenum minification_filter = GL_LINEAR,
+  Texture(std::string name, glm::ivec2 size, GLenum format, GLenum minification_filter,
       GLenum magnification_filter = GL_LINEAR, GLenum wraps = GL_CLAMP_TO_EDGE, GLenum wrapt = GL_CLAMP_TO_EDGE,
       glm::vec4 border_color = glm::vec4(0));
 
@@ -211,7 +211,6 @@ struct Environment_Map
   // todo: irradiance map generation
   void irradiance_convolution();
 
-  // todo: generate ibl mipmaps
   void generate_ibl_mipmaps();
 
   // todo: rendered environment map
@@ -231,28 +230,34 @@ struct Mesh_Handle
   GLuint indices_buffer = 0;
   GLuint indices_buffer_size = 0;
   void enable_assign_attributes();
-  Mesh_Data data;
+  Mesh_Descriptor descriptor;
 };
 
 struct Mesh
 {
+  // todo: asynchronous gpu uploading for meshes
   Mesh();
-  Mesh(Mesh_Primitive p, std::string mesh_name);
-  Mesh(Mesh_Data mesh_data, std::string mesh_name);
-  Mesh(const aiMesh *aimesh, std::string name, std::string unique_identifier, const aiScene *scene);
+  Mesh(const Mesh_Descriptor &d); // mesh_data must be filled out, except for primitives
+  Mesh(const Mesh_Descriptor *d); // mesh_data must be filled out, except for primitives
   GLuint get_vao() { return mesh->vao; }
   GLuint get_indices_buffer() { return mesh->indices_buffer; }
   GLuint get_indices_buffer_size() { return mesh->indices_buffer_size; }
   void draw();
   std::string name = "NULL";
+  Mesh_Descriptor get_descriptor()
+  {
+    if (mesh)
+      return mesh->descriptor;
+    return Mesh_Descriptor();
+  }
   // private:
-  std::string unique_identifier = "NULL";
   std::shared_ptr<Mesh_Handle> upload_data(const Mesh_Data &data);
   std::shared_ptr<Mesh_Handle> mesh;
 };
 
 struct Material_Descriptor
 {
+  void mod_by(const Material_Descriptor *override);
   Texture_Descriptor albedo = Texture_Descriptor("color(1,1,1,1)");
   Texture_Descriptor normal = Texture_Descriptor("color(0.5,.5,1,0)");
   Texture_Descriptor roughness = Texture_Descriptor("color(0.3,0.3,0.3,0.3)");
@@ -271,18 +276,43 @@ struct Material_Descriptor
   bool uses_transparency = false;
   bool discard_on_alpha = false;
   bool casts_shadows = true;
-  // when adding new things here, be sure to add them in the
-  // material constructor override section
+
+  /*
+  how to import anything from blender to warg with pbr materials:
+
+  1:  open blender
+  2:  import your models
+  3:  set your textures to the following mappings:
+
+  warg mapping:      -> blender settings
+  albedo map         -> diffuse - color
+  emissive map       -> diffuse - intensity
+  normal map         -> geometry - normal
+  roughness map      -> specular - hardness
+  metalness map      -> specular - intensity
+  ambient_occ map    -> shading - mirror
+
+  note: if a map is missing, make one
+  or, leave it blank and it will have a generic default
+
+  note: these will look completely wrong for blender - but we dont care about
+  blender we're just hijacking the slots for our own purpose
+
+  4:  save a blender file so you can reload from here
+  5:  file -> export -> .fbx
+  6:  enable "Scale all..." to the right of the Scale slider (lighter color)
+  7:  change Up: to: Z up
+  8:  change Forward: to: Y forward
+  9:  geometry tab -> check Tangent space
+  10: export
+  */
 };
 
 struct Material
 {
   Material();
   Material(Material_Descriptor &m);
-
-  Material(aiMaterial *ai_material, std::string scene_file_path, Material_Descriptor *material_override);
-
-  Material_Descriptor m;
+  Material_Descriptor descriptor;
 
 private:
   friend struct Renderer;
@@ -315,7 +345,7 @@ struct Light
   float32 ambient = 0.0004f;
   float radius = 0.1f;
   float32 cone_angle = .15f;
-  Light_Type type;
+  Light_Type type = Light_Type::omnidirectional;
   bool casts_shadows = false;
   // these take a lot of careful tuning
   // start with max_variance at 0
@@ -340,12 +370,11 @@ struct Light_Array
 {
   Light_Array() {}
   void bind(Shader &shader);
-  // bool operator==(const Light_Array &rhs);
   std::array<Light, MAX_LIGHTS> lights;
   Environment_Map environment =
       Environment_Map_Descriptor(".//Assets/Textures/Environment_Maps/Arches_E_PineTree/radiance.hdr",
           ".//Assets/Textures/Environment_Maps/Arches_E_PineTree/irradiance.hdr");
-  // todo: environment map json
+
   uint32 light_count = 0;
 };
 
@@ -361,6 +390,15 @@ struct Render_Entity
   std::string name;
   uint32 ID;
   bool casts_shadows = true;
+};
+
+struct World_Object
+{
+  mat4 transformation;
+  Mesh_Descriptor *mesh_descriptor;
+  Material_Descriptor *material_descriptor;
+  Array_String name;
+  uint32 ID;
 };
 
 // Similar to Render_Entity, but rendered with instancing
@@ -419,13 +457,9 @@ struct Spotlight_Shadow_Map
 
 void run_pixel_shader(Shader *shader, std::vector<Texture *> *src_textures, Framebuffer *dst, bool clear_dst = false);
 
-void imgui_light_array(Light_Array &lights);
-
 struct Renderer
 {
-  // todo: split sum approximation IBL
   // todo: irradiance map generation
-  // todo: improved bloom
   // todo: water shader
   // todo: skeletal animation
   // todo: particle system/instancing
@@ -433,6 +467,7 @@ struct Renderer
   // todo: refraction
   // todo: screen space reflections
   // todo: parallax mapping
+  // todo: negative glow
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
   void render(float64 state_time);

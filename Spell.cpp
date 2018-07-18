@@ -1,13 +1,8 @@
 #include "Spell.h"
 
-std::unique_ptr<SpellDB> make_spell_db()
+std::unique_ptr<Spell_Database> make_spell_db()
 {
-  auto db = std::make_unique<SpellDB>();;
-  db->spells.resize(100);
-  db->effects.resize(100);
-  db->objects.resize(100);
-  db->buffs.resize(100);
-  db->char_mods.resize(100);
+  auto db = std::make_unique<Spell_Database>();
 
   // DIVINE SHIELD
 
@@ -180,31 +175,6 @@ std::unique_ptr<SpellDB> make_spell_db()
   // lh->effects.push_back(lh_heal);
   // lh->effects.push_back(lh_slow_buff_appl);
 
-  // // ICY VEINS
-
-  // CharMod *icy_veins_mod = &char_mods[nchar_mods++];
-  // icy_veins_mod->type = CharModType::CastSpeed;
-  // icy_veins_mod->cast_speed.m = 3;
-
-  // BuffDef *icy_veins_buff = &buffs[nbuffs++];
-  // icy_veins_buff->name = "IcyVeinsBuff";
-  // icy_veins_buff->duration = 20;
-  // icy_veins_buff->char_mods.push_back(icy_veins_mod);
-
-  // SpellEffect *icy_veins_buff_appl = &spell_effects[nspell_effects++];
-  // icy_veins_buff_appl->name = "IcyVeinsBuffEffect";
-  // icy_veins_buff_appl->type = SpellEffectType::ApplyBuff;
-  // icy_veins_buff_appl->applybuff.buff = icy_veins_buff;
-
-  // SpellDef *icy_veins = &spells[nspells++];
-  // icy_veins->name = "Icy Veins";
-  // icy_veins->mana_cost = 20;
-  // icy_veins->range = 0;
-  // icy_veins->targets = SpellTargets::Self;
-  // icy_veins->cooldown = 120;
-  // icy_veins->cast_time = 0;
-  // icy_veins->effects.push_back(icy_veins_buff_appl);
-
   // // ICE BLOCK
 
   // SpellEffect *ib_clear_debuffs_effect = &spell_effects[nspell_effects++];
@@ -264,75 +234,207 @@ std::unique_ptr<SpellDB> make_spell_db()
   // fb->cast_time = 2;
   // fb->effects.push_back(fb_object_launch);
 
-  // // COUNTERSPELL
+   // COUNTERSPELL
 
-  // SpellEffect *cs_effect = &spell_effects[nspell_effects++];
-  // cs_effect->name = "Counterspell";
-  // cs_effect->type = SpellEffectType::Interrupt;
-  // cs_effect->interrupt.lockout = 6;
+   //SpellEffect *cs_effect = &spell_effects[nspell_effects++];
+   //cs_effect->name = "Counterspell";
+   //cs_effect->type = SpellEffectType::Interrupt;
+   //cs_effect->interrupt.lockout = 6;
 
-  // SpellDef *cs = &spells[nspells++];
-  // cs->name = "Counterspell";
-  // cs->mana_cost = 10;
-  // cs->range = 30;
-  // cs->targets = SpellTargets::Hostile;
-  // cs->cooldown = 24;
-  // cs->cast_time = 0;
-  // cs->effects.push_back(cs_effect);
+   //SpellDef *cs = &spells[nspells++];
+   //cs->name = "Counterspell";
+   //cs->mana_cost = 10;
+   //cs->range = 30;
+   //cs->targets = SpellTargets::Hostile;
+   //cs->cooldown = 24;
+   //cs->cast_time = 0;
+   //cs->effects.push_back(cs_effect);
+
+  // FROSTBOLT
 
   CharMod fb_slow_;
-  fb_slow_.type = CharModType::Speed;
-  fb_slow_.speed.m = 0.2;
+  fb_slow_.type = Character_Modifier_Type::Speed;
+  fb_slow_.speed.factor = 0.2;
   db->char_mods.push_back(fb_slow_);
-  CharMod *fb_slow = &db->char_mods.back();
+  size_t fb_slow = db->char_mods.size() - 1;
 
   BuffDef fb_debuff_;
   fb_debuff_.name = "FrostboltSlowDebuff";
+  fb_debuff_.icon = Texture("../Assets/Icons/frostbolt.jpg");
   fb_debuff_.duration = 10;
-  fb_debuff_.char_mods.push_back(fb_slow);
+  fb_debuff_.char_mods.push_back(fb_slow_);
   db->buffs.push_back(fb_debuff_);
-  BuffDef *fb_debuff = &db->buffs.back();
+  size_t fb_debuff = db->buffs.size() - 1;
 
-  SpellEffect fb_debuff_appl_;
+  Spell_Effect_Formula fb_debuff_appl_;
   fb_debuff_appl_.name = "FrostboltDebuffApplyEffect";
-  fb_debuff_appl_.type = SpellEffectType::ApplyDebuff;
-  fb_debuff_appl_.applydebuff.debuff = fb_debuff;
+  fb_debuff_appl_.type = Spell_Effect_Type::Apply_Debuff;
+  fb_debuff_appl_.apply_debuff.debuff_formula = fb_debuff;
   db->effects.push_back(fb_debuff_appl_);
-  SpellEffect *fb_debuff_appl = &db->effects.back();
+  size_t fb_debuff_appl = db->effects.size() - 1;
 
-  SpellEffect fb_damage_;
+  Spell_Effect_Formula fb_damage_;
   fb_damage_.name = "FrostboltDamageEffect";
-  fb_damage_.type = SpellEffectType::Damage;
-  fb_damage_.damage.n = 15;
+  fb_damage_.type = Spell_Effect_Type::Damage;
+  fb_damage_.damage.amount = 15;
   fb_damage_.damage.pierce_absorb = false;
   fb_damage_.damage.pierce_mod = false;
   db->effects.push_back(fb_damage_);
-  SpellEffect *fb_damage = &db->effects.back();
+  size_t fb_damage = db->effects.size() - 1;
 
-  int fb_object = db->objects.size();
-  SpellObjectDef fb_object_;
+  Spell_Object_Formula fb_object_;
   fb_object_.name = "Frostbolt";
   fb_object_.speed = 30;
   fb_object_.effects.push_back(fb_debuff_appl);
   fb_object_.effects.push_back(fb_damage);
   db->objects.push_back(fb_object_);
+  size_t fb_object = db->objects.size() - 1;
 
-  SpellEffect fb_object_launch_;
+  Spell_Effect_Formula fb_object_launch_;
   fb_object_launch_.name = "FrostboltObjectLaunchEffect";
-  fb_object_launch_.type = SpellEffectType::ObjectLaunch;
-  fb_object_launch_.objectlaunch.object = fb_object;
+  fb_object_launch_.type = Spell_Effect_Type::Object_Launch;
+  fb_object_launch_.object_launch.object_formula = fb_object;
   db->effects.push_back(fb_object_launch_);
-  SpellEffect *fb_object_launch = &db->effects.back();
+  size_t fb_object_launch = db->effects.size() - 1;
 
-  SpellDef frostbolt_;
+  Spell_Formula frostbolt_;
   frostbolt_.name = "Frostbolt";
+  frostbolt_.icon = Texture("../Assets/Icons/frostbolt.jpg");
   frostbolt_.mana_cost = 20;
   frostbolt_.range = 30;
-  frostbolt_.targets = SpellTargets::Hostile;
+  frostbolt_.targets = Spell_Targets::Hostile;
   frostbolt_.cooldown = 0;
-  frostbolt_.cast_time = 0;
+  frostbolt_.cast_time = 1.5f;
+  frostbolt_.on_global_cooldown = true;
   frostbolt_.effects.push_back(fb_object_launch);
   db->spells.push_back(frostbolt_);
+
+  // BLINK
+
+  Spell_Effect_Formula blink_effect_;
+  blink_effect_.blink.distance = 15.f;
+  blink_effect_.type = Spell_Effect_Type::Blink;
+  db->effects.push_back(blink_effect_);
+  size_t blink_effect = db->effects.size() - 1;
+  
+  Spell_Formula blink;
+  blink.name = "Blink";
+  blink.icon = Texture("../Assets/Icons/blink.jpg");
+  blink.mana_cost = 5;
+  blink.range = 0.f;
+  blink.targets = Spell_Targets::Self;
+  blink.cooldown = 15.f;
+  blink.cast_time = 0.f;
+  blink.on_global_cooldown = false;
+  blink.effects.push_back(blink_effect);
+  db->spells.push_back(blink);
+
+   // SHADOW WORD: PAIN
+
+  Spell_Effect_Formula swp_tick_;
+  swp_tick_.type = Spell_Effect_Type::Damage;
+  swp_tick_.damage.amount = 5;
+  swp_tick_.damage.pierce_absorb = false;
+  swp_tick_.damage.pierce_mod = false;
+  db->effects.push_back(swp_tick_);
+  size_t swp_tick = db->effects.size() - 1;
+
+  BuffDef swp_buff_;
+  swp_buff_.name = "ShadowWordPainBuff";
+  swp_buff_.icon = Texture("../Assets/Icons/shadow_word_pain.jpg");
+  swp_buff_.duration = 15;
+  swp_buff_.tick_freq = 1.0 / 3;
+  swp_buff_.tick_effects.push_back(swp_tick);
+  db->buffs.push_back(swp_buff_);
+  size_t swp_buff = db->buffs.size() - 1;
+
+  Spell_Effect_Formula swp_effect_;
+  swp_effect_.name = "ShadowWordPainEffect";
+  swp_effect_.type = Spell_Effect_Type::Apply_Debuff;
+  swp_effect_.apply_debuff.debuff_formula = swp_buff;
+  db->effects.push_back(swp_effect_);
+  size_t swp_effect = db->effects.size() - 1;
+
+  Spell_Formula swp;
+  swp.name = "Shadow Word: Pain";
+  swp.icon = Texture("../Assets/Icons/shadow_word_pain.jpg");
+  swp.mana_cost = 50;
+  swp.range = 30;
+  swp.cooldown = 0;
+  swp.cast_time = 0;
+  swp.on_global_cooldown = true;
+  swp.targets = Spell_Targets::Self;
+  swp.effects.push_back(swp_effect);
+  db->spells.push_back(swp);
+   
+   // ICY VEINS
+
+  CharMod icy_veins_mod_;
+  icy_veins_mod_.type = Character_Modifier_Type::CastSpeed;
+  icy_veins_mod_.cast_speed.factor = 2.f;
+  db->char_mods.push_back(icy_veins_mod_);
+  size_t icy_veins_mod = db->char_mods.size() - 1;
+
+  BuffDef icy_veins_buff_;
+  icy_veins_buff_.name = "IcyVeinsBuff";
+  icy_veins_buff_.icon = Texture("../Assets/Icons/icy_veins.jpg");
+  icy_veins_buff_.duration = 20;
+  icy_veins_buff_.char_mods.push_back(icy_veins_mod_);
+  db->buffs.push_back(icy_veins_buff_);
+  size_t icy_veins_buff = db->buffs.size() - 1;
+
+  Spell_Effect_Formula icy_veins_buff_appl_;
+  icy_veins_buff_appl_.name = "IcyVeinsBuffEffect";
+  icy_veins_buff_appl_.type = Spell_Effect_Type::Apply_Buff;
+  icy_veins_buff_appl_.apply_buff.buff_formula = icy_veins_buff;
+  db->effects.push_back(icy_veins_buff_appl_);
+  size_t icy_veins_buff_appl = db->effects.size() - 1;
+
+  Spell_Formula icy_veins;
+  icy_veins.name = "Icy Veins";
+  icy_veins.icon = Texture("../Assets/Icons/icy_veins.jpg");
+  icy_veins.mana_cost = 20;
+  icy_veins.range = 0;
+  icy_veins.targets = Spell_Targets::Self;
+  icy_veins.cooldown = 0.f;
+  icy_veins.cast_time = 0;
+  icy_veins.on_global_cooldown = false;
+  icy_veins.effects.push_back(icy_veins_buff_appl);
+  db->spells.push_back(icy_veins);
+
+  // SPRINT
+
+  CharMod sprint_modifier_;
+  sprint_modifier_.type = Character_Modifier_Type::Speed;
+  sprint_modifier_.speed.factor = 2.f;
+  db->char_mods.push_back(sprint_modifier_);
+  size_t sprint_modifier = db->char_mods.size() - 1;
+
+  BuffDef sprint_buff_;
+  sprint_buff_.name = "Sprint";
+  sprint_buff_.duration = 15.f;
+  sprint_buff_.icon = Texture("../Assets/Icons/sprint.jpg");
+  sprint_buff_.char_mods.push_back(sprint_modifier_);
+  db->buffs.push_back(sprint_buff_);
+  size_t sprint_buff = db->buffs.size() - 1;
+
+  Spell_Effect_Formula sprint_effect_;
+  sprint_effect_.name = "Sprint";
+  sprint_effect_.type = Spell_Effect_Type::Apply_Buff;
+  sprint_effect_.apply_buff.buff_formula = sprint_buff;
+  db->effects.push_back(sprint_effect_);
+  size_t sprint_effect = db->effects.size() - 1;
+
+  Spell_Formula sprint;
+  sprint.name = "Sprint";
+  sprint.cooldown = 10.f;
+  sprint.icon = Texture("../Assets/Icons/sprint.jpg");
+  sprint.mana_cost = 5;
+  sprint.cast_time = 0.f;
+  sprint.on_global_cooldown = false;
+  sprint.targets = Spell_Targets::Self;
+  sprint.effects.push_back(sprint_effect);
+  db->spells.push_back(sprint);
 
   return db;
 }

@@ -5,26 +5,25 @@
 #include <string>
 #include <vector>
 
-struct SpellEffect;
+struct Spell_Effect_Formula;
 struct BuffDef;
 
-struct SpellObjectDef
+struct Spell_Object_Formula
 {
   std::string name;
   float32 speed;
-  std::vector<SpellEffect *> effects;
+  std::vector<size_t> effects;
 };
 
-struct SpellObjectInst
+struct Spell_Object
 {
-  SpellObjectDef def;
-  int caster;
-  int target;
+  Spell_Object_Formula formula;
+  UID caster;
+  UID target;
   vec3 pos;
-  Node_Ptr mesh;
 };
 
-enum class SpellTargets
+enum class Spell_Targets
 {
   Self,
   Ally,
@@ -32,122 +31,131 @@ enum class SpellTargets
   Terrain
 };
 
-struct SpellDef
+struct Spell_Formula
 {
   std::string name;
-  int mana_cost;
-  float32 range;
-  SpellTargets targets;
-  float32 cooldown;
-  float32 cast_time;
-  std::vector<SpellEffect *> effects;
+  Texture icon;
+  uint32 mana_cost = 0;
+  float32 range = 0.f;
+  Spell_Targets targets = Spell_Targets::Self;
+  float32 cooldown = 0.f;
+  float32 cast_time = 0.f;
+  bool on_global_cooldown = true;
+  std::vector<size_t> effects;
 };
 
 struct Spell
 {
-  SpellDef *def;
-  float32 cd_remaining;
+  Spell_Formula *formula;
+  float32 cooldown_remaining;
 };
 
-struct DamageEffect
+struct Damage_Effect
 {
-  int n;
+  uint32 amount;
   bool pierce_absorb;
   bool pierce_mod;
 };
 
-struct HealEffect
+struct Heal_Effect
 {
-  int n;
+  uint32 amount;
 };
 
-struct ApplyBuffEffect
+struct Apply_Buff_Effect
 {
-  BuffDef *buff;
+  size_t buff_formula;
 };
 
-struct ApplyDebuffEffect
+struct Apply_Debuff_Effect
 {
-  BuffDef *debuff;
+  size_t debuff_formula;
 };
 
-struct AoEEffect
+struct Area_Effect
 {
-  SpellTargets targets;
+  Spell_Targets targets;
   float32 radius;
-  SpellEffect *effect;
+  size_t effect_formula;
 };
 
-struct ClearDebuffsEffect
+struct Clear_Debuffs_Effect
 {
 };
 
-struct ObjectLaunchEffect
+struct Object_Launch_Effect
 {
-  int object;
+  size_t object_formula;
 };
 
-struct InterruptEffect
+struct Interrupt_Effect
 {
-  float32 lockout;
+  float32 lockout_duration;
 };
 
-enum class SpellEffectType
+struct Blink_Effect
+{
+  float32 distance;
+};
+
+enum class Spell_Effect_Type
 {
   Heal,
   Damage,
-  ApplyBuff,
-  ApplyDebuff,
-  AoE,
-  ClearDebuffs,
-  ObjectLaunch,
-  Interrupt
+  Apply_Buff,
+  Apply_Debuff,
+  Area,
+  Clear_Debuffs,
+  Object_Launch,
+  Interrupt,
+  Blink
 };
 
-struct SpellEffect
+struct Spell_Effect_Formula
 {
   std::string name;
-  SpellEffectType type;
+  Spell_Effect_Type type;
   union {
-    HealEffect heal;
-    DamageEffect damage;
-    ApplyBuffEffect applybuff;
-    ApplyDebuffEffect applydebuff;
-    AoEEffect aoe;
-    ClearDebuffsEffect cleardebuffs;
-    ObjectLaunchEffect objectlaunch;
-    InterruptEffect interrupt;
+    Heal_Effect heal;
+    Damage_Effect damage;
+    Apply_Buff_Effect apply_buff;
+    Apply_Debuff_Effect apply_debuff;
+    Area_Effect area;
+    Clear_Debuffs_Effect clear_debuffs;
+    Object_Launch_Effect object_launch;
+    Interrupt_Effect interrupt;
+    Blink_Effect blink;
   };
 };
 
-struct SpellEffectInst
+struct Spell_Effect
 {
-  SpellEffect def;
-  int caster;
-  int target;
-  vec3 pos;
+  Spell_Effect_Formula formula;
+  UID caster;
+  UID target;
+  vec3 position;
 };
 
-struct DamageTakenMod
+struct Damage_Taken_Modifier
 {
-  float32 n;
+  float32 factor;
 };
 
-struct SpeedMod
+struct Speed_Modifier
 {
-  float32 m;
+  float32 factor;
 };
 
-struct CastSpeedMod
+struct Cast_Speed_Modifier
 {
-  float32 m;
+  float32 factor;
 };
 
-struct SilenceMod
+struct Silence_Modifier
 {
 };
 
-enum class CharModType
+enum class Character_Modifier_Type
 {
   DamageTaken,
   Speed,
@@ -157,50 +165,51 @@ enum class CharModType
 
 struct CharMod
 {
-  CharModType type;
+  Character_Modifier_Type type;
   union {
-    DamageTakenMod damage_taken;
-    SpeedMod speed;
-    CastSpeedMod cast_speed;
-    SilenceMod silence;
+    Damage_Taken_Modifier damage_taken;
+    Speed_Modifier speed;
+    Cast_Speed_Modifier cast_speed;
+    Silence_Modifier silence;
   };
 };
 
 struct BuffDef
 {
   std::string name;
+  Texture icon;
   float32 duration;
   float32 tick_freq;
-  std::vector<SpellEffect *> tick_effects;
-  std::vector<CharMod *> char_mods;
+  std::vector<size_t> tick_effects;
+  std::vector<CharMod> char_mods;
 };
 
 struct Buff
 {
   BuffDef def;
   float64 duration;
-  uint32 ticks_left = 0;
+  float64 time_since_last_tick = 0;
 };
 
-enum class CastErrorType
+enum class Cast_Error
 {
   Success,
   Silenced,
-  GCD,
-  SpellCD,
-  NotEnoughMana,
-  InvalidTarget,
-  OutOfRange,
-  AlreadyCasting
+  Global_Cooldown,
+  Cooldown,
+  Insufficient_Mana,
+  Invalid_Target,
+  Out_of_Range,
+  Already_Casting
 };
 
-struct SpellDB
+struct Spell_Database
 {
-  std::vector<SpellDef> spells;
-  std::vector<SpellEffect> effects;
-  std::vector<SpellObjectDef> objects;
+  std::vector<Spell_Formula> spells;
+  std::vector<Spell_Effect_Formula> effects;
+  std::vector<Spell_Object_Formula> objects;
   std::vector<BuffDef> buffs;
   std::vector<CharMod> char_mods;
 };
 
-std::unique_ptr<SpellDB> make_spell_db();
+std::unique_ptr<Spell_Database> make_spell_db();

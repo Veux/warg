@@ -1,6 +1,6 @@
 #pragma once
 
-#define SIM_LATENCY 500
+#define SIM_LATENCY 100
 
 #include "Spell.h"
 #include <enet/enet.h>
@@ -64,30 +64,6 @@ struct Char_Spawn_Request_Message : Message
   uint8_t team;
 };
 
-struct Char_Spawn_Message : Message
-{
-  Char_Spawn_Message(UID id, const char *name_, uint8_t team_);
-  Char_Spawn_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID id;
-  std::string name;
-  uint8_t team;
-};
-
-struct Player_Control_Message : Message
-{
-  Player_Control_Message(UID character_);
-  Player_Control_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID character;
-};
-
 enum Move_Status
 {
   None = 0,
@@ -98,17 +74,18 @@ enum Move_Status
   Jumping = 1 << 4
 };
 
-struct Player_Movement_Message : Message
+struct Input_Message : Message
 {
-  Player_Movement_Message(uint32_t i_, Move_Status move_status, vec3 dir);
-  Player_Movement_Message(Buffer &b);
+  Input_Message(uint32_t i_, Move_Status move_status, quat orientation, UID target_id);
+  Input_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state) { ASSERT(false); };
   virtual void serialize(Buffer &b);
 
-  uint32_t i;
+  uint32_t input_number;
   Move_Status move_status;
-  vec3 dir;
+  quat orientation;
+  UID target_id;
 };
 
 struct Cast_Message : Message
@@ -161,18 +138,6 @@ struct Cast_Interrupt_Message : Message
   UID caster;
 };
 
-struct Char_HP_Message : Message
-{
-  Char_HP_Message(UID character, int hp);
-  Char_HP_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID character;
-  int hp;
-};
-
 struct Buff_Application_Message : Message
 {
   Buff_Application_Message(UID character, const char *buff);
@@ -185,39 +150,21 @@ struct Buff_Application_Message : Message
   std::string buff;
 };
 
-struct Object_Launch_Message : Message
+struct Input;
+
+struct State_Message : Message
 {
-  Object_Launch_Message(UID object, UID caster, UID target, vec3 pos);
-  Object_Launch_Message(Buffer &b);
+  State_Message(UID pc, std::map<UID, Character> &chars, std::map<UID, Spell_Object> spell_objects, uint32 tick_, uint32 input_number_);
+  State_Message(Buffer &b);
   virtual void handle(Warg_Server &server) { ASSERT(false); };
   virtual void handle(Warg_State &state);
   virtual void serialize(Buffer &b);
 
-  UID object;
-  UID caster;
-  UID target;
-  vec3 pos;
-};
-
-struct Movement_Command;
-
-struct Player_Geometry_Message : Message
-{
-  Player_Geometry_Message(std::map<UID, Character> &chars);
-  Player_Geometry_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  std::vector<UID> id;
-  std::vector<vec3> pos;
-  std::vector<vec3> dir;
-  std::vector<vec3> vel;
-  std::vector<int> hp_max;
-  std::vector<vec3> radius;
-  std::vector<uint8_t> grounded;
-  std::vector<uint32> command_n;
-  std::vector<Movement_Command> command;
+  UID pc;
+  uint32 tick;
+  uint32 input_number;
+  std::map<UID, Character> characters;
+  std::map<UID, Spell_Object> spell_objects;
 };
 
 struct Ping_Message : Message

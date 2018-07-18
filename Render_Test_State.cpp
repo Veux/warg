@@ -10,79 +10,40 @@
 #include <thread>
 using namespace glm;
 
-void test_spheres(Scene_Graph scene)
-{
-  Node_Ptr node;
-
-  Material_Descriptor material;
-  material.albedo = "color(1,1,1,0.9)";
-  // material.emissive = "";
-  // material.normal = "test_normal.png";
-  material.roughness = "color(1,1,1,0.9)";
-  material.metalness = "color(1,1,1,.99)";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
-  material.uv_scale = vec2(1);
-  material.casts_shadows = true;
-  material.backface_culling = false;
-
-  for (uint32 i = 0; i < 8; ++i)
-  {
-    for (uint32 j = 0; j < 8; ++j)
-    {
-      for (uint32 k = 0; k < 8; ++k)
-      {
-        float roughness = float(i) / 7.f;
-        float metalness = float(j) / 7.f;
-        float color = float(k) / 7.f;
-
-        material.albedo.mod = vec4(color, 1, 1, 1.1);
-        material.roughness.mod = vec4(roughness);
-        material.metalness.mod = vec4(metalness);
-
-        Node_Ptr node = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
-        node->scale = vec3(0.5f);
-        node->position = (node->scale * 2.f * vec3(i, k, j)) + vec3(0, 6, 1);
-        scene.set_parent(node, scene.root, true);
-      }
-    }
-  }
-}
-
 Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
 {
   free_cam = true;
 
-#ifndef _DEBUG
-  test_spheres(scene);
-  gun = scene.add_aiscene("Cerberus/cerberus-warg.FBX");
-  gun->position = vec3(4.0f, -3.0f, 2.0f);
-  gun->scale = vec3(5);
-#else
-  gun = scene.add_primitive_mesh(cube, "debug", Material_Descriptor());
-#endif
-
   Material_Descriptor material;
-  material.albedo = "ground1_diffuse.png";
+  // test_spheres(scene);
+
+  gun = scene.add_aiscene("gun", "Cerberus/cerberus-warg.FBX");
+  scene.nodes[gun].position = vec3(4.0f, -3.0f, 2.0f);
+  scene.nodes[gun].scale = vec3(5);
+
+  // ground
+  material.albedo = "grass_albedo.png";
   material.emissive = "";
   material.normal = "ground1_normal.png";
-  material.roughness = "color(1,1,1,1.0)";
+  material.roughness = "color(.7,.7,.7,1.0)";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(12);
   material.casts_shadows = true;
   material.backface_culling = false;
-  ground = scene.add_primitive_mesh(cube, "world_cube", material);
-  ground->position = {0.0f, 0.0f, -0.5f};
-  ground->scale = {35.0f, 35.0f, 1.f};
-
+  ground = scene.add_mesh(cube, "world_cube", &material);
+  scene.nodes[ground].position = {0.0f, 0.0f, -0.5f};
+  scene.nodes[ground].scale = {35.0f, 35.0f, 1.f};
+  material.albedo.mod = vec4(1);
+  // sky
   Material_Descriptor sky_mat;
   sky_mat.backface_culling = false;
   sky_mat.vertex_shader = "vertex_shader.vert";
   sky_mat.frag_shader = "skybox.frag";
-  skybox = scene.add_primitive_mesh(cube, "skybox", sky_mat);
+  skybox = scene.add_mesh(cube, "skybox", &sky_mat);
 
+  // sphere
   material.casts_shadows = true;
   material.uv_scale = vec2(4);
   material.albedo = "color(1,1,1,1)";
@@ -90,92 +51,87 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   material.roughness = "steel_roughness.png";
   material.roughness.mod = vec4(.02);
   material.metalness = "color(1,1,1,1)";
-  sphere = scene.add_aiscene("smoothsphere.fbx", nullptr, &material);
+  sphere = scene.add_aiscene("sphere", "smoothsphere.fbx", &material);
+  scene.nodes[sphere].position = vec3(-4, -2, 3.5);
+  scene.nodes[sphere].scale = vec3(1.0);
+  material.roughness.mod = vec4(1);
+
   // testobjects = scene.add_aiscene("testobjects.fbx", nullptr, &material);
   // testobjects->position = vec3(-5, 5, 1);
-  material.roughness.mod = vec4(1);
-  material.metalness.mod = vec4(1);
 
-  // crates:
-  material.albedo = "crate_albedo.png";
-  material.emissive = "test_emissive.png";
-  material.normal = "color(0.5,.5,1,0)";
-  material.roughness = "crate_roughness.png";
-  material.metalness = "crate_metalness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
-  material.uv_scale = vec2(1);
-  material.uses_transparency = false;
-  material.casts_shadows = true;
+  //// crates:
+  // material.albedo = "crate_albedo.png";
+  // material.emissive = "test_emissive.png";
+  // material.normal = "color(0.5,.5,1,0)";
+  // material.roughness = "crate_roughness.png";
+  // material.metalness = "crate_metalness.png";
+  // material.vertex_shader = "vertex_shader.vert";
+  // material.frag_shader = "fragment_shader.frag";
+  // material.uv_scale = vec2(1);
+  // material.uses_transparency = false;
+  // material.casts_shadows = true;
 
-  cube_star = scene.add_primitive_mesh(cube, "star", material);
-  cube_planet = scene.add_primitive_mesh(cube, "planet", material);
-  scene.set_parent(cube_planet, cube_star, false);
-  cube_moon = scene.add_primitive_mesh(cube, "moon", material);
-  scene.set_parent(cube_moon, cube_planet, false);
+  // cubes
+  material.albedo = s(Conductor_Reflectivity::gold);
+  grabbycube = scene.add_mesh(cube, "grabbycube", &material);
+  cube_planet = scene.add_mesh(cube, "planet", &material);
+  scene.set_parent(cube_planet, grabbycube);
+  cube_moon = scene.add_mesh(cube, "moon", &material);
+  scene.set_parent(cube_moon, cube_planet);
+  shoulder_joint = scene.new_node();
+  arm_test = scene.add_mesh(cube, "world_cube", &material);
 
+  scene.set_parent(shoulder_joint, grabbycube);
+  scene.set_parent(arm_test, shoulder_joint);
+
+  // camera spawn
   cam.phi = .25;
   cam.theta = -1.5f * half_pi<float32>();
   cam.pos = vec3(3.3, 2.3, 1.4);
 
-  bool transp = false;
-
-  Material_Descriptor chest_mat;
-  chest_mat.metalness = BASE_ASSET_PATH + "Chest/chest_metalness.png";
-  chest_mat.roughness = BASE_ASSET_PATH + "Chest/roughness.png";
-  for (int y = -3; y < 3; ++y)
-  {
-    for (int x = -4; x < 3; ++x)
-    {
-      mat4 t = translate(vec3(x, y, 0.0));
-      mat4 s = scale(vec3(0.25));
-      mat4 basis = t * s;
-      chests.push_back(scene.add_aiscene("Chest/Chest.fbx", &basis, &chest_mat));
-
-      if (transp)
-      {
-        Material_Descriptor *m = &chests.back()->owned_children[0]->owned_children[0]->model[0].second.m;
-        m->uses_transparency = true;
-        m->albedo_alpha_override = 0.4f;
-      }
-      transp = !transp;
-    }
-  }
+  // tigers
   Material_Descriptor tiger_mat;
   tiger_mat.backface_culling = false;
   tiger_mat.discard_on_alpha = true;
-  tiger = scene.add_aiscene("tiger/tiger.fbx", &tiger_mat);
-  tiger->position = vec3(-6, -3, 0.0);
-  tiger->scale = vec3(2.0);
-  // tiger->scale = vec3(0.45f);
-  // scene.set_parent(tiger, cube_star, true);
+  tiger = scene.add_aiscene("tiger", "tiger/tiger.fbx", &tiger_mat);
+  scene.nodes[tiger].position = vec3(-6, -3, 0.0);
+  scene.nodes[tiger].scale = vec3(1.0);
 
-  Node_Ptr tiger2 = scene.add_aiscene("tiger/tiger.fbx", &tiger_mat);
-  tiger2->position = vec3(0, 0, 0.5);
-  tiger2->scale = vec3(0.45f);
-  scene.set_parent(tiger2, cube_planet, true);
+  tiger1 = scene.add_aiscene("tiger1", "tiger/tiger.fbx", &tiger_mat);
+  scene.set_parent(tiger1, grabbycube);
 
-  Node_Ptr tiger3 = scene.add_aiscene("tiger/tiger.fbx", &tiger_mat);
-  tiger3->position = vec3(0, 0, 0.5);
-  tiger3->scale = vec3(0.45f);
-  scene.set_parent(tiger3, cube_moon, true);
+  tiger2 = scene.add_aiscene("tiger2", "tiger/tiger.fbx", &tiger_mat);
+  scene.set_parent(tiger2, grabbycube);
 
+  // Node_Index tiger3 = scene.add_aiscene("tiger3", "tiger/tiger.fbx", &tiger_mat);
+  // scene.nodes[tiger3].position = vec3(0, 0, 0.5);
+  // scene.nodes[tiger3].scale = vec3(0.45f);
+  // scene.set_parent(tiger3, cube_moon);
+
+  // light spheres
   material.casts_shadows = false;
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(11,11,11,1)";
   material.roughness = "color(1,1,1,1)";
   material.metalness = "color(0,0,0,0)";
-  cone_light1 = scene.add_aiscene("smoothsphere.fbx", &material);
-  cone_light1->name = "conelight1";
+  Node_Index temp = scene.add_aiscene("cone_light1", "smoothsphere.fbx", &material);
+  cone_light1 = scene.nodes[scene.nodes[temp].children[0]].children[0];
+  scene.drop(cone_light1);
+  scene.delete_node(temp);
 
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(3,3,1.5,1)";
-  sun_light = scene.add_aiscene("smoothsphere.fbx", &material);
-  sun_light->name = "sun";
+  temp = scene.add_aiscene("sun_light", "smoothsphere.fbx", &material);
+  sun_light = scene.nodes[scene.nodes[temp].children[0]].children[0];
+  scene.drop(sun_light);
+  scene.delete_node(temp);
 
   material.albedo = "color(0,0,0,1)";
   material.emissive = "color(1.15,0,1.15,1)";
-  small_light = scene.add_aiscene("smoothsphere.fbx", &material);
+  temp = scene.add_aiscene("small_light", "smoothsphere.fbx", &material);
+  small_light = scene.nodes[scene.nodes[temp].children[0]].children[0];
+  scene.drop(small_light);
+  scene.delete_node(temp);
 }
 
 void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
@@ -191,7 +147,8 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
 
     if (_e.type == SDL_KEYDOWN)
     {
-      ASSERT(!block_kb);
+      if (block_kb)
+        continue;
       if (_e.key.keysym.sym == SDLK_ESCAPE)
       {
         running = false;
@@ -200,6 +157,8 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     }
     else if (_e.type == SDL_KEYUP)
     {
+      if (block_kb)
+        continue;
       if (_e.key.keysym.sym == SDLK_F5)
       {
         free_cam = !free_cam;
@@ -217,7 +176,8 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
-      ASSERT(!block_mouse);
+      if (block_mouse)
+        continue;
       if (_e.wheel.y < 0)
         cam.zoom += ZOOM_STEP;
       else if (_e.wheel.y > 0)
@@ -272,20 +232,20 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     cam.dir = normalize(vec3(ry * vr));
 
     if (is_pressed(SDL_SCANCODE_W))
-      cam.pos += MOVE_SPEED * cam.dir;
+      cam.pos += MOVE_SPEED * dt * cam.dir;
     if (is_pressed(SDL_SCANCODE_S))
-      cam.pos -= MOVE_SPEED * cam.dir;
+      cam.pos -= MOVE_SPEED * dt * cam.dir;
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * r * v);
+      cam.pos += vec3(MOVE_SPEED * dt * r * v);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * r * v);
+      cam.pos += vec3(MOVE_SPEED * dt * r * v);
     }
   }
   else
@@ -364,24 +324,24 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     if (is_pressed(SDL_SCANCODE_W))
     {
       vec3 v = vec3(player_dir.x, player_dir.y, 0.0f);
-      player_pos += MOVE_SPEED * v;
+      player_pos += MOVE_SPEED * dt * v;
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
       vec3 v = vec3(player_dir.x, player_dir.y, 0.0f);
-      player_pos -= MOVE_SPEED * v;
+      player_pos -= MOVE_SPEED * dt * v;
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(player_dir.x, player_dir.y, 0, 0);
-      player_pos += MOVE_SPEED * vec3(r * v);
+      player_pos += MOVE_SPEED * dt * vec3(r * v);
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(player_dir.x, player_dir.y, 0, 0);
-      player_pos += MOVE_SPEED * vec3(r * v);
+      player_pos += MOVE_SPEED * dt * vec3(r * v);
     }
     cam.pos = player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
     cam.dir = -vec3(cam_rel);
@@ -391,34 +351,31 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
 
 void Render_Test_State::update()
 {
+
+  scene.nodes[skybox].position = cam.pos;
+
   const float32 height = 1.25;
-  cube_star->scale = vec3(.85);
-  cube_star->position = vec3(0.5 * cos(current_time / 10.f), 0, height);
-  const float32 anglestar = wrap_to_range(pi<float32>() * (float32)sin(current_time / 2.f), 0.0f, 2.0f * pi<float32>());
-  cube_star->propagate_visibility = true;
-  cube_star->orientation = angleAxis(anglestar, normalize(vec3(cos(current_time * .2), sin(current_time * .2), 1)));
 
   const float32 planet_scale = 0.35;
   const float32 planet_distance = 4;
   const float32 planet_year = 5;
   const float32 planet_day = 1;
-  cube_planet->scale = vec3(planet_scale);
-  cube_planet->position = planet_distance * vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
+  scene.nodes[cube_planet].scale = vec3(planet_scale);
+  scene.nodes[cube_planet].position =
+      planet_distance * vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
   const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
-  cube_planet->orientation = angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
-  cube_planet->visible = sin(current_time * 6) > 0;
-  cube_planet->propagate_visibility = false;
+  scene.nodes[cube_planet].orientation = angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
+  scene.nodes[cube_planet].visible = sin(current_time * 6) > 0;
+  scene.nodes[cube_planet].propagate_visibility = false;
 
   const float32 moon_scale = 0.25;
   const float32 moon_distance = 1.5;
   const float32 moon_year = .75;
   const float32 moon_day = .1;
-  cube_moon->scale = vec3(moon_scale);
-  cube_moon->position = moon_distance * vec3(cos(current_time / moon_year), sin(current_time / moon_year), 0);
-  cube_moon->orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
-
-  sphere->position = vec3(-4, -2, 3.5);
-  sphere->scale = vec3(1.0);
+  scene.nodes[cube_moon].scale = vec3(moon_scale);
+  scene.nodes[cube_moon].position =
+      moon_distance * vec3(cos(current_time / moon_year), sin(current_time / moon_year), 0);
+  scene.nodes[cube_moon].orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
 
   auto &lights = scene.lights.lights;
   static bool first = true;
@@ -458,21 +415,149 @@ void Render_Test_State::update()
     first = false;
   }
 
-  imgui_light_array(scene.lights);
   lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   lights[2].position = vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
 
-  sun_light->position = lights[0].position;
-  sun_light->scale = vec3(lights[0].radius);
-  cone_light1->position = lights[1].position;
-  cone_light1->scale = vec3(lights[1].radius);
-  small_light->position = lights[2].position;
-  small_light->scale = vec3(lights[2].radius);
+  scene.nodes[sun_light].position = lights[0].position;
+  scene.nodes[sun_light].scale = vec3(lights[0].radius);
+  scene.nodes[cone_light1].position = lights[1].position;
+  scene.nodes[cone_light1].scale = vec3(lights[1].radius);
+  scene.nodes[small_light].position = lights[2].position;
+  scene.nodes[small_light].scale = vec3(lights[2].radius);
 
-  gun->orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
-  tiger->orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
+  Material_Index light0_mat = scene.nodes[sun_light].model[0].second;
+  Material_Descriptor *md0 = scene.resource_manager->retrieve_pool_material_descriptor(light0_mat);
+  vec3 c0 = lights[0].brightness * lights[0].color;
+  md0->emissive.name = s("color(", c0.r, ",", c0.g, ",", c0.b, ",", 1, ")");
+  scene.push_material_change(light0_mat);
 
-  skybox->scale = vec3(4000);
-  skybox->position = vec3(0, 0, 0);
-  skybox->visible = true;
+  Material_Index light1_mat = scene.nodes[cone_light1].model[0].second;
+  Material_Descriptor *md1 = scene.resource_manager->retrieve_pool_material_descriptor(light1_mat);
+  vec3 c1 = lights[1].brightness * lights[1].color;
+  md1->emissive.name = s("color(", c1.r, ",", c1.g, ",", c1.b, ",", 1, ")");
+  scene.push_material_change(light0_mat);
+
+  Material_Index light2_mat = scene.nodes[small_light].model[0].second;
+  Material_Descriptor *md2 = scene.resource_manager->retrieve_pool_material_descriptor(light2_mat);
+  vec3 c2 = lights[2].brightness * lights[2].color;
+  md2->emissive.name = s("color(", c2.r, ",", c2.g, ",", c2.b, ",", 1, ")");
+  scene.push_material_change(light2_mat);
+
+  // scene.nodes[gun].orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
+  scene.nodes[tiger].orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
+  scene.nodes[skybox].scale = vec3(4000);
+  scene.nodes[skybox].position = vec3(0, 0, 0);
+  scene.nodes[skybox].visible = true;
+  scene.nodes[tiger2].position = vec3(.35 * cos(3 * current_time), .35 * sin(3 * current_time), 1);
+  scene.nodes[tiger2].scale = vec3(.25);
+
+  // build_transformation transfer child test
+  static float32 last = current_time;
+  static float32 time_of_reset = 0.f;
+  static bool is_world = false;
+  static bool first1 = true;
+
+  if (first1)
+  {
+    first1 = false;
+    scene.copy_all_materials_to_new_pool_slots(grabbycube);
+  }
+  if (last < current_time - 3)
+  {
+    if (!is_world)
+    {
+      scene.set_parent(tiger2, grabbycube);
+
+      scene.drop(tiger1);
+      Material_Index material_index = scene.nodes[arm_test].model[0].second;
+      Material_Descriptor *md = scene.resource_manager->retrieve_pool_material_descriptor(material_index);
+      md->albedo.mod = vec4(1, 0, 0, 1);
+      scene.push_material_change(material_index);
+      // alternatively we could just have one resource manager function that pushes all the descriptors into
+      // the pool at once, called at prepare_renderer every frame
+
+      last = current_time;
+      is_world = true;
+      if (time_of_reset < current_time - 15)
+      {
+        set_message(s("resetting tiger to origin"), "", 3.f);
+        scene.nodes[tiger1].position = vec3(0);
+        scene.nodes[tiger1].scale = vec3(1);
+        scene.nodes[tiger1].orientation = {};
+        scene.nodes[tiger1].import_basis = mat4(1);
+        time_of_reset = current_time;
+      }
+    }
+    else
+    {
+      Material_Index material_index = scene.nodes[arm_test].model[0].second;
+      Material_Descriptor *md = scene.resource_manager->retrieve_pool_material_descriptor(material_index);
+      md->albedo.mod = vec4(0, 1, 0, 1);
+      scene.push_material_change(material_index);
+
+      set_message(s("arm_test GRAB"), "", 1.5f);
+      scene.grab(arm_test, tiger1);
+
+      scene.set_parent(tiger2, sphere);
+
+      is_world = false;
+      last = current_time;
+    }
+  }
+
+  const float32 theta = (float32)sin(current_time / 12.f);
+  float cube_diameter = 1;
+
+  scene.nodes[grabbycube].scale_vertex = vec3(1, 1, 2); // the size of the cube - affects *only* this object
+  scene.nodes[grabbycube].scale = vec3(cube_diameter);  // the scale of the node - affects all children
+  scene.nodes[grabbycube].position = vec3(0, 0, height + 3.f * (0.5 + 0.5 * (sin(current_time))));
+  scene.nodes[grabbycube].orientation = angleAxis(theta, vec3(cos(.25f * current_time), sin(.25f * current_time), 0));
+
+  scene.nodes[shoulder_joint].position = {0.50f * cube_diameter, 0.0f, cube_diameter};
+  scene.nodes[shoulder_joint].orientation = angleAxis(20.f * (float32)sin(current_time), vec3(1, 0, 0));
+
+  const float32 arm_radius = 0.25f;
+  scene.nodes[arm_test].scale_vertex = {arm_radius, arm_radius, 1.5f};
+  scene.nodes[arm_test].position = {0.5f * arm_radius, 0.0f, -0.75f};
+
+  scene.draw_imgui();
+}
+
+void test_spheres(Flat_Scene_Graph &scene)
+{
+  Material_Descriptor material;
+  material.albedo = "color(1,1,1,0.9)";
+  // material.emissive = "";
+  // material.normal = "test_normal.png";
+  material.roughness = "color(1,1,1,0.9)";
+  material.metalness = "color(1,1,1,.99)";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+  material.uv_scale = vec2(1);
+  material.casts_shadows = true;
+  material.backface_culling = false;
+  uint32 count = 0;
+  for (uint32 i = 0; i < 8; ++i)
+  {
+    for (uint32 j = 0; j < 8; ++j)
+    {
+      for (uint32 k = 0; k < 8; ++k)
+      {
+        float roughness = float(i) / 7.f;
+        float metalness = float(j) / 7.f;
+        float color = float(k) / 7.f;
+
+        material.albedo.mod = vec4(color, 1, 1, 1.1);
+        material.roughness.mod = vec4(roughness);
+        material.metalness.mod = vec4(metalness);
+
+        Node_Index index = scene.add_aiscene("Spherearray", "smoothsphere.fbx", &material);
+        Flat_Scene_Graph_Node *node = &scene.nodes[index];
+        node->scale = vec3(0.5f);
+        node->position = (node->scale * 2.f * vec3(i, k, j)) + vec3(0, 6, 1);
+        scene.set_parent(index, NODE_NULL);
+        ++count;
+      }
+    }
+  }
 }

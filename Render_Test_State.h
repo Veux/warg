@@ -10,18 +10,21 @@ struct Render_Test_State : protected State
   vec3 player_pos = vec3(0, 0, 0.5);
   vec3 player_dir = vec3(0, 1, 0);
 
-  Node_Ptr ground;
-  Node_Ptr skybox;
-  Node_Ptr cube_star;
-  Node_Ptr cube_planet;
-  Node_Ptr cube_moon;
-  Node_Ptr sphere;
-  Node_Ptr tiger;
-  Node_Ptr gun;
-  Node_Ptr cone_light1;
-  Node_Ptr small_light;
-  Node_Ptr sun_light;
-  Node_Ptr testobjects;
-
-  std::vector<Node_Ptr> chests;
+  Node_Index ground;
+  Node_Index skybox;
+  Node_Index grabbycube;
+  Node_Index cube_planet;
+  Node_Index cube_moon;
+  Node_Index sphere;
+  Node_Index tiger;
+  Node_Index gun;
+  Node_Index cone_light1;
+  Node_Index small_light;
+  Node_Index sun_light;
+  Node_Index testobjects;
+  Node_Index tiger2;
+  Node_Index tiger1;
+  Node_Index arm_test;
+  Node_Index shoulder_joint;
+  std::vector<Node_Index> chests;
 };

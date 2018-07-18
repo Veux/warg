@@ -4,7 +4,18 @@
 #include <Windows.h>
 #endif
 #include "SDL_Imgui_State.h"
+
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
+
+
+ImVec2 v(vec2 v_)
+{
+  ImVec2 result;
+  result.x = v_.x;
+  result.y = v_.y;
+  return result;
+}
+
 std::vector<FS_Node> lsdir(std::string dir)
 {
   std::vector<FS_Node> results;
@@ -70,10 +81,10 @@ bool File_Picker::run()
   ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
   auto thumbsize = ImVec2(128, 128);
   auto tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
-  int num_horizontal = (winsize.x - 32) / (tframesize.x + 8);
+  int num_horizontal = (int)floor((winsize.x - 32) / (tframesize.x + 8));
   if (num_horizontal == 0)
     num_horizontal = 1;
-  for (int i = 0; i < dircontents.size(); i++)
+  for (size_t i = 0; i < dircontents.size(); i++)
   {
     auto &f = dircontents[i];
     if (i % num_horizontal != 0)
@@ -146,4 +157,55 @@ std::string File_Picker::get_result()
 bool File_Picker::get_closed()
 {
   return !display;
+}
+
+
+Layout_Grid::Layout_Grid(vec2 size_, vec2 borders_, vec2 spacing_, uint32 columns_, uint32 rows_)
+{
+  size = size_;
+  borders = borders_;
+  spacing = spacing_;
+  columns = columns_;
+  rows = rows_;
+  element_size = (size - borders * vec2(2.f) - spacing * vec2(columns - 1, rows - 1)) / vec2(columns_, rows_);
+}
+
+Layout_Grid::Layout_Grid(
+    vec2 size_, vec2 borders_, vec2 spacing_, vec2 layout, vec2 ratio_identity_lhs, float32 ratio_identity_rhs)
+{
+  borders = borders_;
+  spacing = spacing_;
+  columns = (uint32)layout.x;
+  rows = (uint32)layout.y;
+
+  vec2 max_possible_element_size = (size_ - borders * vec2(2) - (layout - vec2(1)) * spacing) / layout;
+  vec2 max_possible_lhs_size =
+      ratio_identity_lhs * max_possible_element_size + (ratio_identity_lhs - vec2(1)) * spacing;
+  float32 ratio_of_max_possible_lhs = max_possible_lhs_size.y / max_possible_lhs_size.x;
+  vec2 final_lhs_size;
+  if (ratio_of_max_possible_lhs > ratio_identity_rhs)
+    final_lhs_size = vec2(max_possible_lhs_size.x, max_possible_lhs_size.x * ratio_identity_rhs);
+  else
+    final_lhs_size = vec2(max_possible_lhs_size.y / ratio_identity_rhs, max_possible_lhs_size.y);
+  element_size = (final_lhs_size - (ratio_identity_lhs - vec2(1)) * spacing) / ratio_identity_lhs;
+
+  size = borders * vec2(2) + spacing * (layout - vec2(1)) + element_size * layout;
+}
+
+vec2 Layout_Grid::get_total_size()
+{
+  return size;
+}
+
+vec2 Layout_Grid::get_position(uint32 column, uint32 row)
+{
+  ASSERT(column < columns);
+  ASSERT(row < rows);
+
+  return borders + vec2(column, row) * (spacing + element_size);
+}
+
+vec2 Layout_Grid::get_section_size(uint32 number_columns, uint32 number_rows)
+{
+  return element_size + vec2(number_columns - 1, number_rows - 1) * (element_size + spacing);
 }

@@ -82,14 +82,16 @@ void Framebuffer::init()
   }
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
 
+  std::vector<GLenum> draw_buffers;
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
     Texture_Descriptor test;
     ASSERT(color_attachments[i].t.name != test.name); // texture must be named, or .load assumes null
     color_attachments[i].load();
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0 + i);
+    draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
+  glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
   // check_FBO_status();
   if (depth_enabled)
   {
@@ -351,7 +353,7 @@ Texture::Texture(string name, ivec2 size, GLenum format, GLenum minification_fil
 }
 Texture_Handle::~Texture_Handle()
 {
-  set_message("Deleting texture: ", s(texture, " ", filename));
+  // set_message("Deleting texture: ", s(texture, " ", filename), 45.f);
   glDeleteTextures(1, &texture);
   texture = 0;
 }
@@ -361,6 +363,12 @@ Texture::Texture(string path, bool premul)
   t.name = path; // note this will possibly be modified within .load()
   t.cache_as_unique = false;
   t.process_premultiply = premul;
+  t.format = GL_RGBA;
+  const bool is_hdr = stbi_is_hdr(path.c_str());
+  if (is_hdr)
+  {
+    t.format = GL_RGBA16F;
+  }
   load();
 }
 
@@ -417,8 +425,8 @@ void Texture::load()
     t.name = fix_filename(t.name);
 
     if (t.name.find_last_of("/") == t.name.npos)
-    {                                      // no directory included in name, so use base path
-      t.name = BASE_TEXTURE_PATH + t.name; // also color( hits this
+    { // no directory included in name, so use base path
+      t.name = BASE_TEXTURE_PATH + t.name;
     }
     // else: use t.name as the full directory
   }
@@ -443,28 +451,27 @@ void Texture::load()
   // todo: other software procedural texture generators here?
   if (t.name.substr(0, 6) == "color(")
   {
-    texture = make_shared<Texture_Handle>();
-    TEXTURE2D_CACHE[t.name] = texture;
-
-    t.size = ivec2(1, 1);
-    t.format = GL_RGBA16F; // could detect and support other formats in here
-    t.magnification_filter = GL_NEAREST;
-    t.minification_filter = GL_NEAREST;
-
     vec4 color = string_to_float4_color(t.name);
-    glGenTextures(1, &texture->texture);
-    glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, GL_FLOAT, &color);
-
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    texture->size = t.size;
-    texture->filename = t.name;
-    texture->format = t.format;
-    texture->border_color = t.border_color;
-    initialized = true;
-    return;
+    if (color != vec4(0))
+    {
+      texture = make_shared<Texture_Handle>();
+      TEXTURE2D_CACHE[t.name] = texture;
+      t.size = ivec2(1, 1);
+      t.format = GL_RGBA16F; // could detect and support other formats in here
+      t.magnification_filter = GL_NEAREST;
+      t.minification_filter = GL_NEAREST;
+      glGenTextures(1, &texture->texture);
+      glBindTexture(GL_TEXTURE_2D, texture->texture);
+      glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, GL_FLOAT, &color);
+      glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
+      glBindTexture(GL_TEXTURE_2D, 0);
+      texture->size = t.size;
+      texture->filename = t.name;
+      texture->format = t.format;
+      texture->border_color = t.border_color;
+      initialized = true;
+      return;
+    }
   }
 
   void *data = nullptr;
@@ -527,8 +534,9 @@ void Texture::load()
   t.size = ivec2(width, height);
   glGenTextures(1, &texture->texture);
 
-  set_message(
-      s("Texture load cache miss. Texture from disk: ", t.name, " Generated handle: ", texture->texture), "", 1.0);
+  set_message(s("Texture load cache miss. Texture from disk: ", t.name, " Generated handle: ", texture->texture,
+                  "\nInternal_Format: ", texture_format_to_string(t.format)),
+      "", 3.f);
   glBindTexture(GL_TEXTURE_2D, texture->texture);
   glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, data_format, data);
   glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
@@ -634,56 +642,28 @@ GLuint Texture::get_handle()
 }
 
 Mesh::Mesh() {}
-Mesh::Mesh(Mesh_Primitive p, string mesh_name) : name(mesh_name)
+
+Mesh::Mesh(const Mesh_Descriptor &d) : Mesh(&d) {}
+Mesh::Mesh(const Mesh_Descriptor *d)
 {
-  unique_identifier = to_string(p);
-  auto ptr = MESH_CACHE[unique_identifier].lock();
+  name = d->name;
+  std::string &unique_identifier = SCRATCH_STRING;
+  unique_identifier = d->build_unique_identifier();
+  shared_ptr<Mesh_Handle> ptr = MESH_CACHE[unique_identifier].lock();
   if (ptr)
   {
-    // assert that the data is actually exactly the same
     mesh = ptr;
     return;
   }
-  set_message("caching mesh with uid: ", unique_identifier);
-  MESH_CACHE[unique_identifier] = mesh = upload_data(load_mesh(p));
-  mesh->enable_assign_attributes();
-}
-Mesh::Mesh(Mesh_Data data, string mesh_name) : name(mesh_name)
-{
-  unique_identifier = data.unique_identifier;
-  if (unique_identifier == "NULL")
-  { // lets not cache custom meshes thx
-    // todo: Mesh JSON: but we could hash it for a uid and cache it
-    // to support json restore
-    mesh = upload_data(data);
-    mesh->enable_assign_attributes();
-    return;
-  }
-  auto ptr = MESH_CACHE[unique_identifier].lock();
-  if (ptr)
+  ptr = std::make_shared<Mesh_Handle>();
+  ptr->descriptor = *d;
+
+  if (ptr->descriptor.primitive != null)
   {
-    // assert that the data is actually exactly the same
-    mesh = ptr;
-    return;
+    ASSERT(ptr->descriptor.mesh_data.positions.size() == 0); // a primitive set and custom mesh data??
+    ptr->descriptor.mesh_data = load_mesh(ptr->descriptor.primitive);
   }
-  set_message("caching mesh with uid: ", unique_identifier);
-  MESH_CACHE[unique_identifier] = mesh = upload_data(data);
-  mesh->enable_assign_attributes();
-}
-Mesh::Mesh(const aiMesh *aimesh, string name, string unique_identifier, const aiScene *scene)
-{
-  ASSERT(aimesh);
-  this->unique_identifier = unique_identifier;
-  this->name = name;
-  auto ptr = MESH_CACHE[unique_identifier].lock();
-  if (ptr)
-  {
-    // assert that the data is actually exactly the same
-    mesh = ptr;
-    return;
-  }
-  set_message("caching mesh with uid: ", unique_identifier);
-  MESH_CACHE[unique_identifier] = mesh = upload_data(load_mesh(aimesh, unique_identifier, scene));
+  MESH_CACHE[unique_identifier] = mesh = upload_data(ptr->descriptor.mesh_data);
   mesh->enable_assign_attributes();
 }
 
@@ -738,7 +718,7 @@ void Mesh_Handle::enable_assign_attributes()
 shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 {
   shared_ptr<Mesh_Handle> mesh = make_shared<Mesh_Handle>();
-  mesh->data = mesh_data;
+  mesh->descriptor.mesh_data = mesh_data;
 
   if (sizeof(decltype(mesh_data.indices)::value_type) != sizeof(uint32))
   {
@@ -802,206 +782,60 @@ shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 }
 
 Material::Material() {}
-Material::Material(Material_Descriptor &m)
-{
-  ASSERT(m.normal.name != "");
-  load(m);
-}
+Material::Material(Material_Descriptor &m) { load(m); }
 
-std::string name_from_ai_type(aiMaterial *ai_material, aiTextureType type)
-{
-  ASSERT(ai_material);
-  const int count = ai_material->GetTextureCount(type);
-  aiString name;
-  ai_material->GetTexture(type, 0, &name);
-  return fix_filename(copy(&name));
-}
-
-void gather_all_assimp_materials(aiMaterial *mat)
-{
-  // all ai supported types
-  string diffuse = name_from_ai_type(mat, aiTextureType_DIFFUSE);
-  string emissive = name_from_ai_type(mat, aiTextureType_EMISSIVE);
-  string normals = name_from_ai_type(mat, aiTextureType_NORMALS);
-  string shininess = name_from_ai_type(mat, aiTextureType_SHININESS);
-  string specular = name_from_ai_type(mat, aiTextureType_SPECULAR);
-  string ambient = name_from_ai_type(mat, aiTextureType_AMBIENT);
-  string height = name_from_ai_type(mat, aiTextureType_HEIGHT);
-  string opacity = name_from_ai_type(mat, aiTextureType_OPACITY);
-  string displacement = name_from_ai_type(mat, aiTextureType_DISPLACEMENT);
-  string lightmap = name_from_ai_type(mat, aiTextureType_LIGHTMAP);
-  string reflection = name_from_ai_type(mat, aiTextureType_REFLECTION);
-  const uint32 count = mat->GetTextureCount(aiTextureType_UNKNOWN);
-  vector<string> unknowns;
-  for (uint32 i = 0; i < count; ++i)
-  {
-    unknowns.push_back("");
-    aiString name;
-    mat->GetTexture(aiTextureType_UNKNOWN, 0, &name);
-    unknowns.back() = copy(&name);
-  }
-}
-
-Material::Material(aiMaterial *mat, string scene_file_path, Material_Descriptor *override)
-{
-  /*
-  how to import anything from blender to warg with pbr materials:
-
-  1:  open blender
-  2:  import your models
-  3:  set your textures to the following mappings:
-
-  warg mapping:      -> blender settings
-  albedo map         -> diffuse - color
-  emissive map       -> diffuse - intensity
-  normal map         -> geometry - normal
-  roughness map      -> specular - hardness
-  metalness map      -> specular - intensity
-  ambient_occ map    -> shading - mirror
-
-  note: if a map is missing, make one
-  or, leave it blank and it will have a generic default
-
-  note: these will look completely wrong for blender - but we dont care about
-  blender we're just hijacking the slots for our own purpose
-
-  4:  save a blender file so you can reload from here
-  5:  file -> export -> .fbx
-  6:  enable "Scale all..." to the right of the Scale slider (lighter color)
-  7:  change Up: to: Z up
-  8:  change Forward: to: Y forward
-  9:  geometry tab -> check Tangent space
-  10: export
-  */
-
-  size_t slice = scene_file_path.find_last_of("/\\");
-  string dir = scene_file_path.substr(0, slice) + '/';
-  slice = scene_file_path.find_last_of(".");
-  string extension = scene_file_path.substr(slice, scene_file_path.size() - slice);
-
-  ASSERT(mat);
-  Material_Descriptor m;
-  gather_all_assimp_materials(mat);
-  if (extension == ".FBX" || extension == ".fbx")
-  {
-    m.albedo = dir + name_from_ai_type(mat, aiTextureType_DIFFUSE);
-    m.emissive = dir + name_from_ai_type(mat, aiTextureType_EMISSIVE);
-    m.normal = dir + name_from_ai_type(mat, aiTextureType_NORMALS);
-    m.roughness = dir + name_from_ai_type(mat, aiTextureType_SHININESS);
-    m.metalness = dir + name_from_ai_type(mat, aiTextureType_SPECULAR);
-    m.ambient_occlusion = dir + name_from_ai_type(mat, aiTextureType_REFLECTION);
-  }
-  else
-  {
-    ASSERT(0);
-    // only .fbx supported for now
-    // helper function for material assignments:
-    // void gather_all_assimp_materials(aiMaterial* m);
-  }
-
-  Material_Descriptor defaults;
-  if (override)
-  { // only apply the override for the material descriptor slots
-    // that are different than default
-    if (override->albedo.name != defaults.albedo.name)
-      m.albedo = override->albedo;
-    if (override->roughness.name != defaults.roughness.name)
-      m.roughness = override->roughness;
-    if (override->metalness.name != defaults.metalness.name)
-      m.metalness = override->metalness;
-    if (override->tangent.name != defaults.tangent.name)
-      m.tangent = override->tangent;
-    if (override->normal.name != defaults.normal.name)
-      m.normal = override->normal;
-    if (override->ambient_occlusion.name != defaults.ambient_occlusion.name)
-      m.ambient_occlusion = override->ambient_occlusion;
-    if (override->emissive.name != defaults.emissive.name)
-      m.emissive = override->emissive;
-
-    m.albedo.mod = override->albedo.mod;
-    m.roughness.mod = override->roughness.mod;
-    m.metalness.mod = override->metalness.mod;
-    m.tangent.mod = override->tangent.mod;
-    m.emissive.mod = override->emissive.mod;
-    m.ambient_occlusion.mod = override->ambient_occlusion.mod;
-    m.vertex_shader = override->vertex_shader;
-    m.frag_shader = override->frag_shader;
-    m.backface_culling = override->backface_culling;
-    m.uv_scale = override->uv_scale;
-    m.uses_transparency = override->uses_transparency;
-    m.casts_shadows = override->casts_shadows;
-    m.albedo_alpha_override = override->albedo_alpha_override;
-    m.discard_on_alpha = override->discard_on_alpha;
-  }
-
-  // assimp may set 0 length strings, so reset them to default
-  if (m.albedo.name == dir)
-    m.albedo = defaults.albedo;
-  if (m.emissive.name == dir)
-    m.emissive = defaults.emissive;
-  if (m.normal.name == dir)
-    m.normal = defaults.normal;
-  if (m.roughness.name == dir)
-    m.roughness = defaults.roughness;
-  if (m.metalness.name == dir)
-    m.metalness = defaults.metalness;
-  if (m.ambient_occlusion.name == dir)
-    m.ambient_occlusion = defaults.ambient_occlusion;
-
-  load(m);
-}
 void Material::load(Material_Descriptor &mat)
 {
   // the formats set here may be overriden in the texture constructor
   // based on if its a generated color or not
 
-  m = mat;
+  descriptor = mat;
 
-  m.albedo.format = GL_SRGB8_ALPHA8;
-  albedo = Texture(m.albedo);
+  descriptor.albedo.format = GL_SRGB8_ALPHA8;
+  albedo = Texture(descriptor.albedo);
 
-  m.normal.format = GL_RGBA;
-  normal = Texture(m.normal);
+  descriptor.normal.format = GL_RGBA;
+  normal = Texture(descriptor.normal);
 
-  m.emissive.format = GL_SRGB8_ALPHA8;
-  emissive = Texture(m.emissive);
+  descriptor.emissive.format = GL_SRGB8_ALPHA8;
+  emissive = Texture(descriptor.emissive);
 
-  m.roughness.format = GL_R8;
-  roughness = Texture(m.roughness);
+  descriptor.roughness.format = GL_R8;
+  roughness = Texture(descriptor.roughness);
 
-  m.metalness.format = GL_R8;
-  metalness = Texture(m.metalness);
+  descriptor.metalness.format = GL_R8;
+  metalness = Texture(descriptor.metalness);
 
-  m.ambient_occlusion.format = GL_R8;
-  ambient_occlusion = Texture(m.ambient_occlusion);
+  descriptor.ambient_occlusion.format = GL_R8;
+  ambient_occlusion = Texture(descriptor.ambient_occlusion);
 
-  shader = Shader(m.vertex_shader, m.frag_shader);
+  shader = Shader(descriptor.vertex_shader, descriptor.frag_shader);
 }
 void Material::bind(Shader *shader)
 {
-  if (m.backface_culling)
+  if (descriptor.backface_culling)
     glEnable(GL_CULL_FACE);
   else
     glDisable(GL_CULL_FACE);
 
-  shader->set_uniform("discard_on_alpha", m.discard_on_alpha);
+  shader->set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
   albedo.bind(Texture_Location::albedo);
-  shader->set_uniform("texture0_mod", m.albedo.mod);
+  shader->set_uniform("texture0_mod", descriptor.albedo.mod);
 
   emissive.bind(Texture_Location::emissive);
-  shader->set_uniform("texture1_mod", m.emissive.mod);
+  shader->set_uniform("texture1_mod", descriptor.emissive.mod);
 
   roughness.bind(Texture_Location::roughness);
-  shader->set_uniform("texture2_mod", m.roughness.mod);
+  shader->set_uniform("texture2_mod", descriptor.roughness.mod);
 
   normal.bind(Texture_Location::normal);
 
   metalness.bind(Texture_Location::metalness);
-  shader->set_uniform("texture4_mod", m.metalness.mod);
+  shader->set_uniform("texture4_mod", descriptor.metalness.mod);
 
   ambient_occlusion.bind(Texture_Location::ambient_occlusion);
-  shader->set_uniform("texture5_mod", m.ambient_occlusion.mod);
+  shader->set_uniform("texture5_mod", descriptor.ambient_occlusion.mod);
 }
 void Material::unbind_textures()
 {
@@ -1067,9 +901,9 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
   set_message("Initializing renderer...");
 
-  Mesh_Data quad_data = load_mesh_plane();
-  quad_data.unique_identifier = "RENDERER's PLANE";
-  quad = Mesh(quad_data, "RENDERER's PLANE"); /*
+  quad = Mesh(Mesh_Descriptor(plane, "RENDERER's PLANE"));
+
+  /*
    temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
    passthrough = Shader("passthrough.vert", "passthrough.frag");
    variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
@@ -1085,7 +919,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 
   const ivec2 brdf_lut_size = ivec2(512, 512);
   Shader brdf_lut_generator = Shader("passthrough.vert", "brdf_lut_generator.frag");
-  brdf_integration_lut = Texture("brdf_lut", brdf_lut_size, GL_RG16F);
+  brdf_integration_lut = Texture("brdf_lut", brdf_lut_size, GL_RG16F, GL_LINEAR);
   Framebuffer lut_fbo;
   lut_fbo.color_attachments[0] = brdf_integration_lut;
   lut_fbo.init();
@@ -1213,7 +1047,7 @@ void Renderer::build_shadow_maps()
     shadow_map->projection_camera = projection * camera;
     for (Render_Entity &entity : render_entities)
     {
-      if (entity.material->m.casts_shadows)
+      if (entity.material->descriptor.casts_shadows)
       {
         ASSERT(entity.mesh);
         int vao = entity.mesh->get_vao();
@@ -1243,13 +1077,16 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   ASSERT(shader);
   ASSERT(shader->vs == "passthrough.vert");
 
-  static Mesh quad = Mesh(load_mesh_plane(), "run_pixel_shader_quad");
+  Mesh_Descriptor d;
+  d.primitive = plane;
+  d.name = "run_pixel_shader_quad";
+  static Mesh quad = Mesh(d);
 
   if (dst)
   {
     ASSERT(dst->fbo);
     ASSERT(dst->color_attachments.size());
-    glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo->fbo);
+    dst->bind();
   }
   else
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1268,189 +1105,21 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   }
 
   glDisable(GL_DEPTH_TEST);
-  glBindVertexArray(quad.get_vao());
+  glDisable(GL_BLEND);
+  glDisable(GL_CULL_FACE);
+  //glBindVertexArray(quad.get_vao());
   shader->use();
   shader->set_uniform("transform", Renderer::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  //glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  quad.draw();
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {
     glActiveTexture(GL_TEXTURE0 + i);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
-}
-
-void imgui_light_array(Light_Array &lights)
-{
-  static bool open = false;
-  const uint32 initial_height = 130;
-  const uint32 height_per_inactive_light = 25;
-  const uint32 max_height = 600;
-  uint32 width = 243;
-
-  uint32 height = initial_height + height_per_inactive_light * lights.light_count;
-  check_gl_error();
-  ImGui::Begin("lighting adjustment", &open, ImGuiWindowFlags_NoResize);
-  {
-    check_gl_error();
-    static auto radiance_map = File_Picker(".");
-    static auto irradiance_map = File_Picker(".");
-    static bool picking_radiance = false;
-    static bool picking_irradiance = false;
-    std::string radiance_map_result = lights.environment.radiance.handle->peek_filename();
-    std::string irradiance_map_result = lights.environment.irradiance.handle->peek_filename();
-    check_gl_error();
-    bool updated = false;
-    if (ImGui::Button("Radiance Map"))
-      picking_radiance = true;
-    if (ImGui::Button("Irradiance Map"))
-      picking_irradiance = true;
-    if (picking_radiance)
-    {
-      if (radiance_map.run())
-      {
-        picking_radiance = false;
-        radiance_map_result = radiance_map.get_result();
-        updated = true;
-      }
-      else if (radiance_map.get_closed())
-      {
-        picking_radiance = false;
-      }
-    }
-    if (picking_irradiance)
-    {
-      if (irradiance_map.run())
-      {
-        picking_irradiance = false;
-        irradiance_map_result = irradiance_map.get_result();
-        updated = true;
-      }
-      else if (irradiance_map.get_closed())
-      {
-        picking_irradiance = false;
-      }
-    }
-    ImGui::Text(s("Radiance map: ", radiance_map_result).c_str());
-    ImGui::Text(s("Irradiance map: ", irradiance_map_result).c_str());
-    check_gl_error();
-    if (updated)
-    {
-      Environment_Map_Descriptor d;
-      d.radiance = radiance_map_result;
-      d.irradiance = irradiance_map_result;
-      lights.environment = d;
-      check_gl_error();
-    }
-  }
-
-  ImGui::SetWindowSize(ImVec2((float)width, (float)height));
-  if (ImGui::Button("Push Light"))
-  {
-    lights.light_count++;
-
-    if (lights.light_count > MAX_LIGHTS)
-    {
-      lights.light_count = MAX_LIGHTS;
-    }
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Pop Light"))
-  {
-    if (!lights.light_count == 0)
-    {
-      lights.light_count--;
-    }
-  }
-  ImGui::SameLine();
-  bool want_collapse = false;
-  if (ImGui::Button("Collapse"))
-  {
-    want_collapse = true;
-  }
-  ImGui::BeginChild("ScrollingRegion");
-  for (uint32 i = 0; i < lights.light_count; ++i)
-  {
-    ImGui::PushID(s(i).c_str());
-    ImGui::PushItemWidth(150);
-    if (want_collapse)
-    {
-      ImGui::SetNextTreeNodeOpen(false);
-    }
-    if (!ImGui::CollapsingHeader(s("Light ", i).c_str()))
-    {
-      ImGui::PopID();
-      continue;
-    }
-    width = 270;
-    height = max_height;
-    Light *light = &lights.lights[i];
-    ImGui::Indent(5);
-    ImGui::LabelText("Option", "Setting %u", i);
-    ImGui::ColorPicker3("Radiance", &light->color[0], ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_RGB);
-    ImGui::DragFloat3("Position", &light->position[0]);
-    ImGui::DragFloat("Brightness", &light->brightness, 0.1f);
-    light->brightness = max(light->brightness, 0.0000001f);
-    ImGui::DragFloat3("Attenuation", &light->attenuation[0], 0.01f);
-    ImGui::DragFloat("Ambient", &light->ambient, 0.001f);
-    light->ambient = max(light->ambient, 0.f);
-    ImGui::DragFloat("radius", &light->radius, 0.01f);
-    string current_type = s(light->type);
-    if (ImGui::BeginCombo("Light Type", current_type.c_str()))
-    {
-      const uint light_type_count = 3;
-      for (int n = 0; n < light_type_count; n++)
-      {
-        string list_type_n = s(Light_Type(n));
-        bool is_selected = (current_type == list_type_n);
-        if (ImGui::Selectable(list_type_n.c_str(), is_selected))
-          light->type = Light_Type(n);
-        if (is_selected)
-          ImGui::SetItemDefaultFocus();
-      }
-      ImGui::EndCombo();
-    }
-    if (light->type == Light_Type::parallel)
-    {
-      ImGui::DragFloat3("Direction", &light->direction[0]);
-    }
-    if (light->type == Light_Type::omnidirectional)
-    {
-    }
-    if (light->type == Light_Type::spot)
-    {
-      ImGui::DragFloat3("Direction", &light->direction[0]);
-      ImGui::DragFloat("Focus", &light->cone_angle, 0.0001f, 0.0000001, 0.5);
-      ImGui::Checkbox("Casts Shadows", &light->casts_shadows);
-      if (light->casts_shadows)
-      {
-        if (ImGui::TreeNode("Shadow settings"))
-        {
-          width = 320;
-          ImGui::InputInt2("Shadow Map Resolution", &light->shadow_map_resolution[0]);
-          ImGui::InputInt("Blur Iterations", &light->shadow_blur_iterations, 1, 0);
-          ImGui::DragFloat("Blur Radius", &light->shadow_blur_radius, 0.1f, 0.00001f, 0.0f);
-          ImGui::DragFloat("Near Plane", &light->shadow_near_plane, 1.0f, 0.00001f);
-          ImGui::DragFloat("Far Plane", &light->shadow_far_plane, 1.0f, 1.0f);
-          ImGui::InputFloat("Max Variance", &light->max_variance, 0.0000001f, 0.0001f, 12);
-          ImGui::DragFloat("FoV", &light->shadow_fov, 1.0f, 0.0000001f, 90.f);
-          ImGui::TreePop();
-
-          light->shadow_blur_iterations = max(light->shadow_blur_iterations, 0);
-          light->max_variance = max(light->max_variance, 0.f);
-          light->shadow_blur_radius = max(light->shadow_blur_radius, 0.f);
-        }
-      }
-    }
-    ImGui::Unindent(5.f);
-    ImGui::PopItemWidth();
-    ImGui::PopID();
-  }
-  ImGui::EndChild();
-  ImGui::SetWindowSize(ImVec2((float32)width, (float32)height));
-  ImGui::End();
 }
 
 void Renderer::opaque_pass(float32 time)
@@ -1488,8 +1157,8 @@ void Renderer::opaque_pass(float32 time)
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->m.uv_scale);
-    shader.set_uniform("normal_uv_scale", entity.material->m.normal_uv_scale);
+    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+    shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
@@ -1527,7 +1196,7 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->m.uv_scale);
+    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     lights.bind(shader);
     //// verify sizes of data, mat4 floats
     ASSERT(entity.Model_Matrices.size() > 0);
@@ -1655,17 +1324,17 @@ void Renderer::translucent_pass(float32 time)
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
     glBindVertexArray(vao);
-    Shader &shader = entity.material->shader;
+    Shader &shader = CONFIG.render_simple ? simple : entity.material->shader;
     shader.use();
     entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->m.uv_scale);
+    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader.set_uniform("MVP", projection * camera * entity.transformation);
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("discard_on_alpha", false);
-    shader.set_uniform("alpha_albedo_override", entity.material->m.albedo_alpha_override);
+    shader.set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
 
 #if SHOW_UV_TEST_GRID
     uv_map_grid.bind(10);
@@ -1732,7 +1401,7 @@ void Renderer::postprocess_pass(float32 time)
 
   // bloom:
   bool need_to_allocate_texture = bloom_target.get_handle() == 0;
-  const uint32 min_width = 140;
+  const uint32 min_width = 80;
   vector<ivec2> resolutions = {size};
   while (resolutions.back().x / 2 > min_width)
   {
@@ -1743,13 +1412,13 @@ void Renderer::postprocess_pass(float32 time)
 
   if (need_to_allocate_texture)
   {
-    bloom_intermediate = Texture(name + s("'s Bloom Intermediate"), size, GL_RGB16F);
+    bloom_intermediate = Texture(name + s("'s Bloom Intermediate"), size, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
     bloom_intermediate.bind(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip_levels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
-    bloom_target = Texture(name + s("'s Bloom Target"), size, GL_RGB16F);
+    bloom_target = Texture(name + s("'s Bloom Target"), size, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
     bloom_target.bind(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip_levels);
@@ -1778,7 +1447,18 @@ void Renderer::postprocess_pass(float32 time)
   draw_target.color_attachments[0].bind(0);
   quad.draw();
 
-  const float32 radius = 0.0035f;
+  static float32 radius = 0.0021;
+  static float32 factor = 2.12f;
+  static bool enabled = true;
+  ImGui::Begin("bloom");
+  ImGui::Checkbox("Enabled", &enabled);
+  ImGui::DragFloat("radius", &radius, 0.00001, 0.0f, 0.5f, "%.6f");
+  ImGui::DragFloat("factor", &factor, 0.001, 0.0f, 10.5f, "%.3f");
+  ImGui::Text(s("mip_count:", mip_levels).c_str());
+
+  ImGui::End();
+
+  float32 original = radius;
   // in a loop
   // blur: src:bloom_target, dst:intermediate (x), src:intermediate, dst:target (y)
   for (uint32 i = 0; i < mip_levels; ++i)
@@ -1802,7 +1482,10 @@ void Renderer::postprocess_pass(float32 time)
     gaussian_blur_15x.set_uniform("lod", i + 1);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_target.get_handle(), i + 1);
     quad.draw();
+
+    radius += (factor * radius);
   }
+  radius = original;
   // bloom target is now the screen high pass filtered, lod0 no blur, increasing bluriness on each mip level below that
 
   if (!bloom_result.get_handle())
@@ -1810,7 +1493,7 @@ void Renderer::postprocess_pass(float32 time)
     Texture_Descriptor td;
     td.name = name + "'s bloom_result";
     // td.name = "color(0.15,0,0,1)";
-    td.size = size / 4;
+    td.size = size / 1;
     td.format = GL_RGB16F;
     td.minification_filter = GL_LINEAR;
     td.wrap_s = GL_CLAMP_TO_EDGE;
@@ -1824,7 +1507,7 @@ void Renderer::postprocess_pass(float32 time)
   bloom_target.bind(0);
   glViewport(0, 0, bloom_result.t.size.x, bloom_result.t.size.y);
   bloom_mix.set_uniform("transform", ortho_projection(bloom_result.t.size));
-  bloom_mix.set_uniform("mip_count", mip_levels);
+  bloom_mix.set_uniform("mip_count", mip_levels + 1); //+1 because we index from 0
   quad.draw();
   // all of these bloom textures should now be averaged and drawn into a texture at 1/4 the source resolution
 
@@ -1836,7 +1519,8 @@ void Renderer::postprocess_pass(float32 time)
   glViewport(0, 0, size.x, size.y);
   passthrough.use();
   passthrough.set_uniform("transform", ortho_projection(size));
-  quad.draw();
+  if (enabled)
+    quad.draw();
   glBindTexture(GL_TEXTURE_2D, 0);
   glDisable(GL_BLEND);
 }
@@ -1904,7 +1588,8 @@ void Renderer::render(float64 state_time)
 
       for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
       {
-        shared_ptr<Texture_Handle> ptr = imgui_texture_array[i].ptr;
+        Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
+        shared_ptr<Texture_Handle> ptr = itd->ptr;
         GLenum format = ptr->get_format();
         bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
                           format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
@@ -1919,6 +1604,11 @@ void Renderer::render(float64 state_time)
           const char *format = texture_format_to_string(ptr->format);
 
           ImGui::Text(s("Format:", format).c_str());
+
+          if (itd->is_cubemap)
+            ImGui::Text(s("Type:", "Cubemap").c_str());
+          else
+            ImGui::Text(s("Type:", "Texture2D").c_str());
           ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
           Imgui_Texture_Descriptor descriptor;
           descriptor.ptr = ptr;
@@ -1944,7 +1634,7 @@ void Renderer::render(float64 state_time)
             for (uint32 i = 0; i < mip_levels; ++i)
             {
               Imgui_Texture_Descriptor d = descriptor;
-              d.mip_lod_to_draw = i;
+              d.mip_lod_to_draw = (float)i;
               IMGUI_TEXTURE_DRAWS.push_back(d);
               uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
               ImGui::Image((ImTextureID)data, ImVec2(ptr->imgui_size_scale * aspect * 256, ptr->imgui_size_scale * 256),
@@ -1976,10 +1666,9 @@ void Renderer::render(float64 state_time)
   opaque_pass(time);
 
   // instance_pass(time);
-  if (!CONFIG.render_simple)
-  {
-    translucent_pass(time);
-  }
+
+  translucent_pass(time);
+
 #if POSTPROCESSING
   postprocess_pass(time);
 #else
@@ -2163,7 +1852,7 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
     vec3 translation = vec3((*m)[3][0], (*m)[3][1], (*m)[3][2]);
 
     float32 dist = length(translation - camera_position);
-    bool is_transparent = entity->material->m.uses_transparency;
+    bool is_transparent = entity->material->descriptor.uses_transparency;
     if (is_transparent)
     {
       index_distances.push_back({i, dist});
@@ -2539,9 +2228,8 @@ vector<Image> load_cubemap_faces(array<string, 6> filenames)
 
 Cubemap::Cubemap(string equirectangular_filename)
 {
-
   static Shader equi_to_cube("equi_to_cube.vert", "equi_to_cube.frag");
-  static Mesh cube(load_mesh(cube), "Cubemap(string equirectangular_filename)'s cube");
+  static Mesh cube(Mesh_Descriptor(cube, "Cubemap(string equirectangular_filename)'s cube"));
 
   handle = TEXTURECUBEMAP_CACHE[equirectangular_filename].lock();
   if (handle)
@@ -2552,7 +2240,6 @@ Cubemap::Cubemap(string equirectangular_filename)
   handle = make_shared<Texture_Handle>();
   TEXTURECUBEMAP_CACHE[equirectangular_filename] = handle;
   handle->filename = equirectangular_filename;
-
   mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
   vec3 origin = vec3(0);
   vec3 posx = vec3(1.0f, 0.0f, 0.0f);
@@ -2576,10 +2263,6 @@ Cubemap::Cubemap(string equirectangular_filename)
   glBindRenderbuffer(GL_RENDERBUFFER, rbo);
   glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
-
-  GLint value;
-  glGetIntegerv(gl::GL_ACTIVE_TEXTURE_ARB, &value);
-  value = value - (uint32)GL_TEXTURE0;
 
   glActiveTexture(GL_TEXTURE0);
   glGenTextures(1, &handle->texture);
@@ -2608,6 +2291,7 @@ Cubemap::Cubemap(string equirectangular_filename)
   { // stall for resource
     source.load();
   }
+
   source.bind(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);
@@ -2705,7 +2389,7 @@ void Environment_Map::generate_ibl_mipmaps()
       specular_filter = Shader("equi_to_cube.vert", "specular_brdf_convolution.frag");
     }
   }
-  static Mesh cube(load_mesh(cube), "generate_ibl_mipmaps()'s cube");
+  static Mesh cube(Mesh_Descriptor(cube, "generate_ibl_mipmaps()'s cube"));
 
   const uint32 mip_levels = 6;
 
@@ -2773,8 +2457,8 @@ void Environment_Map::generate_ibl_mipmaps()
   glCullFace(GL_FRONT);
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
   {
-    uint32 width = radiance.size.x * pow(0.5, mip_level);
-    uint32 height = radiance.size.y * pow(0.5, mip_level);
+    uint32 width = (uint32)floor(radiance.size.x * pow(0.5, mip_level));
+    uint32 height = (uint32)floor(radiance.size.y * pow(0.5, mip_level));
     glViewport(0, 0, width, height);
     float roughness = (float)mip_level / (float)(mip_levels - 1);
     specular_filter.set_uniform("roughness", roughness);
@@ -2916,5 +2600,42 @@ void Light_Array::bind(Shader &shader)
   {
     shader.program->light_count = (int32)light_count;
     glUniform1i(shader.program->light_count_location, new_light_count);
+  }
+}
+
+void Material_Descriptor::mod_by(const Material_Descriptor *override)
+{
+  const static Material_Descriptor defaults;
+  { // only apply the override for the material descriptor slots
+    // that are different than default
+    if (override->albedo.name != defaults.albedo.name)
+      albedo = override->albedo;
+    if (override->roughness.name != defaults.roughness.name)
+      roughness = override->roughness;
+    if (override->metalness.name != defaults.metalness.name)
+      metalness = override->metalness;
+    if (override->tangent.name != defaults.tangent.name)
+      tangent = override->tangent;
+    if (override->normal.name != defaults.normal.name)
+      normal = override->normal;
+    if (override->ambient_occlusion.name != defaults.ambient_occlusion.name)
+      ambient_occlusion = override->ambient_occlusion;
+    if (override->emissive.name != defaults.emissive.name)
+      emissive = override->emissive;
+
+    albedo.mod = override->albedo.mod;
+    roughness.mod = override->roughness.mod;
+    metalness.mod = override->metalness.mod;
+    tangent.mod = override->tangent.mod;
+    emissive.mod = override->emissive.mod;
+    ambient_occlusion.mod = override->ambient_occlusion.mod;
+    vertex_shader = override->vertex_shader;
+    frag_shader = override->frag_shader;
+    backface_culling = override->backface_culling;
+    uv_scale = override->uv_scale;
+    uses_transparency = override->uses_transparency;
+    casts_shadows = override->casts_shadows;
+    albedo_alpha_override = override->albedo_alpha_override;
+    discard_on_alpha = override->discard_on_alpha;
   }
 }

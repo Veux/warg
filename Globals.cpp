@@ -2,6 +2,7 @@
 #include "Json.h"
 #include "Render.h"
 #include "SDL_Imgui_State.h"
+#include "Scene_Graph.h"
 #include <SDL2/SDL.h>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
@@ -14,62 +15,32 @@
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 60.0f;
-const float32 MOVE_SPEED = 2.0f * dt;
+const float32 MOVE_SPEED = 4.f;
+const float32 STEP_SIZE = MOVE_SPEED / 3.f;
 const float32 MOUSE_X_SENS = .0041f;
 const float32 MOUSE_Y_SENS = .0041f;
 const float32 ZOOM_STEP = 0.5f;
 const float32 ATK_RANGE = 5.0f;
 const float32 JUMP_IMPULSE = 4.0f;
-
+Assimp::Importer IMPORTER;
 const std::string BASE_ASSET_PATH = ROOT_PATH + "Assets/";
 const std::string BASE_TEXTURE_PATH = BASE_ASSET_PATH + std::string("Textures/");
 const std::string BASE_SHADER_PATH = BASE_ASSET_PATH + std::string("Shaders/");
 const std::string BASE_MODEL_PATH = BASE_ASSET_PATH + std::string("Models/");
 const std::string ERROR_TEXTURE_PATH = BASE_TEXTURE_PATH + "err.png";
+std::string SCRATCH_STRING;
 Timer PERF_TIMER = Timer(1000);
 Timer FRAME_TIMER = Timer(60);
 Timer SWAP_TIMER = Timer(60);
+Resource_Manager GL_ENABLED_RESOURCE_MANAGER(false);
+Resource_Manager GL_DISABLED_RESOURCE_MANAGER(true);
 Config CONFIG;
+bool WARG_SERVER;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
   const float32 offset = input - min;
   return (offset - (floor(offset / range) * range)) + min;
-}
-
-bool WARG_SERVER = false;
-
-static Assimp::Importer importer;
-
-const int default_assimp_flags = aiProcess_FlipWindingOrder |
-                                 // aiProcess_Triangulate |
-                                 // aiProcess_FlipUVs |
-                                 aiProcess_CalcTangentSpace |
-                                 // aiProcess_MakeLeftHanded|
-                                 // aiProcess_JoinIdenticalVertices |
-                                 // aiProcess_PreTransformVertices |
-                                 // aiProcess_GenUVCoords |
-                                 // aiProcess_OptimizeGraph|
-                                 // aiProcess_ImproveCacheLocality|
-                                 // aiProcess_OptimizeMeshes|
-                                 // aiProcess_GenNormals|
-                                 // aiProcess_GenSmoothNormals|
-                                 // aiProcess_FixInfacingNormals |
-                                 0;
-
-const aiScene *load_aiscene(std::string path, const int *assimp_flags)
-{
-  if (!assimp_flags)
-    assimp_flags = &default_assimp_flags;
-  path = BASE_MODEL_PATH + path;
-  int flags = *assimp_flags;
-  auto p = importer.ReadFile(path.c_str(), flags);
-  if (!p || p->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !p->mRootNode)
-  {
-    set_message("ERROR::ASSIMP::", importer.GetErrorString());
-    ASSERT(0);
-  }
-  return p;
 }
 
 bool all_equal(int32 a, int32 b, int32 c) { return (a == b) && (a == c); }
@@ -89,7 +60,6 @@ vec3 rand(vec3 max) { return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z)
 
 // used to fix double escaped or wrong-slash file paths that assimp sometimes
 // gives
-// todo: UTF8 support for all filenames
 std::string fix_filename(std::string str)
 {
   std::string result;
@@ -191,11 +161,21 @@ glm::vec4 string_to_float4_color(std::string color)
 {
   // color(n,n,n,n)
   std::string a = color.substr(6);
+
+  if (a.length() == 0)
+  {
+    return vec4(0);
+  }
+  if (a.back() != ')')
+  {
+    return vec4(0);
+  }
+
   // n,n,n,n)
   a.pop_back();
   // n,n,n,n
 
-  std::string c;
+  std::string buffer;
   vec4 result(0);
 
   int i = 0;
@@ -204,25 +184,34 @@ glm::vec4 string_to_float4_color(std::string color)
   {
     if (it == a.end() || *it == ',')
     {
-      ASSERT(i < 4);
-      result[i] = std::stof(c);
+      if (i == 4)
+      { // more than three ','
+        return vec4(0);
+      }
+      result[i] = std::stof(buffer);
       if (it == a.end())
       {
         break;
       }
-      c.clear();
+      buffer.clear();
       ++i;
       ++it;
       continue;
     }
-    c.push_back(*it);
+
+    const char c = *it;
+    if (!isdigit(c) && c != '.' && c != '-' && c != 'f')
+    {
+      return vec4(0);
+    }
+    buffer.push_back(c);
     ++it;
   }
 
   return result;
 }
 
-Uint64 dankhash(float32 *data, uint32 size)
+Uint64 dankhash(const float32 *data, uint32 size)
 {
   Uint64 h = 1631243561234777777;
   Uint64 acc = 0;
@@ -276,7 +265,7 @@ Uint64 dankhash(float32 *data, uint32 size)
 //}
 void check_gl_error()
 {
-  //glFlush();
+  // glFlush();
   GLenum err = glGetError();
   if (err != GL_NO_ERROR)
   {
@@ -404,6 +393,10 @@ std::string vtos(glm::vec2 v)
   std::string result = "";
   for (uint32 i = 0; i < 2; ++i)
   {
+    if (v[i] >= 0.0f)
+    {
+      result += " ";
+    }
     result += std::to_string(v[i]) + " ";
   }
   return result;
@@ -413,6 +406,10 @@ std::string vtos(glm::vec3 v)
   std::string result = "";
   for (uint32 i = 0; i < 3; ++i)
   {
+    if (v[i] >= 0.0f)
+    {
+      result += " ";
+    }
     result += std::to_string(v[i]) + " ";
   }
   return result;
@@ -422,17 +419,50 @@ std::string vtos(glm::vec4 v)
   std::string result = "";
   for (uint32 i = 0; i < 4; ++i)
   {
-    result += std::to_string(v[i]) + " ";
+    if (v[i] >= 0.0f)
+    {
+      result += " ";
+    }
+    std::string sf = std::to_string(v[i]);
+    while (sf.length() > 6)
+      sf.pop_back();
+    while (sf.length() <= 6)
+      sf.push_back('0');
+    result += sf + " ";
   }
   return result;
 }
 
-std::string mtos(glm::mat4 m)
+std::string to_string(glm::mat4 m)
 {
-  std::string result = "\n|";
-  for (uint32 i = 0; i < 4; ++i)
+  std::string result = "";
+  for (uint32 column = 0; column < 4; ++column)
   {
-    result += "|" + vtos(m[i]) + "|\n";
+    result += "|";
+    for (uint32 row = 0; row < 4; ++row)
+    {
+      float32 f = m[row][column];
+      std::string sf = s(f);
+      while (sf.length() > 6)
+      {
+        if (sf.back() != '.')
+          sf.pop_back();
+        else
+          break;
+      }
+      while (sf.length() <= 6)
+        sf.push_back('0');
+      if (f >= 0)
+      {
+        result += " ";
+        if (sf.back() != '.')
+        {
+          sf.pop_back();
+        }
+      }
+      result += sf + " ";
+    }
+    result += "|\n";
   }
   return result;
 }
@@ -455,9 +485,8 @@ template <> std::string s<vec4>(vec4 value)
   std::string g = std::to_string(value.g);
   std::string b = std::to_string(value.b);
   std::string a = std::to_string(value.a);
-  return "color(" + r + "," + g + "," + b + "," + "a" + ")";
+  return "color(" + r + "," + g + "," + b + "," + a + ")";
 }
-
 template <> std::string s<const char *>(const char *value) { return std::string(value); }
 template <> std::string s<std::string>(std::string value) { return value; }
 
@@ -537,6 +566,19 @@ bool is_float_format(GLenum texture_format)
   }
 }
 
+std::string to_string(Array_String &s)
+{
+  std::string result;
+  for (uint32 i = 0; i < MAX_ARRAY_STRING_LENGTH; ++i)
+  {
+    char *ch = &s.str[i];
+    if (*ch == '\0')
+      return result;
+    result.push_back(*ch);
+  }
+  return result;
+}
+
 void Config::load(std::string filename)
 {
   json j;
@@ -591,7 +633,7 @@ void loader_loop(std::unordered_map<std::string, Image_Data> &database, std::que
   while (true)
   {
     std::string path;
-    Sleep(5);
+    Sleep(1);
     bool empty = true;
     {
       std::lock_guard<std::mutex> guard(queue_mtx);
@@ -676,15 +718,63 @@ bool has_img_file_extension(std::string name)
 {
   uint32 size = name.size();
 
-  if (size < 3)
+  if (size <= 3)
     return false;
 
   std::string end = name.substr(size - 4, 4);
   if (end == ".jpg" || end == ".png" || end == ".hdr" || end == ".JPG" || end == ".PNG" || end == ".JPG" ||
-      end == ".HDR")
+      end == ".HDR" || end == ".TGA" || end == ".tga")
   {
     return true;
   }
   return false;
 }
 Image_Loader IMAGE_LOADER;
+
+vec4 rgb_vec4(uint8 r, uint8 g, uint8 b) { return vec4(r, g, b, 255.f) / vec4(255.f); }
+
+float64 random_between(float64 min, float64 max)
+{
+  std::uniform_real_distribution<float64> distribution(min, max);
+  return distribution(generator);
+}
+int32 random_between(int32 min, int32 max)
+{
+  std::uniform_int_distribution<int32> distribution(min, max);
+  return distribution(generator);
+}
+float32 random_between(float32 min, float32 max)
+{
+  std::uniform_real_distribution<float32> distribution(min, max);
+  return distribution(generator);
+}
+glm::vec2 random_within(const vec2 &vec)
+{
+  std::uniform_real_distribution<float32> x(0, vec.x);
+  std::uniform_real_distribution<float32> y(0, vec.y);
+  return vec2(x(generator), y(generator));
+}
+glm::vec3 random_within(const vec3 &vec)
+{
+  std::uniform_real_distribution<float32> x(0, vec.x);
+  std::uniform_real_distribution<float32> y(0, vec.y);
+  std::uniform_real_distribution<float32> z(0, vec.z);
+  return vec3(x(generator), y(generator), z(generator));
+}
+glm::vec4 random_within(const vec4 &vec)
+{
+  std::uniform_real_distribution<float32> x(0, vec.x);
+  std::uniform_real_distribution<float32> y(0, vec.y);
+  std::uniform_real_distribution<float32> z(0, vec.x);
+  std::uniform_real_distribution<float32> w(0, vec.y);
+  return vec4(x(generator), y(generator), z(generator), w(generator));
+}
+bool Array_String::operator==(Array_String &rhs)
+{
+  for (uint32 i = 0; i < MAX_ARRAY_STRING_LENGTH; ++i)
+  {
+    if (str[i] != rhs.str[i])
+      return false;
+  }
+  return true;
+}

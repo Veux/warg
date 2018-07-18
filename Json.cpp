@@ -1,13 +1,11 @@
 #include "Json.h"
+#include "Render.h"
+#include "Scene_Graph.h"
+#include <unordered_map>
 
 extern std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 
-json jsonify(Scene_Graph &scene) { return scene; }
-
-void dejsonificate(Scene_Graph *scene, json j) { *scene = j; }
-
-void _pretty_json(std::string &result, const std::string &input,
-    std::string::size_type &pos, size_t le, size_t indent)
+void _pretty_json(std::string &result, const std::string &input, std::string::size_type &pos, size_t le, size_t indent)
 {
   bool in_string = false;
   for (; pos < input.length(); ++pos)
@@ -70,6 +68,12 @@ std::string pretty_dump(const json &j)
   return result;
 }
 
+void to_json(json &result, const Flat_Scene_Graph &p)
+{
+  json j;
+  j["Light_Array"] = p.lights;
+  j["Node Serialization"] = p.serialize();
+}
 void to_json(json &result, const Light &p)
 {
   json j;
@@ -112,75 +116,13 @@ void from_json(const json &j, Light &p)
   p.shadow_fov = j.at("Shadow FoV");
 }
 
-void to_json(json &result, const Mesh &p)
-{
-  // the only thing this will let us restore is already-imported-for-this-run
-  // Mesh_Handles  that havent gone out of scope yet, and Mesh_Primitives
-  json j;
-  j["Name"] = p.name;
-  j["Unique Identifier"] = p.unique_identifier;
-  result = j;
-
-  ////below is just for a warning:
-
-  std::shared_ptr<Mesh_Handle> cached_mesh =
-      MESH_CACHE[p.unique_identifier].lock();
-
-  if (!cached_mesh)
-  {
-    if (s_to_primitive(p.name) ==
-        null) // j["Data"] = p.stored_copy_of_vertex_data;?
-      set_message(s("Mesh to_json warning: Attempting to save a mesh that was "
-                    "created with custom Mesh_Data (unsupported). Name:",
-                      p.name, " Unique Identifier:", p.unique_identifier),
-          "", 5.0f);
-  }
-}
-
-void from_json(const json &j, Mesh &p)
-{
-  std::shared_ptr<Mesh_Handle> cached_mesh;
-  std::string name = j.at("Name");
-  std::string id = j.at("Unique Identifier");
-  cached_mesh = MESH_CACHE[id].lock();
-  if (cached_mesh)
-  {
-    p.unique_identifier = id;
-    p.mesh = cached_mesh;
-    p.name = name;
-    return;
-  }
-  else
-  { // was not in the cache
-    Mesh_Primitive primitive = s_to_primitive(name);
-    if (primitive != null)
-    {
-      p = Mesh(primitive, name);
-      return;
-    }
-    else
-    { // was not a primitive, and was not found in the assimp MESH_CACHE
-
-      // todo: Meshes made with custom Mesh_Data are unsupported - the mesh isnt
-      // currently holding the mesh data,  and cannot be restored from json
-
-      throw s(
-          "Mesh from_json failed to find Unique ID in cache: Unique_ID:", id);
-      // if this is an assimp import child, maybe the handle was let go just
-      // before this function call?  maybe the parent assimp import was
-      // unsuccessful, or the unique id is incorrect
-    }
-  }
-}
-
-void to_json(json &result, const Material &p) { result = p.m; }
+void to_json(json &result, const Material &p) { result = p.descriptor; }
 
 void from_json(const json &j, Material &p)
 {
   Material_Descriptor m = j;
   p = Material(m);
 }
-
 
 void to_json(json &result, const Environment_Map &p) { result = p.m; }
 
@@ -190,11 +132,10 @@ void from_json(const json &j, Environment_Map &p)
   p = Environment_Map(m);
 }
 
-
 void to_json(json &result, const Environment_Map_Descriptor &p)
 {
   json j;
-  j["Environment"] = p.radiance;
+  j["Radiance"] = p.radiance;
   j["Irradiance"] = p.irradiance;
   j["Environment Faces"] = p.environment_faces;
   j["Irradiance Faces"] = p.irradiance_faces;
@@ -205,10 +146,8 @@ void to_json(json &result, const Environment_Map_Descriptor &p)
 void from_json(const json &j, Environment_Map_Descriptor &p)
 {
   Environment_Map_Descriptor result;
-  std::string value = j.at("Environment");
-  result.radiance = value;
-  std::string value2 = j.at("Irradiance");
-  result.irradiance = value2;
+  result.radiance = j.at("Radiance").get<std::string>();
+  result.irradiance = j.at("Irradiance").get<std::string>();
   result.environment_faces = j.at("Environment Faces");
   result.irradiance_faces = j.at("Irradiance Faces");
   result.source_is_equirectangular = j.at("Equirectangular");
@@ -266,8 +205,6 @@ void to_json(json &result, const Material_Descriptor &p)
   result = j;
 }
 
-
-
 void from_json(const json &j, Material_Descriptor &p)
 {
   Material_Descriptor result;
@@ -278,15 +215,97 @@ void from_json(const json &j, Material_Descriptor &p)
   result.tangent = j.at("Tangent");
   result.ambient_occlusion = j.at("Ambient Occlusion");
   result.emissive = j.at("Emissive");
-  std::string vert = j.at("Vertex Shader");
-  result.vertex_shader = vert;
-  std::string frag = j.at("Fragment Shader");
-  result.frag_shader = frag;
+  result.vertex_shader = j.at("Vertex Shader").get<std::string>();
+  result.frag_shader = j.at("Fragment Shader").get<std::string>();
   result.uv_scale = j.at("UV Scale");
   result.albedo_alpha_override = j.at("Albedo Alpha Override");
   result.backface_culling = j.at("Backface Culling");
   result.uses_transparency = j.at("Uses Transparency");
   result.casts_shadows = j.at("Casts Shadows");
+  p = result;
+}
+
+void to_json(json &result, const std::vector<vec3> &p)
+{
+  json j;
+  for (auto &v : p)
+  {
+    j.push_back(v);
+  }
+  result = j;
+}
+void from_json(const json &j, std::vector<vec3> &p)
+{
+  std::vector<vec3> v;
+  for (json i : j)
+  {
+    v.push_back(i);
+  }
+  p = v;
+}
+
+void to_json(json &result, const std::vector<vec2> &p)
+{
+  json j;
+  for (auto &v : p)
+  {
+    j.push_back(v);
+  }
+  result = j;
+}
+void from_json(const json &j, std::vector<vec2> &p)
+{
+  std::vector<vec2> v;
+  for (json i : j)
+  {
+    v.push_back(i);
+  }
+  p = v;
+}
+void to_json(json &result, const Mesh_Data &p)
+{
+  json j;
+  j["Name"] = p.name;
+  j["Positions"] = p.positions;
+  j["Normals"] = p.normals;
+  j["Texture_Coordinates"] = p.texture_coordinates;
+  j["Tangents"] = p.tangents;
+  j["Bitangents"] = p.bitangents;
+  j["Indices"] = p.indices;
+  result = j;
+}
+void from_json(const json &j, Mesh_Data &p)
+{
+  Mesh_Data result;
+  result.name = j.at("Name").get<std::string>();
+  result.positions = j.at("Positions").get<std::vector<vec3>>();
+  result.normals = j.at("Normals").get<std::vector<vec3>>();
+  result.texture_coordinates = j.at("Texture_Coordinates").get<std::vector<vec2>>();
+  result.tangents = j.at("Tangents").get<std::vector<vec3>>();
+  result.bitangents = j.at("Bitangents").get<std::vector<vec3>>();
+  result.indices = j.at("Indices").get<std::vector<uint32>>();
+  p = result;
+}
+void to_json(json &result, const Mesh_Descriptor &p)
+{
+  json j;
+  j["Name"] = p.name;
+  j["Assimp_Filename"] = p.assimp_filename;
+  j["Assimp_Index"] = p.assimp_index;
+  j["Primitive"] = p.primitive;
+  j["Mesh_Data"] = p.mesh_data;
+  result = j;
+}
+
+void from_json(const json &j, Mesh_Descriptor &p)
+{
+  Mesh_Descriptor result;
+  std::string name = j.at("Name");
+  result.name = name;
+  result.assimp_filename = j.at("Assimp_Filename").get<std::string>();
+  result.assimp_index = j["Assimp_Index"].get<uint32>();
+  result.primitive = j.at("Primitive");
+  result.mesh_data = j.at("Mesh_Data");
   p = result;
 }
 
@@ -306,273 +325,4 @@ void from_json(const json &j, Light_Array &p)
   l.light_count = j.at("Light Count");
   l.environment = j.at("Environment");
   p = l;
-}
-
-void to_json(json &result, const std::shared_ptr<Scene_Graph_Node> &node_ptr)
-{
-  const Scene_Graph_Node &node = *node_ptr.get();
-  result = node;
-}
-
-void to_json(json &result, const Scene_Graph_Node &node)
-{
-  json j;
-  if (!node.include_in_save)
-  {
-    result = j;
-    return;
-  }
-
-  j["Name"] = node.name;
-  j["Position"] = node.position;
-  j["Orientation"] = node.orientation;
-  j["Scale"] = node.scale;
-  j["Velocity"] = node.velocity;
-  j["Visible"] = node.visible;
-  j["Propagate Visibility"] = node.propagate_visibility;
-  j["Import Basis"] = node.import_basis;
-
-  j["Filename Of Import"] = node.filename_of_import;
-  j["Is Root Of Import"] = node.is_root_of_import;
-
-  json model_json;
-  for (uint32 i = 0; i < node.model.size(); ++i)
-  {
-    const Mesh &mesh = node.model[i].first;
-    const Material &material = node.model[i].second;
-
-    json jpair;
-
-    json jmesh = mesh;
-    json jmaterial = material;
-
-    std::string key = mesh.unique_identifier;
-
-    jpair["Mesh"] = jmesh;
-    jpair["Material"] = jmaterial;
-
-    model_json[key] = jpair;
-  }
-  j["Model"] = model_json;
-
-  j["Owned Children"] = {};
-  for (uint32 i = 0; i < node.owned_children.size(); ++i)
-  {
-    auto ptr = node.owned_children[i];
-    json child = ptr;
-    j["Owned Children"].push_back(child);
-  }
-
-  // for (uint32 i = 0; i < node.unowned_children.size(); ++i)
-  //{//should this even be here? can you think of a reason to actually save
-  // these?
-  //  auto ptr = node.unowned_children[i].lock();
-  //  j["unowned_children"].push_back(ptr);
-  //}
-  result = j;
-}
-
-void to_json(json &result, const Scene_Graph &scene)
-{
-  json j;
-  j["SCENE_GRAPH_ROOT"] = scene.root;
-  j["Lights"] = scene.lights;
-  result = j;
-}
-
-// only to be called on an already-imported asset node ptr, the json will only
-// attempt to  restore the materials for the import
-void set_import_materials(Node_Ptr ptr, json json_for_ptr)
-{
-  json jmodel = json_for_ptr.at("Model");
-  for (auto &pair : ptr->model)
-  {
-    Mesh *mesh = &pair.first;
-    Material *material = &pair.second;
-
-    std::string *desired_key = &mesh->unique_identifier;
-
-    json jpair = jmodel.at(*desired_key);
-    json jmesh = jpair.at("Mesh");
-    json jmaterial = jpair.at("Material");
-
-    //*mesh = jmesh; shouldnt be needed
-    *material = jmaterial;
-  }
-
-  // ptr->owned_children should not contain anything but the children created by
-  // the import  but json could have some that are not
-  json jchildren = json_for_ptr.at("Owned Children");
-
-  const uint32 import_children_size = ptr->owned_children.size();
-  const uint32 jchildren_size = jchildren.size();
-
-  // we need the full json for the child that matches this already-constructed
-  // child in order to recurse
-  for (uint32 i = 0; i < import_children_size; ++i)
-  {
-    if (i >= jchildren_size)
-    {
-      // problem: if the user added something to this node's owned-children
-      // before the final import child, the order will be ruined, and the
-      // remaining nodes will never have their materials restored
-      // unless you implement heuristics or save the vertex data raw
-      break;
-    }
-
-    Node_Ptr child = ptr->owned_children[i];
-    child->include_in_save = true;
-    json jchild = jchildren[i];
-    std::string name = jchild.at("Name");
-    if (child->name == name)
-    { // probably the thing we want - not guaranteed - if the index and name of
-      // the object are the same, its going to get the overriden material
-      set_import_materials(child, jchild);
-    }
-    else
-    { // todo: better json support for materials: asset file has probably
-      // changed could try some heuristics here to match it up, but for now just
-      // abort
-      continue;
-    }
-  }
-  // todo: keep track of if the entire asset was imported with an actual
-  // material-override pointer  and always respawn it with that override, when
-  // reconstructing the node_ptr in build_node_graph_from_json
-  // this ensures that even if theres an asset file modification
-  // the override materials are still applied
-}
-
-Node_Ptr build_node_graph_from_json(const json &j, Scene_Graph &scene)
-{
-  Node_Ptr ptr;
-  std::string name;
-  try
-  {
-    std::string naem = j.at("Name");
-    name = naem;
-  }
-  catch (std::exception &e)
-  {
-    set_message(s(
-        "No \"Name\" found for json node:", j.dump(), "Exception:", e.what()));
-    return nullptr;
-  }
-
-  if (name == "SCENE_GRAPH_ROOT")
-  {
-    ptr = std::make_shared<Scene_Graph_Node>();
-    ptr->name = name;
-  }
-
-  const bool is_root_of_import = j.at("Is Root Of Import");
-  const std::string filename_of_import = j.at("Filename Of Import");
-
-  if (is_root_of_import)
-  { // assimp import case - does entire import and restores its materials
-    // (probably)
-    ptr = scene.add_aiscene(filename_of_import);
-    ptr->position = j.at("Position");
-    ptr->name = name;
-    ptr->orientation = j.at("Orientation");
-    ptr->scale = j.at("Scale");
-    ptr->velocity = j.at("Velocity");
-    ptr->visible = j.at("Visible");
-    ptr->propagate_visibility = j.at("Propagate Visibility");
-    ptr->import_basis = j.at("Import Basis");
-
-    ptr->filename_of_import = filename_of_import;
-    ptr->is_root_of_import = true;
-    ptr->include_in_save = true;
-
-    set_import_materials(ptr, j);
-  }
-
-  if (filename_of_import == "")
-  { // primitive case (or custom Mesh_Data (not implemented))
-
-    json json_saved_model = j.at("Model");
-    for (json &jpair : json_saved_model)
-    {
-      json jmesh = jpair.at("Mesh");
-      json jmaterial = jpair.at("Material");
-
-      Material_Descriptor material = jmaterial;
-
-      std::string unique_id = jmesh.at("Unique Identifier");
-      Mesh_Primitive primitive = null;
-      try
-      {
-        primitive = s_to_primitive(unique_id);
-      }
-      catch (std::exception &e)
-      {
-        std::string name = jmesh.at("Name");
-        set_message(s("JSON unable to restore mesh/material pair. Name:", name,
-            " UID:", unique_id, "Exception:", e.what()));
-      }
-
-      if (primitive != null)
-      {
-        ASSERT(filename_of_import == "");
-        ASSERT(!is_root_of_import);
-        ASSERT(name != "SCENE_GRAPH_ROOT");
-
-        ptr = scene.add_primitive_mesh(primitive, name, material, nullptr);
-      }
-    }
-  }
-
-  json owned_children = j.at("Owned Children");
-  for (auto &owned_child : owned_children)
-  {
-    Node_Ptr child = build_node_graph_from_json(owned_child, scene);
-    if (child)
-    {
-      child->include_in_save = true;
-      ptr->owned_children.push_back(child);
-    }
-  }
-  return ptr;
-}
-
-void from_json(const json &k, Scene_Graph &scene)
-{
-  // problem: very difficult to tell if a child node position(for example) was
-  // changed by changing its position  in the scene graph, or by changing its
-  // position in the asset import file itself, so, default to using the data
-  // provided by the file for all imported scenes
-
-  // possible solution: use filename last modified time  if file is newer than
-  // the date saved in the json, file overrides, else json overrides
-
-  try
-  {
-    json root = k.at("SCENE_GRAPH_ROOT");
-    scene.root = build_node_graph_from_json(root, scene);
-    if (!scene.root)
-    {
-      scene.root = std::make_shared<Scene_Graph_Node>();
-      scene.root->name = "SCENE_GRAPH_ROOT";
-    }
-  }
-  catch (std::exception &e)
-  {
-    std::string pretty = pretty_dump(k);
-    set_message(s("Warning: JSON for Scene_Graph::root load failed.",
-                    "Exception: ", e.what(), " JSON:\n"),
-        pretty, 15.0f);
-    scene = Scene_Graph();
-  }
-  try
-  {
-    scene.lights = k.at("Lights");
-  }
-  catch (std::exception &e)
-  {
-    std::string pretty = pretty_dump(k);
-    set_message(s("Warning: JSON for Scene_Graph::lights load failed.",
-                    "Exception: ", e.what(), " JSON:\n"),
-        pretty, 15.0f);
-  }
 }

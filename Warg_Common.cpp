@@ -1,10 +1,8 @@
 #include "Warg_Common.h"
 
-std::vector<Triangle> collect_colliders(const Scene_Graph &scene);
+std::vector<Triangle> collect_colliders(const Flat_Scene_Graph &scene);
 void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
-    const std::vector<Triangle> &colliders);
-void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders);
 
 Map make_blades_edge()
@@ -14,8 +12,8 @@ Map make_blades_edge()
   // spawns
   blades_edge.spawn_pos[0] = {0, 0, 15};
   blades_edge.spawn_pos[1] = {45, 45, 5};
-  blades_edge.spawn_dir[0] = {0, 1, 0};
-  blades_edge.spawn_dir[1] = {0, -1, 0};
+  blades_edge.spawn_orientation[0] = angleAxis(0.f, vec3(0, 1, 0));
+  blades_edge.spawn_orientation[1] = angleAxis(0.f, vec3(0, -1, 0));
 
   // blades_edge.mesh.unique_identifier = "blades_edge_map";
   // blades_edge.material.backface_culling = false;
@@ -30,13 +28,15 @@ Map make_blades_edge()
   blades_edge.material.albedo.wrap_s = GL_TEXTURE_WRAP_S;
   blades_edge.material.albedo.wrap_t = GL_TEXTURE_WRAP_T;
   blades_edge.material.metalness.mod = vec4(0);
+  if (CONFIG.render_simple)
+    blades_edge.material.albedo.mod = vec4(0.4f);
 
   return blades_edge;
 }
 
 void Character::update_hp(float32 dt)
 {
-  hp += e_stats.hp_regen * dt;
+  hp += (int)round(e_stats.hp_regen * dt); // todo: fix dis shit
   if (hp > hp_max)
     hp = hp_max;
 }
@@ -54,16 +54,16 @@ void Character::update_spell_cooldowns(float32 dt)
   for (auto &spell_ : spellbook)
   {
     auto &spell = spell_.second;
-    if (spell.cd_remaining > 0)
-      spell.cd_remaining -= dt;
-    if (spell.cd_remaining < 0)
-      spell.cd_remaining = 0;
+    if (spell.cooldown_remaining > 0)
+      spell.cooldown_remaining -= dt;
+    if (spell.cooldown_remaining < 0)
+      spell.cooldown_remaining = 0;
   }
 }
 
 void Character::update_global_cooldown(float32 dt)
 {
-  gcd -= dt;
+  gcd -= dt * e_stats.cast_speed;
   if (gcd < 0)
     gcd = 0;
 }
@@ -72,15 +72,16 @@ void Character::apply_modifier(CharMod &modifier)
 {
   switch (modifier.type)
   {
-    case CharModType::DamageTaken:
-      e_stats.damage_mod *= modifier.damage_taken.n;
+    case Character_Modifier_Type::DamageTaken:
+      e_stats.damage_mod *= modifier.damage_taken.factor;
       break;
-    case CharModType::Speed:
-      e_stats.speed *= modifier.speed.m;
+    case Character_Modifier_Type::Speed:
+      e_stats.speed *= modifier.speed.factor;
       break;
-    case CharModType::CastSpeed:
-      e_stats.cast_speed *= modifier.cast_speed.m;
-    case CharModType::Silence:
+    case Character_Modifier_Type::CastSpeed:
+      e_stats.cast_speed *= modifier.cast_speed.factor;
+      break;
+    case Character_Modifier_Type::Silence:
       silenced = true;
     default:
       break;
@@ -92,22 +93,27 @@ void Character::apply_modifiers()
   e_stats = b_stats;
   silenced = false;
 
-  for (auto &buff : buffs)
-    for (auto &modifier : buff.def.char_mods)
-      apply_modifier(*modifier);
-  for (auto &debuff : debuffs)
-    for (auto &modifier : debuff.def.char_mods)
-      apply_modifier(*modifier);
+  for (size_t i = 0; i < buffs.size(); i++)
+  {
+    Buff *buff = &buffs[i];
+    for (size_t j = 0; j < buff->def.char_mods.size(); j++)
+      apply_modifier(buff->def.char_mods[j]);
+  }
+  for (size_t i = 0; i < debuffs.size(); i++)
+  {
+    Buff *debuff = &debuffs[i];
+    for (size_t j = 0; j < debuff->def.char_mods.size(); j++)
+      apply_modifier(debuff->def.char_mods[j]);
+  }
 }
 
-Character_Physics move_char(
-    Character_Physics physics, Movement_Command command, vec3 radius, float32 speed, std::vector<Triangle> colliders)
+void move_char(Character &character, Input command, std::vector<Triangle> colliders)
 {
-  vec3 &pos = physics.pos;
-  vec3 &dir = command.dir;
-  physics.dir = dir;
-  vec3 &vel = physics.vel;
-  bool &grounded = physics.grounded;
+  vec3 &pos = character.physics.position;
+  character.physics.orientation = command.orientation;
+  vec3 dir = command.orientation * vec3(0, 1, 0);
+  vec3 &vel = character.physics.velocity;
+  bool &grounded = character.physics.grounded;
   Move_Status move_status = command.m;
 
   vec3 v = vec3(0);
@@ -130,7 +136,7 @@ Character_Physics move_char(
   if (move_status & ~Move_Status::Jumping)
   {
     v = normalize(v);
-    v *= speed;
+    v *= character.e_stats.speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {
@@ -138,37 +144,28 @@ Character_Physics move_char(
     grounded = false;
   }
 
-  vel.z -= 9.81 * dt;
+  vel.z -= 9.81f * dt;
   if (vel.z < -53)
     vel.z = -53;
   if (grounded)
     vel.z = 0;
 
-  collide_and_slide_char(physics, radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
-
-  return physics;
+  collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
 }
 
-void Character::move(float32 dt, const std::vector<Triangle> &colliders)
-{
-  physics = move_char(physics, last_movement_command, radius, e_stats.speed, colliders);
-  physics.cmdn = last_movement_command.i;
-  physics.command = last_movement_command;
-}
-
-std::vector<Triangle> collect_colliders(Scene_Graph &scene)
+std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene)
 {
   std::vector<Triangle> collider_cache;
 
-  auto entities = scene.visit_nodes_st_start();
+  auto entities = scene.visit_nodes_server_start();
   for (auto &entity : entities)
   {
     auto transform = [&](vec3 p) {
       vec4 q = entity.transformation * vec4(p.x, p.y, p.z, 1.0);
       return vec3(q.x, q.y, q.z);
     };
-    auto &mesh_data = entity.mesh->mesh->data;
-    for (int i = 0; i < mesh_data.indices.size(); i += 3)
+    auto &mesh_data = entity.mesh_descriptor->mesh_data;
+    for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
     {
       uint32 a, b, c;
       a = mesh_data.indices[i];
@@ -256,7 +253,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
   int collision_recursion_depth;
 
   colpkt.e_radius = radius;
-  colpkt.pos_r3 = physics.pos;
+  colpkt.pos_r3 = physics.position;
   colpkt.vel_r3 = vel;
 
   vec3 e_space_pos = colpkt.pos_r3 / colpkt.e_radius;
@@ -276,8 +273,8 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
     colpkt.found_collision = false;
 
     check_collision(colpkt, colliders);
-    if (colpkt.found_collision && colpkt.nearest_distance > 0.05)
-      final_pos.z -= colpkt.nearest_distance - 0.005;
+    if (colpkt.found_collision && colpkt.nearest_distance > 0.05f)
+      final_pos.z -= colpkt.nearest_distance - 0.005f;
   }
 
   colpkt.pos_r3 = final_pos * colpkt.e_radius;
@@ -300,26 +297,79 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
   physics.grounded = colpkt.found_collision && gravity.z <= 0;
 
   final_pos *= colpkt.e_radius;
-  physics.pos = final_pos;
+  physics.position = final_pos;
 }
 
 bool Character_Physics::operator==(const Character_Physics &b) const
 {
   auto &a = *this;
-  return a.pos == b.pos && a.dir == b.dir && a.vel == b.vel && a.grounded == b.grounded;
+  return a.position == b.position && a.orientation == b.orientation && a.velocity == b.velocity &&
+         a.grounded == b.grounded;
 }
 
 bool Character_Physics::operator!=(const Character_Physics &b) const { return !(*this == b); }
 
-bool Character_Physics::operator<(const Character_Physics &b) const
-{
-  return cmdn < b.cmdn;
-}
+bool Character_Physics::operator<(const Character_Physics &b) const { return command_number < b.command_number; }
 
-bool Movement_Command::operator==(const Movement_Command &b) const
+bool Input::operator==(const Input &b) const
 {
   auto &a = *this;
-  return a.i == b.i && a.dir == b.dir && a.m == b.m;
+  return a.number == b.number && a.orientation == b.orientation && a.m == b.m;
 }
 
-bool Movement_Command::operator!=(const Movement_Command &b) const { return !(*this == b); }
+bool Input::operator!=(const Input &b) const { return !(*this == b); }
+
+size_t Input_Buffer::size()
+{
+  if (start <= end)
+    return end - start;
+  else
+    return (capacity - start) + end;
+}
+
+Input &Input_Buffer::operator[](size_t i)
+{
+  ASSERT(i < size());
+
+  if (start + i < capacity)
+    return buffer[start + i];
+  else
+    return buffer[i - (capacity - start)];
+}
+
+void Input_Buffer::push(Input &input)
+{
+  size_t size_ = size();
+
+  if (size_ < capacity)
+  {
+    if (end < capacity)
+      buffer[end++] = input;
+    else
+    {
+      buffer[0] = input;
+      end = 1;
+    }
+    return;
+  }
+
+  buffer[start] = input;
+  end = start + 1;
+  if (start < capacity - 1)
+    start++;
+  else
+    start = 0;
+}
+
+void Input_Buffer::pop_older_than(uint32 input_number)
+{
+  uint32 delta = input_number - buffer[start].number + 1;
+  size_t size_ = size();
+
+  if (delta > size_)
+    start = end = 0;
+  else if (start + delta < capacity)
+    start += delta;
+  else
+    start = delta - (capacity - start);
+}

@@ -1,4 +1,5 @@
 #pragma once
+#include "Forward_Declarations.h"
 #include "Timer.h"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
@@ -7,20 +8,19 @@
 #include <fstream>
 #include <glbinding/gl33core/gl.h>
 #include <glm/glm.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <iostream>
-#include <random>
-#include <unordered_map>
-#include <queue>
 #include <mutex>
+#include <queue>
+#include <random>
 #include <thread>
+#include <unordered_map>
 using namespace glm;
 using namespace gl33core;
-struct aiString;
 
 #define MAX_INSTANCE_COUNT 100
 #define UNIFORM_LIGHT_LOCATION 20
-#define MAX_LIGHTS                                                             \
-  10 // reminder to change the Texture_Location::s1...sn shadow map enums
+#define MAX_LIGHTS 10 // reminder to change the Texture_Location::s1...sn shadow map enums
 #define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define ENABLE_ASSERTS 1
@@ -31,6 +31,11 @@ struct aiString;
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
 #define SHOW_UV_TEST_GRID 0
 #define POSTPROCESSING 1
+#define NODE_NULL uint32(-1)
+#define MAX_MESHES_PER_NODE uint32(10)
+#define MAX_CHILDREN uint32(10)
+#define MAX_NODES uint32(10000)
+#define INPUT_BUFFER_SIZE 100
 
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
@@ -38,20 +43,27 @@ struct aiString;
 #define ROOT_PATH std::string("../")
 #endif
 
+#define MAX_FILENAME_LENGTH 128
+#define MAX_ARRAY_STRING_LENGTH 128
 
 struct Warg_State;
 struct Render_Test_State;
+struct Resource_Manager;
 
 extern std::mt19937 generator;
 extern const float32 dt;
 extern const float32 MOVE_SPEED;
+extern const float32 STEP_SIZE;
 extern const float32 ATK_RANGE;
 extern const float32 MOUSE_X_SENS;
 extern const float32 MOUSE_Y_SENS;
 extern const float32 ZOOM_STEP;
 extern const float32 JUMP_IMPULSE;
 extern uint32 LAST_RENDER_ENTITY_COUNT;
+extern Assimp::Importer IMPORTER;
 
+extern Resource_Manager GL_ENABLED_RESOURCE_MANAGER;
+extern Resource_Manager GL_DISABLED_RESOURCE_MANAGER;
 extern const std::string BASE_ASSET_PATH;
 extern const std::string BASE_TEXTURE_PATH;
 extern const std::string BASE_SHADER_PATH;
@@ -60,27 +72,32 @@ extern const std::string ERROR_TEXTURE_PATH;
 extern Timer PERF_TIMER;
 extern Timer FRAME_TIMER;
 extern Timer SWAP_TIMER;
+const uint32 default_assimp_flags = aiProcess_FlipWindingOrder |
+                                    // aiProcess_Triangulate |
+                                    // aiProcess_FlipUVs |
+                                    aiProcess_CalcTangentSpace |
+                                    // aiProcess_MakeLeftHanded|
+                                    // aiProcess_JoinIdenticalVertices |
+                                    // aiProcess_PreTransformVertices |
+                                    // aiProcess_GenUVCoords |
+                                    // aiProcess_OptimizeGraph|
+                                    // aiProcess_ImproveCacheLocality|
+                                    // aiProcess_OptimizeMeshes|
+                                    // aiProcess_GenNormals|
+                                    // aiProcess_GenSmoothNormals|
+                                    // aiProcess_FixInfacingNormals |
+                                    0;
+extern std::string SCRATCH_STRING; // just used to avoid some string allocations - use only in main thread
 
 extern bool WARG_SERVER;
-
-// load an aiScene
-// will cache the result so that future loads
-// of the same path won't have to read from disk
-extern const aiScene *load_aiscene(
-    std::string path, const int *assimp_flags = nullptr);
-
 // todo: make some variadic template for this crap:
 bool all_equal(int32 a, int32 b, int32 c);
 bool all_equal(int32 a, int32 b, int32 c, int32 d);
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f);
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f, int32 g);
 
-float32 wrap_to_range(
-    const float32 input, const float32 min, const float32 max);
-template <typename T> uint32 array_count(T t)
-{
-  return sizeof(t) / sizeof(t[0]);
-}
+float32 wrap_to_range(const float32 input, const float32 min, const float32 max);
+template <typename T> uint32 array_count(T t) { return sizeof(t) / sizeof(t[0]); }
 float32 rand(float32 min, float32 max);
 vec3 rand(vec3 max);
 // used to fix double escaped or wrong-slash file paths
@@ -93,7 +110,7 @@ std::string read_file(const char *path);
 
 Uint32 string_to_U32_color(std::string color);
 glm::vec4 string_to_float4_color(std::string color);
-Uint64 dankhash(float32 *data, uint32 size);
+Uint64 dankhash(const float32 *data, uint32 size);
 
 void checkSDLError(int32 line = -1);
 void check_gl_error();
@@ -102,8 +119,7 @@ void check_gl_error();
 // don't use for game simulation
 float64 get_real_time();
 
-void __set_message(std::string identifier, std::string message,
-    float64 msg_duration, const char *, uint32);
+void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *, uint32);
 #define CREATE_3(x, y, z) __set_message(x, y, z, __FILE__, __LINE__)
 #define CREATE_2(x, y) CREATE_3(x, y, 0.0)
 #define CREATE_1(x) CREATE_2(x, "")
@@ -111,8 +127,7 @@ void __set_message(std::string identifier, std::string message,
 
 #define FUNC_CHOOSER(_f1, _f2, _f3, _f4, ...) _f4
 #define FUNC_RECOMPOSER(argsWithParentheses) FUNC_CHOOSER argsWithParentheses
-#define CHOOSE_FROM_ARG_COUNT(...)                                             \
-  FUNC_RECOMPOSER((__VA_ARGS__, CREATE_3, CREATE_2, CREATE_1, ))
+#define CHOOSE_FROM_ARG_COUNT(...) FUNC_RECOMPOSER((__VA_ARGS__, CREATE_3, CREATE_2, CREATE_1, ))
 #define NO_ARG_EXPANDER() , , CREATE_0
 #define MACRO_CHOOSER(...) CHOOSE_FROM_ARG_COUNT(NO_ARG_EXPANDER __VA_ARGS__())
 
@@ -141,10 +156,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
 #ifndef DISABLE_ASSERT
   if (!t)
   {
-    set_message("",
-        "Assertion failed in:" + std::string(file) +
-            "\non line:" + std::to_string(line),
-        1.0);
+    set_message("", "Assertion failed in:" + std::string(file) + "\non line:" + std::to_string(line), 1.0);
     std::string message_log = get_message_log();
     push_log_to_disk();
     std::string end_of_log;
@@ -172,21 +184,50 @@ template <typename T> std::string vtos(std::vector<T> v)
   }
   return result;
 }
+
+struct Array_String
+{
+  Array_String() { str[0] = '\0'; }
+  Array_String(std::string &rhs)
+  {
+    ASSERT(rhs.size() <= MAX_ARRAY_STRING_LENGTH);
+    SDL_strlcpy(&str[0], &rhs[0], rhs.size() + 1);
+  }
+
+  Array_String &operator=(std::string &rhs)
+  {
+    ASSERT(rhs.size() <= MAX_ARRAY_STRING_LENGTH);
+    SDL_strlcpy(&str[0], &rhs[0], rhs.size() + 1);
+    return *this;
+  }
+  Array_String(const char *rhs) : Array_String(std::string(rhs)) {}
+  Array_String &operator=(const char *rhs)
+  {
+    *this = std::string(rhs);
+    return *this;
+  }
+  bool operator==(Array_String &rhs);
+
+  std::array<char, MAX_ARRAY_STRING_LENGTH + 1> str;
+};
+
+enum struct Light_Type;
+
 std::string vtos(glm::vec2 v);
 std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
-std::string mtos(glm::mat4 m);
-
-enum struct Light_Type;
-template <typename T> std::string s(T value) { return std::to_string(value); }
-
-template <typename T, typename... Args> std::string s(T first, Args... args)
+std::string to_string(glm::mat4 m);
+std::string to_string(Array_String &s);
+template <typename T> std::string s(T value)
 {
-  return s(first) + s(args...);
+  using namespace std;
+  return to_string(value);
 }
+template <typename T, typename... Args> std::string s(T first, Args... args) { return s(first) + s(args...); }
 template <> std::string s<const char *>(const char *value);
 template <> std::string s<std::string>(std::string value);
 template <> std::string s<Light_Type>(Light_Type value);
+template <> std::string s<vec4>(vec4 value);
 template <> std::string s<vec4>(vec4 value);
 
 typedef uint32_t UID;
@@ -262,12 +303,19 @@ private:
   std::thread loader_thread;
 };
 
-
 const char *texture_format_to_string(GLenum texture_format);
 
 bool has_img_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
 std::string strip_file_extension(std::string file);
 
-
 extern Image_Loader IMAGE_LOADER;
+
+vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
+
+float64 random_between(float64 min, float64 max);
+int32 random_between(int32 min, int32 max);
+float32 random_between(float32 min, float32 max);
+glm::vec2 random_within(const vec2 &vec);
+glm::vec3 random_within(const vec3 &vec);
+glm::vec4 random_within(const vec4 &vec);

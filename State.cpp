@@ -11,7 +11,7 @@
 using namespace glm;
 
 State::State(std::string name, SDL_Window *window, ivec2 window_size)
-    : state_name(name), window(window), renderer(window, window_size,name)
+    : state_name(name), window(window), renderer(window, window_size, name), scene(&GL_ENABLED_RESOURCE_MANAGER)
 {
   reset_mouse_delta();
   save_graph_on_exit = true;
@@ -19,26 +19,25 @@ State::State(std::string name, SDL_Window *window, ivec2 window_size)
   std::string str = read_file(scene_graph_json_filename.c_str());
   try
   {
-    json scene_descriptor = json::parse(str);
-    dejsonificate(&scene, scene_descriptor);
+    json j = json::parse(str);
+    Light_Array lights = j.at("Lights");
+    scene.deserialize(j.at("Node Serialization"));
   }
   catch (std::exception &e)
   {
     set_message("Exception loading scene graph json:", e.what(), 55.0f);
     set_message("JSON:\n", str.c_str(), 55.0f);
   }
-  scene.root->include_in_save = false;
 }
 
 State::~State()
 {
   if (save_graph_on_exit)
   {
-    json j = jsonify(scene);
+    json j = scene;
     std::string str = pretty_dump(j);
     set_message("state destructor saved scene graph: ", str, 1.0f);
-    std::fstream file(
-        scene_graph_json_filename, std::ios::out | std::ios::trunc);
+    std::fstream file(scene_graph_json_filename, std::ios::out | std::ios::trunc);
     file.write(str.c_str(), str.size());
   }
 }
@@ -70,10 +69,10 @@ void State::prepare_renderer(double t)
 
   // Traverse graph nodes and submit to renderer for packing:
 
-  // TODO: add simple bounding colliders assignable to each node_ptr
-  //       add a node_ptr to render_entity to point back to the owner
+  // TODO: add simple bounding colliders assignable to each Node_Index
+  //       add a Node_Index to render_entity to point back to the owner
   //       octree for triangle data to optimize collision
-  auto render_entities = scene.visit_nodes_st_start();
+  auto render_entities = scene.visit_nodes_client_start();
   renderer.set_render_entities(&render_entities);
   renderer.set_lights(scene.lights);
   renderer.clear_color = clear_color;
@@ -81,8 +80,7 @@ void State::prepare_renderer(double t)
 
 void State::reset_mouse_delta()
 {
-  uint32 mouse_state = SDL_GetMouseState(
-      &last_seen_mouse_position.x, &last_seen_mouse_position.y);
+  uint32 mouse_state = SDL_GetMouseState(&last_seen_mouse_position.x, &last_seen_mouse_position.y);
 }
 
 void State::render(float64 t)
@@ -91,8 +89,7 @@ void State::render(float64 t)
   renderer.render(t);
 }
 
-void State::handle_input(State **current_state,
-    std::vector<State *> *available_states, std::vector<SDL_Event> *input,
+void State::handle_input(State **current_state, std::vector<State *> *available_states, std::vector<SDL_Event> *input,
     bool block_kb, bool block_mouse)
 {
   std::vector<SDL_Event> game_events;
@@ -110,8 +107,7 @@ void State::handle_input(State **current_state,
         // resize
         continue;
       }
-      else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
-               e.window.event == SDL_WINDOWEVENT_ENTER)
+      else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e.window.event == SDL_WINDOWEVENT_ENTER)
       { // dumping mouse delta prevents camera teleport on focus gain
 
         //// required, else clicking the title bar itself to gain focus
@@ -132,9 +128,8 @@ void State::handle_input(State **current_state,
         else
         {
           SDL_SetRelativeMouseMode(SDL_bool(false));
-          SDL_WarpMouseInWindow(nullptr,
-              (*current_state)->last_seen_mouse_position.x,
-              (*current_state)->last_seen_mouse_position.y);
+          SDL_WarpMouseInWindow(
+              nullptr, (*current_state)->last_seen_mouse_position.x, (*current_state)->last_seen_mouse_position.y);
         }
         ivec2 trash;
         SDL_GetRelativeMouseState(&trash.x, &trash.y);
@@ -150,9 +145,8 @@ void State::handle_input(State **current_state,
         else
         {
           SDL_SetRelativeMouseMode(SDL_bool(false));
-          SDL_WarpMouseInWindow(nullptr,
-              (*current_state)->last_seen_mouse_position.x,
-              (*current_state)->last_seen_mouse_position.y);
+          SDL_WarpMouseInWindow(
+              nullptr, (*current_state)->last_seen_mouse_position.x, (*current_state)->last_seen_mouse_position.y);
         }
         ivec2 trash;
         SDL_GetRelativeMouseState(&trash.x, &trash.y);
@@ -167,9 +161,7 @@ void State::handle_input(State **current_state,
     if (block_kb && (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP))
       gui_owns_event = true;
 
-    if (block_mouse &&
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
-            e.type == SDL_MOUSEWHEEL))
+    if (block_mouse && (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL))
       gui_owns_event = true;
 
     if (free_cam)
@@ -208,8 +200,7 @@ void State::performance_output()
 #endif
     const uint64 frames_since_last_report = frame_count - frames_at_last_report;
 
-    current_frame_rate =
-        (1.0f / report_frequency_in_seconds) * (float)frames_since_last_report;
+    current_frame_rate = (1.0f / report_frequency_in_seconds) * (float)frames_since_last_report;
     frames_at_last_report = frame_count;
     last_performance_output = current_time;
     // std::cout << get_messages() << std::endl;

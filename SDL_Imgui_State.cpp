@@ -149,6 +149,8 @@ void SDL_Imgui_State::render()
         if (warg_texture_flag_set)
         {
           GLuint index = tex & 0x0000ffff;
+          if (index > int32(IMGUI_TEXTURE_DRAWS.size()) - 1)
+            continue;
           Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
           if (!tex.is_cubemap)
           {
@@ -156,6 +158,13 @@ void SDL_Imgui_State::render()
             glUniform1f(mip_location, tex.mip_lod_to_draw);
             glBindTexture(GL_TEXTURE_2D, tex.ptr->texture);
             glUniform1i(sample_lod_location, 1);
+
+            if (tex.is_mipmap_list_command)
+            {
+
+              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            }
             check_gl_error();
           }
           else
@@ -178,6 +187,22 @@ void SDL_Imgui_State::render()
             (int)(pcmd->ClipRect.z - pcmd->ClipRect.x), (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
         glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount,
             sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset);
+
+        if (warg_texture_flag_set)
+        {
+          GLuint index = tex & 0x0000ffff;
+          Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
+          if (!tex.is_cubemap)
+          {
+
+            if (tex.is_mipmap_list_command)
+            {
+              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tex.ptr->minification_filter);
+              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, tex.ptr->magnification_filter);
+              check_gl_error();
+            }
+          }
+        }
       }
       idx_buffer_offset += pcmd->ElemCount;
     }
@@ -590,4 +615,30 @@ void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
   {
     process_event(&e);
   }
+}
+
+void put_imgui_texture(Texture *t, glm::vec2 size)
+{
+  ASSERT(t);
+  Imgui_Texture_Descriptor descriptor;
+  descriptor.ptr = t->texture;
+  uint32 data = 0;
+  if (descriptor.ptr)
+  {
+    GLenum format = descriptor.ptr->get_format();
+    descriptor.gamma_encode = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
+                              format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+    IMGUI_TEXTURE_DRAWS.push_back(descriptor);
+    data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+  }
+  float32 aspect = 1.0f;
+  if (t->texture)
+    aspect = (float32)t->texture->size.x / (float32)t->texture->size.y;
+  ImGui::Image((ImTextureID)data, ImVec2(aspect * size.x, size.y), ImVec2(0, 1), ImVec2(1, 0));
+}
+
+void put_imgui_texture(Texture_Descriptor *td, glm::vec2 pos)
+{
+  Texture texture = *td;
+  put_imgui_texture(&texture, pos);
 }
