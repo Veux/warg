@@ -392,7 +392,7 @@ void Warg_State::push(unique_ptr<Message> msg)
 
 void Warg_State::set_camera_geometry()
 {
-  set_message(s("set_camera_geometry(), time:", current_time), "", 1.0f);
+  // set_message(s("set_camera_geometry(), time:", current_time), "", 1.0f);
   if (!game_state.characters.count(pc))
     return;
   Character *player_character = &game_state.characters[pc];
@@ -416,7 +416,7 @@ void Warg_State::set_camera_geometry()
 
 void Warg_State::update_hp_bar(UID character_id)
 {
-  set_message("update_hp_bar()");
+  // set_message("update_hp_bar()");
   Character *character = &game_state.characters[character_id];
   Node_Index character_node = character_nodes[character_id];
 
@@ -791,15 +791,14 @@ void Warg_State::update_animation_objects()
 
 void Warg_State::update()
 {
-  set_message(s("Warg update. Time:", current_time), "", 1.0f);
-  set_message(s("Warg time/dt:", current_time / dt), "", 1.0f);
+  set_message("Warg update. Time:", s(current_time), 1.0f);
+  set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
-  set_message(s("process_messages():"), "", 1.0f);
   process_messages();
   send_ping();
   update_stats_bar();
 
-  set_message(s("overwriting game_state with server_state"), "", 1.0f);
+  // set_message(s("overwriting game_state with server_state"), "", 1.0f);
 
   quat orientation_before;
   quat orientation_after;
@@ -811,8 +810,8 @@ void Warg_State::update()
   {
     orientation_after = server_state.characters[3].physics.orientation;
   }
-  set_message("character3 orientation in game_state:", s(qtos(orientation_before)), 1.0f);
-  set_message("character3 orientation in server_state:", s(qtos(orientation_after)), 1.0f);
+  // set_message("character3 orientation in game_state:", s(qtos(orientation_before)), 1.0f);
+  // set_message("character3 orientation in server_state:", s(qtos(orientation_after)), 1.0f);
 
   game_state = server_state;
   if (!game_state.characters.count(target_id) ||
@@ -1089,15 +1088,15 @@ void Warg_State::add_character_mesh(UID character_id)
 
 void State_Message::handle(Warg_State &state)
 {
-  set_message("State_Message::handle()");
+  // set_message("State_Message::handle()");
   state.pc = pc;
   state.server_state.characters = characters;
   state.server_state.spell_objects = spell_objects;
-  set_message(s("overwriting state.server_state.tick = ", state.server_state.tick, " with: ", tick), "", 1.0f);
+  // set_message(s("overwriting state.server_state.tick = ", state.server_state.tick, " with: ", tick), "", 1.0f);
   state.server_state.tick = tick;
-  set_message(
-      s("overwriting state.server_state.input_number = ", state.server_state.input_number, " with: ", input_number), "",
-      1.0f);
+  // set_message(
+  //    s("overwriting state.server_state.input_number = ", state.server_state.input_number, " with: ", input_number),
+  //    "", 1.0f);
   state.server_state.input_number = input_number;
 
   state.input_buffer.pop_older_than(input_number);
@@ -1391,6 +1390,7 @@ void Warg_State::update_icons()
     if (spell->formula->on_global_cooldown && cooldown_remaining < player_character->gcd)
       cooldown_percent = player_character->gcd / player_character->e_stats.gcd;
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
+    set_message(s("progress", i, ":"), s(cooldown_percent), 1.0f);
   }
 
   run_pixel_shader(&shader, &sources, &framebuffer);
@@ -1416,9 +1416,8 @@ void Warg_State::update_action_bar()
           ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
   for (size_t i = 0; i < interface_state.action_bar_textures.size(); i++)
   {
-    ImTextureID icon = (ImTextureID)interface_state.action_bar_textures[i].get_handle();
     ImGui::SetCursorPos(v(grid.get_position(i, 0)));
-    ImGui::Image(icon, v(grid.get_section_size(1, 1)));
+    put_imgui_texture(&interface_state.action_bar_textures[i], grid.get_section_size(1, 1));
   }
   ImGui::End();
   ImGui::PopStyleVar(2);

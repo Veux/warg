@@ -106,12 +106,17 @@ struct Texture_Handle
 
   // specific for specular environment maps
   bool ibl_mipmaps_generated = false;
+
+  bool is_cubemap = false;
 };
 
 struct Imgui_Texture_Descriptor
 {
   std::shared_ptr<Texture_Handle> ptr = nullptr;
+  glm::vec2 size = vec2(0);
+  float aspect = 1.0f;
   float mip_lod_to_draw = 0.f;
+  bool y_invert = false;
   bool gamma_encode = false;
   bool is_cubemap = false;
   bool is_mipmap_list_command = false;

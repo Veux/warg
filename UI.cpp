@@ -7,7 +7,6 @@
 
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
 
-
 ImVec2 v(vec2 v_)
 {
   ImVec2 result;
@@ -19,14 +18,16 @@ ImVec2 v(vec2 v_)
 std::vector<FS_Node> lsdir(std::string dir)
 {
   std::vector<FS_Node> results;
-#ifdef __linux__ 
+#ifdef __linux__
   ASSERT(false);
 #elif _WIN32
   std::string search_path = dir + "/*";
   WIN32_FIND_DATA fd;
   HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
-  if (hFind != INVALID_HANDLE_VALUE) {
-    do {
+  if (hFind != INVALID_HANDLE_VALUE)
+  {
+    do
+    {
       if (std::string(fd.cFileName) == "." || std::string(fd.cFileName) == "..")
         continue;
       FS_Node node;
@@ -64,8 +65,7 @@ bool File_Picker::run()
 {
   bool clicked = false;
   display = true;
-  ImGui::Begin("File Picker", &display, ImVec2(586, 488), 1,
-    ImGuiWindowFlags_NoScrollbar);
+  ImGui::Begin("File Picker", &display, ImVec2(586, 488), 1, ImGuiWindowFlags_NoScrollbar);
 
   auto winsize = ImGui::GetWindowSize();
 
@@ -92,29 +92,26 @@ bool File_Picker::run()
     auto id1 = s("thumb", i);
     ImGui::PushID(id1.c_str());
     auto id1_ = ImGui::GetID(id1.c_str());
-    ImGui::BeginChildFrame(id1_, tframesize,
-      ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::BeginChildFrame(id1_, tframesize, ImGuiWindowFlags_NoScrollWithMouse);
 
+    //
+    ////desired method:
+    // Imgui_Texture_Descriptor descriptor;
+    // descriptor.ptr = f.is_dir ? dir_icon.texture : f.texture.texture;
+    // uint32 data = 0;
+    // if (descriptor.ptr)
+    //{
+    //  descriptor.gamma_encode = is_float_format(descriptor.ptr->get_format());
+    //  IMGUI_TEXTURE_DRAWS.push_back(descriptor);
+    //  data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+    //}
+    ////if (ImGui::ImageButton((ImTextureID)data, thumbsize))
+    ////...
+    //// why does this uint32 data cause the clicking to not work correctly in imgui?
+    //// even if you set 'handle' to '0' instead, the clicks work fine
+    //// i wasn't able to fix this with another PushID
 
-    
-    //desired method:
-    Imgui_Texture_Descriptor descriptor;
-    descriptor.ptr = f.is_dir ? dir_icon.texture : f.texture.texture;
-    uint32 data = 0;
-    if (descriptor.ptr)
-    {
-      descriptor.gamma_encode = is_float_format(descriptor.ptr->get_format());
-      IMGUI_TEXTURE_DRAWS.push_back(descriptor);
-      data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
-    }
-    //if (ImGui::ImageButton((ImTextureID)data, thumbsize))
-    //...
-    // why does this uint32 data cause the clicking to not work correctly in imgui?
-    // even if you set 'handle' to '0' instead, the clicks work fine
-    // i wasn't able to fix this with another PushID
-
-    
-
+    //
 
     uint32 handle = f.is_dir ? dir_icon.get_handle() : f.texture.get_handle();
     if (ImGui::ImageButton((ImTextureID)handle, thumbsize))
@@ -132,7 +129,8 @@ bool File_Picker::run()
   ImGui::End();
 
   bool picked = false;
-  if (clicked) {
+  if (clicked)
+  {
     if (dircontents[current_item].is_dir)
     {
       set_dir(s(dir, "//", dircontents[current_item].path));
@@ -149,16 +147,9 @@ bool File_Picker::run()
   return picked;
 }
 
-std::string File_Picker::get_result()
-{
-  return s(dir + "//" + result);
-}
+std::string File_Picker::get_result() { return s(dir + "//" + result); }
 
-bool File_Picker::get_closed()
-{
-  return !display;
-}
-
+bool File_Picker::get_closed() { return !display; }
 
 Layout_Grid::Layout_Grid(vec2 size_, vec2 borders_, vec2 spacing_, uint32 columns_, uint32 rows_)
 {
@@ -192,10 +183,7 @@ Layout_Grid::Layout_Grid(
   size = borders * vec2(2) + spacing * (layout - vec2(1)) + element_size * layout;
 }
 
-vec2 Layout_Grid::get_total_size()
-{
-  return size;
-}
+vec2 Layout_Grid::get_total_size() { return size; }
 
 vec2 Layout_Grid::get_position(uint32 column, uint32 row)
 {

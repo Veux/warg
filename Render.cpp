@@ -1566,6 +1566,7 @@ void Renderer::render(float64 state_time)
         auto ptr = tex.second.lock();
         if (ptr)
         {
+          ASSERT(!ptr->is_cubemap);
           Imgui_Texture_Descriptor iid;
           iid.ptr = ptr;
           imgui_texture_array.push_back(iid);
@@ -1576,9 +1577,9 @@ void Renderer::render(float64 state_time)
         auto ptr = tex.second.lock();
         if (ptr)
         {
+          ASSERT(ptr->is_cubemap);
           Imgui_Texture_Descriptor iid;
           iid.ptr = ptr;
-          iid.is_cubemap = true;
           imgui_texture_array.push_back(iid);
         }
       }
@@ -1586,15 +1587,10 @@ void Renderer::render(float64 state_time)
           [](Imgui_Texture_Descriptor a, Imgui_Texture_Descriptor b) {
             return a.ptr->peek_filename().compare(b.ptr->peek_filename()) < 0;
           });
-      IMGUI_TEXTURE_DRAWS.clear();
       for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
       {
         Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
         shared_ptr<Texture_Handle> ptr = itd->ptr;
-        GLenum format = ptr->get_format();
-        bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
-                          format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-        imgui_texture_array[i].gamma_encode = gamma_flag;
 
         ImGui::PushID(s(i).c_str());
         if (ImGui::TreeNode(ptr->peek_filename().c_str()))
@@ -1602,31 +1598,29 @@ void Renderer::render(float64 state_time)
           ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
           ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
           ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          const char *format = texture_format_to_string(ptr->format);
+          ImGui::Text(s("Format:", texture_format_to_string(ptr->format)).c_str());
 
-          ImGui::Text(s("Format:", format).c_str());
-
-          if (itd->is_cubemap)
+          if (ptr->is_cubemap)
             ImGui::Text(s("Type:", "Cubemap").c_str());
           else
             ImGui::Text(s("Type:", "Texture2D").c_str());
           ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
           Imgui_Texture_Descriptor descriptor;
           descriptor.ptr = ptr;
+          GLenum format = descriptor.ptr->get_format();
+          bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
+                            format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
           descriptor.gamma_encode = gamma_flag;
-          descriptor.is_cubemap = imgui_texture_array[i].is_cubemap;
+          descriptor.is_cubemap = ptr->is_cubemap;
 
           ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
           ImGui::InputFloat("LOD", &ptr->imgui_mipmap_setting, 0.1f);
           descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
-          IMGUI_TEXTURE_DRAWS.push_back(descriptor);
-
-          uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
-
-          float32 aspect = (float32)ptr->size.x / (float32)ptr->size.y;
-
-          ImGui::Image((ImTextureID)data, ImVec2(ptr->imgui_size_scale * aspect * 256, ptr->imgui_size_scale * 256),
-              ImVec2(0, 1), ImVec2(1, 0));
+          descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
+          descriptor.size = ptr->imgui_size_scale * vec2(256);
+          descriptor.y_invert = true;
+          put_imgui_texture(&descriptor);
 
           if (ImGui::TreeNode("List Mipmaps"))
           {
@@ -1636,10 +1630,8 @@ void Renderer::render(float64 state_time)
             {
               Imgui_Texture_Descriptor d = descriptor;
               d.mip_lod_to_draw = (float)i;
-              IMGUI_TEXTURE_DRAWS.push_back(d);
-              uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
-              ImGui::Image((ImTextureID)data, ImVec2(ptr->imgui_size_scale * aspect * 256, ptr->imgui_size_scale * 256),
-                  ImVec2(0, 1), ImVec2(1, 0));
+              d.is_mipmap_list_command = true;
+              put_imgui_texture(&d);
             }
             ImGui::TreePop();
           }
@@ -2241,6 +2233,7 @@ Cubemap::Cubemap(string equirectangular_filename)
   handle = make_shared<Texture_Handle>();
   TEXTURECUBEMAP_CACHE[equirectangular_filename] = handle;
   handle->filename = equirectangular_filename;
+  handle->is_cubemap = true;
   mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
   vec3 origin = vec3(0);
   vec3 posx = vec3(1.0f, 0.0f, 0.0f);
@@ -2341,6 +2334,7 @@ Cubemap::Cubemap(array<string, 6> filenames)
   }
   handle = make_shared<Texture_Handle>();
   TEXTURECUBEMAP_CACHE[key] = handle;
+  handle->is_cubemap = true;
 
   set_message("Cubemap load cache miss. Textures from disk: ", key, 1.0);
   vector<Image> faces = load_cubemap_faces(filenames);
@@ -2409,6 +2403,7 @@ void Environment_Map::generate_ibl_mipmaps()
   Cubemap source = radiance;
   radiance.handle = make_shared<Texture_Handle>();
   TEXTURECUBEMAP_CACHE[source.handle->filename] = radiance.handle;
+  radiance.handle->is_cubemap = true;
   radiance.handle->filename = source.handle->filename;
   glGenTextures(1, &radiance.handle->texture);
   glActiveTexture(GL_TEXTURE6);

@@ -50,5 +50,7 @@ private:
   SDL_Cursor *sdl_cursors[ImGuiMouseCursor_Count_] = {0};
 };
 
-void put_imgui_texture(Texture *t, glm::vec2 size);
-void put_imgui_texture(Texture_Descriptor *td, glm::vec2 pos);
+void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert = false);
+void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert = false);
+void put_imgui_texture(std::shared_ptr<Texture_Handle> t, glm::vec2 size, bool y_invert = false);
+void put_imgui_texture(Imgui_Texture_Descriptor *itd);

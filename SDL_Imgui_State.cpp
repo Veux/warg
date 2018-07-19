@@ -127,25 +127,21 @@ void SDL_Imgui_State::render()
       {
         const uint32 tex = (uint32)pcmd->TextureId;
 
-        const uint32 mask = 0xff000000;
-        uint32 bits = mask & tex;
-        // 0x????0000
-        // any bits set in here means maybe TextureId gets high
-        // and we might stomp useful bits
-        bool test1 = (bits xor 0x0f000000) == 0x0f000000;
-        bool test2 = (bits xor 0xff000000) == 0x0f000000;
-        if (!(test1 || test2))
+        // ensure tex without the warg flag is between 0 and 65536
+        const uint32 testmask = 0x0fff0000;
+        uint32 testbits = testmask & tex;
+        bool any_of_these_bits_set = (testbits xor 0x0fff0000) != 0x0fff0000;
+        if (any_of_these_bits_set)
         {
-          set_message("test1:", s(test1), 1.0f);
-          set_message("test2:", s(test2), 1.0f);
-          set_message("bits:", s(bits), 1.0f);
+          // any bits set in here means maybe TextureId gets high
+          set_message("testbits:", s(testbits), 1.0f);
           set_message("tex:", s(tex), 1.0f);
           ASSERT(0);
         }
 
         // 0x?0000000
         bool warg_texture_flag_set = (tex & 0xf0000000) == 0xf0000000;
-        GLuint texture = tex & 0x00ffffff;
+        GLuint texture = tex & 0x0000ffff;
 
         if (warg_texture_flag_set)
         {
@@ -613,28 +609,40 @@ void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
   }
 }
 
-void put_imgui_texture(Texture *t, glm::vec2 size)
+void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert) { put_imgui_texture(t->texture, size, y_invert); }
+
+void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
 {
-  ASSERT(t);
+  Texture texture = *td;
+  put_imgui_texture(texture.texture, size, y_invert);
+}
+void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert)
+{
   Imgui_Texture_Descriptor descriptor;
-  descriptor.ptr = t->texture;
-  uint32 data = 0;
+  descriptor.ptr = handle;
+  descriptor.y_invert = y_invert;
+  descriptor.is_cubemap = handle->is_cubemap;
+  descriptor.size = size;
   if (descriptor.ptr)
   {
     GLenum format = descriptor.ptr->get_format();
-    descriptor.gamma_encode = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
-                              format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-    IMGUI_TEXTURE_DRAWS.push_back(descriptor);
-    data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+    bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
+                      format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+    descriptor.gamma_encode = gamma_flag;
+    descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
   }
-  float32 aspect = 1.0f;
-  if (t->texture)
-    aspect = (float32)t->texture->size.x / (float32)t->texture->size.y;
-  ImGui::Image((ImTextureID)data, ImVec2(aspect * size.x, size.y), ImVec2(0, 1), ImVec2(1, 0));
+  put_imgui_texture(&descriptor);
 }
 
-void put_imgui_texture(Texture_Descriptor *td, glm::vec2 pos)
+void put_imgui_texture(Imgui_Texture_Descriptor *descriptor)
 {
-  Texture texture = *td;
-  put_imgui_texture(&texture, pos);
+  ASSERT(descriptor);
+  IMGUI_TEXTURE_DRAWS.push_back(*descriptor);
+  uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+
+  if (descriptor->y_invert)
+    ImGui::Image((ImTextureID)data, ImVec2(descriptor->aspect * descriptor->size.x, descriptor->size.y), ImVec2(0, 1),
+        ImVec2(1, 0));
+  else
+    ImGui::Image((ImTextureID)data, ImVec2(descriptor->aspect * descriptor->size.x, descriptor->size.y));
 }

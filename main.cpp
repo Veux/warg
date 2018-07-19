@@ -263,8 +263,9 @@ int main(int argc, char *argv[])
         imgui.handle_input(&imgui_event_accumulator);
         imgui_event_accumulator.clear();
         imgui.new_frame(window, imgui_dt_accumulator);
-        state_ptr->update();
         renderer_requires_trashgui_wrapping = false;
+        IMGUI_TEXTURE_DRAWS.clear();
+        state_ptr->update();
       }
       else
       {

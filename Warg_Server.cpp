@@ -70,7 +70,7 @@ void Warg_Server::update(float32 dt)
   time += dt;
   tick += 1;
 
-  set_message(s("Server update(). Time:", time, " Tick:", tick, " Tick*dt:", tick * dt), "", 1.0f);
+  // set_message(s("Server update(). Time:", time, " Tick:", tick, " Tick*dt:", tick * dt), "", 1.0f);
 
   if (!local)
     process_packets();
