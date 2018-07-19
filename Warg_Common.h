@@ -32,6 +32,7 @@ struct Input
 struct Input_Buffer
 {
   Input &operator[](size_t i);
+  Input back();
   size_t size();
   void push(Input &input);
   void pop_older_than(uint32 input_number);

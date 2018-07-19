@@ -1,9 +1,9 @@
-#include "Warg_State.h"
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
 #include "UI.h"
+#include "Warg_State.h"
 #include <atomic>
 #include <memory>
 #include <sstream>
@@ -307,11 +307,15 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     ASSERT(player_character);
 
     quat orientation;
+    static quat last_rmb_orientation = player_character->physics.orientation;
     if (right_button_down)
+    {
       orientation =
           angleAxis(half_pi<float32>() + atan2(character_to_camera.y, character_to_camera.x), vec3(0.f, 0.f, 1.f));
+      last_rmb_orientation = orientation;
+    }
     else
-      orientation = player_character->physics.orientation;
+      orientation = last_rmb_orientation;
 
     int m = Move_Status::None;
     if (is_pressed(SDL_SCANCODE_W))
@@ -521,10 +525,9 @@ void Warg_State::update_prediction_ghost()
 
   static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);
   scene.nodes[ghost_mesh].position = physics->position;
-  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2);
+  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2) * vec3(5);
   scene.nodes[ghost_mesh].velocity = physics->velocity;
-  scene.nodes[ghost_mesh].orientation = angleAxis(
-      (float32)atan2(physics->orientation.y, physics->orientation.x) - half_pi<float32>(), vec3(0.f, 0.f, 1.f));
+  scene.nodes[ghost_mesh].orientation = physics->orientation;
 }
 
 void Warg_State::update_stats_bar()
@@ -808,18 +811,18 @@ void Warg_State::update()
   {
     orientation_after = server_state.characters[3].physics.orientation;
   }
-  set_message(s("character3 orientation in game_state:", qtos(orientation_before)), "", 1.0f);
-  set_message(s("character3 orientation in server_state:", qtos(orientation_after)), "", 1.0f);
+  set_message("character3 orientation in game_state:", s(qtos(orientation_before)), 1.0f);
+  set_message("character3 orientation in server_state:", s(qtos(orientation_after)), 1.0f);
 
   game_state = server_state;
   if (!game_state.characters.count(target_id) ||
       (game_state.characters.count(target_id) && !game_state.characters[target_id].alive))
     target_id = 0;
-  // predict_state();
+   predict_state();
   set_camera_geometry();
   update_meshes();
   update_character_nodes();
-  // draw_prediction_ghost();
+   update_prediction_ghost();
   update_spell_object_nodes();
   update_game_interface();
   // update_animation_objects();

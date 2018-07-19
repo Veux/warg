@@ -337,6 +337,12 @@ Input &Input_Buffer::operator[](size_t i)
     return buffer[i - (capacity - start)];
 }
 
+Input Input_Buffer::back()
+{
+  ASSERT(size());
+  return buffer[end];
+}
+
 void Input_Buffer::push(Input &input)
 {
   size_t size_ = size();
