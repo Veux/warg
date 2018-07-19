@@ -33,7 +33,7 @@ using namespace gl33core;
 #define POSTPROCESSING 1
 #define NODE_NULL uint32(-1)
 #define MAX_MESHES_PER_NODE uint32(10)
-#define MAX_CHILDREN uint32(10)
+#define MAX_CHILDREN uint32(30)
 #define MAX_NODES uint32(10000)
 #define INPUT_BUFFER_SIZE 100
 

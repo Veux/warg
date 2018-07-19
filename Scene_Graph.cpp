@@ -395,16 +395,23 @@ void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
   }
   if (desired_parent != NODE_NULL)
   {
+    bool found_new_slot = false;
     Flat_Scene_Graph_Node *new_parent = &nodes[desired_parent];
     for (auto &child : new_parent->children)
     {
       if (child == NODE_NULL)
       {
+        found_new_slot = true;
         child = i;
         break;
       }
     }
+    if (!found_new_slot)
+    {
+      ASSERT(0); // out of children
+    }
   }
+
   node->parent = desired_parent;
 }
 

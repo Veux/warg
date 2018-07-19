@@ -1,9 +1,9 @@
+#include "Warg_State.h"
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
 #include "UI.h"
-#include "Warg_State.h"
 #include <atomic>
 #include <memory>
 #include <sstream>
@@ -525,7 +525,7 @@ void Warg_State::update_prediction_ghost()
 
   static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);
   scene.nodes[ghost_mesh].position = physics->position;
-  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2) * vec3(5);
+  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2);
   scene.nodes[ghost_mesh].velocity = physics->velocity;
   scene.nodes[ghost_mesh].orientation = physics->orientation;
 }
@@ -818,11 +818,11 @@ void Warg_State::update()
   if (!game_state.characters.count(target_id) ||
       (game_state.characters.count(target_id) && !game_state.characters[target_id].alive))
     target_id = 0;
-   predict_state();
+  predict_state();
   set_camera_geometry();
   update_meshes();
   update_character_nodes();
-   update_prediction_ghost();
+  update_prediction_ghost();
   update_spell_object_nodes();
   update_game_interface();
   // update_animation_objects();
