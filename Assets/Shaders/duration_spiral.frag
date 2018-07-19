@@ -39,8 +39,8 @@ vec4 compute(vec4 src, float progress)
 
   bool should_filter = position_radians < progress_radians;
   vec4 overlay = vec4(1.0 - float(should_filter) * 0.5);
-
-  return src * overlay;
+  return 0.6f + 0.5f*sin(time*4)*src * overlay;
+  //return src * overlay;
 }
 
 void main()
