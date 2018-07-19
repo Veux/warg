@@ -383,11 +383,11 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
-  Render_Entity(Mesh *mesh, Material *material, mat4 world_to_model);
+  Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model);
   mat4 transformation;
   Mesh *mesh;
   Material *material;
-  std::string name;
+  Array_String name;
   uint32 ID;
   bool casts_shadows = true;
 };

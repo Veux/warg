@@ -368,7 +368,7 @@ std::string get_messages()
       it = messages.erase(it);
       continue;
     }
-    result = result + it->identifier + std::string(" ") + it->message + std::string("\n");
+    result = result + it->identifier + it->message + std::string("\n");
     ++it;
   }
   return result;

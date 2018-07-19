@@ -565,7 +565,7 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
       material_ptr = resource_manager->retrieve_assimp_material_resource(assimp_filename, material_index);
     }
     if (entity->visible)
-      accumulator.emplace_back(mesh_ptr, material_ptr, BASIS);
+      accumulator.emplace_back(entity->name, mesh_ptr, material_ptr, BASIS);
   }
   for (uint32 i = 0; i < entity->children.size(); ++i)
   {

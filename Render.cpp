@@ -878,8 +878,8 @@ void Material::unbind_textures()
 //  }
 //  return true;
 //}
-Render_Entity::Render_Entity(Mesh *mesh, Material *material, mat4 world_to_model)
-    : mesh(mesh), material(material), transformation(world_to_model)
+Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat4 world_to_model)
+    : mesh(mesh), material(material), transformation(world_to_model), name(n)
 {
   ASSERT(mesh);
   ASSERT(material);
@@ -1160,6 +1160,18 @@ void Renderer::opaque_pass(float32 time)
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
     shader.set_uniform("MVP", projection * camera * entity.transformation);
+    if (entity.name == "Blades Edge Arena")
+    {
+      set_message("Blades Edge Arena:", "", 1.0f);
+      set_message("\nTransformation:\n\n", s(entity.transformation), 1.0f);
+      set_message("camera:\n\n", s(camera), 1.0f);
+      set_message("projection:\n\n", s(projection), 1.0f);
+      set_message("MVP:\n\n", s(projection * camera * entity.transformation), 1.0f);
+      set_message("Indices buffer:", s(entity.mesh->get_indices_buffer()), 1.0f);
+      set_message("Indices buffer size:", s(entity.mesh->get_indices_buffer_size()), 1.0f);
+      set_message("Vertex buffer size:", s(entity.mesh->get_descriptor().mesh_data.positions.size()), 1.0f);
+      set_message("\n", "", 1.0f);
+    }
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
 #if SHOW_UV_TEST_GRID

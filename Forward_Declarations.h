@@ -1,4 +1,5 @@
 #pragma once
+struct Array_String;
 struct aiString;
 struct Material;
 struct Material_Descriptor;

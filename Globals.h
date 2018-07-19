@@ -185,6 +185,25 @@ template <typename T> std::string vtos(std::vector<T> v)
   return result;
 }
 
+enum struct Light_Type;
+std::string vtos(glm::vec2 v);
+std::string vtos(glm::vec3 v);
+std::string vtos(glm::vec4 v);
+std::string qtos(glm::quat v);
+std::string to_string(glm::mat4 m);
+std::string to_string(Array_String &s);
+template <typename T> std::string s(T value)
+{
+  using namespace std;
+  return to_string(value);
+}
+template <typename T, typename... Args> std::string s(T first, Args... args) { return s(first) + s(args...); }
+template <> std::string s<const char *>(const char *value);
+template <> std::string s<std::string>(std::string value);
+template <> std::string s<Light_Type>(Light_Type value);
+template <> std::string s<vec4>(vec4 value);
+template <> std::string s<vec4>(vec4 value);
+
 struct Array_String
 {
   Array_String() { str[0] = '\0'; }
@@ -207,29 +226,14 @@ struct Array_String
     return *this;
   }
   bool operator==(Array_String &rhs);
+  bool operator==(const char *rhs)
+  {
+    Array_String r = s(rhs);
+    return *this == r;
+  }
 
   std::array<char, MAX_ARRAY_STRING_LENGTH + 1> str;
 };
-
-enum struct Light_Type;
-
-std::string vtos(glm::vec2 v);
-std::string vtos(glm::vec3 v);
-std::string vtos(glm::vec4 v);
-std::string qtos(glm::quat v);
-std::string to_string(glm::mat4 m);
-std::string to_string(Array_String &s);
-template <typename T> std::string s(T value)
-{
-  using namespace std;
-  return to_string(value);
-}
-template <typename T, typename... Args> std::string s(T first, Args... args) { return s(first) + s(args...); }
-template <> std::string s<const char *>(const char *value);
-template <> std::string s<std::string>(std::string value);
-template <> std::string s<Light_Type>(Light_Type value);
-template <> std::string s<vec4>(vec4 value);
-template <> std::string s<vec4>(vec4 value);
 
 typedef uint32_t UID;
 UID uid();

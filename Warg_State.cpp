@@ -824,6 +824,7 @@ void Warg_State::update()
   update_game_interface();
   // update_animation_objects();
   send_messages();
+  scene.draw_imgui();
 }
 
 void Warg_State::add_character_mesh(UID character_id)
