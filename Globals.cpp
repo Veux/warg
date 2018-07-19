@@ -792,6 +792,11 @@ bool Array_String::operator==(Array_String &rhs)
 {
   for (uint32 i = 0; i < MAX_ARRAY_STRING_LENGTH; ++i)
   {
+    if (str[i] == '\0')
+    {
+      if (rhs.str[i] == '\0')
+        return true;
+    }
     if (str[i] != rhs.str[i])
       return false;
   }

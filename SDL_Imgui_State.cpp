@@ -137,35 +137,26 @@ void SDL_Imgui_State::render()
 
         // 0x?0000000
         bool warg_texture_flag_set = (tex & 0xf0000000) == 0xf0000000;
+        GLuint texture = tex & 0x0000ffff;
 
-        // glEnable(GL_FRAMEBUFFER_SRGB) doesnt work on the fp frame textures, theyre linear
-        // and also need to be gamma corrected to srgb
-        // to display properly.
-
-        // too dark means the texture is in linear space and needs
-        // to-srgb
-
-        check_gl_error();
         if (warg_texture_flag_set)
         {
-          GLuint index = tex & 0x0000ffff;
-          if (index > int32(IMGUI_TEXTURE_DRAWS.size()) - 1)
+          const GLuint index = texture;
+          if ((int32(IMGUI_TEXTURE_DRAWS.size()) - 1) < int32(index))
             continue;
-          Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
-          if (!tex.is_cubemap)
+          Imgui_Texture_Descriptor itd = IMGUI_TEXTURE_DRAWS[index];
+          if (!itd.is_cubemap)
           {
-            glUniform1i(gamma_location, tex.gamma_encode);
-            glUniform1f(mip_location, tex.mip_lod_to_draw);
-            glBindTexture(GL_TEXTURE_2D, tex.ptr->texture);
+            glUniform1i(gamma_location, itd.gamma_encode);
+            glUniform1f(mip_location, itd.mip_lod_to_draw);
+            glBindTexture(GL_TEXTURE_2D, itd.ptr->texture);
             glUniform1i(sample_lod_location, 1);
 
-            if (tex.is_mipmap_list_command)
+            if (itd.is_mipmap_list_command)
             {
-
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             }
-            check_gl_error();
           }
           else
           {
@@ -175,7 +166,6 @@ void SDL_Imgui_State::render()
         }
         else
         {
-          GLuint texture = tex & 0x0000ffff;
           glUniform1i(gamma_location, false);
           glUniform1f(mip_location, 0);
           glUniform1i(sample_lod_location, 0);
@@ -207,8 +197,6 @@ void SDL_Imgui_State::render()
       idx_buffer_offset += pcmd->ElemCount;
     }
   }
-
-  IMGUI_TEXTURE_DRAWS.clear();
 
   // Restore modified GL state
   glUseProgram(last_program);

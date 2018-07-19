@@ -1107,12 +1107,12 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
   glDisable(GL_CULL_FACE);
-  //glBindVertexArray(quad.get_vao());
+  // glBindVertexArray(quad.get_vao());
   shader->use();
   shader->set_uniform("transform", Renderer::ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
-  //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  //glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
   quad.draw();
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
@@ -1585,7 +1585,7 @@ void Renderer::render(float64 state_time)
           [](Imgui_Texture_Descriptor a, Imgui_Texture_Descriptor b) {
             return a.ptr->peek_filename().compare(b.ptr->peek_filename()) < 0;
           });
-
+      IMGUI_TEXTURE_DRAWS.clear();
       for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
       {
         Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
