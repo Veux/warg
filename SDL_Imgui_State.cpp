@@ -126,18 +126,26 @@ void SDL_Imgui_State::render()
       else
       {
         const uint32 tex = (uint32)pcmd->TextureId;
-        const uint32 mask = 0xffff0000;
+
+        const uint32 mask = 0xff000000;
         uint32 bits = mask & tex;
         // 0x????0000
         // any bits set in here means maybe TextureId gets high
         // and we might stomp useful bits
-        bool test1 = (bits xor 0x0fff0000) == 0x0fff0000;
-        bool test2 = (bits xor 0xffff0000) == 0x0fff0000;
-        ASSERT((test1 || test2));
+        bool test1 = (bits xor 0x0f000000) == 0x0f000000;
+        bool test2 = (bits xor 0xff000000) == 0x0f000000;
+        if (!(test1 || test2))
+        {
+          set_message("test1:", s(test1), 1.0f);
+          set_message("test2:", s(test2), 1.0f);
+          set_message("bits:", s(bits), 1.0f);
+          set_message("tex:", s(tex), 1.0f);
+          ASSERT(0);
+        }
 
         // 0x?0000000
         bool warg_texture_flag_set = (tex & 0xf0000000) == 0xf0000000;
-        GLuint texture = tex & 0x0000ffff;
+        GLuint texture = tex & 0x00ffffff;
 
         if (warg_texture_flag_set)
         {
@@ -180,7 +188,7 @@ void SDL_Imgui_State::render()
 
         if (warg_texture_flag_set)
         {
-          GLuint index = tex & 0x0000ffff;
+          const GLuint index = texture;
           Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
           if (!tex.is_cubemap)
           {
