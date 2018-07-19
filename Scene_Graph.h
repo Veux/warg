@@ -705,7 +705,7 @@ struct Flat_Scene_Graph
     {
       ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Filename:");
       ImGui::SameLine();
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), s(node->filename_of_import).c_str());
+      ImGui::TextWrapped(s(node->filename_of_import).c_str());
       for (uint32 i = 0; i < node->model.size(); ++i)
       {
         Model_Index model_index = i;
@@ -1023,7 +1023,7 @@ struct Flat_Scene_Graph
   {
     const float32 selected_node_draw_height = 340;
     const float32 default_window_height = 800;
-    const float32 horizontal_split_size = 450;
+    const float32 horizontal_split_size = 350;
     static float32 last_seen_height = 600;
     ImGui::Begin("Scene Graph", &imgui_open);
     float32 fudge = 50.f;
