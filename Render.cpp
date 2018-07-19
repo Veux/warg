@@ -1401,7 +1401,8 @@ void Renderer::postprocess_pass(float32 time)
 
   // bloom:
   bool need_to_allocate_texture = bloom_target.get_handle() == 0;
-  const uint32 min_width = 80;
+  const float32 scale_relative_to_1080p = this->size.x / 1920.f;
+  const uint32 min_width = 80 * scale_relative_to_1080p;
   vector<ivec2> resolutions = {size};
   while (resolutions.back().x / 2 > min_width)
   {
