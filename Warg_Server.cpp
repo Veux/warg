@@ -1,20 +1,10 @@
-#include "Warg_Server.h"
 #include "Third_party/imgui/imgui.h"
+#include "Warg_Server.h"
 #include <cstring>
 #include <memory>
 
-Warg_Server::Warg_Server(bool local) : scene(&GL_DISABLED_RESOURCE_MANAGER)
+Warg_Server::Warg_Server() : scene(&GL_DISABLED_RESOURCE_MANAGER)
 {
-  this->local = local;
-  if (!local)
-  {
-    ENetAddress address;
-    address.host = ENET_HOST_ANY;
-    address.port = 1337;
-
-    server = enet_host_create(&address, 32, 2, 0, 0);
-    ASSERT(server);
-  }
   map = make_blades_edge();
   map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   collider_cache = collect_colliders(scene);
@@ -24,47 +14,6 @@ Warg_Server::Warg_Server(bool local) : scene(&GL_DISABLED_RESOURCE_MANAGER)
   add_dummy();
 }
 
-void Warg_Server::process_packets()
-{
-  ASSERT(server);
-
-  ENetEvent event;
-  while (enet_host_service(server, &event, 0) > 0)
-  {
-    switch (event.type)
-    {
-      case ENET_EVENT_TYPE_NONE:
-        break;
-      case ENET_EVENT_TYPE_CONNECT:
-      {
-        UID id = uid();
-        peers[id] = {event.peer, nullptr, nullptr, 0};
-
-        break;
-      }
-      case ENET_EVENT_TYPE_RECEIVE:
-      {
-        Buffer b;
-        b.insert((void *)event.packet->data, event.packet->dataLength);
-        auto ev = deserialize_message(b);
-        ev->peer = 0;
-        for (auto &p : peers)
-        {
-          if (p.second.peer == event.peer)
-            ev->peer = p.first;
-        }
-        ASSERT(ev->peer >= 0);
-        ev->handle(*this);
-        break;
-      }
-      case ENET_EVENT_TYPE_DISCONNECT:
-        break;
-      default:
-        break;
-    }
-  }
-}
-
 void Warg_Server::update(float32 dt)
 {
   time += dt;
@@ -72,10 +21,7 @@ void Warg_Server::update(float32 dt)
 
   // set_message(s("Server update(). Time:", time, " Tick:", tick, " Tick*dt:", tick * dt), "", 1.0f);
 
-  if (!local)
-    process_packets();
-  else
-    process_events();
+  process_messages();
 
   bool found_living_dummy = false;
   for (auto &character : game_state.characters)
@@ -96,7 +42,7 @@ void Warg_Server::update(float32 dt)
     Input last_input;
     for (auto &peer_ : peers)
     {
-      Warg_Peer *peer = &peer_.second;
+      std::shared_ptr<Peer> peer = peer_.second;
       if (peer->character == cid)
         last_input = peer->last_input;
     }
@@ -127,10 +73,9 @@ void Warg_Server::update(float32 dt)
 
   for (auto &p : peers)
   {
-    Warg_Peer &peer = p.second;
-    push_to(make_unique<State_Message>(
-                peer.character, game_state.characters, game_state.spell_objects, tick, peer.last_input.number),
-        peer);
+    shared_ptr<Peer> peer = p.second;
+    peer->push_to_peer(make_unique<State_Message>(
+        peer->character, game_state.characters, game_state.spell_objects, tick, peer->last_input.number));
   }
 
   for (auto i = game_state.spell_objects.begin(); i != game_state.spell_objects.end();)
@@ -141,27 +86,18 @@ void Warg_Server::update(float32 dt)
     else
       i++;
   }
-
-  send_events();
 }
 
-void Warg_Server::process_events()
+void Warg_Server::process_messages()
 {
-  auto process_peer_events = [&](UID uid, Warg_Peer &p) {
-    ASSERT(p.in);
-    while (!p.in->empty())
-    {
-      auto &ev = p.in->front();
-      // if (get_real_time() - ev->t < SIM_LATENCY / 2000.0f)
-      //  return;
-      ev->peer = uid;
-      ev->handle(*this);
-      p.in->pop();
-    }
-  };
-
   for (auto &peer : peers)
-    process_peer_events(peer.first, peer.second);
+  {
+    for (auto &message : peer.second->pull_from_peer())
+    {
+      message->peer = peer.first;
+      message->handle(*this);
+    }
+  }
 }
 
 bool Warg_Server::update_spell_object(Spell_Object *so)
@@ -197,31 +133,31 @@ void Char_Spawn_Request_Message::handle(Warg_Server &server)
 {
   UID character = server.add_char(team, name.c_str());
   ASSERT(server.peers.count(peer));
-  server.peers[peer].character = character;
+  server.peers[peer]->character = character;
 }
 
 void Input_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  ASSERT(server.game_state.characters.count(peer_.character));
-  auto &character = server.game_state.characters[peer_.character];
+  ASSERT(server.game_state.characters.count(peer_->character));
+  auto &character = server.game_state.characters[peer_->character];
 
   Input command;
   command.number = input_number;
   command.orientation = orientation;
   command.m = move_status;
-  peer_.last_input = command;
-  if (server.game_state.characters.count(peer_.character))
-    server.game_state.characters[peer_.character].target = target_id;
+  peer_->last_input = command;
+  if (server.game_state.characters.count(peer_->character))
+    server.game_state.characters[peer_->character].target = target_id;
 }
 
 void Cast_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  ASSERT(server.game_state.characters.count(peer_.character));
-  auto &character = server.game_state.characters[peer_.character];
+  ASSERT(server.game_state.characters.count(peer_->character));
+  auto &character = server.game_state.characters[peer_->character];
 
   server.try_cast_spell(character, target, spell.c_str());
 }
@@ -230,8 +166,8 @@ void Ping_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  unique_ptr<Message> msg = make_unique<Ack_Message>();
-  server.send_event(peer_, msg);
+  //unique_ptr<Message> msg = make_unique<Ack_Message>();
+  //peer_->push_to_peer(std::move(msg));
 }
 
 void Ack_Message::handle(Warg_Server &server)
@@ -256,7 +192,7 @@ void Warg_Server::try_cast_spell(Character &caster, UID target_, const char *spe
 
   Cast_Error err;
   if (static_cast<int>(err = cast_viable(caster.id, target_, spell)))
-    push(make_unique<Cast_Error_Message>(caster.id, target_, spell_, (int)err));
+/*    push_all(new Cast_Error_Message(caster.id, target_, spell_, (int)err))*/;
   else
     cast_spell(caster.id, target ? target->id : target_, spell);
 }
@@ -303,7 +239,8 @@ void Warg_Server::interrupt_cast(UID ci)
   if (c->casting_spell->formula->on_global_cooldown)
     c->gcd = 0;
   c->casting_spell = nullptr;
-  push(make_unique<Cast_Interrupt_Message>(ci));
+  //std::shared_ptr<Cast_Interrupt_Message> message = new Cast_Interrupt_Message(ci);
+  //push_all(message);
 }
 
 void Warg_Server::update_cast(UID caster_id, float32 dt)
@@ -377,7 +314,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   Cast_Error err;
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
-    push(make_unique<Cast_Error_Message>(caster_, target_, spell->formula->name.c_str(), static_cast<int>(err)));
+    //push_all(make_unique<Cast_Error_Message>(caster_, target_, spell->formula->name.c_str(), static_cast<int>(err)));
     return;
   }
 
@@ -548,7 +485,7 @@ void Warg_Server::invoke_spell_effect_interrupt(Spell_Effect &effect)
   target->cast_progress = 0;
   target->cast_target = 0;
 
-  push(make_unique<Cast_Interrupt_Message>(effect.target));
+  //push_all(make_unique<Cast_Interrupt_Message>(effect.target));
 }
 
 void Warg_Server::invoke_spell_effect_object_launch(Spell_Effect &effect)
@@ -704,67 +641,9 @@ UID Warg_Server::add_char(int team, const char *name)
   return id;
 }
 
-void Warg_Server::connect(std::queue<unique_ptr<Message>> *in, std::queue<unique_ptr<Message>> *out)
+void Warg_Server::connect(std::shared_ptr<Peer> peer)
 {
-  peers[uid()] = {nullptr, in, out, 0};
-  for (auto &c : game_state.characters)
-  {
-    auto &character = c.second;
-  }
-}
-
-void Warg_Server::push(unique_ptr<Message> ev)
-{
-  ASSERT(ev != nullptr);
-  tick_events.push_back(std::move(ev));
-  ASSERT(tick_events.back() != nullptr);
-}
-
-void Warg_Server::push_to(unique_ptr<Message> ev, Warg_Peer &peer)
-{
-  ASSERT(ev != nullptr);
-  peer.tick_events.push_back(std::move(ev));
-  ASSERT(peer.tick_events.back() != nullptr);
-}
-
-void Warg_Server::send_event(Warg_Peer &p, unique_ptr<Message> &ev)
-{
-  ev->t = get_real_time();
-  ASSERT(ev != nullptr);
-  if (local)
-  {
-    ASSERT(p.out);
-    p.out->push(std::move(ev));
-  }
-  else
-  {
-    ASSERT(p.peer);
-    Buffer b;
-    ev->serialize(b);
-    ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
-    enet_peer_send(p.peer, 0, packet);
-    enet_host_flush(server);
-  }
-}
-
-void Warg_Server::send_events()
-{
-  for (auto &p : peers)
-  {
-    Warg_Peer &peer = p.second;
-    for (auto &ev : tick_events)
-    {
-      ASSERT(ev != nullptr);
-      send_event(peer, ev);
-    }
-    for (auto &ev : peer.tick_events)
-    {
-      ASSERT(ev != nullptr);
-      send_event(peer, ev);
-    }
-    peer.tick_events.clear();
-  }
-  tick_events.clear();
+  peers[uid()] = peer;
 }
 
 Character *Warg_Server::get_character(UID id)

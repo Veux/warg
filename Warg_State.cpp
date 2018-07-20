@@ -11,72 +11,19 @@
 
 using namespace glm;
 
-Warg_State::Warg_State(
-    std::string name, SDL_Window *window, ivec2 window_size, const char *address_, const char *char_name, uint8_t team)
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
     : State(name, window, window_size)
-{
-  local = false;
+{ 
+  session = session_;
 
   map = make_blades_edge();
   sdb = make_spell_db();
-
-  map.node = scene.add_aiscene("Blades Edge", "blades_edge.fbx", &map.material);
-  collider_cache = collect_colliders(scene);
-  SDL_SetRelativeMouseMode(SDL_bool(true));
-  reset_mouse_delta();
-
-  ASSERT(!enet_initialize());
-  clientp = enet_host_create(NULL, 1, 2, 0, 0);
-  ASSERT(clientp);
-
-  ENetAddress address;
-  ENetEvent event;
-
-  enet_address_set_host(&address, address_);
-  address.port = 1337;
-
-  serverp = enet_host_connect(clientp, &address, 2, 0);
-  ASSERT(serverp);
-
-  ASSERT(enet_host_service(clientp, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
-
-  Buffer b;
-  auto msg = Char_Spawn_Request_Message(char_name, 0);
-  msg.t = get_real_time();
-  msg.serialize(b);
-  ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), ENET_PACKET_FLAG_RELIABLE);
-  enet_peer_send(serverp, 0, packet);
-  enet_host_flush(clientp);
-}
-
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size) : State(name, window, window_size)
-{
-  local = true;
-  renderer.name = "Warg_State";
-  map = make_blades_edge();
-  sdb = make_spell_db();
-
-  // map.material.frag_shader = "world_origin_distance.frag";
   map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
-  map.material.roughness = "color(8, 0, 0, 0)";
   collider_cache = collect_colliders(scene);
-  // collider_cache.push_back({ { 1000, 1000, 0 },{ -1000,1000,0 },{ -1000,-1000,0 } });
-  // collider_cache.push_back({ { -1000, -1000, 0 },{ 1000, -1000, 0 },{ 1000, 1000, 0 } });
-
-  Material_Descriptor sky_mat;
-  sky_mat.backface_culling = false;
-  sky_mat.vertex_shader = "vertex_shader.vert";
-  sky_mat.frag_shader = "skybox.frag";
-  Node_Index skybox = scene.add_mesh(cube, "skybox", &sky_mat);
-  scene.nodes[skybox].scale = vec3(500);
-  scene.set_parent(skybox, NODE_NULL);
-
   SDL_SetRelativeMouseMode(SDL_bool(true));
   reset_mouse_delta();
 
-  server = make_unique<Warg_Server>(true);
-  server->connect(&out, &in);
-  push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
+  session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 }
 
 void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
@@ -108,7 +55,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
         size_t key = _e.key.keysym.sym - SDLK_1;
         if (key < sdb->spells.size())
         {
-          push(std::make_unique<Cast_Message>(target_id, sdb->spells[key].name.c_str()));
+          session->push(std::make_unique<Cast_Message>(target_id, sdb->spells[key].name.c_str()));
         }
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam && game_state.characters.count(pc))
@@ -123,14 +70,11 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     else if (_e.type == SDL_KEYUP)
     {
       ASSERT(!block_kb);
-      if (local)
-      {
         if (_e.key.keysym.sym == SDLK_F5)
         {
           free_cam = !free_cam;
           SDL_SetRelativeMouseMode(SDL_bool(free_cam));
         }
-      }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
@@ -336,7 +280,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
 
 void Warg_State::register_move_command(Move_Status m, quat orientation)
 {
-  push(make_unique<Input_Message>(input_number, m, orientation, target_id));
+  session->push(make_unique<Input_Message>(input_number, m, orientation, target_id));
   Input cmd;
   cmd.number = input_number;
   cmd.m = m;
@@ -345,49 +289,10 @@ void Warg_State::register_move_command(Move_Status m, quat orientation)
   input_number++;
 }
 
-void Warg_State::process_packets()
+void Warg_State::process_messages()
 {
-  ENetEvent event;
-  while (enet_host_service(clientp, &event, 0) > 0)
-  {
-    switch (event.type)
-    {
-      case ENET_EVENT_TYPE_NONE:
-        break;
-      case ENET_EVENT_TYPE_CONNECT:
-        break;
-      case ENET_EVENT_TYPE_RECEIVE:
-      {
-        Buffer b;
-        b.insert((void *)event.packet->data, event.packet->dataLength);
-        in.push(deserialize_message(b));
-        break;
-      }
-      case ENET_EVENT_TYPE_DISCONNECT:
-        break;
-      default:
-        break;
-    }
-  }
-}
-
-void Warg_State::process_events()
-{
-  while (!in.empty())
-  {
-    auto &msg = in.front();
-    // if (get_real_time() - msg->t < SIM_LATENCY / 2000.0f)
-    //  return;
-    msg->handle(*this);
-    in.pop();
-  }
-  return;
-}
-
-void Warg_State::push(unique_ptr<Message> msg)
-{
-  msg->t = current_time;
-  out.push(std::move(msg));
+  for (unique_ptr<Message> &message : session->pull())
+    message->handle(*this);
 }
 
 void Warg_State::set_camera_geometry()
@@ -547,38 +452,7 @@ void Warg_State::update_stats_bar()
 void Warg_State::send_ping()
 {
   if (latency_tracker.should_send_ping())
-    push(make_unique<Ping_Message>());
-}
-
-void Warg_State::process_messages()
-{
-  if (!local)
-    process_packets();
-  process_events();
-}
-
-void Warg_State::send_messages()
-{
-  if (local)
-  {
-    server->update(dt);
-  }
-  else
-  {
-    while (!out.empty())
-    {
-      auto ev = std::move(out.front());
-
-      Buffer b;
-      ev->serialize(b);
-      enet_uint32 flags = ev->reliable ? ENET_PACKET_FLAG_RELIABLE : 0;
-      ENetPacket *packet = enet_packet_create(&b.data[0], b.data.size(), flags);
-      enet_peer_send(serverp, 0, packet);
-      enet_host_flush(clientp);
-
-      out.pop();
-    }
-  }
+    session->push(make_unique<Ping_Message>());
 }
 
 bool prediction_correct(UID player_character_id, Game_State &server_state, Game_State &predicted_state)
@@ -825,7 +699,6 @@ void Warg_State::update()
   update_spell_object_nodes();
   update_game_interface();
   // update_animation_objects();
-  send_messages();
   scene.draw_imgui();
 }
 
@@ -1177,7 +1050,7 @@ void Buff_Application_Message::handle(Warg_State &state)
   set_message("ApplyBuff:", msg, 10);
 }
 
-void Ping_Message::handle(Warg_State &state) { state.push(make_unique<Ack_Message>()); }
+void Ping_Message::handle(Warg_State &state) { state.session->push(make_unique<Ack_Message>()); }
 
 void Ack_Message::handle(Warg_State &state) { state.latency_tracker.ack_received(); }
 

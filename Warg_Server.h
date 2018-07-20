@@ -4,6 +4,7 @@
 #include "Physics.h"
 #include "Warg_Event.h"
 #include "Warg_Common.h"
+#include "Peer.h"
 #include <enet/enet.h>
 #include <map>
 #include <queue>
@@ -13,28 +14,15 @@ using std::queue;
 using std::unique_ptr;
 using std::make_unique;
 
-struct Warg_Peer
-{
-  ENetPeer *peer;
-  queue<unique_ptr<Message>> *in, *out;
-  UID character = 0;
-  vector<unique_ptr<Message>> tick_events;
-  Input last_input;
-};
+
 // todo: change all built in dynamic types to static types, eg int, float
 // todo: change all instances of dt to use float64 for identical precision with game loop
 struct Warg_Server
 {
-  Warg_Server(bool local);
+  Warg_Server();
   void update(float32 dt);
-  void connect(queue<unique_ptr<Message>> *in, queue<unique_ptr<Message>> *out);
-
-  void push(unique_ptr<Message> ev);
-  void push_to(unique_ptr<Message> ev, Warg_Peer &peer);
-  void send_event(Warg_Peer &p, unique_ptr<Message> &ev);
-  void send_events();
-  void process_packets();
-  void process_events();
+  void connect(std::shared_ptr<Peer> peer);
+  void process_messages();
 
   UID add_char(int team, const char *name);
   UID add_dummy();
@@ -59,11 +47,7 @@ struct Warg_Server
   bool update_spell_object(Spell_Object *so);
   Character *get_character(UID id);
 
-  queue<unique_ptr<Message>> eq;
-  vector<unique_ptr<Message>> tick_events;
-  std::map<UID, Warg_Peer> peers;
-  ENetHost *server;
-  bool local = true;
+  std::map<UID, std::shared_ptr<Peer>> peers;
   float64 time = 0;
   uint32 tick = 0;
 

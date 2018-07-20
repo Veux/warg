@@ -54,31 +54,6 @@ void gl_after_check(const glbinding::FunctionCall &f)
   check_gl_error();
 }
 
-void server_main()
-{
-  ASSERT(!enet_initialize());
-
-  auto warg_server = std::make_unique<Warg_Server>(false);
-
-  float64 current_time = get_real_time();
-  float64 last_time = 0.0;
-  float64 elapsed_time = 0.0;
-  while (true)
-  {
-    const float64 time = get_real_time();
-    elapsed_time = time - current_time;
-    last_time = current_time;
-    while (current_time + dt < last_time + elapsed_time)
-    {
-      current_time += dt;
-      warg_server->update(dt);
-    }
-  }
-
-  // enet_host_destroy(warg_server->server());
-  enet_deinitialize();
-}
-
 int main(int argc, char *argv[])
 {
   const char *config_filename = "config.json";
@@ -97,7 +72,7 @@ int main(int argc, char *argv[])
   {
     WARG_SERVER = true;
     ASSERT(WARG_SERVER);
-    server_main();
+    //server_main();
     return 0;
   }
   else if (argc > 1 && std::string(argv[1]) == "--connect")
@@ -189,11 +164,8 @@ int main(int argc, char *argv[])
   GL_DISABLED_RESOURCE_MANAGER.init();
 
   Render_Test_State *render_test_state = new Render_Test_State("Render Test State", window, window_size);
-  Warg_State *game_state;
-  if (client)
-    game_state = new Warg_State("Warg", window, window_size, address.c_str(), char_name.c_str(), team);
-  else
-    game_state = new Warg_State("Warg", window, window_size);
+  Local_Session warg_session = Local_Session();
+  Warg_State *game_state = new Warg_State("Warg", window, window_size, (Session *)&warg_session);
   std::vector<State *> states;
   states.push_back((State *)game_state);
   states.push_back((State *)render_test_state);

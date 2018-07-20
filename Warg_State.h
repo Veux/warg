@@ -1,5 +1,6 @@
 #pragma once
 #include "Physics.h"
+#include "Session.h"
 #include "Spell.h"
 #include "State.h"
 #include "Warg_Common.h"
@@ -42,24 +43,16 @@ struct Interface_State
 
 struct Warg_State : protected State
 {
-  Warg_State(std::string name, SDL_Window *window, ivec2 window_size);
-  Warg_State(std::string name, SDL_Window *window, ivec2 window_size, const char *address, const char *char_name,
-      uint8_t team);
+  Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session);
   void update();
   virtual void handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse) final;
-  void process_packets();
-  void process_events();
-  void push(unique_ptr<Message> msg);
-  void add_char(UID id, int team, const char *name);
+  void process_messages();
   void register_move_command(Move_Status m, quat orientation);
   void add_character_mesh(UID character_id);
   void set_camera_geometry();
   void update_character_nodes();
   void update_prediction_ghost();
   void update_stats_bar();
-  void predict_player_character();
-  void send_messages();
-  void process_messages();
   void send_ping();
   void predict_state();
   void update_meshes();
@@ -74,11 +67,7 @@ struct Warg_State : protected State
   void update_icons();
   void update_buff_indicators();
 
-  unique_ptr<Warg_Server> server;
-  queue<unique_ptr<Message>> in, out;
-  bool local;
-  ENetPeer *serverp;
-  ENetHost *clientp;
+  Session *session = nullptr;
   Latency_Tracker latency_tracker;
 
   Map map;
