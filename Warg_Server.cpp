@@ -1,7 +1,6 @@
-#include "Third_party/imgui/imgui.h"
+#include "stdafx.h"
 #include "Warg_Server.h"
-#include <cstring>
-#include <memory>
+#include "Third_party/imgui/imgui.h"
 
 Warg_Server::Warg_Server() : scene(&GL_DISABLED_RESOURCE_MANAGER)
 {

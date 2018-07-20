@@ -828,13 +828,8 @@ struct Particle_Emitter
       : descriptor(d), mesh(m), material(mat)
   {
     shared_data = std::make_unique<Physics_Shared_Data>();
-    construct_physics_method(descriptor);
-    construct_emission_method(descriptor);
-    shared_data->physics = physics_method.get();
-    shared_data->emission = emission_method.get();
     shared_data->descriptor = descriptor;
 
-    shared_data->dt = dt;
     t = std::thread(thread, shared_data);
     t.detach();
     thread_launched = true;
@@ -844,14 +839,11 @@ struct Particle_Emitter
     shared_data = std::make_unique<Physics_Shared_Data>();
     construct_physics_method(descriptor);
     construct_emission_method(descriptor);
-    shared_data->physics = physics_method.get();
-    shared_data->emission = emission_method.get();
     shared_data->descriptor = descriptor;
 
     rhs.spin_until_up_to_date();
     *particles.get() = *rhs.particles.get();
 
-    shared_data->dt = dt;
     t = std::thread(thread, shared_data);
     t.detach();
     thread_launched = true;
@@ -866,11 +858,6 @@ struct Particle_Emitter
     emission_method = std::move(rhs.emission_method);
     particles = std::move(rhs.particles);
     descriptor = rhs.descriptor;
-
-    ASSERT(shared_data->physics == this->physics_method.get());
-    ASSERT(shared_data->emission == this->emission_method.get());
-    ASSERT(shared_data->particles == this->particles.get());
-    ASSERT(shared_data->descriptor == this->descriptor.get());
   }
 
   Particle_Emitter &operator=(const Particle_Emitter &rhs)
@@ -881,8 +868,6 @@ struct Particle_Emitter
     construct_physics_method(descriptor);
     construct_emission_method(descriptor);
     *particles.get() = *rhs.particles.get();
-    shared_data->physics = physics_method.get();
-    shared_data->emission = emission_method.get();
     shared_data->descriptor = descriptor;
   }
 
@@ -896,21 +881,13 @@ struct Particle_Emitter
     t.join();
     t = std::move(rhs.t);
     shared_data = std::move(rhs.shared_data);
-    physics_method = std::move(rhs.physics_method);
-    emission_method = std::move(rhs.emission_method);
     particles = std::move(rhs.particles);
     descriptor = rhs.descriptor;
-
-    ASSERT(shared_data->physics == physics_method.get());
-    ASSERT(shared_data->emission = emission_method.get());
-    ASSERT(shared_data->particles = particles.get());
-    ASSERT(shared_data->descriptor = descriptor);
   }
 
   struct Physics_Shared_Data
   {
     Particle_Emitter_Descriptor descriptor;        // thread reads
-    const float32 dt;                              // thread reads
     std::atomic<bool> request_thread_exit = false; // thread reads
     std::atomic<uint64> requested_tick = 0;        // thread reads
     std::atomic<uint64> completed_update = 0;      // thread reads/writes
@@ -927,7 +904,6 @@ struct Particle_Emitter
     // locally calculate basis vector, or, change scene graph to store its last-calculated world basis, and read from
     // that here  take lock  modify the descriptor to change position, orientation, velocity  release lock
     ASSERT(shared_data);
-    ASSERT(shared_data->dt == dt);
     ASSERT(thread_launched);
     spin_until_up_to_date();
     // descriptor.time = shared_data->descriptor.time;
@@ -983,15 +959,15 @@ struct Particle_Emitter
         SDL_Delay(1);
         continue;
       }
-      const float32 time = shared_data->completed_update * shared_data->dt;
+      const float32 time = shared_data->completed_update * dt;
 
-      emission->update(shared_data->particles, &shared_data->descriptor.emission_descriptor, time, shared_data->dt);
-      physics->step(shared_data->particles, &shared_data->descriptor.physics_descriptor, time, shared_data->dt);
+      emission->update(shared_data->particles, &shared_data->descriptor.emission_descriptor, time, dt);
+      physics->step(shared_data->particles, &shared_data->descriptor.physics_descriptor, time, dt);
 
       // delete expired particles:
       for (uint i = 0; i < shared_data->particles->particles.size(); ++i)
       {
-        shared_data->particles->particles[i].time_left_to_live -= shared_data->dt;
+        shared_data->particles->particles[i].time_left_to_live -= dt;
         if (shared_data->particles->particles[i].time_left_to_live <= 0.0f)
         {
           shared_data->particles->particles[i] = shared_data->particles->particles.back();
@@ -1013,7 +989,7 @@ struct Particle_Emitter
     particles->particles.clear();
   }
 
-  std::unique_ptr<Particle_Emitter_Descriptor> descriptor;
+  Particle_Emitter_Descriptor descriptor;
   Mesh mesh;
   Material material;
 

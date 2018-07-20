@@ -1,13 +1,7 @@
+#include "stdafx.h"
 #include "Mesh_Loader.h"
 #include "Globals.h"
 #include "Render.h"
-#include <assimp/Importer.hpp>
-#include <assimp/cimport.h>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-#include <assimp/types.h>
-#include <glm/glm.hpp>
-#include <vector>
 
 void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data &mesh)
 {

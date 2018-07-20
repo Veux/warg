@@ -1,17 +1,9 @@
+#include "stdafx.h"
 #include "Globals.h"
 #include "Json.h"
 #include "Render.h"
 #include "SDL_Imgui_State.h"
 #include "Scene_Graph.h"
-#include <SDL2/SDL.h>
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-#include <assimp/types.h>
-#ifdef __linux__
-#elif _WIN32
-#include <Windows.h>
-#endif
 using namespace glm;
 std::mt19937 generator;
 const float32 dt = 1.0f / 60.0f;

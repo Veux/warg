@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Spell.h"
 
 std::unique_ptr<Spell_Database> make_spell_db()
@@ -234,21 +235,21 @@ std::unique_ptr<Spell_Database> make_spell_db()
   // fb->cast_time = 2;
   // fb->effects.push_back(fb_object_launch);
 
-   // COUNTERSPELL
+  // COUNTERSPELL
 
-   //SpellEffect *cs_effect = &spell_effects[nspell_effects++];
-   //cs_effect->name = "Counterspell";
-   //cs_effect->type = SpellEffectType::Interrupt;
-   //cs_effect->interrupt.lockout = 6;
+  // SpellEffect *cs_effect = &spell_effects[nspell_effects++];
+  // cs_effect->name = "Counterspell";
+  // cs_effect->type = SpellEffectType::Interrupt;
+  // cs_effect->interrupt.lockout = 6;
 
-   //SpellDef *cs = &spells[nspells++];
-   //cs->name = "Counterspell";
-   //cs->mana_cost = 10;
-   //cs->range = 30;
-   //cs->targets = SpellTargets::Hostile;
-   //cs->cooldown = 24;
-   //cs->cast_time = 0;
-   //cs->effects.push_back(cs_effect);
+  // SpellDef *cs = &spells[nspells++];
+  // cs->name = "Counterspell";
+  // cs->mana_cost = 10;
+  // cs->range = 30;
+  // cs->targets = SpellTargets::Hostile;
+  // cs->cooldown = 24;
+  // cs->cast_time = 0;
+  // cs->effects.push_back(cs_effect);
 
   // FROSTBOLT
 
@@ -316,7 +317,7 @@ std::unique_ptr<Spell_Database> make_spell_db()
   blink_effect_.type = Spell_Effect_Type::Blink;
   db->effects.push_back(blink_effect_);
   size_t blink_effect = db->effects.size() - 1;
-  
+
   Spell_Formula blink;
   blink.name = "Blink";
   blink.icon = Texture("../Assets/Icons/blink.jpg");
@@ -329,7 +330,7 @@ std::unique_ptr<Spell_Database> make_spell_db()
   blink.effects.push_back(blink_effect);
   db->spells.push_back(blink);
 
-   // SHADOW WORD: PAIN
+  // SHADOW WORD: PAIN
 
   Spell_Effect_Formula swp_tick_;
   swp_tick_.type = Spell_Effect_Type::Damage;
@@ -366,8 +367,8 @@ std::unique_ptr<Spell_Database> make_spell_db()
   swp.targets = Spell_Targets::Self;
   swp.effects.push_back(swp_effect);
   db->spells.push_back(swp);
-   
-   // ICY VEINS
+
+  // ICY VEINS
 
   CharMod icy_veins_mod_;
   icy_veins_mod_.type = Character_Modifier_Type::CastSpeed;

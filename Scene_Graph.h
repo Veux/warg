@@ -430,7 +430,8 @@ struct Flat_Scene_Graph
       }
       else
       {
-        ImGui::TextColored(ImVec4(0.5f + 0.5f * sin(get_real_time() * 4.f), 0.0f, 0.0f, 1.0f), "Loading import...");
+        ImGui::TextColored(
+            ImVec4(0.5f + 0.5f * (float32)sin(get_real_time() * 4.f), 0.0f, 0.0f, 1.0f), "Loading import...");
       }
     }
   }
@@ -662,7 +663,7 @@ struct Flat_Scene_Graph
     bool non_default_basis = node->import_basis != mat4(1);
     if (non_default_basis)
     {
-      ImGui::PushStyleColor(0, ImVec4(0.75 + 0.5 * sin(4.0f * get_real_time()), 0.f, 0.f, 1.f));
+      ImGui::PushStyleColor(0, ImVec4(0.75f + 0.5f * (float32)sin(4.0f * get_real_time()), 0.f, 0.f, 1.f));
       if (ImGui::TreeNode("Import Basis:"))
       {
         ImGui::Text(s(node->import_basis).c_str());

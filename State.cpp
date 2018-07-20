@@ -1,12 +1,9 @@
+#include "stdafx.h"
 #include "State.h"
 #include "Globals.h"
 #include "Json.h"
 #include "Render.h"
 #include "Third_party/imgui/imgui.h"
-#include <atomic>
-#include <memory>
-#include <sstream>
-#include <thread>
 
 using namespace glm;
 

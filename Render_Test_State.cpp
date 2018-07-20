@@ -1,13 +1,10 @@
+#include "stdafx.h"
 #include "Render_Test_State.h"
 #include "Globals.h"
 #include "Json.h"
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
-#include <atomic>
-#include <memory>
-#include <sstream>
-#include <thread>
 using namespace glm;
 
 Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)

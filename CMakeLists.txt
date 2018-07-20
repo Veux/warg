@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 3.4 FATAL_ERROR)
 include (FindPkgConfig)
+set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+include(cotire)
 
 project (warg)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
@@ -12,8 +14,6 @@ if (MSVC)
 endif (MSVC)
 set (CMAKE_BUILD_TYPE Debug)
 
-
-set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 file (GLOB CPP_FILES "*.cpp")
 file (GLOB HEADER_FILES "*.h" ".hpp")
@@ -57,3 +57,6 @@ target_link_libraries (warg  glbinding::glbinding)
 if(WIN32)
   target_link_libraries (warg wsock32 ws2_32 winmm)
 endif()
+
+set_target_properties(warg PROPERTIES COTIRE_CXX_PREFIX_HEADER_INIT "stdafx.h")
+cotire(warg)

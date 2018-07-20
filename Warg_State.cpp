@@ -1,13 +1,10 @@
+#include "stdafx.h"
 #include "Warg_State.h"
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
 #include "UI.h"
-#include <atomic>
-#include <memory>
-#include <sstream>
-#include <thread>
 
 using namespace glm;
 

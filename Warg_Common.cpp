@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Warg_Common.h"
 
 std::vector<Triangle> collect_colliders(const Flat_Scene_Graph &scene);

@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Physics.h"
 
 Plane::Plane(const vec3 &origin, const vec3 &normal)
@@ -7,8 +8,7 @@ Plane::Plane(const vec3 &origin, const vec3 &normal)
   equation[0] = normal.x;
   equation[1] = normal.y;
   equation[2] = normal.z;
-  equation[3] =
-      -(normal.x * origin.x + normal.y * origin.y + normal.z * origin.z);
+  equation[3] = -(normal.x * origin.x + normal.y * origin.y + normal.z * origin.z);
 }
 
 Plane::Plane(const Triangle &t)
@@ -20,19 +20,12 @@ Plane::Plane(const Triangle &t)
   equation[0] = normal.x;
   equation[1] = normal.y;
   equation[2] = normal.z;
-  equation[3] =
-      -(normal.x * origin.x + normal.y * origin.y + normal.z * origin.z);
+  equation[3] = -(normal.x * origin.x + normal.y * origin.y + normal.z * origin.z);
 }
 
-bool Plane::is_facing(const vec3 &direction) const
-{
-  return dot(normal, direction) <= 0;
-}
+bool Plane::is_facing(const vec3 &direction) const { return dot(normal, direction) <= 0; }
 
-float Plane::signed_distance_to(const vec3 &p) const
-{
-  return dot(p, normal) + equation[3];
-}
+float Plane::signed_distance_to(const vec3 &p) const { return dot(p, normal) + equation[3]; }
 
 float squared_length(vec3 v)
 {
@@ -109,8 +102,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
   float t0, t1;
   bool embedded_in_plane = false;
 
-  float signed_dist_to_triangle_plane =
-      triangle_plane.signed_distance_to(colpkt->base_point);
+  float signed_dist_to_triangle_plane = triangle_plane.signed_distance_to(colpkt->base_point);
 
   float normal_dot_vel = dot(triangle_plane.normal, colpkt->vel);
 
@@ -160,8 +152,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
 
   if (!embedded_in_plane)
   {
-    vec3 plane_intersection_point =
-        (colpkt->base_point - triangle_plane.normal) + (colpkt->vel * t0);
+    vec3 plane_intersection_point = (colpkt->base_point - triangle_plane.normal) + (colpkt->vel * t0);
 
     if (check_point_in_triangle(plane_intersection_point, tri))
     {
@@ -215,15 +206,13 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     float edge_dot_base_to_vertex = dot(edge, base_to_vertex);
 
     a = edge_squared_length * -vel_squared_length + edge_dot_vel * edge_dot_vel;
-    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) -
-        2.0f * edge_dot_vel * edge_dot_base_to_vertex;
+    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) - 2.0f * edge_dot_vel * edge_dot_base_to_vertex;
     c = edge_squared_length * (1.0f - squared_length(base_to_vertex)) +
         edge_dot_base_to_vertex * edge_dot_base_to_vertex;
 
     if (get_lowest_root(a, b, c, t, &new_t))
     {
-      float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) /
-                edge_squared_length;
+      float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) / edge_squared_length;
       if (f >= 0.0f && f <= 1.0f)
       {
         t = new_t;
@@ -239,15 +228,13 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     edge_dot_base_to_vertex = dot(edge, base_to_vertex);
 
     a = edge_squared_length * -vel_squared_length + edge_dot_vel * edge_dot_vel;
-    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) -
-        2.0f * edge_dot_vel * edge_dot_base_to_vertex;
+    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) - 2.0f * edge_dot_vel * edge_dot_base_to_vertex;
     c = edge_squared_length * (1.0f - squared_length(base_to_vertex)) +
         edge_dot_base_to_vertex * edge_dot_base_to_vertex;
 
     if (get_lowest_root(a, b, c, t, &new_t))
     {
-      float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) /
-                edge_squared_length;
+      float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) / edge_squared_length;
       if (f >= 0.0f && f <= 1.0f)
       {
         t = new_t;
@@ -263,15 +250,13 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
     edge_dot_base_to_vertex = dot(edge, base_to_vertex);
 
     a = edge_squared_length * -vel_squared_length + edge_dot_vel * edge_dot_vel;
-    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) -
-        2.0f * edge_dot_vel * edge_dot_base_to_vertex;
+    b = edge_squared_length * 2.0f * dot(vel, base_to_vertex) - 2.0f * edge_dot_vel * edge_dot_base_to_vertex;
     c = edge_squared_length * (1.0f - squared_length(base_to_vertex)) +
         edge_dot_base_to_vertex * edge_dot_base_to_vertex;
 
     if (get_lowest_root(a, b, c, t, &new_t))
     {
-      float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) /
-                edge_squared_length;
+      float f = (edge_dot_vel * new_t - edge_dot_base_to_vertex) / edge_squared_length;
       if (f >= 0.0f && f <= 1.0f)
       {
         t = new_t;
@@ -285,8 +270,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
   {
     float dist_to_collision = t * length(colpkt->vel);
 
-    if (!colpkt->found_collision ||
-        dist_to_collision < colpkt->nearest_distance)
+    if (!colpkt->found_collision || dist_to_collision < colpkt->nearest_distance)
     {
       colpkt->nearest_distance = dist_to_collision;
       colpkt->intersection_point = collision_point;
@@ -299,8 +283,7 @@ bool check_triangle(Collision_Packet *colpkt, Triangle &tri)
   return false;
 }
 
-bool ray_intersects_triangle(
-    vec3 origin, vec3 dir, Triangle tri, vec3 *intersection_point)
+bool ray_intersects_triangle(vec3 origin, vec3 dir, Triangle tri, vec3 *intersection_point)
 {
   ASSERT(intersection_point);
 
@@ -337,7 +320,4 @@ bool ray_intersects_triangle(
   }
 }
 
-bool vec3_has_nan(vec3 v)
-{
-  return _isnan(v.x) || _isnan(v.y) || _isnan(v.z);
-}
+bool vec3_has_nan(vec3 v) { return _isnan(v.x) || _isnan(v.y) || _isnan(v.z); }

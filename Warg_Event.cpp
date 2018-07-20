@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Warg_Event.h"
 #include "Warg_Common.h"
 
@@ -59,10 +60,10 @@ void Char_Spawn_Request_Message::serialize(Buffer &b)
 
 void Input_Message::serialize(Buffer &b)
 {
-  //serialize_(b, Warg_Event_Type::PlayerMovement);
-  //serialize_(b, input_number);
-  //serialize_(b, (uint8_t)move_status);
-  //serialize_(b, dir);
+  // serialize_(b, Warg_Event_Type::PlayerMovement);
+  // serialize_(b, input_number);
+  // serialize_(b, (uint8_t)move_status);
+  // serialize_(b, dir);
 }
 
 void Cast_Message::serialize(Buffer &b)
@@ -134,9 +135,9 @@ Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 
 Input_Message::Input_Message(Buffer &b)
 {
-  //input_number = deserialize_uint32(b);
-  //move_status = (Move_Status)deserialize_uint8(b);
-  //dir = deserialize_vec3(b);
+  // input_number = deserialize_uint32(b);
+  // move_status = (Move_Status)deserialize_uint8(b);
+  // dir = deserialize_vec3(b);
 }
 
 State_Message::State_Message(Buffer &b)

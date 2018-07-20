@@ -1,7 +1,7 @@
+#include "stdafx.h"
 #include "Json.h"
 #include "Render.h"
 #include "Scene_Graph.h"
-#include <unordered_map>
 
 extern std::unordered_map<std::string, std::weak_ptr<Mesh_Handle>> MESH_CACHE;
 

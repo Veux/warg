@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Timer.h"
 template <typename T> void ASSERT(T t)
 {

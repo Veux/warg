@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Forward_Declarations.h"
 #include "Globals.h"
 #include "Json.h"
@@ -6,16 +7,10 @@
 #include "State.h"
 #include "Timer.h"
 #include "Warg_State.h"
-#include <SDL2/SDL.h>
 #undef main
 #include "SDL_Imgui_State.h"
 #include "Third_party/imgui/imgui.h"
 #include "Third_party/imgui/imgui_internal.h"
-#include <enet/enet.h>
-#include <glbinding/Binding.h>
-#include <iostream>
-#include <sstream>
-#include <stdlib.h>
 
 void gl_before_check(const glbinding::FunctionCall &f)
 {

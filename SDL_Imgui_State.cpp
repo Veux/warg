@@ -7,15 +7,13 @@
 // main.cpp for an example of using this. If you use this binding you'll need to
 // call 4 functions: ImGui_ImplXXXX_Init(), ImGui_ImplXXXX_NewFrame(),
 // ImGui::Render() and ImGui_ImplXXXX_Shutdown().
-
+#include "stdafx.h"
 #include "SDL_Imgui_State.h"
 #include "Render.h"
 #include "Third_Party/imgui/imgui.h"
 #include "Third_Party/imgui/imgui_internal.h"
 
 #include "Globals.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
 
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
 

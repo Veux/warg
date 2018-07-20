@@ -1,8 +1,5 @@
+#include "stdafx.h"
 #include "UI.h"
-#ifdef __linux__
-#elif _WIN32
-#include <Windows.h>
-#endif
 #include "SDL_Imgui_State.h"
 
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;

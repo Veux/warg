@@ -1,15 +1,7 @@
+#include "stdafx.h"
 #include "Scene_Graph.h"
 #include "Globals.h"
 #include "Render.h"
-#include <array>
-#include <assimp/Importer.hpp>
-#include <assimp/cimport.h>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-#include <assimp/types.h>
-#include <atomic>
-#include <nlohmann/json.hpp>
-#include <thread>
 using json = nlohmann::json;
 using namespace std;
 
