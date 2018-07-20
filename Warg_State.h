@@ -53,7 +53,6 @@ struct Warg_State : protected State
   void update_character_nodes();
   void update_prediction_ghost();
   void update_stats_bar();
-  void send_ping();
   void predict_state();
   void update_meshes();
   void update_spell_object_nodes();

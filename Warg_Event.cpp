@@ -52,7 +52,7 @@ void serialize_(Buffer &b, Warg_Event_Type type) { serialize_(b, (uint8_t)type);
 
 void Char_Spawn_Request_Message::serialize(Buffer &b)
 {
-  serialize_(b, Warg_Event_Type::CharSpawnRequest);
+  serialize_(b, Warg_Event_Type::Spawn_Request);
   serialize_(b, name);
   serialize_(b, team);
 }
@@ -72,44 +72,10 @@ void Cast_Message::serialize(Buffer &b)
   serialize_(b, spell);
 }
 
-void Cast_Error_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::CastError);
-  serialize_(b, caster);
-  serialize_(b, target);
-  serialize_(b, spell);
-  serialize_(b, err);
-}
-
-void Cast_Begin_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::CastBegin);
-  serialize_(b, caster);
-  serialize_(b, target);
-  serialize_(b, spell);
-}
-
-void Cast_Interrupt_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::CastInterrupt);
-  serialize_(b, caster);
-}
-
-void Buff_Application_Message::serialize(Buffer &b)
-{
-  serialize_(b, Warg_Event_Type::BuffAppl);
-  serialize_(b, character);
-  serialize_(b, buff);
-}
-
 void State_Message::serialize(Buffer &b)
 {
   // sponge
 }
-
-void Ping_Message::serialize(Buffer &b) { serialize_(b, Warg_Event_Type::Ping); }
-
-void Ack_Message::serialize(Buffer &b) { serialize_(b, Warg_Event_Type::Ack); }
 
 uint8_t deserialize_uint8(Buffer &b)
 {
@@ -184,33 +150,6 @@ Cast_Message::Cast_Message(Buffer &b)
   spell = deserialize_string(b);
 }
 
-Cast_Error_Message::Cast_Error_Message(Buffer &b)
-{
-  caster = deserialize_uid(b);
-  target = deserialize_uid(b);
-  spell = deserialize_string(b);
-  err = deserialize_uint8(b);
-}
-
-Cast_Begin_Message::Cast_Begin_Message(Buffer &b)
-{
-  caster = deserialize_uid(b);
-  target = deserialize_uid(b);
-  spell = deserialize_string(b);
-}
-
-Cast_Interrupt_Message::Cast_Interrupt_Message(Buffer &b) { caster = deserialize_uid(b); }
-
-Buff_Application_Message::Buff_Application_Message(Buffer &b)
-{
-  character = deserialize_uid(b);
-  buff = deserialize_string(b);
-}
-
-Ping_Message::Ping_Message(Buffer &b) {}
-
-Ack_Message::Ack_Message(Buffer &b) {}
-
 std::unique_ptr<Message> deserialize_message(Buffer &b)
 {
   auto type = (Warg_Event_Type)deserialize_uint8(b);
@@ -218,35 +157,17 @@ std::unique_ptr<Message> deserialize_message(Buffer &b)
   std::unique_ptr<Message> msg = nullptr;
   switch (type)
   {
-    case Warg_Event_Type::CharSpawnRequest:
+    case Warg_Event_Type::Spawn_Request:
       msg = std::make_unique<Char_Spawn_Request_Message>(b);
       break;
-    case Warg_Event_Type::PlayerMovement:
+    case Warg_Event_Type::Input:
       msg = std::make_unique<Input_Message>(b);
       break;
-    case Warg_Event_Type::PlayerGeometry:
+    case Warg_Event_Type::State:
       msg = std::make_unique<State_Message>(b);
       break;
     case Warg_Event_Type::Cast:
       msg = std::make_unique<Cast_Message>(b);
-      break;
-    case Warg_Event_Type::CastError:
-      msg = std::make_unique<Cast_Error_Message>(b);
-      break;
-    case Warg_Event_Type::CastBegin:
-      msg = std::make_unique<Cast_Begin_Message>(b);
-      break;
-    case Warg_Event_Type::CastInterrupt:
-      msg = std::make_unique<Cast_Interrupt_Message>(b);
-      break;
-    case Warg_Event_Type::BuffAppl:
-      msg = std::make_unique<Buff_Application_Message>(b);
-      break;
-    case Warg_Event_Type::Ping:
-      msg = std::make_unique<Ping_Message>(b);
-      break;
-    case Warg_Event_Type::Ack:
-      msg = std::make_unique<Ack_Message>(b);
       break;
     default:
       ASSERT(false);
@@ -276,29 +197,6 @@ Cast_Message::Cast_Message(UID target_, const char *spell_)
   spell = spell_;
 }
 
-Cast_Error_Message::Cast_Error_Message(UID caster_, UID target_, const char *spell_, uint8_t err_)
-{
-  caster = caster_;
-  target = target_;
-  spell = spell_;
-  err = err_;
-}
-
-Cast_Begin_Message::Cast_Begin_Message(UID caster_, UID target_, const char *spell_)
-{
-  caster = caster_;
-  target = target_;
-  spell = spell_;
-}
-
-Cast_Interrupt_Message::Cast_Interrupt_Message(UID caster_) { caster = caster_; }
-
-Buff_Application_Message::Buff_Application_Message(UID character_, const char *buff_)
-{
-  character = character_;
-  buff = buff_;
-}
-
 State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, std::map<UID, Spell_Object> spell_objects_, uint32 tick_, uint32 input_number_)
 {
   reliable = false;
@@ -309,7 +207,3 @@ State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, std::map
   characters = chars_;
   spell_objects = spell_objects_;
 }
-
-Ping_Message::Ping_Message() {}
-
-Ack_Message::Ack_Message() {}

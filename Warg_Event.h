@@ -24,21 +24,10 @@ struct Buffer
 
 enum class Warg_Event_Type
 {
-  CharSpawnRequest,
-  CharSpawn,
-  PlayerControl,
-  PlayerMovement,
-  PlayerGeometry,
-  Jump,
-  Cast,
-  CastError,
-  CastBegin,
-  CastInterrupt,
-  CharHP,
-  BuffAppl,
-  ObjectLaunch,
-  Ping,
-  Ack
+  Spawn_Request,
+  Input,
+  State,
+  Cast
 };
 
 struct Message
@@ -100,56 +89,6 @@ struct Cast_Message : Message
   std::string spell;
 };
 
-struct Cast_Error_Message : Message
-{
-  Cast_Error_Message(UID caster, UID target, const char *spell, uint8_t err);
-  Cast_Error_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID caster;
-  UID target;
-  std::string spell;
-  uint8_t err;
-};
-
-struct Cast_Begin_Message : Message
-{
-  Cast_Begin_Message(UID caster, UID target, const char *spell);
-  Cast_Begin_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID caster;
-  UID target;
-  std::string spell;
-};
-
-struct Cast_Interrupt_Message : Message
-{
-  Cast_Interrupt_Message(UID caster);
-  Cast_Interrupt_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID caster;
-};
-
-struct Buff_Application_Message : Message
-{
-  Buff_Application_Message(UID character, const char *buff);
-  Buff_Application_Message(Buffer &b);
-  virtual void handle(Warg_Server &server) { ASSERT(false); };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID character;
-  std::string buff;
-};
-
 struct Input;
 
 struct State_Message : Message
@@ -165,24 +104,6 @@ struct State_Message : Message
   uint32 input_number;
   std::map<UID, Character> characters;
   std::map<UID, Spell_Object> spell_objects;
-};
-
-struct Ping_Message : Message
-{
-  Ping_Message();
-  Ping_Message(Buffer &b);
-  virtual void handle(Warg_Server &server);
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-};
-
-struct Ack_Message : Message
-{
-  Ack_Message();
-  Ack_Message(Buffer &b);
-  virtual void handle(Warg_Server &server);
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
 };
 
 std::unique_ptr<Message> deserialize_message(Buffer &b);

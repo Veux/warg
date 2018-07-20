@@ -162,20 +162,6 @@ void Cast_Message::handle(Warg_Server &server)
   server.try_cast_spell(character, target, spell.c_str());
 }
 
-void Ping_Message::handle(Warg_Server &server)
-{
-  ASSERT(server.peers.count(peer));
-  auto &peer_ = server.peers[peer];
-  //unique_ptr<Message> msg = make_unique<Ack_Message>();
-  //peer_->push_to_peer(std::move(msg));
-}
-
-void Ack_Message::handle(Warg_Server &server)
-{
-  ASSERT(server.peers.count(peer));
-  auto &peer_ = server.peers[peer];
-}
-
 void Warg_Server::try_cast_spell(Character &caster, UID target_, const char *spell_)
 {
   ASSERT(spell_);

@@ -449,12 +449,6 @@ void Warg_State::update_stats_bar()
   ImGui::End();
 }
 
-void Warg_State::send_ping()
-{
-  if (latency_tracker.should_send_ping())
-    session->push(make_unique<Ping_Message>());
-}
-
 bool prediction_correct(UID player_character_id, Game_State &server_state, Game_State &predicted_state)
 {
   bool same_input = server_state.input_number == predicted_state.input_number;
@@ -669,7 +663,6 @@ void Warg_State::update()
   set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
   process_messages();
-  send_ping();
   update_stats_bar();
 
   // set_message(s("overwriting game_state with server_state"), "", 1.0f);
@@ -974,85 +967,6 @@ void State_Message::handle(Warg_State &state)
 
   state.input_buffer.pop_older_than(input_number);
 }
-
-void Cast_Error_Message::handle(Warg_State &state)
-{
-  // ASSERT(state.game_state.characters.count(caster));
-
-  // std::string msg;
-  // msg += state.game_state.characters[caster].name;
-  // msg += " failed to cast ";
-  // msg += spell;
-  // msg += ": ";
-
-  // switch (err)
-  //{
-  //  case (int)CastErrorType::Silenced:
-  //    msg += "silenced";
-  //    break;
-  //  case (int)CastErrorType::GCD:
-  //    msg += "GCD";
-  //    break;
-  //  case (int)CastErrorType::SpellCD:
-  //    msg += "spell on cooldown";
-  //    break;
-  //  case (int)CastErrorType::NotEnoughMana:
-  //    msg += "not enough mana";
-  //    break;
-  //  case (int)CastErrorType::InvalidTarget:
-  //    msg += "invalid target";
-  //    break;
-  //  case (int)CastErrorType::OutOfRange:
-  //    msg += "out of range";
-  //    break;
-  //  case (int)CastErrorType::AlreadyCasting:
-  //    msg += "already casting";
-  //    break;
-  //  case (int)CastErrorType::Success:
-  //    ASSERT(false);
-  //    break;
-  //  default:
-  //    ASSERT(false);
-  //}
-
-  // set_message("SpellError:", msg, 10);
-}
-
-void Cast_Begin_Message::handle(Warg_State &state)
-{
-  // ASSERT(state.game_state.characters.count(caster));
-
-  // std::string msg;
-  // msg += state.game_state.characters[caster].name;
-  // msg += " begins casting ";
-  // msg += spell;
-  // set_message("CastBegin:", msg, 10);
-}
-
-void Cast_Interrupt_Message::handle(Warg_State &state)
-{
-  // ASSERT(state.game_state.characters.count(caster));
-
-  // std::string msg;
-  // msg += state.game_state.characters[caster].name;
-  // msg += "'s casting was interrupted";
-  // set_message("CastInterrupt:", msg, 10);
-}
-
-void Buff_Application_Message::handle(Warg_State &state)
-{
-  ASSERT(state.game_state.characters.count(character));
-
-  std::string msg;
-  msg += buff;
-  msg += " applied to ";
-  msg += state.game_state.characters[character].name;
-  set_message("ApplyBuff:", msg, 10);
-}
-
-void Ping_Message::handle(Warg_State &state) { state.session->push(make_unique<Ack_Message>()); }
-
-void Ack_Message::handle(Warg_State &state) { state.latency_tracker.ack_received(); }
 
 bool Latency_Tracker::should_send_ping()
 {
