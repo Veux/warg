@@ -18,7 +18,7 @@
 using namespace glm;
 using namespace gl33core;
 
-#define MAX_INSTANCE_COUNT 100
+#define MAX_INSTANCE_COUNT 1000
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS 10 // reminder to change the Texture_Location::s1...sn shadow map enums
 #define DYNAMIC_TEXTURE_RELOADING 0
@@ -237,38 +237,6 @@ struct Array_String
 
 typedef uint32_t UID;
 UID uid();
-
-struct Bezier_Curve
-{
-  Bezier_Curve() {}
-  Bezier_Curve(std::vector<glm::vec4> pts) : points(pts) {}
-  glm::vec4 lerp(float t)
-  {
-    if (remainder.size() == 0)
-    {
-      remainder = points;
-    }
-    if (remainder.size() == 1)
-    {
-      glm::vec4 p = remainder[0];
-      remainder.clear();
-      return p;
-    }
-
-    for (uint32 i = 0; i + 1 < remainder.size(); ++i)
-    {
-      glm::vec4 p = glm::mix(remainder[i], remainder[i + 1], t);
-      remainder[i] = p;
-    }
-    remainder.pop_back();
-
-    return lerp(t);
-  }
-  std::vector<glm::vec4> points;
-
-private:
-  std::vector<glm::vec4> remainder;
-};
 
 struct Config
 { // if you add more settings, be sure to put them in load() and save()

@@ -207,11 +207,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   glEnable(GL_DEPTH_TEST);
 }
 
-Renderer::~Renderer()
-{
-  glDeleteBuffers(1, &instance_mvp_buffer);
-  glDeleteBuffers(1, &instance_model_buffer);
-}
+Renderer::~Renderer() {}
 
 void check_and_clear_expired_textures()
 { // todo: separate thread that does this
@@ -669,7 +665,7 @@ Mesh::Mesh(const Mesh_Descriptor *d)
 
 void Mesh::draw()
 {
-  glBindVertexArray(get_vao());
+  mesh->enable_assign_attributes(); // also binds vao
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, get_indices_buffer());
   glDrawElements(GL_TRIANGLES, get_indices_buffer_size(), GL_UNSIGNED_INT, nullptr);
 }
@@ -929,20 +925,6 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   brdf_lut_generator.set_uniform("transform", mat);
   quad.draw();
 
-  set_message("Initializing instance buffers");
-  const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
-  const GLuint instance_buffer_size = MAX_INSTANCE_COUNT * mat4_size;
-
-  glGenBuffers(1, &instance_mvp_buffer);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-  glBufferData(GL_ARRAY_BUFFER, instance_buffer_size, (void *)0, GL_DYNAMIC_DRAW);
-
-  glGenBuffers(1, &instance_model_buffer);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
-  glBufferData(GL_ARRAY_BUFFER, instance_buffer_size, (void *)0, GL_DYNAMIC_DRAW);
-
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
-
   set_message("Renderer init finished");
   init_render_targets();
   FRAME_TIMER.start();
@@ -1152,7 +1134,6 @@ void Renderer::opaque_pass(float32 time)
     glBindVertexArray(vao);
     Shader &shader = CONFIG.render_simple ? simple : entity.material->shader;
     shader.use();
-
     entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
@@ -1165,13 +1146,9 @@ void Renderer::opaque_pass(float32 time)
 #if SHOW_UV_TEST_GRID
     shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
 #endif
-
     lights.bind(shader);
-    // set_message("SETTING SHADOW MAPS:");
     set_uniform_shadowmaps(shader);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
-    // set_message(s("drawing elements..."));
-    glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, nullptr);
+    entity.mesh->draw();
     entity.material->unbind_textures();
   }
   glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
@@ -1184,8 +1161,6 @@ void Renderer::instance_pass(float32 time)
 {
   for (auto &entity : render_instances)
   {
-    ASSERT(0); // disables vertex attribs, so non instanced draw calls will need
-               // to re-enable and re-point
     ASSERT(entity.mesh);
     int vao = entity.mesh->get_vao();
     glBindVertexArray(vao);
@@ -1198,79 +1173,72 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     lights.bind(shader);
-    //// verify sizes of data, mat4 floats
-    ASSERT(entity.Model_Matrices.size() > 0);
-    ASSERT(entity.MVP_Matrices.size() == entity.Model_Matrices.size());
-    ASSERT(sizeof(decltype(entity.Model_Matrices[0])) == sizeof(decltype(entity.MVP_Matrices[0])));
-    ASSERT(sizeof(decltype(entity.MVP_Matrices[0][0][0])) == sizeof(GLfloat)); // buffer init code assumes these
-    ASSERT(sizeof(decltype(entity.MVP_Matrices[0])) == sizeof(mat4));
 
-    uint32 num_instances = entity.MVP_Matrices.size();
-    uint32 buffer_size = num_instances * sizeof(mat4);
+    ASSERT(glGetAttribLocation(shader.program->program, "instanced_MVP") == 5);
+    glEnableVertexAttribArray(6);
+    glEnableVertexAttribArray(7);
+    glEnableVertexAttribArray(8);
+    glEnableVertexAttribArray(9);
+    glBindBuffer(GL_ARRAY_BUFFER, entity.mvp_buffer);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(0));
+    glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 4));
+    glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 8));
+    glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 12));
+    glVertexAttribDivisor(6, 1); //"update attribute at location <N> every <1> instance"
+    glVertexAttribDivisor(7, 1);
+    glVertexAttribDivisor(8, 1);
+    glVertexAttribDivisor(9, 1);
 
-    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size, &entity.MVP_Matrices[0][0][0]);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, buffer_size, &entity.Model_Matrices[0][0][0]);
+    ASSERT(glGetAttribLocation(shader.program->program, "instanced_model") == 9);
+    glEnableVertexAttribArray(9);
+    glEnableVertexAttribArray(10);
+    glEnableVertexAttribArray(11);
+    glEnableVertexAttribArray(12);
+    glBindBuffer(GL_ARRAY_BUFFER, entity.model_buffer);
+    glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(0));
+    glVertexAttribPointer(10, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 4));
+    glVertexAttribPointer(11, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 8));
+    glVertexAttribPointer(12, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 12));
+    glVertexAttribDivisor(9, 1);
+    glVertexAttribDivisor(10, 1);
+    glVertexAttribDivisor(11, 1);
+    glVertexAttribDivisor(12, 1);
 
-    const GLuint mat4_size = sizeof(GLfloat) * 4 * 4;
-    // shader attribute locations
-    // 4 locations for mat4
-    int32 loc = glGetAttribLocation(shader.program->program, "instanced_MVP");
-    ASSERT(loc != -1);
+    ASSERT(glGetAttribLocation(shader.program->program, "attribute0") == 13);
+    glEnableVertexAttribArray(13);
+    glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
+    glVertexAttribPointer(13, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+    glVertexAttribDivisor(13, 1);
 
-    GLuint loc1 = loc + 0;
-    GLuint loc2 = loc + 1;
-    GLuint loc3 = loc + 2;
-    GLuint loc4 = loc + 3;
-    glEnableVertexAttribArray(loc1);
-    glEnableVertexAttribArray(loc2);
-    glEnableVertexAttribArray(loc3);
-    glEnableVertexAttribArray(loc4);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-    glVertexAttribPointer(loc1, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(0));
-    glVertexAttribPointer(loc2, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 4));
-    glVertexAttribPointer(loc3, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 8));
-    glVertexAttribPointer(loc4, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 12));
-    glVertexAttribDivisor(loc1, 1);
-    glVertexAttribDivisor(loc2, 1);
-    glVertexAttribDivisor(loc3, 1);
-    glVertexAttribDivisor(loc4, 1);
+    ASSERT(glGetAttribLocation(shader.program->program, "attribute1") == 14);
+    glEnableVertexAttribArray(14);
+    glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
+    glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+    glVertexAttribDivisor(14, 1);
 
-    loc = glGetAttribLocation(shader.program->program, "instanced_model");
-    ASSERT(loc != -1);
-
-    GLuint loc_1 = loc + 0;
-    GLuint loc_2 = loc + 1;
-    GLuint loc_3 = loc + 2;
-    GLuint loc_4 = loc + 3;
-    glEnableVertexAttribArray(loc_1);
-    glEnableVertexAttribArray(loc_2);
-    glEnableVertexAttribArray(loc_3);
-    glEnableVertexAttribArray(loc_4);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
-    glVertexAttribPointer(loc_1, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(0));
-    glVertexAttribPointer(loc_2, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 4));
-    glVertexAttribPointer(loc_3, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 8));
-    glVertexAttribPointer(loc_4, 4, GL_FLOAT, GL_FALSE, mat4_size, (void *)(sizeof(GLfloat) * 12));
-    glVertexAttribDivisor(loc_1, 1);
-    glVertexAttribDivisor(loc_2, 1);
-    glVertexAttribDivisor(loc_3, 1);
-    glVertexAttribDivisor(loc_4, 1);
+    ASSERT(glGetAttribLocation(shader.program->program, "attribute2") == 15);
+    glEnableVertexAttribArray(15);
+    glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
+    glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+    glVertexAttribDivisor(15, 1);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(
-        GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, num_instances);
+        GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
 
     entity.material->unbind_textures();
-    glDisableVertexAttribArray(loc1);
-    glDisableVertexAttribArray(loc2);
-    glDisableVertexAttribArray(loc3);
-    glDisableVertexAttribArray(loc4);
-    glDisableVertexAttribArray(loc_1);
-    glDisableVertexAttribArray(loc_2);
-    glDisableVertexAttribArray(loc_3);
-    glDisableVertexAttribArray(loc_4);
+
+    glDisableVertexAttribArray(6);
+    glDisableVertexAttribArray(7);
+    glDisableVertexAttribArray(8);
+    glDisableVertexAttribArray(9);
+    glDisableVertexAttribArray(10);
+    glDisableVertexAttribArray(11);
+    glDisableVertexAttribArray(12);
+    glDisableVertexAttribArray(13);
+    glDisableVertexAttribArray(14);
+    glDisableVertexAttribArray(15);
+    glDisableVertexAttribArray(16);
   }
 }
 
