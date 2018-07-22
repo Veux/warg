@@ -35,9 +35,18 @@ float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
   return (offset - (floor(offset / range) * range)) + min;
 }
 
-bool all_equal(int32 a, int32 b, int32 c) { return (a == b) && (a == c); }
-bool all_equal(int32 a, int32 b, int32 c, int32 d) { return (a == b) && (a == c) && (a == d); }
-bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f) { return (a == b) && (a == c) && (a == d) && (a == f); }
+bool all_equal(int32 a, int32 b, int32 c)
+{
+  return (a == b) && (a == c);
+}
+bool all_equal(int32 a, int32 b, int32 c, int32 d)
+{
+  return (a == b) && (a == c) && (a == d);
+}
+bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f)
+{
+  return (a == b) && (a == c) && (a == d) && (a == f);
+}
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f, int32 g)
 {
   return (a == b) && (a == c) && (a == d) && (a == f) && (a == g);
@@ -48,7 +57,10 @@ float32 rand(float32 min, float32 max)
   float32 result = dist(generator);
   return result;
 }
-vec3 rand(vec3 max) { return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z)); }
+vec3 rand(vec3 max)
+{
+  return vec3(rand(0, max.x), rand(0, max.y), rand(0, max.z));
+}
 
 // used to fix double escaped or wrong-slash file paths that assimp sometimes
 // gives
@@ -318,7 +330,10 @@ struct Message
 };
 static std::vector<Message> messages;
 static std::string message_log = "";
-std::string get_message_log() { return message_log; }
+std::string get_message_log()
+{
+  return message_log;
+}
 std::mutex SET_MESSAGE_MUTEX;
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
@@ -343,16 +358,12 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   }
   if (!found)
   {
-    Message m = {identifier, message, time + msg_duration};
     Message m = {identifier, message, time + msg_duration, ss.str()};
     messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
-  message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + " File: " + file + ": " +
-                     std::to_string(line) + "\n\n");
   message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, " File: ", file, ": ", , line, "\n\n"));
 #else
-  message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
   message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, "\n"));
 #endif
 }
@@ -369,7 +380,6 @@ std::string get_messages()
       it = messages.erase(it);
       continue;
     }
-    result = result + it->identifier + it->message + std::string("\n");
     result = result + s(it->thread_id, ": ", it->identifier, " ", it->message, "\n");
     ++it;
   }
@@ -508,8 +518,14 @@ template <> std::string s<vec4>(vec4 value)
   std::string a = std::to_string(value.a);
   return "color(" + r + "," + g + "," + b + "," + a + ")";
 }
-template <> std::string s<const char *>(const char *value) { return std::string(value); }
-template <> std::string s<std::string>(std::string value) { return value; }
+template <> std::string s<const char *>(const char *value)
+{
+  return std::string(value);
+}
+template <> std::string s<std::string>(std::string value)
+{
+  return value;
+}
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
 #define check_gl_error() _check_gl_error()
@@ -752,7 +768,10 @@ bool has_img_file_extension(std::string name)
 }
 Image_Loader IMAGE_LOADER;
 
-vec4 rgb_vec4(uint8 r, uint8 g, uint8 b) { return vec4(r, g, b, 255.f) / vec4(255.f); }
+vec4 rgb_vec4(uint8 r, uint8 g, uint8 b)
+{
+  return vec4(r, g, b, 255.f) / vec4(255.f);
+}
 
 float64 random_between(float64 min, float64 max)
 {
