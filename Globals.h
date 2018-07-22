@@ -38,6 +38,11 @@ using namespace gl33core;
 #define INPUT_BUFFER_SIZE 100
 #define MAX_CHARACTERS 10
 #define MAX_SPELL_OBJECTS 10
+#define MAX_CHARACTER_NAME_LENGTH 16
+#define MAX_BUFFS 16
+#define MAX_DEBUFFS 16
+#define MAX_SPELLS 16
+#define MAX_SPELLS 16
 
 #ifdef __linux__
 #define ROOT_PATH std::string("../")

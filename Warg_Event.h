@@ -75,7 +75,7 @@ struct Input_Message : Message
 
 struct Cast_Message : Message
 {
-  Cast_Message(UID target, const char *spell);
+  Cast_Message(UID target_id, Spell_Index spell_index);
   Cast_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state)
@@ -84,16 +84,15 @@ struct Cast_Message : Message
   };
   virtual void serialize(Buffer &b);
 
-  UID target;
-  std::string spell;
+  UID _target_id;
+  Spell_Index _spell_index;
 };
 
 struct Input;
 
 struct State_Message : Message
 {
-  State_Message(UID pc, Character *chars, Spell_Object *spell_objects, uint8 character_count_,
-      uint8 spell_object_count_, uint32 tick_, uint32 input_number_);
+  State_Message(UID pc, Game_State *game_state_);
   State_Message(Buffer &b);
   virtual void handle(Warg_Server &server)
   {
@@ -103,12 +102,7 @@ struct State_Message : Message
   virtual void serialize(Buffer &b);
 
   UID pc;
-  uint32 tick;
-  uint32 input_number;
-  Character characters[MAX_CHARACTERS];
-  Spell_Object spell_objects[MAX_SPELL_OBJECTS];
-  uint8 character_count;
-  uint8 spell_object_count;
+  Game_State game_state;
 };
 
 std::unique_ptr<Message> deserialize_message(Buffer &b);

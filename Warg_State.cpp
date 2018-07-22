@@ -14,7 +14,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   session = session_;
 
   map = make_blades_edge();
-  sdb = make_spell_db();
+  spell_db = Spell_Database();
   map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   collider_cache = collect_colliders(scene);
   SDL_SetRelativeMouseMode(SDL_bool(true));
@@ -47,20 +47,22 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
       }
-      if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam && get_character(&game_state, pc))
+      if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam && get_character(&game_state, player_character_id))
       {
+        Character *player_character = get_character(&game_state, player_character_id);
         size_t key = _e.key.keysym.sym - SDLK_1;
-        if (key < sdb.spells.size())
+        if (key < player_character->spell_set.spell_count)
         {
-          session->push(std::make_unique<Cast_Message>(target_id, sdb.spells[key].name.c_str()));
+          Spell_Index spell_formula_index = player_character->spell_set.spell_statuses[key].formula_index;
+          session->push(std::make_unique<Cast_Message>(target_id, spell_formula_index));
         }
       }
-      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&game_state, pc))
+      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&game_state, player_character_id))
       {
         for (size_t i = 0; i < game_state.character_count; i++)
         {
           Character *character = &game_state.characters[i];
-          if (character->id != pc && character->alive)
+          if (character->id != player_character_id && character->alive)
             target_id = character->id;
         }
       }
@@ -109,7 +111,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!pc || !get_character(&game_state, pc))
+  if (!player_character_id || !get_character(&game_state, player_character_id))
     return;
   if (free_cam)
   {
@@ -244,8 +246,8 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     // rotate the camera vector around perp
     character_to_camera = normalize(ry * character_to_camera);
 
-    ASSERT(pc);
-    Character *player_character = get_character(&game_state, pc);
+    ASSERT(player_character_id);
+    Character *player_character = get_character(&game_state, player_character_id);
     ASSERT(player_character);
 
     quat orientation;
@@ -296,7 +298,7 @@ void Warg_State::process_messages()
 void Warg_State::set_camera_geometry()
 {
   // set_message(s("set_camera_geometry(), time:", current_time), "", 1.0f);
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   if (!player_character)
     return;
 
@@ -408,7 +410,7 @@ void Warg_State::update_character_nodes()
 
 void Warg_State::update_prediction_ghost()
 {
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   if (!player_character)
     return;
 
@@ -470,7 +472,7 @@ void Warg_State::predict_state()
 {
   game_state = server_state;
 
-  if (!get_character(&server_state, pc))
+  if (!get_character(&server_state, player_character_id))
     return;
 
   if (input_buffer.size() == 0)
@@ -481,7 +483,7 @@ void Warg_State::predict_state()
 
   Game_State predicted_state = server_state;
   size_t prediction_start = 0;
-  if (state_buffer.size() && prediction_correct(pc, server_state, state_buffer.front()))
+  if (state_buffer.size() && prediction_correct(player_character_id, server_state, state_buffer.front()))
   {
     predicted_state = state_buffer.back();
     state_buffer.pop_front();
@@ -498,7 +500,7 @@ void Warg_State::predict_state()
   {
     Input &input = input_buffer[i];
 
-    Character *player_character = get_character(&predicted_state, pc);
+    Character *player_character = get_character(&predicted_state, player_character_id);
     Character_Physics &physics = player_character->physics;
     vec3 radius = player_character->radius;
     float32 movement_speed = player_character->effective_stats.speed;
@@ -937,22 +939,10 @@ void Warg_State::add_character_mesh(UID character_id)
 
 void State_Message::handle(Warg_State &state)
 {
-  // set_message("State_Message::handle()");
-  state.pc = pc;
-  state.server_state.character_count = character_count;
-  state.server_state.spell_object_count = spell_object_count;
-  for (size_t i = 0; i < character_count; i++)
-    state.server_state.characters[i] = characters[i];
-  for (size_t i = 0; i < spell_object_count; i++)
-    state.server_state.spell_objects[i] = spell_objects[i];
-  // set_message(s("overwriting state.server_state.tick = ", state.server_state.tick, " with: ", tick), "", 1.0f);
-  state.server_state.tick = tick;
-  // set_message(
-  //    s("overwriting state.server_state.input_number = ", state.server_state.input_number, " with: ", input_number),
-  //    "", 1.0f);
-  state.server_state.input_number = input_number;
+  state.player_character_id = pc;
+  game_state_copy(&state.server_state, &game_state);
 
-  state.input_buffer.pop_older_than(input_number);
+  state.input_buffer.pop_older_than(state.server_state.input_number);
 }
 
 bool Latency_Tracker::should_send_ping()
@@ -997,7 +987,7 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
 
 void Warg_State::update_cast_bar()
 {
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   if (!player_character)
     return;
 
@@ -1008,19 +998,20 @@ void Warg_State::update_cast_bar()
 
   ImVec2 size = ImVec2(200, 32);
   ImVec2 position = ImVec2(resolution.x / 2 - size.x / 2, CONFIG.resolution.y * 0.7f);
-  float32 progress = player_character->cast_progress / player_character->casting_spell->formula->cast_time;
+  Spell_Formula *casting_spell_formula = spell_db.get_spell(get_casting_spell_formula_index(player_character));
+  float32 progress = player_character->cast_progress / casting_spell_formula->cast_time;
 
   create_cast_bar("player_cast_bar", progress, position, size);
 }
 
 void Warg_State::update_unit_frames()
 {
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   if (!player_character)
     return;
 
   auto make_unit_frame = [&](const char *name, Character *character, ImVec2 size, ImVec2 position) {
-    const char *character_name = character->name.c_str();
+    const char *character_name = character->name;
 
     Layout_Grid grid(vec2(size.x, size.y), vec2(2), vec2(1), 1, 4);
 
@@ -1056,12 +1047,10 @@ void Warg_State::update_unit_frames()
     ImGui::PopStyleVar(3);
   };
 
-  auto make_target_buffs = [&](std::vector<Buff> *buffs, vec2 position, vec2 size, bool debuffs) {
-    uint32 num_buffs = buffs->size();
+  auto make_target_buffs = [&](Buff *buffs, uint8 buff_count, vec2 position, vec2 size, bool debuffs) {
+    Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(buff_count, 1), vec2(1, 1), 1);
 
-    Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(num_buffs, 1), vec2(1, 1), 1);
-
-    for (size_t i = 0; i < num_buffs; i++)
+    for (size_t i = 0; i < buff_count; i++)
     {
       Layout_Grid inner_grid(outer_grid.get_section_size(1, 1), vec2(2), vec2(0), 1, 1);
 
@@ -1077,7 +1066,8 @@ void Warg_State::update_unit_frames()
               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
               ImGuiWindowFlags_NoFocusOnAppearing);
 
-      ImTextureID icon = (ImTextureID)(*buffs)[i].def.icon.get_handle();
+      BuffDef *buff_formula = spell_db.get_buff(buffs[i].formula_index);
+      ImTextureID icon = (ImTextureID)buff_formula->icon.get_handle();
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
       ImGui::Image(icon, v(inner_grid.get_section_size(1, 1)));
 
@@ -1090,23 +1080,23 @@ void Warg_State::update_unit_frames()
 
   make_unit_frame("player_unit_frame", player_character, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
 
-  // if (!game_state.characters.count(target_id))
-  //  return;
-  // Character *target = &game_state.characters[target_id]; // sponge
-  Character *target = player_character;
+  Character *target = get_character(&game_state, target_id);
+  if (!target)
+    return;
 
   make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
-  make_target_buffs(&target->buffs, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
-  make_target_buffs(&target->debuffs, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
+  make_target_buffs(target->buffs, target->buff_count, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
+  make_target_buffs(target->debuffs, target->debuff_count, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
   if (!target->casting)
     return;
-  float32 cast_progress = target->cast_progress / target->casting_spell->formula->cast_time;
+  Spell_Formula *casting_spell_formula = spell_db.get_spell(get_casting_spell_formula_index(target));
+  float32 cast_progress = target->cast_progress / casting_spell_formula->cast_time;
   create_cast_bar("target_cast_bar", cast_progress, v(grid.get_position(1, 5)), v(grid.get_section_size(1, 1)));
 }
 
 void Warg_State::update_icons()
 {
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   ASSERT(player_character);
 
   static Framebuffer framebuffer = Framebuffer();
@@ -1124,16 +1114,17 @@ void Warg_State::update_icons()
     ASSERT(interface_state.action_bar_textures.size() == 0);
     ASSERT(sources.size() == 0);
 
-    num_spells = sdb.spells.size();
+    num_spells = player_character->spell_set.spell_count;
     interface_state.action_bar_textures.resize(num_spells);
     sources.resize(num_spells);
     framebuffer.color_attachments.resize(num_spells);
 
     for (size_t i = 0; i < num_spells; i++)
     {
+      Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = &sdb.spells[i].icon;
+      sources[i] = &formula->icon;
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
     }
     configured = true;
@@ -1146,20 +1137,20 @@ void Warg_State::update_icons()
   shader.set_uniform("count", (int)sources.size());
   for (size_t i = 0; i < num_spells; i++)
   {
-    std::string spell_name = sdb.spells[i].name;
-    Spell *spell = &player_character->spellbook[spell_name];
+    Spell_Status *spell_status = &player_character->spell_set.spell_statuses[i];
+    Spell_Formula *spell_formula = spell_db.get_spell(spell_status->formula_index);
 
     float32 cooldown_percent = 0.f;
     float32 cooldown_remaining = 0.f;
 
-    float32 cooldown = sdb.spells[i].cooldown;
+    float32 cooldown = spell_formula->cooldown;
     if (cooldown > 0.f)
     {
-      cooldown_remaining = spell->cooldown_remaining;
+      cooldown_remaining = spell_status->cooldown_remaining;
       cooldown_percent = cooldown_remaining / cooldown;
     }
-    if (spell->formula->on_global_cooldown && cooldown_remaining < player_character->gcd)
-      cooldown_percent = player_character->gcd / player_character->effective_stats.gcd;
+    if (spell_formula->on_global_cooldown && cooldown_remaining < player_character->global_cooldown)
+      cooldown_percent = player_character->global_cooldown / player_character->effective_stats.global_cooldown;
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
     set_message(s("progress", i, ":"), s(cooldown_percent), 1.0f);
   }
@@ -1196,7 +1187,7 @@ void Warg_State::update_action_bar()
 
 void Warg_State::update_buff_indicators()
 {
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   ASSERT(player_character);
 
   auto duration_string = [](float32 seconds) {
@@ -1246,28 +1237,30 @@ void Warg_State::update_buff_indicators()
   size_t max_columns = 18;
   Layout_Grid grid(vec2(800, 300), vec2(10), vec2(5), max_columns, 3);
 
-  for (size_t i = 0; i < player_character->buffs.size() && i < max_columns; i++)
+  for (size_t i = 0; i < player_character->buff_count && i < max_columns; i++)
   {
     Buff *buff = &player_character->buffs[i];
+    BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
 
     float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
     create_indicator(vec2(position_x, grid.get_position(i, 0).y), grid.get_section_size(1, 1),
-        (ImTextureID)buff->def.icon.get_handle(), buff->duration, false, i);
+        (ImTextureID)buff_formula->icon.get_handle(), buff->duration, false, i);
   }
 
-  for (size_t i = 0; i < player_character->debuffs.size() && i < max_columns; i++)
+  for (size_t i = 0; i < player_character->debuff_count && i < max_columns; i++)
   {
     Buff *debuff = &player_character->debuffs[i];
+    BuffDef *debuff_formula = spell_db.get_buff(debuff->formula_index);
 
     float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
     create_indicator(vec2(position_x, grid.get_position(i, 2).y), grid.get_section_size(1, 1),
-        (ImTextureID)debuff->def.icon.get_handle(), debuff->duration, true, i);
+        (ImTextureID)debuff_formula->icon.get_handle(), debuff->duration, true, i);
   }
 }
 
 void Warg_State::update_game_interface()
 {
-  Character *player_character = get_character(&game_state, pc);
+  Character *player_character = get_character(&game_state, player_character_id);
   if (!player_character)
     return;
 

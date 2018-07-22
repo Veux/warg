@@ -26,13 +26,13 @@ struct Warg_Server
 
   UID add_char(int team, const char *name);
   UID add_dummy();
-  Cast_Error cast_viable(UID caster_, UID target_, Spell *spell);
-  void try_cast_spell(Character &caster, UID target, const char *spell);
-  void cast_spell(UID caster, UID target, Spell *spell);
-  void begin_cast(UID caster_, UID target_, Spell *spell);
+  Cast_Error cast_viable(UID caster_, UID target_, Spell_Status *spell);
+  void try_cast_spell(Character &caster, UID target_id, Spell_Index spell_formula_index);
+  void cast_spell(UID caster, UID target, Spell_Status *spell);
+  void begin_cast(UID caster_, UID target_, Spell_Status *spell);
   void interrupt_cast(UID caster_);
   void update_cast(UID caster_, float32 dt);
-  void release_spell(UID caster_, UID target_, Spell *spell);
+  void release_spell(UID caster_, UID target_, Spell_Status *spell);
   void invoke_spell_effect(Spell_Effect &effect);
   void invoke_spell_effect_aoe(Spell_Effect &effect);
   void invoke_spell_effect_apply_buff(Spell_Effect &effect);
@@ -42,10 +42,11 @@ struct Warg_Server
   void invoke_spell_effect_interrupt(Spell_Effect &effect);
   void invoke_spell_effect_object_launch(Spell_Effect &effect);
   void invoke_spell_effect_blink(Spell_Effect &effect);
-  void update_buffs(UID character, float32 dt);
+  void update_buffs(UID character);
   void update_target(UID ch);
   bool update_spell_object(Spell_Object *so);
   Character *get_character(UID id);
+  void apply_character_modifiers(Character *character);
 
   std::map<UID, std::shared_ptr<Peer>> peers;
   float64 time = 0;
@@ -53,8 +54,7 @@ struct Warg_Server
 
   Map map;
   Flat_Scene_Graph scene;
-  Spell_Database sdb;
+  Spell_Database spell_db;
   Game_State game_state;
-  UID dummy_id = 0;
   vector<Triangle> collider_cache;
 };

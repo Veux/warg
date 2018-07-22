@@ -52,21 +52,21 @@ void Character::update_mana(float32 dt)
 
 void Character::update_spell_cooldowns(float32 dt)
 {
-  for (auto &spell_ : spellbook)
+  for (size_t i = 0; i < spell_set.spell_count; i++)
   {
-    auto &spell = spell_.second;
-    if (spell.cooldown_remaining > 0)
-      spell.cooldown_remaining -= dt;
-    if (spell.cooldown_remaining < 0)
-      spell.cooldown_remaining = 0;
+    Spell_Status *spell_status = &spell_set.spell_statuses[i];
+    if (spell_status->cooldown_remaining > 0)
+      spell_status->cooldown_remaining -= dt;
+    if (spell_status->cooldown_remaining < 0)
+      spell_status->cooldown_remaining = 0;
   }
 }
 
 void Character::update_global_cooldown(float32 dt)
 {
-  gcd -= dt * effective_stats.cast_speed;
-  if (gcd < 0)
-    gcd = 0;
+  global_cooldown -= dt * effective_stats.cast_speed;
+  if (global_cooldown < 0)
+    global_cooldown = 0;
 }
 
 void Character::apply_modifier(CharMod &modifier)
@@ -86,25 +86,6 @@ void Character::apply_modifier(CharMod &modifier)
       silenced = true;
     default:
       break;
-  }
-}
-
-void Character::apply_modifiers()
-{
-  effective_stats = base_stats;
-  silenced = false;
-
-  for (size_t i = 0; i < buffs.size(); i++)
-  {
-    Buff *buff = &buffs[i];
-    for (size_t j = 0; j < buff->def.char_mods.size(); j++)
-      apply_modifier(buff->def.char_mods[j]);
-  }
-  for (size_t i = 0; i < debuffs.size(); i++)
-  {
-    Buff *debuff = &debuffs[i];
-    for (size_t j = 0; j < debuff->def.char_mods.size(); j++)
-      apply_modifier(debuff->def.char_mods[j]);
   }
 }
 
@@ -379,4 +360,24 @@ void Input_Buffer::pop_older_than(uint32 input_number)
     start += delta;
   else
     start = delta - (capacity - start);
+}
+
+void character_copy(Character *dst, Character *src)
+{
+  *dst = *src;
+  strncpy(dst->name, src->name, MAX_CHARACTER_NAME_LENGTH);
+}
+
+void game_state_copy(Game_State *dst, Game_State *src)
+{
+  *dst = *src;
+  for (size_t i = 0; i < src->character_count; i++)
+    character_copy(dst->characters + i, src->characters + i);
+  for (size_t i = 0; i < src->spell_object_count; i++)
+    dst->spell_objects[i] = src->spell_objects[i];
+}
+
+Spell_Index get_casting_spell_formula_index(Character *character)
+{
+  return character->spell_set.spell_statuses[character->casting_spell_status_index].formula_index;
 }

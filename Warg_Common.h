@@ -5,9 +5,9 @@
 #include <string>
 #include <vector>
 
-struct CharStats
+struct Character_Stats
 {
-  float32 gcd;
+  float32 global_cooldown;
   float32 speed;
   float32 cast_speed;
   float32 cast_damage;
@@ -67,45 +67,57 @@ struct Character_Physics
   Input command;
 };
 
+struct Spell_Status
+{
+  size_t index;
+  Spell_Index formula_index;
+  float32 cooldown_remaining = 0;
+};
+
+struct Spell_Set
+{
+  Spell_Status spell_statuses[MAX_SPELLS];
+  uint8 spell_count = 0;
+};
+
 struct Character
 {
   void update_hp(float32 dt);
   void update_mana(float32 dt);
   void update_spell_cooldowns(float32 dt);
   void update_global_cooldown(float32 dt);
-  void apply_modifiers();
+  void apply_modifier(CharMod &modifier);
 
   UID id;
 
   Character_Physics physics;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
 
-  std::string name;
+  char name[MAX_CHARACTER_NAME_LENGTH + 1] = {};
   int team;
-  UID target = 0;
+  UID target_id = 0;
 
-  CharStats base_stats;
-  CharStats effective_stats;
+  Character_Stats base_stats;
+  Character_Stats effective_stats;
 
-  std::map<std::string, Spell> spellbook;
-
-  std::vector<Buff> buffs, debuffs;
+  Buff buffs[MAX_BUFFS];
+  Buff debuffs[MAX_DEBUFFS];
+  uint8 buff_count = 0;
+  uint8 debuff_count = 0;
 
   int32 hp, hp_max;
   float32 mana, mana_max;
   bool alive = true;
 
-  float64 atk_cd = 0;
-  float64 gcd = 0;
+  float64 attack_cooldown = 0;
+  float64 global_cooldown = 0;
 
-  bool silenced = false;
+  Spell_Set spell_set;
   bool casting = false;
-  Spell *casting_spell;
+  size_t casting_spell_status_index;
   float32 cast_progress = 0;
   UID cast_target = 0;
-
-private:
-  void apply_modifier(CharMod &modifier);
+  bool silenced = false;
 };
 
 struct Map
@@ -133,3 +145,6 @@ std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene);
 void move_char(Character &character, Input command, std::vector<Triangle> colliders);
 void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
     const std::vector<Triangle> &colliders);
+void character_copy(Character *dst, Character *src);
+void game_state_copy(Game_State *dst, Game_State *src);
+Spell_Index get_casting_spell_formula_index(Character *character);

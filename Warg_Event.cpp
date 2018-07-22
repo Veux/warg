@@ -92,9 +92,9 @@ void Input_Message::serialize(Buffer &b)
 
 void Cast_Message::serialize(Buffer &b)
 {
-  serialize_(b, Warg_Event_Type::Cast);
-  serialize_(b, target);
-  serialize_(b, spell);
+  //serialize_(b, Warg_Event_Type::Cast);
+  //serialize_(b, target);
+  //serialize_(b, spell);
 }
 
 void State_Message::serialize(Buffer &b)
@@ -174,8 +174,8 @@ State_Message::State_Message(Buffer &b)
 
 Cast_Message::Cast_Message(Buffer &b)
 {
-  target = deserialize_uid(b);
-  spell = deserialize_string(b);
+  //target = deserialize_uid(b);
+  //spell = deserialize_string(b);
 }
 
 std::unique_ptr<Message> deserialize_message(Buffer &b)
@@ -219,24 +219,16 @@ Input_Message::Input_Message(uint32_t i_, Move_Status move_status_, quat orienta
   target_id = target_id_;
 }
 
-Cast_Message::Cast_Message(UID target_, const char *spell_)
+Cast_Message::Cast_Message(UID target_id, Spell_Index spell_index)
 {
-  target = target_;
-  spell = spell_;
+  _target_id = target_id;
+  _spell_index = spell_index;
 }
 
-State_Message::State_Message(UID pc_, Character *chars_, Spell_Object *spell_objects_, uint8 character_count_,
-    uint8 spell_object_count_, uint32 tick_, uint32 input_number_)
+State_Message::State_Message(UID pc_, Game_State *game_state_)
 {
   reliable = false;
 
-  tick = tick_;
-  input_number = input_number_;
   pc = pc_;
-  character_count = character_count_;
-  spell_object_count = spell_object_count_;
-  for (size_t i = 0; i < character_count; i++)
-    characters[i] = chars_[i];
-  for (size_t i = 0; i < spell_object_count; i++)
-    spell_objects[i] = spell_objects_[i];
+  game_state_copy(&game_state, game_state_);
 }
