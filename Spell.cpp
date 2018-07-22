@@ -114,7 +114,7 @@ Spell_Database::Spell_Database()
 
   Spell_Object_Formula *fb_object = add_spell_object();
   fb_object->name = "Frostbolt";
-  fb_object->speed = 500;
+  fb_object->speed = 30;
   fb_object->effects.push_back(fb_debuff_appl->index);
   fb_object->effects.push_back(fb_damage->index);
 
