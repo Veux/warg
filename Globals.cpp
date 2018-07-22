@@ -314,12 +314,18 @@ struct Message
   std::string identifier;
   std::string message;
   float64 time_of_expiry;
+  std::string thread_id;
 };
 static std::vector<Message> messages;
 static std::string message_log = "";
 std::string get_message_log() { return message_log; }
+std::mutex SET_MESSAGE_MUTEX;
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
+  std::lock_guard<std::mutex> l(SET_MESSAGE_MUTEX);
+  std::thread::id thread_id = std::this_thread::get_id();
+  std::stringstream ss;
+  ss << std::this_thread::get_id();
   const float64 time = get_real_time();
   bool found = false;
   if (identifier != "")
@@ -338,13 +344,16 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   if (!found)
   {
     Message m = {identifier, message, time + msg_duration};
+    Message m = {identifier, message, time + msg_duration, ss.str()};
     messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
   message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + " File: " + file + ": " +
                      std::to_string(line) + "\n\n");
+  message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, " File: ", file, ": ", , line, "\n\n"));
 #else
   message_log.append("Time: " + s(time) + " Event: " + identifier + " " + message + "\n");
+  message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, "\n"));
 #endif
 }
 
@@ -361,6 +370,7 @@ std::string get_messages()
       continue;
     }
     result = result + it->identifier + it->message + std::string("\n");
+    result = result + s(it->thread_id, ": ", it->identifier, " ", it->message, "\n");
     ++it;
   }
   return result;
