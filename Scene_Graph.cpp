@@ -404,6 +404,7 @@ void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
     }
   }
 
+  set_message(s("Setting parent:child:", i, "to parent:", desired_parent), "", 30.f);
   node->parent = desired_parent;
 }
 
