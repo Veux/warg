@@ -991,7 +991,7 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
   ImGui::ProgressBar(progress, v(grid.get_section_size(1, 1)), "");
 
   ImGui::End();
-  ImGui::PopStyleVar(2);
+  ImGui::PopStyleVar(3);
 }
 
 void Warg_State::update_cast_bar()
