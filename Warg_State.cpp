@@ -501,7 +501,7 @@ void Warg_State::predict_state()
     Character *player_character = get_character(&predicted_state, pc);
     Character_Physics &physics = player_character->physics;
     vec3 radius = player_character->radius;
-    float32 movement_speed = player_character->e_stats.speed;
+    float32 movement_speed = player_character->effective_stats.speed;
 
     move_char(*player_character, input, collider_cache);
     if (vec3_has_nan(physics.position))
@@ -616,7 +616,7 @@ void Warg_State::animate_character(UID character_id)
 
   auto linear_oscillate = [](float32 m, float32 x, float32 b) { return 4 * abs(fract(m * x + b) - 0.5) - 1; };
 
-  float32 cadence = character->e_stats.speed / STEP_SIZE;
+  float32 cadence = character->effective_stats.speed / STEP_SIZE;
 
   float32 m = cadence / 2;
   float32 x = *animation_time;
@@ -1159,7 +1159,7 @@ void Warg_State::update_icons()
       cooldown_percent = cooldown_remaining / cooldown;
     }
     if (spell->formula->on_global_cooldown && cooldown_remaining < player_character->gcd)
-      cooldown_percent = player_character->gcd / player_character->e_stats.gcd;
+      cooldown_percent = player_character->gcd / player_character->effective_stats.gcd;
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
     set_message(s("progress", i, ":"), s(cooldown_percent), 1.0f);
   }

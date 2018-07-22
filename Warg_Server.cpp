@@ -211,7 +211,7 @@ void Warg_Server::begin_cast(UID caster_id, UID target_id, Spell *spell)
   caster->cast_progress = 0;
   caster->cast_target = target_id;
   if (spell->formula->on_global_cooldown)
-    caster->gcd = caster->e_stats.gcd;
+    caster->gcd = caster->effective_stats.gcd;
 }
 
 void Warg_Server::interrupt_cast(UID ci)
@@ -245,7 +245,7 @@ void Warg_Server::update_cast(UID caster_id, float32 dt)
   ASSERT(caster->casting_spell);
   ASSERT(caster->casting_spell->formula);
 
-  caster->cast_progress += caster->e_stats.cast_speed * dt;
+  caster->cast_progress += caster->effective_stats.cast_speed * dt;
   if (caster->cast_progress >= caster->casting_spell->formula->cast_time)
   {
     set_message(s("releasing cast on tick ", tick), "", 20);
@@ -322,7 +322,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   }
 
   if (!spell->formula->cast_time && spell->formula->on_global_cooldown)
-    caster->gcd = caster->e_stats.gcd;
+    caster->gcd = caster->effective_stats.gcd;
   spell->cooldown_remaining = spell->formula->cooldown;
 }
 
@@ -429,7 +429,7 @@ void Warg_Server::invoke_spell_effect_damage(Spell_Effect &effect)
   int overkill = 0;
 
   if (!d->pierce_mod)
-    effective = (int)round(effective * target->e_stats.damage_mod);
+    effective = (int)round(effective * target->effective_stats.damage_mod);
 
   target->hp -= effective;
 
@@ -588,10 +588,10 @@ UID Warg_Server::add_dummy()
   s.atk_dmg = 0;
   s.atk_dmg = 1;
 
-  c.b_stats = s;
-  c.e_stats = s;
 
   game_state.characters[game_state.character_count++] = c;
+  c->base_stats = s;
+  c->effective_stats = s;
 
   return id;
 }
@@ -624,8 +624,8 @@ UID Warg_Server::add_char(int team, const char *name)
   s.atk_dmg = 5;
   s.atk_speed = 2;
 
-  c.b_stats = s;
-  c.e_stats = s;
+  c->base_stats = s;
+  c->effective_stats = s;
 
   for (size_t i = 0; i < sdb.spells.size(); i++)
   {

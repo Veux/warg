@@ -37,14 +37,14 @@ Map make_blades_edge()
 
 void Character::update_hp(float32 dt)
 {
-  hp += (int)round(e_stats.hp_regen * dt); // todo: fix dis shit
+  hp += (int)round(effective_stats.hp_regen * dt); // todo: fix dis shit
   if (hp > hp_max)
     hp = hp_max;
 }
 
 void Character::update_mana(float32 dt)
 {
-  mana += e_stats.mana_regen * dt;
+  mana += effective_stats.mana_regen * dt;
 
   if (mana > mana_max)
     mana = mana_max;
@@ -64,7 +64,7 @@ void Character::update_spell_cooldowns(float32 dt)
 
 void Character::update_global_cooldown(float32 dt)
 {
-  gcd -= dt * e_stats.cast_speed;
+  gcd -= dt * effective_stats.cast_speed;
   if (gcd < 0)
     gcd = 0;
 }
@@ -74,13 +74,13 @@ void Character::apply_modifier(CharMod &modifier)
   switch (modifier.type)
   {
     case Character_Modifier_Type::DamageTaken:
-      e_stats.damage_mod *= modifier.damage_taken.factor;
+      effective_stats.damage_mod *= modifier.damage_taken.factor;
       break;
     case Character_Modifier_Type::Speed:
-      e_stats.speed *= modifier.speed.factor;
+      effective_stats.speed *= modifier.speed.factor;
       break;
     case Character_Modifier_Type::CastSpeed:
-      e_stats.cast_speed *= modifier.cast_speed.factor;
+      effective_stats.cast_speed *= modifier.cast_speed.factor;
       break;
     case Character_Modifier_Type::Silence:
       silenced = true;
@@ -91,7 +91,7 @@ void Character::apply_modifier(CharMod &modifier)
 
 void Character::apply_modifiers()
 {
-  e_stats = b_stats;
+  effective_stats = base_stats;
   silenced = false;
 
   for (size_t i = 0; i < buffs.size(); i++)
@@ -137,7 +137,7 @@ void move_char(Character &character, Input command, std::vector<Triangle> collid
   if (move_status & ~Move_Status::Jumping)
   {
     v = normalize(v);
-    v *= character.e_stats.speed;
+    v *= character.effective_stats.speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {

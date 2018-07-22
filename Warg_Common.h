@@ -84,7 +84,8 @@ struct Character
   int team;
   UID target = 0;
 
-  CharStats b_stats, e_stats;
+  CharStats base_stats;
+  CharStats effective_stats;
 
   std::map<std::string, Spell> spellbook;
 
