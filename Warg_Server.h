@@ -53,7 +53,7 @@ struct Warg_Server
 
   Map map;
   Flat_Scene_Graph scene;
-  unique_ptr<Spell_Database> sdb;
+  Spell_Database sdb;
   Game_State game_state;
   UID dummy_id = 0;
   vector<Triangle> collider_cache;

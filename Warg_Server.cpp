@@ -117,7 +117,7 @@ bool Warg_Server::update_spell_object(Spell_Object *so)
     for (auto &e : so->formula.effects)
     {
       Spell_Effect i;
-      i.formula = sdb->effects[e];
+      i.formula = sdb.effects[e];
       i.caster = so->caster;
       i.position = so->pos;
       i.target = so->target;
@@ -313,7 +313,7 @@ void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
   for (auto &e : spell->formula->effects)
   {
     Spell_Effect i;
-    i.formula = sdb->effects[e];
+    i.formula = sdb.effects[e];
     i.caster = caster_;
     i.position = caster->physics.position;
     i.target = target_;
@@ -377,7 +377,7 @@ void Warg_Server::invoke_spell_effect_aoe(Spell_Effect &effect)
     if (in_range && (at_ally || at_hostile))
     {
       Spell_Effect i;
-      i.formula = sdb->effects[effect.formula.area.effect_formula];
+      i.formula = sdb.effects[effect.formula.area.effect_formula];
       i.caster = effect.caster;
       i.position = {0, 0, 0};
       i.target = ch;
@@ -396,7 +396,7 @@ void Warg_Server::invoke_spell_effect_apply_buff(Spell_Effect &effect)
   bool is_buff = effect.formula.type == Spell_Effect_Type::Apply_Buff;
 
   Buff buff;
-  buff.def = sdb->buffs[is_buff ? effect.formula.apply_buff.buff_formula : effect.formula.apply_debuff.debuff_formula];
+  buff.def = sdb.buffs[is_buff ? effect.formula.apply_buff.buff_formula : effect.formula.apply_debuff.debuff_formula];
   buff.duration = buff.def.duration;
   buff.time_since_last_tick = 0.f;
 
@@ -487,7 +487,7 @@ void Warg_Server::invoke_spell_effect_interrupt(Spell_Effect &effect)
 void Warg_Server::invoke_spell_effect_object_launch(Spell_Effect &effect)
 {
   Spell_Object obji;
-  obji.formula = sdb->objects[effect.formula.object_launch.object_formula];
+  obji.formula = sdb.objects[effect.formula.object_launch.object_formula];
   obji.caster = effect.caster;
   obji.target = effect.target;
   Character *caster = &game_state.characters[effect.caster];
@@ -527,7 +527,7 @@ void Warg_Server::update_buffs(UID character, float32 dt)
         for (auto &e : b->def.tick_effects)
         {
           Spell_Effect i;
-          i.formula = sdb->effects[e];
+          i.formula = sdb.effects[e];
           i.caster = 0;
           i.target = character;
           i.position = {0, 0, 0};
@@ -627,10 +627,10 @@ UID Warg_Server::add_char(int team, const char *name)
   c.b_stats = s;
   c.e_stats = s;
 
-  for (size_t i = 0; i < sdb->spells.size(); i++)
+  for (size_t i = 0; i < sdb.spells.size(); i++)
   {
     Spell s;
-    s.formula = &sdb->spells[i];
+    s.formula = &sdb.spells[i];
     s.cooldown_remaining = 0;
     c.spellbook[s.formula->name] = s;
   }

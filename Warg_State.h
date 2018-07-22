@@ -82,7 +82,7 @@ struct Warg_State : protected State
   Input_Buffer input_buffer;
   uint32 input_number = 0;
 
-  unique_ptr<Spell_Database> sdb;
+  Spell_Database sdb;
 
   std::map<UID, Node_Index> character_nodes;
   std::map<UID, Node_Index> spell_object_nodes;

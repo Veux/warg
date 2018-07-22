@@ -213,4 +213,4 @@ struct Spell_Database
   std::vector<CharMod> char_mods;
 };
 
-std::unique_ptr<Spell_Database> make_spell_db();
+Spell_Database make_spell_db();

@@ -50,9 +50,9 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
       if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam && get_character(&game_state, pc))
       {
         size_t key = _e.key.keysym.sym - SDLK_1;
-        if (key < sdb->spells.size())
+        if (key < sdb.spells.size())
         {
-          session->push(std::make_unique<Cast_Message>(target_id, sdb->spells[key].name.c_str()));
+          session->push(std::make_unique<Cast_Message>(target_id, sdb.spells[key].name.c_str()));
         }
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&game_state, pc))
@@ -1123,7 +1123,7 @@ void Warg_State::update_icons()
     ASSERT(interface_state.action_bar_textures.size() == 0);
     ASSERT(sources.size() == 0);
 
-    num_spells = sdb->spells.size();
+    num_spells = sdb.spells.size();
     interface_state.action_bar_textures.resize(num_spells);
     sources.resize(num_spells);
     framebuffer.color_attachments.resize(num_spells);
@@ -1132,7 +1132,7 @@ void Warg_State::update_icons()
     {
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = &sdb->spells[i].icon;
+      sources[i] = &sdb.spells[i].icon;
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
     }
     configured = true;
@@ -1145,13 +1145,13 @@ void Warg_State::update_icons()
   shader.set_uniform("count", (int)sources.size());
   for (size_t i = 0; i < num_spells; i++)
   {
-    std::string spell_name = sdb->spells[i].name;
+    std::string spell_name = sdb.spells[i].name;
     Spell *spell = &player_character->spellbook[spell_name];
 
     float32 cooldown_percent = 0.f;
     float32 cooldown_remaining = 0.f;
 
-    float32 cooldown = sdb->spells[i].cooldown;
+    float32 cooldown = sdb.spells[i].cooldown;
     if (cooldown > 0.f)
     {
       cooldown_remaining = spell->cooldown_remaining;
