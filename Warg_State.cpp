@@ -47,7 +47,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
       }
-      if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam && game_state.characters.count(pc))
+      if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam && get_character(&game_state, pc))
       {
         size_t key = _e.key.keysym.sym - SDLK_1;
         if (key < sdb->spells.size())
@@ -55,12 +55,13 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
           session->push(std::make_unique<Cast_Message>(target_id, sdb->spells[key].name.c_str()));
         }
       }
-      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && game_state.characters.count(pc))
+      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&game_state, pc))
       {
-        for (auto &character : game_state.characters)
+        for (size_t i = 0; i < game_state.character_count; i++)
         {
-          if (character.first != pc && character.second.alive)
-            target_id = character.first;
+          Character *character = &game_state.characters[i];
+          if (character->id != pc && character->alive)
+            target_id = character->id;
         }
       }
     }
@@ -108,7 +109,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!pc || !game_state.characters.count(pc))
+  if (!pc || !get_character(&game_state, pc))
     return;
   if (free_cam)
   {
@@ -243,8 +244,8 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     // rotate the camera vector around perp
     character_to_camera = normalize(ry * character_to_camera);
 
-    ASSERT(pc && game_state.characters.count(pc));
-    Character *player_character = &game_state.characters[pc];
+    ASSERT(pc);
+    Character *player_character = get_character(&game_state, pc);
     ASSERT(player_character);
 
     quat orientation;
@@ -295,10 +296,9 @@ void Warg_State::process_messages()
 void Warg_State::set_camera_geometry()
 {
   // set_message(s("set_camera_geometry(), time:", current_time), "", 1.0f);
-  if (!game_state.characters.count(pc))
+  Character *player_character = get_character(&game_state, pc);
+  if (!player_character)
     return;
-  Character *player_character = &game_state.characters[pc];
-  ASSERT(player_character);
 
   float effective_zoom = cam.zoom;
   for (Triangle &surface : collider_cache)
@@ -319,7 +319,7 @@ void Warg_State::set_camera_geometry()
 void Warg_State::update_hp_bar(UID character_id)
 {
   // set_message("update_hp_bar()");
-  Character *character = &game_state.characters[character_id];
+  Character *character = get_character(&game_state, character_id);
   Node_Index character_node = character_nodes[character_id];
 
   Node_Index hp_bar = scene.find_child_by_name(character_node, "hp_bar");
@@ -388,9 +388,9 @@ void Warg_State::update_hp_bar(UID character_id)
 
 void Warg_State::update_character_nodes()
 {
-  for (auto &c : game_state.characters)
+  for (size_t i = 0; i < game_state.character_count; i++)
   {
-    Character *character = &c.second;
+    Character *character = &game_state.characters[i];
 
     Node_Index character_node = character_nodes[character->id];
 
@@ -400,18 +400,17 @@ void Warg_State::update_character_nodes()
 
     scene.nodes[character_node].scale = character->radius * vec3(2);
 
-    update_hp_bar(c.first);
+    update_hp_bar(character->id);
 
-    animate_character(c.first);
+    animate_character(character->id);
   }
 }
 
 void Warg_State::update_prediction_ghost()
 {
-  if (!game_state.characters.count(pc))
+  Character *player_character = get_character(&game_state, pc);
+  if (!player_character)
     return;
-  Character *player_character = &server_state.characters[pc];
-  ASSERT(player_character);
 
   Character_Physics *physics = &player_character->physics;
 
@@ -450,19 +449,19 @@ bool prediction_correct(UID player_character_id, Game_State &server_state, Game_
 {
   bool same_input = server_state.input_number == predicted_state.input_number;
 
-  if (server_state.characters.count(player_character_id) == 0 &&
-      predicted_state.characters.count(player_character_id) == 0)
+  Character *server_character = get_character(&server_state, player_character_id);
+  Character *predicted_character = get_character(&predicted_state, player_character_id);
+
+  if (!server_character && !predicted_character)
     return same_input;
 
-  if (server_state.characters.count(player_character_id) != predicted_state.characters.count(player_character_id))
+  if (!server_character != !predicted_character)
     return false;
 
-  ASSERT(server_state.characters.count(player_character_id));
-  ASSERT(predicted_state.characters.count(player_character_id));
+  ASSERT(server_character);
+  ASSERT(predicted_character);
 
-  Character_Physics *server_physics = &server_state.characters[player_character_id].physics;
-  Character_Physics *predicted_physics = &predicted_state.characters[player_character_id].physics;
-  bool same_player_physics = *server_physics == *predicted_physics;
+  bool same_player_physics = server_character->physics == predicted_character->physics;
 
   return same_input && same_player_physics;
 }
@@ -471,7 +470,7 @@ void Warg_State::predict_state()
 {
   game_state = server_state;
 
-  if (server_state.characters.count(pc) == 0)
+  if (!get_character(&server_state, pc))
     return;
 
   if (input_buffer.size() == 0)
@@ -499,14 +498,14 @@ void Warg_State::predict_state()
   {
     Input &input = input_buffer[i];
 
-    Character &player_character = predicted_state.characters[pc];
-    Character_Physics &physics = player_character.physics;
-    vec3 radius = player_character.radius;
-    float32 movement_speed = player_character.e_stats.speed;
+    Character *player_character = get_character(&predicted_state, pc);
+    Character_Physics &physics = player_character->physics;
+    vec3 radius = player_character->radius;
+    float32 movement_speed = player_character->e_stats.speed;
 
-    move_char(player_character, input, collider_cache);
+    move_char(*player_character, input, collider_cache);
     if (vec3_has_nan(physics.position))
-      physics.position = map.spawn_pos[player_character.team];
+      physics.position = map.spawn_pos[player_character->team];
 
     predicted_state.input_number = input.number;
     state_buffer.push_back(predicted_state);
@@ -520,9 +519,9 @@ void Warg_State::predict_state()
 
 void Warg_State::update_meshes()
 {
-  for (auto &c : game_state.characters)
+  for (size_t i = 0; i < game_state.character_count; i++)
   {
-    Character *character = &c.second;
+    Character *character = &game_state.characters[i];
     if (!character_nodes.count(character->id))
     {
       add_character_mesh(character->id);
@@ -537,26 +536,29 @@ void Warg_State::update_spell_object_nodes()
   material.emissive = "color(1, 1, 1, 1)";
   material.emissive.mod = vec4(0.5f, 0.5f, 100.f, 1.f);
 
-  for (auto &spell_object : game_state.spell_objects)
+  for (size_t i = 0; i < game_state.spell_object_count; i++)
   {
-    UID spell_object_id = spell_object.first;
-    if (spell_object_nodes.count(spell_object_id) == 0)
+    Spell_Object *spell_object = &game_state.spell_objects[i];
+    if (spell_object_nodes.count(spell_object->id) == 0)
     {
-      spell_object_nodes[spell_object_id] = scene.add_mesh(cube, "spell_object_cube", &material);
+      spell_object_nodes[spell_object->id] = scene.add_mesh(cube, "spell_object_cube", &material);
       set_message(s("adding spell object node on tick ", game_state.tick), "", 20);
     }
-    Node_Index mesh = spell_object_nodes[spell_object_id];
+    Node_Index mesh = spell_object_nodes[spell_object->id];
     scene.nodes[mesh].scale = vec3(0.4f);
-    scene.nodes[mesh].position = spell_object.second.pos;
+    scene.nodes[mesh].position = spell_object->pos;
   }
 
   std::vector<UID> to_erase;
   for (auto &node : spell_object_nodes)
   {
     bool orphaned = true;
-    for (auto &spell_object : game_state.spell_objects)
-      if (node.first == spell_object.first)
+    for (size_t i = 0; i < game_state.spell_object_count; i++)
+    {
+      Spell_Object *spell_object = &game_state.spell_objects[i];
+      if (node.first == spell_object->id)
         orphaned = false;
+    }
     if (orphaned)
       to_erase.push_back(node.first);
   }
@@ -574,11 +576,10 @@ void Warg_State::animate_character(UID character_id)
   static std::map<UID, vec3> last_positions;
   static std::map<UID, bool> last_grounded;
 
-  ASSERT(game_state.characters.count(character_id));
-  Character *character = &game_state.characters[character_id];
+  Character *character = get_character(&game_state, character_id);
   ASSERT(character);
 
-  if (!game_state.characters[character_id].alive)
+  if (!character->alive)
     return;
 
   ASSERT(character_nodes.count(character_id));
@@ -661,25 +662,9 @@ void Warg_State::update()
 
   process_messages();
   update_stats_bar();
-
-  // set_message(s("overwriting game_state with server_state"), "", 1.0f);
-
-  quat orientation_before;
-  quat orientation_after;
-  if (game_state.characters.count(3))
-  {
-    orientation_before = game_state.characters[3].physics.orientation;
-  }
-  if (server_state.characters.count(3))
-  {
-    orientation_after = server_state.characters[3].physics.orientation;
-  }
-  // set_message("character3 orientation in game_state:", s(qtos(orientation_before)), 1.0f);
-  // set_message("character3 orientation in server_state:", s(qtos(orientation_after)), 1.0f);
-
   game_state = server_state;
-  if (!game_state.characters.count(target_id) ||
-      (game_state.characters.count(target_id) && !game_state.characters[target_id].alive))
+  Character *target = get_character(&game_state, target_id);
+  if (!target || !target->alive)
     target_id = 0;
   predict_state();
   set_camera_geometry();
@@ -953,8 +938,12 @@ void State_Message::handle(Warg_State &state)
 {
   // set_message("State_Message::handle()");
   state.pc = pc;
-  state.server_state.characters = characters;
-  state.server_state.spell_objects = spell_objects;
+  state.server_state.character_count = character_count;
+  state.server_state.spell_object_count = spell_object_count;
+  for (size_t i = 0; i < character_count; i++)
+    state.server_state.characters[i] = characters[i];
+  for (size_t i = 0; i < spell_object_count; i++)
+    state.server_state.spell_objects[i] = spell_objects[i];
   // set_message(s("overwriting state.server_state.tick = ", state.server_state.tick, " with: ", tick), "", 1.0f);
   state.server_state.tick = tick;
   // set_message(
@@ -1007,10 +996,9 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
 
 void Warg_State::update_cast_bar()
 {
-  if (!game_state.characters.count(pc))
+  Character *player_character = get_character(&game_state, pc);
+  if (!player_character)
     return;
-  Character *player_character = &game_state.characters[pc];
-  ASSERT(player_character);
 
   if (!player_character->casting)
     return;
@@ -1026,10 +1014,9 @@ void Warg_State::update_cast_bar()
 
 void Warg_State::update_unit_frames()
 {
-  if (!game_state.characters.count(pc))
+  Character *player_character = get_character(&game_state, pc);
+  if (!player_character)
     return;
-  Character *player_character = &game_state.characters[pc];
-  ASSERT(player_character);
 
   auto make_unit_frame = [&](const char *name, Character *character, ImVec2 size, ImVec2 position) {
     const char *character_name = character->name.c_str();
@@ -1118,7 +1105,8 @@ void Warg_State::update_unit_frames()
 
 void Warg_State::update_icons()
 {
-  ASSERT(game_state.characters.count(pc));
+  Character *player_character = get_character(&game_state, pc);
+  ASSERT(player_character);
 
   static Framebuffer framebuffer = Framebuffer();
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
@@ -1152,8 +1140,6 @@ void Warg_State::update_icons()
 
   framebuffer.init();
   framebuffer.bind();
-
-  Character *player_character = &game_state.characters[pc];
 
   shader.use();
   shader.set_uniform("count", (int)sources.size());
@@ -1209,9 +1195,7 @@ void Warg_State::update_action_bar()
 
 void Warg_State::update_buff_indicators()
 {
-  Character *player_character = nullptr;
-  if (game_state.characters.count(pc))
-    player_character = &game_state.characters[pc];
+  Character *player_character = get_character(&game_state, pc);
   ASSERT(player_character);
 
   auto duration_string = [](float32 seconds) {
@@ -1282,10 +1266,7 @@ void Warg_State::update_buff_indicators()
 
 void Warg_State::update_game_interface()
 {
-  Character *player_character = nullptr;
-  if (game_state.characters.count(pc))
-    player_character = &game_state.characters[pc];
-
+  Character *player_character = get_character(&game_state, pc);
   if (!player_character)
     return;
 
@@ -1295,4 +1276,16 @@ void Warg_State::update_game_interface()
   update_unit_frames();
   update_action_bar();
   update_buff_indicators();
+}
+
+Character *get_character(Game_State *game_state, UID id)
+{
+  for (size_t i = 0; i < game_state->character_count; i++)
+  {
+    Character *character = &game_state->characters[i];
+    if (character->id == id)
+      return character;
+  }
+
+  return nullptr;
 }

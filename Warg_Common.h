@@ -1,7 +1,6 @@
 #pragma once
 #include "Physics.h"
 #include "Spell.h"
-#include "Warg_Event.h"
 #include <map>
 #include <string>
 #include <vector>
@@ -17,6 +16,16 @@ struct CharStats
   float32 damage_mod;
   float32 atk_dmg;
   float32 atk_speed;
+};
+
+enum Move_Status
+{
+  None = 0,
+  Forwards = 1 << 0,
+  Left = 1 << 1,
+  Backwards = 1 << 2,
+  Right = 1 << 3,
+  Jumping = 1 << 4
 };
 
 struct Input
@@ -112,8 +121,10 @@ struct Game_State
 {
   uint32 tick = 0;
   uint32 input_number = 0;
-  std::map<UID, Character> characters;
-  std::map<UID, Spell_Object> spell_objects;
+  Character characters[MAX_CHARACTERS];
+  Spell_Object spell_objects[MAX_SPELL_OBJECTS];
+  uint8 character_count = 0;
+  uint8 spell_object_count = 0;
 };
 
 Map make_blades_edge();
