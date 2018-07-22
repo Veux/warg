@@ -564,6 +564,7 @@ void Warg_State::update_spell_object_nodes()
   }
   for (UID node_id : to_erase)
   {
+    scene.delete_node(spell_object_nodes[node_id]);
     spell_object_nodes.erase(node_id);
     set_message(s("erasing spell object node on tick ", game_state.tick), "", 20);
   }
