@@ -23,9 +23,12 @@ void Warg_Server::update(float32 dt)
   process_messages();
 
   bool found_living_dummy = false;
-  for (auto &character : game_state.characters)
-    if (character.second.name == "Combat Dummy" && character.second.alive)
+  for (size_t i = 0; i < game_state.character_count; i++)
+  {
+    Character *character = &game_state.characters[i];
+    if (character->name == "Combat Dummy" && character->alive)
       found_living_dummy = true;
+  }
   if (!found_living_dummy)
   {
     add_dummy();
@@ -33,10 +36,10 @@ void Warg_Server::update(float32 dt)
   }
 
   PERF_TIMER.start();
-  for (auto &c : game_state.characters)
+  for (size_t i = 0; i < game_state.character_count; i++)
   {
-    auto &cid = c.first;
-    auto &ch = c.second;
+    auto &cid = game_state.characters[i].id;
+    auto &ch = game_state.characters[i];
 
     Input last_input;
     for (auto &peer_ : peers)
@@ -73,17 +76,19 @@ void Warg_Server::update(float32 dt)
   for (auto &p : peers)
   {
     shared_ptr<Peer> peer = p.second;
-    peer->push_to_peer(make_unique<State_Message>(
-        peer->character, game_state.characters, game_state.spell_objects, tick, peer->last_input.number));
+    peer->push_to_peer(make_unique<State_Message>(peer->character, game_state.characters, game_state.spell_objects,
+        game_state.character_count, game_state.spell_object_count, tick, peer->last_input.number));
   }
 
-  for (auto i = game_state.spell_objects.begin(); i != game_state.spell_objects.end();)
+  for (size_t i = 0; i < game_state.spell_object_count; i++)
   {
-    Spell_Object *spell_object = &i->second;
+    Spell_Object *spell_object = &game_state.spell_objects[i];
     if (update_spell_object(spell_object))
-      i = game_state.spell_objects.erase(i);
-    else
-      i++;
+    {
+      Spell_Object *last_object = &game_state.spell_objects[game_state.spell_object_count - 1];
+      game_state.spell_objects[i] = *last_object;
+      game_state.spell_object_count--;
+    }
   }
 }
 
@@ -101,8 +106,9 @@ void Warg_Server::process_messages()
 
 bool Warg_Server::update_spell_object(Spell_Object *so)
 {
-  ASSERT(so->target && game_state.characters.count(so->target));
-  Character *target = &game_state.characters[so->target];
+  ASSERT(so->target);
+  Character *target = get_character(so->target);
+  ASSERT(target);
 
   float d = length(target->physics.position - so->pos);
 
@@ -139,26 +145,25 @@ void Input_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  ASSERT(server.game_state.characters.count(peer_->character));
-  auto &character = server.game_state.characters[peer_->character];
+  Character *character = server.get_character(peer_->character);
+  ASSERT(character);
 
   Input command;
   command.number = input_number;
   command.orientation = orientation;
   command.m = move_status;
   peer_->last_input = command;
-  if (server.game_state.characters.count(peer_->character))
-    server.game_state.characters[peer_->character].target = target_id;
+  character->target = target_id;
 }
 
 void Cast_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  ASSERT(server.game_state.characters.count(peer_->character));
-  auto &character = server.game_state.characters[peer_->character];
+  Character *character = server.get_character(peer_->character);
+  ASSERT(character);
 
-  server.try_cast_spell(character, target, spell.c_str());
+  server.try_cast_spell(*character, target, spell.c_str());
 }
 
 void Warg_Server::try_cast_spell(Character &caster, UID target_, const char *spell_)
@@ -172,12 +177,12 @@ void Warg_Server::try_cast_spell(Character &caster, UID target_, const char *spe
     target = &caster;
   else if (spell->formula->targets == Spell_Targets::Terrain)
     ASSERT(target_ == 0);
-  else if (target_ && game_state.characters.count(target_))
-    target = &game_state.characters[target_];
+  else if (target_ && get_character(target_))
+    target = get_character(target_);
 
   Cast_Error err;
   if (static_cast<int>(err = cast_viable(caster.id, target_, spell)))
-/*    push_all(new Cast_Error_Message(caster.id, target_, spell_, (int)err))*/;
+    /*    push_all(new Cast_Error_Message(caster.id, target_, spell_, (int)err))*/;
   else
     cast_spell(caster.id, target ? target->id : target_, spell);
 }
@@ -211,8 +216,9 @@ void Warg_Server::begin_cast(UID caster_id, UID target_id, Spell *spell)
 
 void Warg_Server::interrupt_cast(UID ci)
 {
-  ASSERT(ci && game_state.characters.count(ci));
-  Character *c = &game_state.characters[ci];
+  ASSERT(ci);
+  Character *c = get_character(ci);
+  ASSERT(ci);
 
   if (!c->casting)
     return;
@@ -224,8 +230,8 @@ void Warg_Server::interrupt_cast(UID ci)
   if (c->casting_spell->formula->on_global_cooldown)
     c->gcd = 0;
   c->casting_spell = nullptr;
-  //std::shared_ptr<Cast_Interrupt_Message> message = new Cast_Interrupt_Message(ci);
-  //push_all(message);
+  // std::shared_ptr<Cast_Interrupt_Message> message = new Cast_Interrupt_Message(ci);
+  // push_all(message);
 }
 
 void Warg_Server::update_cast(UID caster_id, float32 dt)
@@ -289,17 +295,18 @@ Cast_Error Warg_Server::cast_viable(UID caster_id, UID target_id, Spell *spell)
 
 void Warg_Server::release_spell(UID caster_, UID target_, Spell *spell)
 {
-  ASSERT(game_state.characters.count(caster_));
   ASSERT(spell);
   ASSERT(spell->formula);
 
-  Character *caster = &game_state.characters[caster_];
-  Character *target = (target_ && game_state.characters.count(target_)) ? &game_state.characters[target_] : nullptr;
+  Character *caster = get_character(caster_);
+  ASSERT(caster);
+
+  Character *target = get_character(target_);
 
   Cast_Error err;
   if (static_cast<int>(err = cast_viable(caster_, target_, spell)))
   {
-    //push_all(make_unique<Cast_Error_Message>(caster_, target_, spell->formula->name.c_str(), static_cast<int>(err)));
+    // push_all(make_unique<Cast_Error_Message>(caster_, target_, spell->formula->name.c_str(), static_cast<int>(err)));
     return;
   }
 
@@ -355,9 +362,9 @@ void Warg_Server::invoke_spell_effect(Spell_Effect &effect)
 
 void Warg_Server::invoke_spell_effect_aoe(Spell_Effect &effect)
 {
-  ASSERT(effect.caster && game_state.characters.count(effect.caster));
+  ASSERT(effect.caster && get_character(effect.caster));
 
-  for (size_t ch = 0; ch < game_state.characters.size(); ch++)
+  for (size_t ch = 0; ch < game_state.character_count; ch++)
   {
     Character *c = &game_state.characters[ch];
 
@@ -382,8 +389,9 @@ void Warg_Server::invoke_spell_effect_aoe(Spell_Effect &effect)
 
 void Warg_Server::invoke_spell_effect_apply_buff(Spell_Effect &effect)
 {
-  ASSERT(effect.target && game_state.characters.count(effect.target));
-  Character *target = &game_state.characters[effect.target];
+  ASSERT(effect.target);
+  Character *target = get_character(effect.target);
+  ASSERT(target);
 
   bool is_buff = effect.formula.type == Spell_Effect_Type::Apply_Buff;
 
@@ -400,15 +408,17 @@ void Warg_Server::invoke_spell_effect_apply_buff(Spell_Effect &effect)
 
 void Warg_Server::invoke_spell_effect_clear_debuffs(Spell_Effect &effect)
 {
-  ASSERT(effect.caster && game_state.characters.count(effect.caster));
-  Character *c = &game_state.characters[effect.target];
+  ASSERT(effect.caster);
+  Character *c = get_character(effect.target);
+  ASSERT(c);
   c->debuffs.clear();
 }
 
 void Warg_Server::invoke_spell_effect_damage(Spell_Effect &effect)
 {
-  ASSERT(effect.target && game_state.characters.count(effect.target));
-  Character *target = &game_state.characters[effect.target];
+  ASSERT(effect.target);
+  Character *target = get_character(effect.target);
+  ASSERT(target);
 
   if (!target->alive)
     return;
@@ -438,9 +448,9 @@ void Warg_Server::invoke_spell_effect_damage(Spell_Effect &effect)
 
 void Warg_Server::invoke_spell_effect_heal(Spell_Effect &effect)
 {
-  ASSERT(effect.target && game_state.characters.count(effect.target));
-  Character *target = &game_state.characters[effect.target];
-  ASSERT(target->alive);
+  ASSERT(effect.target);
+  Character *target = get_character(effect.target);
+  ASSERT(target);
 
   Heal_Effect *h = &effect.formula.heal;
 
@@ -459,8 +469,9 @@ void Warg_Server::invoke_spell_effect_heal(Spell_Effect &effect)
 
 void Warg_Server::invoke_spell_effect_interrupt(Spell_Effect &effect)
 {
-  ASSERT(effect.target && game_state.characters.count(effect.target));
-  Character *target = &game_state.characters[effect.target];
+  ASSERT(effect.target);
+  Character *target = get_character(effect.target);
+  ASSERT(target);
 
   if (!target->casting)
     return;
@@ -470,7 +481,7 @@ void Warg_Server::invoke_spell_effect_interrupt(Spell_Effect &effect)
   target->cast_progress = 0;
   target->cast_target = 0;
 
-  //push_all(make_unique<Cast_Interrupt_Message>(effect.target));
+  // push_all(make_unique<Cast_Interrupt_Message>(effect.target));
 }
 
 void Warg_Server::invoke_spell_effect_object_launch(Spell_Effect &effect)
@@ -491,8 +502,9 @@ void Warg_Server::invoke_spell_effect_object_launch(Spell_Effect &effect)
 
 void Warg_Server::invoke_spell_effect_blink(Spell_Effect &effect)
 {
-  ASSERT(game_state.characters.count(effect.caster));
-  Character *caster = &game_state.characters[effect.caster];
+  ASSERT(effect.caster);
+  Character *caster = get_character(effect.caster);
+  ASSERT(caster);
 
   vec3 dir = caster->physics.orientation * vec3(0, 1, 0);
   vec3 delta = normalize(dir) * effect.formula.blink.distance;
@@ -501,8 +513,9 @@ void Warg_Server::invoke_spell_effect_blink(Spell_Effect &effect)
 
 void Warg_Server::update_buffs(UID character, float32 dt)
 {
-  ASSERT(character && game_state.characters.count(character));
-  Character *ch = &game_state.characters[character];
+  ASSERT(character);
+  Character *ch = get_character(character);
+  ASSERT(ch);
 
   auto update_buffs_ = [&](std::vector<Buff> &buffs) {
     for (auto b = buffs.begin(); b != buffs.end();)
@@ -536,14 +549,15 @@ void Warg_Server::update_buffs(UID character, float32 dt)
 
 void Warg_Server::update_target(UID ch)
 {
-  ASSERT(ch && game_state.characters.count(ch));
-  Character *c = &game_state.characters[ch];
+  ASSERT(ch);
+  Character *c = get_character(ch);
+  ASSERT(ch);
 
   if (!c->target)
     return;
 
-  ASSERT(game_state.characters.count(c->target));
-  Character *target = &game_state.characters[c->target];
+  Character *target = get_character(c->target);
+  ASSERT(target);
 
   if (!target->alive)
     c->target = 0;
@@ -577,7 +591,7 @@ UID Warg_Server::add_dummy()
   c.b_stats = s;
   c.e_stats = s;
 
-  game_state.characters[id] = c;
+  game_state.characters[game_state.character_count++] = c;
 
   return id;
 }
@@ -621,7 +635,7 @@ UID Warg_Server::add_char(int team, const char *name)
     c.spellbook[s.formula->name] = s;
   }
 
-  game_state.characters[id] = c;
+  game_state.characters[game_state.character_count++] = c;
 
   return id;
 }
@@ -633,5 +647,11 @@ void Warg_Server::connect(std::shared_ptr<Peer> peer)
 
 Character *Warg_Server::get_character(UID id)
 {
-  return game_state.characters.count(id) ? &game_state.characters[id] : nullptr;
+  for (size_t i = 0; i < game_state.character_count; i++)
+  {
+    Character *character = &game_state.characters[i];
+    if (character->id == id)
+      return character;
+  }
+  return nullptr;
 }

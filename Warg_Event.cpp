@@ -2,7 +2,10 @@
 #include "Warg_Event.h"
 #include "Warg_Common.h"
 
-void Buffer::reserve(size_t size) { data.reserve(wnext + size); }
+void Buffer::reserve(size_t size)
+{
+  data.reserve(wnext + size);
+}
 
 void Buffer::insert(void *d, size_t size)
 {
@@ -19,13 +22,25 @@ void *Buffer::read(size_t size)
   return p;
 }
 
-void serialize_(Buffer &b, uint8_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, uint8_t n)
+{
+  b.insert(&n, sizeof(n));
+}
 
-void serialize_(Buffer &b, uint16_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, uint16_t n)
+{
+  b.insert(&n, sizeof(n));
+}
 
-void serialize_(Buffer &b, int32_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, int32_t n)
+{
+  b.insert(&n, sizeof(n));
+}
 
-void serialize_(Buffer &b, uint32_t n) { b.insert(&n, sizeof(n)); }
+void serialize_(Buffer &b, uint32_t n)
+{
+  b.insert(&n, sizeof(n));
+}
 
 void serialize_(Buffer &b, const char *s)
 {
@@ -38,9 +53,15 @@ void serialize_(Buffer &b, const char *s)
   b.insert((void *)s, len);
 }
 
-void serialize_(Buffer &b, std::string s) { serialize_(b, s.c_str()); }
+void serialize_(Buffer &b, std::string s)
+{
+  serialize_(b, s.c_str());
+}
 
-void serialize_(Buffer &b, float32_t a) { b.insert(&a, sizeof(a)); }
+void serialize_(Buffer &b, float32_t a)
+{
+  b.insert(&a, sizeof(a));
+}
 
 void serialize_(Buffer &b, vec3 v)
 {
@@ -49,7 +70,10 @@ void serialize_(Buffer &b, vec3 v)
   serialize_(b, v.z);
 }
 
-void serialize_(Buffer &b, Warg_Event_Type type) { serialize_(b, (uint8_t)type); }
+void serialize_(Buffer &b, Warg_Event_Type type)
+{
+  serialize_(b, (uint8_t)type);
+}
 
 void Char_Spawn_Request_Message::serialize(Buffer &b)
 {
@@ -125,7 +149,10 @@ vec3 deserialize_vec3(Buffer &b)
   return v;
 }
 
-UID deserialize_uid(Buffer &b) { return deserialize_uint32(b); }
+UID deserialize_uid(Buffer &b)
+{
+  return deserialize_uint32(b);
+}
 
 Char_Spawn_Request_Message::Char_Spawn_Request_Message(Buffer &b)
 {
@@ -198,13 +225,18 @@ Cast_Message::Cast_Message(UID target_, const char *spell_)
   spell = spell_;
 }
 
-State_Message::State_Message(UID pc_, std::map<UID, Character> &chars_, std::map<UID, Spell_Object> spell_objects_, uint32 tick_, uint32 input_number_)
+State_Message::State_Message(UID pc_, Character *chars_, Spell_Object *spell_objects_, uint8 character_count_,
+    uint8 spell_object_count_, uint32 tick_, uint32 input_number_)
 {
   reliable = false;
 
   tick = tick_;
   input_number = input_number_;
   pc = pc_;
-  characters = chars_;
-  spell_objects = spell_objects_;
+  character_count = character_count_;
+  spell_object_count = spell_object_count_;
+  for (size_t i = 0; i < character_count; i++)
+    characters[i] = chars_[i];
+  for (size_t i = 0; i < spell_object_count; i++)
+    spell_objects[i] = spell_objects_[i];
 }

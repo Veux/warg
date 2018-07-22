@@ -36,6 +36,8 @@ using namespace gl33core;
 #define MAX_CHILDREN uint32(30)
 #define MAX_NODES uint32(10000)
 #define INPUT_BUFFER_SIZE 100
+#define MAX_CHARACTERS 10
+#define MAX_SPELL_OBJECTS 10
 
 #ifdef __linux__
 #define ROOT_PATH std::string("../")

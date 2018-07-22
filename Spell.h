@@ -17,6 +17,7 @@ struct Spell_Object_Formula
 
 struct Spell_Object
 {
+  UID id;
   Spell_Object_Formula formula;
   UID caster;
   UID target;
