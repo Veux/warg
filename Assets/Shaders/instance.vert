@@ -29,4 +29,5 @@ void main()
 
   float s = sin(time);
   gl_Position = txaa_jitter*instanced_MVP * vec4(position, 1);
+  //gl_Position = instanced_MVP * vec4(position, 1);
 }

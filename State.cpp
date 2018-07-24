@@ -71,6 +71,21 @@ void State::prepare_renderer(double t)
   //       octree for triangle data to optimize collision
   auto render_entities = scene.visit_nodes_client_start();
   renderer.set_render_entities(&render_entities);
+
+  renderer.render_instances.clear();
+  for (auto &emitter : scene.particle_emitters)
+  {
+    if (emitter.prepare_instance(&renderer.render_instances))
+    {
+      Render_Instance *i = &renderer.render_instances.back();
+
+      Mesh_Index mesh_index = emitter.mesh_index;
+      Material_Index material_index = emitter.material_index;
+      i->mesh = scene.resource_manager->retrieve_pool_mesh(mesh_index);
+      ;
+      i->material = scene.resource_manager->retrieve_pool_material(material_index);
+    }
+  }
   renderer.set_lights(scene.lights);
   renderer.clear_color = clear_color;
 }
@@ -182,10 +197,10 @@ void State::performance_output()
 
   static float current_frame_rate = 0;
 
-  s << PERF_TIMER.string_report();
+  // s << PERF_TIMER.string_report();
   s << "Current FPS: " << current_frame_rate;
   s << "\nAverage FPS:" << (float64)frame_count / current_time;
-  s << "\nRender Scale: " << renderer.get_render_scale();
+  // s << "\nRender Scale: " << renderer.get_render_scale();
   set_message("Performance output: ", s.str(), report_frequency_in_seconds / 2);
 
   if (last_performance_output + report_frequency_in_seconds < current_time)

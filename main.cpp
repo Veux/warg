@@ -52,7 +52,6 @@ void gl_after_check(const glbinding::FunctionCall &f)
 int main(int argc, char *argv[])
 {
   const char *config_filename = "config.json";
-  SCRATCH_STRING.reserve(5000);
   CONFIG.load(config_filename);
   // SDL_Delay(1000); ??
   bool client = false;
@@ -67,7 +66,7 @@ int main(int argc, char *argv[])
   {
     WARG_SERVER = true;
     ASSERT(WARG_SERVER);
-    //server_main();
+    // server_main();
     return 0;
   }
   else if (argc > 1 && std::string(argv[1]) == "--connect")
@@ -187,7 +186,7 @@ int main(int argc, char *argv[])
     }
     const float64 time = real_time - current_state->paused_time_accumulator;
     elapsed_time = time - current_state->current_time;
-    set_message("time", std::to_string(time), 1);
+    // set_message("time", std::to_string(time), 1);
     if (elapsed_time > 0.3)
       elapsed_time = 0.3;
     last_time = current_state->current_time;
@@ -251,8 +250,9 @@ int main(int argc, char *argv[])
       ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
       trash_imgui.new_frame(window, 0.1f);
     }
+    check_gl_error();
     current_state->render(current_state->current_time);
-
+    check_gl_error();
     std::string messages = get_messages();
     ImGui::Text("%s", messages.c_str());
 
@@ -286,6 +286,10 @@ int main(int argc, char *argv[])
     FRAME_TIMER.start();
 
     current_state->performance_output();
+    if (uint32(get_real_time()) % 30 == 0)
+    {
+      push_log_to_disk();
+    }
   }
   delete game_state;
   delete render_test_state;

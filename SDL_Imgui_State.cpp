@@ -125,6 +125,7 @@ void SDL_Imgui_State::render()
       {
         const uint32 tex = (uint32)pcmd->TextureId;
 
+        check_gl_error();
         // ensure tex without the warg flag is between 0 and 65536
         const uint32 testmask = 0x0fff0000;
         uint32 testbits = testmask & tex;
@@ -141,13 +142,19 @@ void SDL_Imgui_State::render()
         bool warg_texture_flag_set = (tex & 0xf0000000) == 0xf0000000;
         GLuint texture = tex & 0x0000ffff;
 
+        check_gl_error();
         if (warg_texture_flag_set)
         {
           const GLuint index = texture;
           if ((int32(IMGUI_TEXTURE_DRAWS.size()) - 1) < int32(index))
             continue;
           Imgui_Texture_Descriptor itd = IMGUI_TEXTURE_DRAWS[index];
-          if (!itd.is_cubemap)
+          if (itd.is_cubemap || itd.ptr == nullptr)
+          {
+            glBindTexture(GL_TEXTURE_2D, 0);
+            check_gl_error();
+          }
+          else
           {
             glUniform1i(gamma_location, itd.gamma_encode);
             glUniform1f(mip_location, itd.mip_lod_to_draw);
@@ -160,26 +167,25 @@ void SDL_Imgui_State::render()
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             }
           }
-          else
-          {
-            glBindTexture(GL_TEXTURE_2D, 0);
-            check_gl_error();
-          }
         }
         else
         {
+          check_gl_error();
           glUniform1i(gamma_location, false);
           glUniform1f(mip_location, 0);
           glUniform1i(sample_lod_location, 0);
           glBindTexture(GL_TEXTURE_2D, texture);
+          check_gl_error();
         }
 
         check_gl_error();
         glScissor((int)pcmd->ClipRect.x, (int)(fb_height - pcmd->ClipRect.w),
             (int)(pcmd->ClipRect.z - pcmd->ClipRect.x), (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
+        check_gl_error();
         glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount,
             sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset);
 
+        check_gl_error();
         if (warg_texture_flag_set)
         {
           const GLuint index = texture;
@@ -230,9 +236,15 @@ void SDL_Imgui_State::render()
   glViewport(last_viewport[0], last_viewport[1], (GLsizei)last_viewport[2], (GLsizei)last_viewport[3]);
   glScissor(last_scissor_box[0], last_scissor_box[1], (GLsizei)last_scissor_box[2], (GLsizei)last_scissor_box[3]);
 }
-const char *SDL_Imgui_State::get_clipboard(void *) { return SDL_GetClipboardText(); }
+const char *SDL_Imgui_State::get_clipboard(void *)
+{
+  return SDL_GetClipboardText();
+}
 
-void SDL_Imgui_State::set_clipboard(void *, const char *text) { SDL_SetClipboardText(text); }
+void SDL_Imgui_State::set_clipboard(void *, const char *text)
+{
+  SDL_SetClipboardText(text);
+}
 
 bool SDL_Imgui_State::process_event(SDL_Event *event)
 {
@@ -398,7 +410,10 @@ bool SDL_Imgui_State::create_device_objects()
   return true;
 }
 
-void SDL_Imgui_State::bind() { ImGui::SetCurrentContext(context); }
+void SDL_Imgui_State::bind()
+{
+  ImGui::SetCurrentContext(context);
+}
 
 void SDL_Imgui_State::build_draw_data()
 {
@@ -607,7 +622,10 @@ void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
   }
 }
 
-void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert) { put_imgui_texture(t->texture, size, y_invert); }
+void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert)
+{
+  put_imgui_texture(t->texture, size, y_invert);
+}
 
 void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
 {
@@ -643,4 +661,45 @@ void put_imgui_texture(Imgui_Texture_Descriptor *descriptor)
         ImVec2(1, 0));
   else
     ImGui::Image((ImTextureID)data, ImVec2(descriptor->aspect * descriptor->size.x, descriptor->size.y));
+}
+
+bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert)
+{
+  return put_imgui_texture_button(t->texture, size, y_invert);
+}
+
+bool put_imgui_texture_button(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
+{
+  Texture texture = *td;
+  return put_imgui_texture_button(texture.texture, size, y_invert);
+}
+bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert)
+{
+  Imgui_Texture_Descriptor descriptor;
+  descriptor.ptr = handle;
+  descriptor.y_invert = y_invert;
+  descriptor.size = size;
+  if (descriptor.ptr)
+  {
+    descriptor.is_cubemap = handle->is_cubemap;
+    GLenum format = descriptor.ptr->get_format();
+    bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
+                      format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+    descriptor.gamma_encode = gamma_flag;
+    descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
+  }
+  return put_imgui_texture_button(&descriptor);
+}
+
+bool put_imgui_texture_button(Imgui_Texture_Descriptor *descriptor)
+{
+  ASSERT(descriptor);
+  IMGUI_TEXTURE_DRAWS.push_back(*descriptor);
+  uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+
+  if (descriptor->y_invert)
+    return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / descriptor->aspect),
+        ImVec2(0, 1), ImVec2(1, 0));
+  else
+    return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / descriptor->aspect));
 }

@@ -52,7 +52,10 @@ static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
 
 void check_FBO_status();
 
-Framebuffer_Handle::~Framebuffer_Handle() { glDeleteFramebuffers(1, &fbo); }
+Framebuffer_Handle::~Framebuffer_Handle()
+{
+  glDeleteFramebuffers(1, &fbo);
+}
 Framebuffer::Framebuffer() {}
 void Framebuffer::init()
 {
@@ -624,8 +627,7 @@ Mesh::Mesh(const Mesh_Descriptor &d) : Mesh(&d) {}
 Mesh::Mesh(const Mesh_Descriptor *d)
 {
   name = d->name;
-  std::string &unique_identifier = SCRATCH_STRING;
-  unique_identifier = d->build_unique_identifier();
+  std::string unique_identifier = d->build_unique_identifier();
   shared_ptr<Mesh_Handle> ptr = MESH_CACHE[unique_identifier].lock();
   if (ptr)
   {
@@ -759,7 +761,10 @@ shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 }
 
 Material::Material() {}
-Material::Material(Material_Descriptor &m) { load(m); }
+Material::Material(Material_Descriptor &m)
+{
+  load(m);
+}
 
 void Material::load(Material_Descriptor &mat)
 {
@@ -1101,6 +1106,9 @@ void Renderer::opaque_pass(float32 time)
   glDepthFunc(GL_LESS);
   // todo: depth pre-pass
 
+  // set_message("opaque_pass projection:", s(projection), 1.0f);
+  // set_message("opaque_pass camera:", s(camera), 1.0f);
+
 #if SHOW_UV_TEST_GRID
   uv_map_grid.bind(uv_grid);
 #endif
@@ -1156,52 +1164,68 @@ void Renderer::instance_pass(float32 time)
     lights.bind(shader);
 
     ASSERT(glGetAttribLocation(shader.program->program, "instanced_MVP") == 5);
+    glEnableVertexAttribArray(5);
     glEnableVertexAttribArray(6);
     glEnableVertexAttribArray(7);
     glEnableVertexAttribArray(8);
-    glEnableVertexAttribArray(9);
     glBindBuffer(GL_ARRAY_BUFFER, entity.mvp_buffer);
-    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(0));
-    glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 4));
-    glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 8));
-    glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 12));
-    glVertexAttribDivisor(6, 1); //"update attribute at location <N> every <1> instance"
+    glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(0));
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 4));
+    glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 8));
+    glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 12));
+    glVertexAttribDivisor(5, 1); //"update attribute at location <N> every <1> instance"
+    glVertexAttribDivisor(6, 1);
     glVertexAttribDivisor(7, 1);
     glVertexAttribDivisor(8, 1);
-    glVertexAttribDivisor(9, 1);
 
-    ASSERT(glGetAttribLocation(shader.program->program, "instanced_model") == 9);
-    glEnableVertexAttribArray(9);
-    glEnableVertexAttribArray(10);
-    glEnableVertexAttribArray(11);
-    glEnableVertexAttribArray(12);
-    glBindBuffer(GL_ARRAY_BUFFER, entity.model_buffer);
-    glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(0));
-    glVertexAttribPointer(10, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 4));
-    glVertexAttribPointer(11, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 8));
-    glVertexAttribPointer(12, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 12));
-    glVertexAttribDivisor(9, 1);
-    glVertexAttribDivisor(10, 1);
-    glVertexAttribDivisor(11, 1);
-    glVertexAttribDivisor(12, 1);
+    GLint instanced_model_location = glGetAttribLocation(shader.program->program, "instanced_model");
+    if (instanced_model_location != -1)
+    {
+      ASSERT(instanced_model_location == 9);
+      glEnableVertexAttribArray(9);
+      glEnableVertexAttribArray(10);
+      glEnableVertexAttribArray(11);
+      glEnableVertexAttribArray(12);
+      glBindBuffer(GL_ARRAY_BUFFER, entity.model_buffer);
+      glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(0));
+      glVertexAttribPointer(10, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 4));
+      glVertexAttribPointer(11, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 8));
+      glVertexAttribPointer(12, 4, GL_FLOAT, GL_FALSE, sizeof(mat4), (void *)(sizeof(GLfloat) * 12));
+      glVertexAttribDivisor(9, 1);
+      glVertexAttribDivisor(10, 1);
+      glVertexAttribDivisor(11, 1);
+      glVertexAttribDivisor(12, 1);
+    }
 
-    ASSERT(glGetAttribLocation(shader.program->program, "attribute0") == 13);
-    glEnableVertexAttribArray(13);
-    glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
-    glVertexAttribPointer(13, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-    glVertexAttribDivisor(13, 1);
+    int32 loc0 = glGetAttribLocation(shader.program->program, "attribute0");
+    if (loc0 != -1)
+    {
+      ASSERT(loc0 == 13);
+      glEnableVertexAttribArray(13);
+      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
+      glVertexAttribPointer(13, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+      glVertexAttribDivisor(13, 1);
+    }
 
-    ASSERT(glGetAttribLocation(shader.program->program, "attribute1") == 14);
-    glEnableVertexAttribArray(14);
-    glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
-    glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-    glVertexAttribDivisor(14, 1);
+    int32 loc1 = glGetAttribLocation(shader.program->program, "attribute1");
+    if (loc1 != -1)
+    {
+      ASSERT(loc1 == 14);
+      glEnableVertexAttribArray(14);
+      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
+      glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+      glVertexAttribDivisor(14, 1);
+    }
 
-    ASSERT(glGetAttribLocation(shader.program->program, "attribute2") == 15);
-    glEnableVertexAttribArray(15);
-    glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
-    glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-    glVertexAttribDivisor(15, 1);
+    int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
+    if (loc2 != -1)
+    {
+      ASSERT(loc2 == 15);
+      glEnableVertexAttribArray(15);
+      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
+      glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+      glVertexAttribDivisor(15, 1);
+    }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(
@@ -1219,7 +1243,6 @@ void Renderer::instance_pass(float32 time)
     glDisableVertexAttribArray(13);
     glDisableVertexAttribArray(14);
     glDisableVertexAttribArray(15);
-    glDisableVertexAttribArray(16);
   }
 }
 
@@ -1351,7 +1374,7 @@ void Renderer::postprocess_pass(float32 time)
   // bloom:
   bool need_to_allocate_texture = bloom_target.get_handle() == 0;
   const float32 scale_relative_to_1080p = this->size.x / 1920.f;
-  const uint32 min_width = 80 * scale_relative_to_1080p;
+  const int32 min_width = (int32)(80.f * scale_relative_to_1080p);
   vector<ivec2> resolutions = {size};
   while (resolutions.back().x / 2 > min_width)
   {
@@ -1499,7 +1522,7 @@ void Renderer::render(float64 state_time)
   uv_map_grid.t.mod = vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
 #endif
 
-  set_message("Render entity size:", s(render_entities.size()), 1.0f);
+  // set_message("Render entity size:", s(render_entities.size()), 1.0f);
   static bool show_renderer_window = true;
   if (show_renderer_window)
   {
@@ -1597,17 +1620,17 @@ void Renderer::render(float64 state_time)
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;
 
-  set_message("FRAME_START", "");
-  set_message("BUILDING SHADOW MAPS START", "");
+  // set_message("FRAME_START", "");
+  // set_message("BUILDING SHADOW MAPS START", "");
   if (!CONFIG.render_simple)
   {
     build_shadow_maps();
   }
-  set_message("OPAQUE PASS START", "");
+  // set_message("OPAQUE PASS START", "");
 
   opaque_pass(time);
 
-  // instance_pass(time);
+  instance_pass(time);
 
   translucent_pass(time);
 
@@ -1821,7 +1844,10 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
   }
 }
 
-void Renderer::set_lights(Light_Array new_lights) { lights = new_lights; }
+void Renderer::set_lights(Light_Array new_lights)
+{
+  lights = new_lights;
+}
 
 void check_FBO_status()
 {
@@ -2066,7 +2092,10 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   initialized = true;
 }
 
-Renderbuffer_Handle::~Renderbuffer_Handle() { glDeleteRenderbuffers(1, &rbo); }
+Renderbuffer_Handle::~Renderbuffer_Handle()
+{
+  glDeleteRenderbuffers(1, &rbo);
+}
 
 Cubemap::Cubemap() {}
 
@@ -2479,7 +2508,10 @@ void Environment_Map::bind(GLuint radiance_texture_unit, GLuint irradiance_textu
   irradiance.bind(irradiance_texture_unit);
 }
 
-void Environment_Map::irradiance_convolution() { ASSERT(0); }
+void Environment_Map::irradiance_convolution()
+{
+  ASSERT(0);
+}
 
 Environment_Map_Descriptor::Environment_Map_Descriptor(
     std::string environment, std::string irradiance, bool equirectangular)
@@ -2582,5 +2614,284 @@ void Material_Descriptor::mod_by(const Material_Descriptor *override)
     casts_shadows = override->casts_shadows;
     albedo_alpha_override = override->albedo_alpha_override;
     discard_on_alpha = override->discard_on_alpha;
+  }
+}
+
+Particle_Emitter::Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, Material_Index mat)
+    : descriptor(d), mesh_index(m), material_index(mat)
+{
+  shared_data = std::make_unique<Physics_Shared_Data>();
+  shared_data->descriptor = descriptor;
+  t = std::thread(thread, shared_data);
+  t.detach();
+  thread_launched = true;
+}
+
+Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
+    : descriptor(rhs.descriptor), mesh_index(rhs.mesh_index), material_index(rhs.material_index)
+{
+  shared_data = std::make_unique<Physics_Shared_Data>();
+  construct_physics_method(descriptor);
+  construct_emission_method(descriptor);
+  shared_data->descriptor = descriptor;
+
+  rhs.spin_until_up_to_date();
+  shared_data->particles = rhs.shared_data->particles;
+
+  t = std::thread(thread, shared_data);
+  t.detach();
+  thread_launched = true;
+}
+
+Particle_Emitter::Particle_Emitter(Particle_Emitter &&rhs)
+{
+  ASSERT(rhs.shared_data->request_thread_exit == false);
+  rhs.spin_until_up_to_date();
+  t = std::move(rhs.t);
+  thread_launched = rhs.thread_launched;
+  shared_data = std::move(rhs.shared_data);
+  physics_method = std::move(rhs.physics_method);
+  emission_method = std::move(rhs.emission_method);
+  mesh_index = rhs.mesh_index;
+  material_index = rhs.material_index;
+
+  if (rhs.shared_data)
+    shared_data->particles = std::move(rhs.shared_data->particles);
+  descriptor = rhs.descriptor;
+}
+
+void Particle_Emitter::update(mat4 projection, mat4 camera, float32 dt)
+{
+  // todo: geometry collision interface
+  // todo: option to add parent node velocity or not
+  // todo: option to snap all particles to basis space or world space
+
+  // locally calculate basis vector, or, change scene graph to store its last-calculated world basis, and read from
+  // that here  take lock  modify the descriptor to change position, orientation, velocity  release lock
+  ASSERT(shared_data);
+  ASSERT(thread_launched);
+  spin_until_up_to_date();
+  shared_data->descriptor = descriptor;
+  shared_data->projection = projection;
+  shared_data->camera = camera;
+  shared_data->requested_tick += 1;
+}
+
+void Particle_Emitter::spin_until_up_to_date() const
+{
+  ASSERT(shared_data);
+  if (shared_data->requested_tick != 0)
+  {
+    while (shared_data->requested_tick != shared_data->completed_update)
+    {
+      // spin
+    }
+  }
+  return;
+}
+
+std::unique_ptr<Particle_Physics_Method> Particle_Emitter::construct_physics_method(Particle_Emitter_Descriptor d)
+{
+  if (d.physics_descriptor.type == simple)
+  {
+    return std::make_unique<Simple_Particle_Physics>();
+  }
+  else if (d.physics_descriptor.type == wind)
+  {
+    return std::make_unique<Wind_Particle_Physics>();
+  }
+}
+
+std::unique_ptr<Particle_Emission_Method> Particle_Emitter::construct_emission_method(Particle_Emitter_Descriptor d)
+{
+  if (d.emission_descriptor.type == stream)
+  {
+    return std::make_unique<Particle_Stream_Emission>();
+  }
+  else if (d.emission_descriptor.type == explosion)
+  {
+    return std::make_unique<Particle_Explosion_Emission>();
+  }
+}
+
+void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
+{
+  ASSERT(shared_data);
+  std::unique_ptr<Particle_Emission_Method> emission = construct_emission_method(shared_data->descriptor);
+  std::unique_ptr<Particle_Physics_Method> physics = construct_physics_method(shared_data->descriptor);
+  Particle_Emission_Type emission_type = shared_data->descriptor.emission_descriptor.type;
+  Particle_Physics_Type physics_type = shared_data->descriptor.physics_descriptor.type;
+  while (!shared_data->request_thread_exit)
+  {
+    if (shared_data->requested_tick == shared_data->completed_update)
+    {
+      SDL_Delay(1);
+      continue;
+    }
+    const float32 time = shared_data->completed_update * dt;
+    vec3 pos = shared_data->descriptor.position;
+    vec3 vel = shared_data->descriptor.velocity;
+    quat o = shared_data->descriptor.orientation;
+    emission->update(&shared_data->particles, &shared_data->descriptor.emission_descriptor, pos, vel, o, time, dt);
+    physics->step(&shared_data->particles, &shared_data->descriptor.physics_descriptor, time, dt);
+    // delete expired particles:
+
+    for (uint i = 0; i < shared_data->particles.particles.size(); ++i)
+    {
+      shared_data->particles.particles[i].time_left_to_live -= dt;
+      if (shared_data->particles.particles[i].time_left_to_live <= 0.0f)
+      {
+        shared_data->particles.particles[i] = shared_data->particles.particles.back();
+        shared_data->particles.particles.pop_back();
+        --i;
+      }
+    }
+    shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera);
+    shared_data->completed_update += 1;
+  }
+  // possible problem: if requested_update doesnt match completed_update when the thread exits
+  // does this cause an issue anywhere?
+}
+
+// interface to retrieve current state for rendering
+
+bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulator)
+{
+  ASSERT(shared_data);
+  ASSERT(accumulator);
+  spin_until_up_to_date();
+  return shared_data->particles.prepare_instance(accumulator);
+}
+
+void Particle_Emitter::clear()
+{
+  ASSERT(shared_data);
+  spin_until_up_to_date();
+  shared_data->particles.particles.clear();
+}
+
+Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs)
+{
+  rhs.spin_until_up_to_date();
+  spin_until_up_to_date();
+  descriptor = rhs.descriptor;
+  construct_physics_method(descriptor);
+  construct_emission_method(descriptor);
+  shared_data->descriptor = descriptor;
+  mesh_index = rhs.mesh_index;
+  material_index = rhs.material_index;
+  return *this;
+}
+
+Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs)
+{
+  ASSERT(rhs.shared_data->request_thread_exit == false);
+  ASSERT(shared_data->request_thread_exit == false);
+  rhs.spin_until_up_to_date();
+  spin_until_up_to_date();
+  shared_data->request_thread_exit = true;
+  t.join();
+  t = std::move(rhs.t);
+  shared_data = std::move(rhs.shared_data);
+  descriptor = rhs.descriptor;
+  mesh_index = rhs.mesh_index;
+  material_index = rhs.material_index;
+  return *this;
+}
+
+void Simple_Particle_Physics::step(
+    Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 time, float32 dt)
+{
+  ASSERT(p);
+  ASSERT(d);
+  for (auto &particle : p->particles)
+  {
+    particle.velocity += dt * d->gravity;
+    particle.position += dt * particle.velocity;
+  }
+}
+
+void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt)
+{
+  ASSERT(p);
+  ASSERT(d);
+  for (auto &particle : p->particles)
+  {
+    vec3 wind = d->intensity * d->direction;
+
+    particle.velocity += dt * (d->gravity + wind);
+    particle.position += dt * particle.velocity;
+  }
+}
+
+void Particle_Explosion_Emission::update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos,
+    vec3 vel, quat o, float32 time, float32 dt)
+{
+  ASSERT(p);
+  ASSERT(d);
+  // todo: particle explosion
+  Particle new_particle;
+  p->particles.push_back(new_particle);
+}
+
+void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos,
+    vec3 vel, quat o, float32 time, float32 dt)
+{
+  ASSERT(p);
+  ASSERT(d);
+  const uint32 particles_before_tick = (uint32)floor(d->particles_per_second * time);
+  const uint32 particles_after_tick = (uint32)floor(d->particles_per_second * (time + dt));
+  const uint32 spawns = particles_after_tick - particles_before_tick;
+
+  for (uint32 i = 0; i < spawns; ++i)
+  {
+
+    if (!(p->particles.size() < MAX_INSTANCE_COUNT))
+    {
+      return;
+    }
+    Particle new_particle;
+
+    vec3 pos_variance = random_within(d->initial_position_variance);
+    pos_variance = pos_variance - 0.5f * d->initial_position_variance;
+    new_particle.position = pos + pos_variance;
+
+    vec3 vel_variance = random_within(d->initial_velocity_variance);
+    vel_variance = vel_variance - 0.5f * d->initial_velocity_variance;
+    if (d->inherit_velocity)
+      new_particle.velocity = o * (vel + d->initial_velocity + vel_variance);
+    else
+      new_particle.velocity = o * (d->initial_velocity + vel_variance);
+
+    vec3 av_variance = random_within(d->initial_angular_velocity_variance);
+    av_variance = av_variance - 0.5f * d->initial_angular_velocity_variance;
+    new_particle.angular_velocity = d->initial_angular_velocity + av_variance;
+
+    //// first generated orientation - use to orient within a cone or an entire unit sphere
+    //// these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
+    // glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
+    // float32 randomized_orientation_angle_variance = 0.f;
+
+    //// post-spawn - use to orient the model relative to the emitter:
+    // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
+    // float32 initial_orientation_angle = 0.0f;
+
+    const vec4 &ov = d->randomized_orientation_axis;
+    vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
+    float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
+    oav = oav - 0.5f * d->randomized_orientation_angle_variance;
+    quat first_orientation = angleAxis(oav, orientation_vector);
+    quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
+    new_particle.orientation = o * second_orientation * first_orientation;
+
+    vec3 scale_variance = random_within(d->initial_scale_variance);
+    scale_variance = scale_variance - 0.5f * d->initial_scale_variance;
+    new_particle.scale = d->initial_scale + scale_variance;
+
+    float32 time_to_live_varaince = random_between(0.f, d->time_to_live_variance);
+    time_to_live_varaince = time_to_live_varaince - 0.5f * d->time_to_live_variance;
+    new_particle.time_to_live = d->time_to_live + time_to_live_varaince;
+    new_particle.time_left_to_live = new_particle.time_to_live;
+    p->particles.push_back(new_particle);
   }
 }

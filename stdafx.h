@@ -7,13 +7,18 @@
 #include <assimp/cimport.h>
 #include <cstring>
 #include <enet/enet.h>
+#include <fstream>
+#include <functional>
 #include <glm/glm.hpp>
 #include <glbinding/Binding.h>
+#include <glbinding/gl33core/gl.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/transform.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <iostream>
 #include <mutex>
 #include <memory>
@@ -22,6 +27,7 @@
 #include <random>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <string>
 #include <sstream>
 #include <stdio.h>
 #include <stdlib.h>

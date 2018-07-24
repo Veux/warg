@@ -1,28 +1,10 @@
 #pragma once
-#include "Globals.h"
+#include "Forward_Declarations.h"
+#include "General_Purpose.h"
 #include "Mesh_Loader.h"
 #include "Shader.h"
-#include "Third_party/stb/stb_image.h"
 #include <SDL2/SDL.h>
-#include <array>
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-#include <assimp/types.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <atomic>
-#include <functional>
-#include <glm/gtx/euler_angles.hpp>
-#include <glm/gtx/quaternion.hpp>
-#include <glm/gtx/transform.hpp>
-#include <memory>
-#include <nlohmann/json.hpp>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include "Third_party/stb/stb_image.h"
 
 using json = nlohmann::json;
 using namespace glm;
@@ -80,9 +62,15 @@ struct Texture_Handle
   // this resource's current set settings
   // should only be set by Texture class inside .bind()
 
-  const std::string &peek_filename() { return filename; }
+  const std::string &peek_filename()
+  {
+    return filename;
+  }
 
-  GLenum get_format() { return format; }
+  GLenum get_format()
+  {
+    return format;
+  }
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
 
@@ -127,8 +115,14 @@ struct Imgui_Texture_Descriptor
 struct Texture_Descriptor
 {
   Texture_Descriptor() {}
-  Texture_Descriptor(const char *filename) { this->name = filename; }
-  Texture_Descriptor(std::string filename) { this->name = filename; }
+  Texture_Descriptor(const char *filename)
+  {
+    this->name = filename;
+  }
+  Texture_Descriptor(std::string filename)
+  {
+    this->name = filename;
+  }
 
   // solid colors can be specified with "color(r,g,b,a)" float values
   std::string name = "";
@@ -171,7 +165,10 @@ struct Texture
   // black, or a random other texture
   GLuint get_handle();
 
-  bool is_initialized() { return initialized; }
+  bool is_initialized()
+  {
+    return initialized;
+  }
 
   // do not modify the handle
   std::shared_ptr<Texture_Handle> texture;
@@ -246,9 +243,18 @@ struct Mesh
   Mesh();
   Mesh(const Mesh_Descriptor &d); // mesh_data must be filled out, except for primitives
   Mesh(const Mesh_Descriptor *d); // mesh_data must be filled out, except for primitives
-  GLuint get_vao() { return mesh->vao; }
-  GLuint get_indices_buffer() { return mesh->indices_buffer; }
-  GLuint get_indices_buffer_size() { return mesh->indices_buffer_size; }
+  GLuint get_vao()
+  {
+    return mesh->vao;
+  }
+  GLuint get_indices_buffer()
+  {
+    return mesh->indices_buffer;
+  }
+  GLuint get_indices_buffer_size()
+  {
+    return mesh->indices_buffer_size;
+  }
   void draw();
   std::string name = "NULL";
   Mesh_Descriptor get_descriptor()
@@ -523,6 +529,7 @@ struct Particle
   glm::quat orientation;
   glm::vec3 velocity;
   glm::vec3 angular_velocity;
+  glm::vec3 scale;
   float32 time_to_live;
   float32 time_left_to_live;
 
@@ -575,43 +582,49 @@ struct Particle_Array
   handle the mutex and thread
   */
   Particle_Array(Particle_Array &&rhs) {}
-  Particle_Array &operator=(Particle_Array &rhs) {}
+  Particle_Array &operator=(Particle_Array &rhs)
+  {
+    // todo: particle_array copy
+    return *this;
+  }
   Particle_Array &operator=(Particle_Array &&rhs)
   {
-    mesh = std::move(rhs.mesh);
-    material = std::move(rhs.material);
     particles = std::move(rhs.particles);
+    return *this;
   }
 
-  Mesh mesh;
-  Material material;
-  Render_Instance prepare_instance()
+  void compute_attributes(mat4 projection, mat4 camera)
   {
-    Render_Instance result;
-    result.mesh = &mesh;
-    result.material = &material;
-
-    std::vector<mat4> MVP_Matrices;
-    std::vector<mat4> Model_Matrices;
-    std::vector<vec4> attributes0;
-    std::vector<vec4> attributes1;
-    std::vector<vec4> attributes2;
+    MVP_Matrices.clear();
+    Model_Matrices.clear();
+    attributes0.clear();
+    attributes1.clear();
+    attributes2.clear();
+    // set_message("compute_attributes projection:", s(projection), 1.0f);
+    // set_message("compute_attributes camera:", s(camera), 1.0f);
     for (auto &i : particles)
     {
-      // todo: compute matrices
-      mat4 mvp;
-      mat4 model;
-      i.position;
-      i.orientation;
-      i.velocity;
-      i.time_to_live;
-      MVP_Matrices.push_back(mvp);
+      const mat4 R = toMat4(i.orientation);
+      const mat4 S = scale(i.scale);
+      const mat4 T = translate(i.position);
+      const mat4 model = T * R * S;
+      const mat4 MVP = projection * camera * model;
+      MVP_Matrices.push_back(MVP);
       Model_Matrices.push_back(model);
       attributes0.push_back(i.attribute0);
       attributes1.push_back(i.attribute1);
       attributes2.push_back(i.attribute2);
     }
+  }
+  bool prepare_instance(std::vector<Render_Instance> *accumulator)
+  {
+    Render_Instance result;
     uint32 num_instances = MVP_Matrices.size();
+    if (num_instances == 0)
+      return false;
+
+    ASSERT(num_instances <= MAX_INSTANCE_COUNT);
+    set_message("Particle count:", s(num_instances), 1.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
     glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
@@ -631,9 +644,17 @@ struct Particle_Array
     result.attribute1_buffer = instance_attribute1_buffer;
     result.attribute2_buffer = instance_attribute2_buffer;
     result.size = num_instances;
-    return result;
+    accumulator->push_back(result);
+    return true;
   }
   std::vector<Particle> particles;
+
+  std::vector<mat4> MVP_Matrices;
+  std::vector<mat4> Model_Matrices;
+  std::vector<vec4> attributes0;
+  std::vector<vec4> attributes1;
+  std::vector<vec4> attributes2;
+
   GLuint instance_mvp_buffer;
   GLuint instance_model_buffer;
   GLuint instance_attribute0_buffer;
@@ -695,6 +716,16 @@ struct Particle_Emission_Method_Descriptor
   float32 time_to_live = 4.0f;
   float32 time_to_live_variance = 1.0f;
   glm::vec3 initial_position_variance = glm::vec3(0);
+
+  // first generated orientation - use to orient within a cone or an entire unit sphere
+  // these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
+  glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
+  float32 randomized_orientation_angle_variance = 0.f;
+
+  // post-spawn - use to orient the model relative to the emitter:
+  glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);
+  float32 initial_orientation_angle = 0.0f;
+
   glm::vec3 initial_scale = glm::vec3(1);
   glm::vec3 initial_scale_variance = glm::vec3(0);
   glm::vec3 initial_velocity = glm::vec3(0, 0, 1);
@@ -721,65 +752,38 @@ struct Particle_Physics_Method_Descriptor
   // simple
 
   // wind
-  vec3 direction = vec3(1, 0, 0);
+  vec3 direction = vec3(1, .4, .3);
   float32 intensity = 1.0f;
 };
 
 struct Particle_Emission_Method
 {
-  virtual void update(
-      Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, float32 time, float32 dt) = 0;
+  virtual void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
+      quat o, float32 time, float32 dt) = 0;
 };
 
 struct Particle_Stream_Emission : Particle_Emission_Method
 {
-  void update(
-      Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, float32 time, float32 dt) final override
-  {
-    // todo: particle stream
-    Particle new_particle;
-    particles->particles.push_back(new_particle);
-  }
+  void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
+      float32 time, float32 dt) final override;
 };
 struct Particle_Explosion_Emission : Particle_Emission_Method
 {
-  void update(
-      Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, float32 time, float32 dt) final override
-  {
-    // todo: particle explosion
-    Particle new_particle;
-    particles->particles.push_back(new_particle);
-  }
+  void update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
+      float32 dt) final override;
 };
 
 struct Particle_Physics_Method
 {
-  virtual void step(
-      Particle_Array *particles, const Particle_Physics_Method_Descriptor *d, float32 time, float32 dt) = 0;
+  virtual void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) = 0;
 };
 struct Wind_Particle_Physics : Particle_Physics_Method
 {
-  void step(
-      Particle_Array *particles, const Particle_Physics_Method_Descriptor *d, float32 time, float32 dt) final override
-  {
-    for (auto &particle : particles->particles)
-    {
-      particle.velocity += dt * (d->gravity + d->direction);
-      particle.position += dt * particle.velocity;
-    }
-  }
+  void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
 };
 struct Simple_Particle_Physics : Particle_Physics_Method
 {
-  void step(
-      Particle_Array *particles, const Particle_Physics_Method_Descriptor *d, float32 time, float32 dt) final override
-  {
-    for (auto &particle : particles->particles)
-    {
-      particle.velocity += dt * d->gravity;
-      particle.position += dt * particle.velocity;
-    }
-  }
+  void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
 };
 
 struct Particle_Emitter_Descriptor
@@ -790,219 +794,56 @@ struct Particle_Emitter_Descriptor
   // for emitter itself:
   glm::vec3 position = glm::vec3(0);
   glm::vec3 velocity = glm::vec3(0);
-  glm::quat orientation = glm::quat(0, 0, 1, 0);
+  glm::quat orientation = angleAxis(0.f, vec3(1, 0, 0)); // glm::quat(0, 0, 1, 0);
 };
 
 struct Particle_Emitter
 {
-  /*
-  if i wanted to save the state of the game and hold all the particles as well
-  i would...
-  save the scene graph
-  save the particle emitters
-  in order to recreate the particles as they were, you could either save/restore all the particles themselves in the
-  save file or, simulate the last n seconds of the emitter - bug prone, value changes arent recorded, impossible to know
-  if the 'saved' setting was just changed or has been there forever
+  Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, Material_Index mat);
+  Particle_Emitter(const Particle_Emitter &rhs);
+  Particle_Emitter(Particle_Emitter &&rhs);
+  Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs);
+  Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs);
 
-  ok so we save the particles in the json
-  in order to perfectly restore state, we also need to restore the particle emitter time as it was
-  so it has to be reachable by the serializer, and has to be settable by a descriptor
-  the place to put it is within the particle emitter descriptor
+  void update(mat4 projection, mat4 camera, float32 dt);
+  void clear();
+  bool prepare_instance(std::vector<Render_Instance> *accumulator);
+  void spin_until_up_to_date() const;
+  Mesh_Index mesh_index;
+  Material_Index material_index;
+  Particle_Emitter_Descriptor descriptor;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-  */
-
-  Particle_Emitter(Particle_Emitter_Descriptor d, Mesh m, Material_Descriptor mat)
-      : descriptor(d), mesh(m), material(mat)
-  {
-    shared_data = std::make_unique<Physics_Shared_Data>();
-    shared_data->descriptor = descriptor;
-
-    t = std::thread(thread, shared_data);
-    t.detach();
-    thread_launched = true;
-  }
-  Particle_Emitter(const Particle_Emitter &rhs) : descriptor(rhs.descriptor), mesh(rhs.mesh), material(rhs.material)
-  {
-    shared_data = std::make_unique<Physics_Shared_Data>();
-    construct_physics_method(descriptor);
-    construct_emission_method(descriptor);
-    shared_data->descriptor = descriptor;
-
-    rhs.spin_until_up_to_date();
-    *particles.get() = *rhs.particles.get();
-
-    t = std::thread(thread, shared_data);
-    t.detach();
-    thread_launched = true;
-  }
-  Particle_Emitter(Particle_Emitter &&rhs)
-  {
-    ASSERT(rhs.shared_data->request_thread_exit == false);
-    rhs.spin_until_up_to_date();
-    t = std::move(rhs.t);
-    shared_data = std::move(rhs.shared_data);
-    physics_method = std::move(rhs.physics_method);
-    emission_method = std::move(rhs.emission_method);
-    particles = std::move(rhs.particles);
-    descriptor = rhs.descriptor;
-  }
-
-  Particle_Emitter &operator=(const Particle_Emitter &rhs)
-  {
-    rhs.spin_until_up_to_date();
-    spin_until_up_to_date();
-    descriptor = rhs.descriptor;
-    construct_physics_method(descriptor);
-    construct_emission_method(descriptor);
-    *particles.get() = *rhs.particles.get();
-    shared_data->descriptor = descriptor;
-  }
-
-  Particle_Emitter &operator=(Particle_Emitter &&rhs)
-  {
-    ASSERT(rhs.shared_data->request_thread_exit == false);
-    ASSERT(shared_data->request_thread_exit == false);
-    rhs.spin_until_up_to_date();
-    spin_until_up_to_date();
-    shared_data->request_thread_exit = true;
-    t.join();
-    t = std::move(rhs.t);
-    shared_data = std::move(rhs.shared_data);
-    particles = std::move(rhs.particles);
-    descriptor = rhs.descriptor;
-  }
+private:
+  static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
+  static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 
   struct Physics_Shared_Data
-  {
+  { // todo :
+
+    /*
+    collision
+    collision flag for nodes in scene graph,
+    collision bounds draw flag in nodes
+    proper rigid body physics algorithm
+
+
+    */
+    mat4 projection;
+    mat4 camera;
     Particle_Emitter_Descriptor descriptor;        // thread reads
     std::atomic<bool> request_thread_exit = false; // thread reads
     std::atomic<uint64> requested_tick = 0;        // thread reads
     std::atomic<uint64> completed_update = 0;      // thread reads/writes
-
-    Particle_Array *particles; // thread reads/writes
+    Particle_Array particles;                      // thread reads/writes
   };
-
-  void update(float32 dt)
-  {
-    // todo: geometry collision interface
-    // todo: option to add parent node velocity or not
-    // todo: option to snap all particles to basis space or world space
-
-    // locally calculate basis vector, or, change scene graph to store its last-calculated world basis, and read from
-    // that here  take lock  modify the descriptor to change position, orientation, velocity  release lock
-    ASSERT(shared_data);
-    ASSERT(thread_launched);
-    spin_until_up_to_date();
-    // descriptor.time = shared_data->descriptor.time;
-    shared_data->descriptor = descriptor;
-    shared_data->requested_tick += 1;
-  }
-  void spin_until_up_to_date() const
-  {
-    ASSERT(shared_data);
-    if (shared_data->requested_tick != 0)
-    {
-      while (shared_data->requested_tick != shared_data->completed_update)
-      {
-        // spin
-      }
-    }
-    return;
-  }
-
-  static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d)
-  {
-    if (d.physics_descriptor.type == simple)
-    {
-      return std::make_unique<Simple_Particle_Physics>();
-    }
-    else if (d.physics_descriptor.type == wind)
-    {
-      return std::make_unique<Wind_Particle_Physics>();
-    }
-  }
-  static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d)
-  {
-    if (d.emission_descriptor.type == stream)
-    {
-      return std::make_unique<Particle_Stream_Emission>();
-    }
-    else if (d.emission_descriptor.type == explosion)
-    {
-      return std::make_unique<Particle_Explosion_Emission>();
-    }
-  }
-
-  static void thread(std::shared_ptr<Physics_Shared_Data> shared_data)
-  {
-    std::unique_ptr<Particle_Emission_Method> emission = construct_emission_method(shared_data->descriptor);
-    std::unique_ptr<Particle_Physics_Method> physics = construct_physics_method(shared_data->descriptor);
-    Particle_Emission_Type emission_type = shared_data->descriptor.emission_descriptor.type;
-    Particle_Physics_Type physics_type = shared_data->descriptor.physics_descriptor.type;
-    while (!shared_data->request_thread_exit)
-    {
-      if (shared_data->requested_tick == shared_data->completed_update)
-      {
-        SDL_Delay(1);
-        continue;
-      }
-      const float32 time = shared_data->completed_update * dt;
-
-      emission->update(shared_data->particles, &shared_data->descriptor.emission_descriptor, time, dt);
-      physics->step(shared_data->particles, &shared_data->descriptor.physics_descriptor, time, dt);
-
-      // delete expired particles:
-      for (uint i = 0; i < shared_data->particles->particles.size(); ++i)
-      {
-        shared_data->particles->particles[i].time_left_to_live -= dt;
-        if (shared_data->particles->particles[i].time_left_to_live <= 0.0f)
-        {
-          shared_data->particles->particles[i] = shared_data->particles->particles.back();
-          shared_data->particles->particles.pop_back();
-          --i;
-        }
-      }
-      shared_data->completed_update += 1;
-    }
-    // possible problem: if requested_update doesnt match completed_update when the thread exits
-    // does this cause an issue anywhere?
-  }
-
-  // interface to retrieve current state for rendering
-  Render_Instance prepare_instance() { return particles->prepare_instance(); }
-  void clear()
-  {
-    spin_until_up_to_date();
-    particles->particles.clear();
-  }
-
-  Particle_Emitter_Descriptor descriptor;
-  Mesh mesh;
-  Material material;
-
-  // do not modify unless the thread is idle with spin_until_up_to_date()
-  std::unique_ptr<Particle_Array> particles = std::make_unique<Particle_Array>();
+  static void thread(std::shared_ptr<Physics_Shared_Data> shared_data);
+  bool thread_launched = false;
+  std::thread t;
   std::unique_ptr<Particle_Physics_Method> physics_method;
   std::unique_ptr<Particle_Emission_Method> emission_method;
 
   // this is the data on the heap through which the main thread and the particle physics thread communicate
   std::shared_ptr<Physics_Shared_Data> shared_data;
-
-  bool thread_launched = false;
-  std::thread t;
 };
 
 struct Renderer
@@ -1024,8 +865,14 @@ struct Renderer
   bool use_txaa = true;
   bool use_fxaa = true;
   void resize_window(ivec2 window_size);
-  float32 get_render_scale() const { return render_scale; }
-  float32 get_vfov() { return vfov; }
+  float32 get_render_scale() const
+  {
+    return render_scale;
+  }
+  float32 get_vfov()
+  {
+    return vfov;
+  }
   void set_render_scale(float32 scale);
   void set_camera(vec3 camera_pos, vec3 dir);
   void set_camera_gaze(vec3 camera_pos, vec3 p);
@@ -1056,7 +903,6 @@ struct Renderer
   Texture brdf_integration_lut;
   bool previous_color_target_missing = true;
 
-private:
   Light_Array lights;
   std::array<Spotlight_Shadow_Map, MAX_LIGHTS> spotlight_shadow_maps;
   std::vector<Render_Entity> previous_render_entities;

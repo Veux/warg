@@ -76,9 +76,9 @@ bool File_Picker::run()
   ImGui::PushID(0);
   auto id0 = ImGui::GetID("Thumbnails");
   ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
-  auto thumbsize = ImVec2(128, 128);
-  auto tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
-  int num_horizontal = (int)floor((winsize.x - 32) / (tframesize.x + 8));
+  vec2 thumbsize = vec2(128, 128);
+  ImVec2 tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
+  int32 num_horizontal = (int32)floor((winsize.x - 32) / (tframesize.x + 8));
   if (num_horizontal == 0)
     num_horizontal = 1;
   for (size_t i = 0; i < dircontents.size(); i++)
@@ -91,31 +91,15 @@ bool File_Picker::run()
     auto id1_ = ImGui::GetID(id1.c_str());
     ImGui::BeginChildFrame(id1_, tframesize, ImGuiWindowFlags_NoScrollWithMouse);
 
-    //
-    ////desired method:
-    // Imgui_Texture_Descriptor descriptor;
-    // descriptor.ptr = f.is_dir ? dir_icon.texture : f.texture.texture;
-    // uint32 data = 0;
-    // if (descriptor.ptr)
-    //{
-    //  descriptor.gamma_encode = is_float_format(descriptor.ptr->get_format());
-    //  IMGUI_TEXTURE_DRAWS.push_back(descriptor);
-    //  data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
-    //}
-    ////if (ImGui::ImageButton((ImTextureID)data, thumbsize))
-    ////...
-    //// why does this uint32 data cause the clicking to not work correctly in imgui?
-    //// even if you set 'handle' to '0' instead, the clicks work fine
-    //// i wasn't able to fix this with another PushID
-
-    //
-
-    uint32 handle = f.is_dir ? dir_icon.get_handle() : f.texture.get_handle();
-    if (ImGui::ImageButton((ImTextureID)handle, thumbsize))
+    Texture *t = f.is_dir ? &dir_icon : &f.texture;
+    t->load();
+    ImGui::PushID(s("thumbbutton", i).c_str());
+    if (put_imgui_texture_button(t, thumbsize))
     {
       clicked = true;
       current_item = i;
     }
+    ImGui::PopID();
     ImGui::Text(f.path.c_str());
     ImGui::EndChildFrame();
     ImGui::PopID();
@@ -144,9 +128,15 @@ bool File_Picker::run()
   return picked;
 }
 
-std::string File_Picker::get_result() { return s(dir + "//" + result); }
+std::string File_Picker::get_result()
+{
+  return s(dir + "//" + result);
+}
 
-bool File_Picker::get_closed() { return !display; }
+bool File_Picker::get_closed()
+{
+  return !display;
+}
 
 Layout_Grid::Layout_Grid(vec2 size_, vec2 borders_, vec2 spacing_, uint32 columns_, uint32 rows_)
 {
@@ -180,7 +170,10 @@ Layout_Grid::Layout_Grid(
   size = borders * vec2(2) + spacing * (layout - vec2(1)) + element_size * layout;
 }
 
-vec2 Layout_Grid::get_total_size() { return size; }
+vec2 Layout_Grid::get_total_size()
+{
+  return size;
+}
 
 vec2 Layout_Grid::get_position(uint32 column, uint32 row)
 {

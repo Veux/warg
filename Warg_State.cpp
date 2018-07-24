@@ -10,7 +10,7 @@ using namespace glm;
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
     : State(name, window, window_size)
-{ 
+{
   session = session_;
 
   map = make_blades_edge();
@@ -47,7 +47,8 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
       if (_e.key.keysym.sym == SDLK_SPACE && !free_cam)
       {
       }
-      if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam && get_character(&game_state, player_character_id))
+      if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam &&
+          get_character(&game_state, player_character_id))
       {
         Character *player_character = get_character(&game_state, player_character_id);
         size_t key = _e.key.keysym.sym - SDLK_1;
@@ -70,11 +71,11 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     else if (_e.type == SDL_KEYUP)
     {
       ASSERT(!block_kb);
-        if (_e.key.keysym.sym == SDLK_F5)
-        {
-          free_cam = !free_cam;
-          SDL_SetRelativeMouseMode(SDL_bool(free_cam));
-        }
+      if (_e.key.keysym.sym == SDLK_F5)
+      {
+        free_cam = !free_cam;
+        SDL_SetRelativeMouseMode(SDL_bool(free_cam));
+      }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
@@ -514,7 +515,7 @@ void Warg_State::predict_state()
 
     prediction_iterations++;
   }
-  set_message("prediction iterations:", s(prediction_iterations), 5);
+  // set_message("prediction iterations:", s(prediction_iterations), 5);
 
   game_state = state_buffer.back();
 }
@@ -544,7 +545,7 @@ void Warg_State::update_spell_object_nodes()
     if (spell_object_nodes.count(spell_object->id) == 0)
     {
       spell_object_nodes[spell_object->id] = scene.add_mesh(cube, "spell_object_cube", &material);
-      set_message(s("adding spell object node on tick ", game_state.tick), "", 20);
+      // set_message(s("adding spell object node on tick ", game_state.tick), "", 20);
     }
     Node_Index mesh = spell_object_nodes[spell_object->id];
     scene.nodes[mesh].scale = vec3(0.4f);
@@ -568,13 +569,13 @@ void Warg_State::update_spell_object_nodes()
   {
     scene.delete_node(spell_object_nodes[node_id]);
     spell_object_nodes.erase(node_id);
-    set_message(s("erasing spell object node on tick ", game_state.tick), "", 20);
+    // set_message(s("erasing spell object node on tick ", game_state.tick), "", 20);
   }
 }
 
 void Warg_State::animate_character(UID character_id)
 {
-  set_message("animate_character uid:", s(character_id), 1.0f);
+  // set_message("animate_character uid:", s(character_id), 1.0f);
   static std::map<UID, float32> animation_times;
   static std::map<UID, vec3> last_positions;
   static std::map<UID, bool> last_grounded;
@@ -589,7 +590,7 @@ void Warg_State::animate_character(UID character_id)
   Node_Index character_node = character_nodes[character_id];
   ASSERT(character_node != NODE_NULL);
 
-  set_message("character_node:", s(character_node), 1.0f);
+  // set_message("character_node:", s(character_node), 1.0f);
 
   Node_Index left_shoe = scene.find_child_by_name(character_node, "left_shoe");
   Node_Index right_shoe = scene.find_child_by_name(character_node, "right_shoe");
@@ -616,7 +617,9 @@ void Warg_State::animate_character(UID character_id)
     return;
   }
 
-  auto linear_oscillate = [](float32 m, float32 x, float32 b) { return 4 * abs(fract(m * x + b) - 0.5) - 1; };
+  auto linear_oscillate = [](float32 m, float32 x, float32 b) {
+    return float32(4.f * abs(fract(m * x + b) - 0.5f) - 1.f);
+  };
 
   float32 cadence = character->effective_stats.speed / STEP_SIZE;
 
@@ -660,8 +663,8 @@ void Warg_State::update_animation_objects()
 
 void Warg_State::update()
 {
-  set_message("Warg update. Time:", s(current_time), 1.0f);
-  set_message("Warg time/dt:", s(current_time / dt), 1.0f);
+  // set_message("Warg update. Time:", s(current_time), 1.0f);
+  // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
   process_messages();
   update_stats_bar();
@@ -682,7 +685,7 @@ void Warg_State::update()
 
 void Warg_State::add_character_mesh(UID character_id)
 {
-  set_message("add_character_mesh with uid:", s(character_id), 1000.0f);
+  // set_message("add_character_mesh with uid:", s(character_id), 1000.0f);
   vec4 skin_color = rgb_vec4(253, 228, 200);
 
   Material_Descriptor material;
@@ -699,7 +702,7 @@ void Warg_State::add_character_mesh(UID character_id)
 
   Node_Index character_node = character_nodes[character_id];
 
-  set_message("add_character_mesh produced character_node :", s(character_node), 1000.0f);
+  // set_message("add_character_mesh produced character_node :", s(character_node), 1000.0f);
 
   Material_Descriptor hp_bar_material;
   hp_bar_material.emissive = "color(1, 1, 1, 1)";
@@ -964,7 +967,10 @@ void Latency_Tracker::ack_received()
   last_latency = last_ack - last_ping;
 }
 
-uint32 Latency_Tracker::get_latency() { return (uint32)round(last_latency * 1000); }
+uint32 Latency_Tracker::get_latency()
+{
+  return (uint32)round(last_latency * 1000);
+}
 
 void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2 size)
 {
@@ -1154,7 +1160,6 @@ void Warg_State::update_icons()
     if (spell_formula->on_global_cooldown && cooldown_remaining < player_character->global_cooldown)
       cooldown_percent = player_character->global_cooldown / player_character->effective_stats.global_cooldown;
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
-    set_message(s("progress", i, ":"), s(cooldown_percent), 1.0f);
   }
 
   run_pixel_shader(&shader, &sources, &framebuffer);

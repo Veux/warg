@@ -129,6 +129,35 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   small_light = scene.nodes[scene.nodes[temp].children[0]].children[0];
   scene.drop(small_light);
   scene.delete_node(temp);
+
+  Particle_Emitter_Descriptor ped;
+  Mesh_Index mesh_index;
+  Material_Index material_index;
+  material.vertex_shader = "instance.vert";
+  material.frag_shader = "emission.frag";
+  material.emissive = "color(1,1,1,1)";
+  material.emissive.mod = vec4(15.f, 3.3f, .7f, 1.f);
+  Node_Index particle_node = scene.add_mesh(cube, "particle", &material);
+  mesh_index = scene.nodes[particle_node].model[0].first;
+  material_index = scene.nodes[particle_node].model[0].second;
+
+  ped.emission_descriptor.initial_scale = vec3(0.035f);
+  ped.emission_descriptor.initial_scale_variance = vec3(0.01f);
+  ped.emission_descriptor.initial_velocity = vec3(0, 0, 2);
+  ped.emission_descriptor.initial_velocity_variance = vec3(2, 2, 1);
+  ped.emission_descriptor.particles_per_second = 12115.f;
+  ped.emission_descriptor.time_to_live = .55f;
+  ped.emission_descriptor.time_to_live_variance = 1.05f;
+
+  ped.physics_descriptor.type = wind;
+  ped.physics_descriptor.intensity = 20.f;
+  scene.nodes[particle_node].visible = false;
+  scene.particle_emitters.push_back(Particle_Emitter(ped, mesh_index, material_index));
+  scene.lights.light_count = 1;
+  scene.lights.lights[0].color = vec3(1.0f, .1f, .1f);
+  scene.lights.lights[0].position.z = 1.0f;
+  scene.lights.lights[0].ambient = 0.002f;
+  scene.lights.lights[0].attenuation.z = 0.06f;
 }
 
 void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
@@ -449,7 +478,7 @@ void Render_Test_State::update()
   scene.nodes[tiger2].scale = vec3(.25);
 
   // build_transformation transfer child test
-  static float32 last = current_time;
+  static float32 last = (float32)current_time;
   static float32 time_of_reset = 0.f;
   static bool is_world = false;
   static bool first1 = true;
@@ -473,7 +502,7 @@ void Render_Test_State::update()
       // alternatively we could just have one resource manager function that pushes all the descriptors into
       // the pool at once, called at prepare_renderer every frame
 
-      last = current_time;
+      last = (float32)current_time;
       is_world = true;
       if (time_of_reset < current_time - 15)
       {
@@ -482,7 +511,7 @@ void Render_Test_State::update()
         scene.nodes[tiger1].scale = vec3(1);
         scene.nodes[tiger1].orientation = {};
         scene.nodes[tiger1].import_basis = mat4(1);
-        time_of_reset = current_time;
+        time_of_reset = (float32)current_time;
       }
     }
     else
@@ -498,7 +527,7 @@ void Render_Test_State::update()
       scene.set_parent(tiger2, sphere);
 
       is_world = false;
-      last = current_time;
+      last = (float32)current_time;
     }
   }
 
@@ -511,12 +540,38 @@ void Render_Test_State::update()
   scene.nodes[grabbycube].orientation = angleAxis(theta, vec3(cos(.25f * current_time), sin(.25f * current_time), 0));
 
   scene.nodes[shoulder_joint].position = {0.50f * cube_diameter, 0.0f, cube_diameter};
-  scene.nodes[shoulder_joint].orientation = angleAxis(20.f * (float32)sin(current_time), vec3(1, 0, 0));
+  scene.nodes[shoulder_joint].orientation = angleAxis(20.f * (float32)sin(current_time / 20.f), vec3(1, 0, 0));
 
   const float32 arm_radius = 0.25f;
   scene.nodes[arm_test].scale_vertex = {arm_radius, arm_radius, 1.5f};
   scene.nodes[arm_test].position = {0.5f * arm_radius, 0.0f, -0.75f};
 
+  renderer.set_camera(cam.pos, cam.dir);
+  Particle_Emitter *pe = &scene.particle_emitters.back();
+  // pe->descriptor.position = vec3(5.f * sin(current_time), 5.f * cos(current_time), 1.0f);
+
+  glm::mat4 m = scene.build_transformation(arm_test);
+  quat orientation;
+  vec3 translation;
+  decompose(m, vec3(), orientation, translation, vec3(), vec4());
+  orientation = conjugate(orientation);
+  // pe->descriptor.physics_descriptor.gravity = vec3(0);
+  // pe->descriptor.orientation = orientation;
+  //// pe->descriptor.position = translation;
+
+  pe->descriptor.emission_descriptor.initial_velocity = vec3(0, 0, 2);
+  pe->descriptor.emission_descriptor.initial_velocity_variance =
+      vec3(5.5f * sin(5 * current_time), 5.5f * cos(4 * current_time), 2);
+  pe->descriptor.emission_descriptor.initial_position_variance = vec3(3, 3, .1);
+  pe->update(renderer.projection, renderer.camera, dt);
+  pe->descriptor.physics_descriptor.intensity = random_between(11.f, 35.f);
+  static vec3 dir;
+  if (fract(sin(current_time)) > .5)
+    dir = random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+
+  pe->descriptor.physics_descriptor.direction = dir;
+
+  scene.lights.lights[0].brightness = random_between(47.f, 55.f);
   scene.draw_imgui();
 }
 
