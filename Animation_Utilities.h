@@ -1,8 +1,12 @@
 #pragma once
 #include "Globals.h"
+#include "Render.h"
+#include "Scene_Graph.h"
+#include "glm/gtc/constants.hpp"
 
-template <typename V, typename T> V lerp(V &v1, V &v2, T &t) { return v1 + t * (v2 - v1); }
-float lerp(float v1, float v2, float t) { return v1 + t * (v2 - v1); }
+template <typename V, typename T> V lerp(V &v1, V &v2, T &t);
+
+float lerp(float v1, float v2, float t);
 
 template <typename V> struct Animation;
 
@@ -67,13 +71,25 @@ template <> struct Animation<float>
     _v1 = v1;
     _v2 = v2;
   }
-  void flip_dir() { _up = !_up; }
-  void set_dir(bool b) { _up = b; }
-  float get_current() const { return _current; }
+  void flip_dir()
+  {
+    _up = !_up;
+  }
+  void set_dir(bool b)
+  {
+    _up = b;
+  }
+  float get_current() const
+  {
+    return _current;
+  }
   float _rate;
 
 private:
-  float lerp(float v1, float v2, float t) { return v1 + t * (v2 - v1); }
+  float lerp(float v1, float v2, float t)
+  {
+    return v1 + t * (v2 - v1);
+  }
   float _current;
   bool _up;
   float _t;
@@ -103,7 +119,10 @@ template <typename V> struct Animation
       return _t == 0.0f;
     }
   }
-  template <typename V, typename T> V lerp(V &v1, V &v2, T &t) { return v1 + t * (v2 - v1); }
+  template <typename V, typename T> V lerp(V &v1, V &v2, T &t)
+  {
+    return v1 + t * (v2 - v1);
+  }
   void lerp(float dt)
   {
     if (is_done())
@@ -130,10 +149,22 @@ template <typename V> struct Animation
     _v1 = v1;
     _v2 = v2;
   }
-  void flip_dir() { _up = !_up; }
-  void set_dir(bool b) { _up = b; }
-  bool peek_dir() { return _up; }
-  V get_current() const { return _current; }
+  void flip_dir()
+  {
+    _up = !_up;
+  }
+  void set_dir(bool b)
+  {
+    _up = b;
+  }
+  bool peek_dir()
+  {
+    return _up;
+  }
+  V get_current() const
+  {
+    return _current;
+  }
   float _rate;
 
 private:
@@ -144,34 +175,64 @@ private:
   V _v2;
 };
 
+//
+// template <typename V> struct Animation;
+//
+// template <> struct Animation<float>
+//{
+//  Animation();
+//  Animation(float v1, float v2, float rate = 1.0f);
+//  void reset();
+//  bool is_done();
+//  const void step(float dt);
+//  void set_new_points(float v1, float v2);
+//  void flip_dir();
+//  void set_dir(bool b);
+//  float get_current();
+//  const float _rate;
+//
+// private:
+//  float lerp(float v1, float v2, float t);
+//  float _current;
+//  bool _up;
+//  float _t;
+//  float _v1;
+//  float _v2;
+//};
+//
+// template <typename V> struct Animation
+//{
+//  Animation(V &v1, V &v2, float rate = 1.0f);
+//  bool is_done();
+//  const
+//
+//      template <typename V, typename T>
+//      V lerp(V &v1, V &v2, T &t);
+//  void lerp(float dt);
+//  void set_new_points(V &v1, V &v2);
+//  void flip_dir();
+//  void set_dir(bool b);
+//  bool peek_dir();
+//  V get_current();
+//  const float _rate;
+//
+// private:
+//  V _current;
+//  bool _up;
+//  float _t;
+//  V _v1;
+//  V _v2;
+//};
+
 struct Bezier_Curve
 {
   Bezier_Curve() {}
-  Bezier_Curve(std::vector<glm::vec4> pts) : points(pts) {}
-  glm::vec4 lerp(float t)
-  {
-    if (remainder.size() == 0)
-    {
-      remainder = points;
-    }
-    if (remainder.size() == 1)
-    {
-      glm::vec4 p = remainder[0];
-      remainder.clear();
-      return p;
-    }
-
-    for (uint32 i = 0; i + 1 < remainder.size(); ++i)
-    {
-      glm::vec4 p = glm::mix(remainder[i], remainder[i + 1], t);
-      remainder[i] = p;
-    }
-    remainder.pop_back();
-
-    return lerp(t);
-  }
+  Bezier_Curve(std::vector<glm::vec4> pts);
+  glm::vec4 lerp(float t);
   std::vector<glm::vec4> points;
 
 private:
   std::vector<glm::vec4> remainder;
 };
+
+void fire_emitter(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size);

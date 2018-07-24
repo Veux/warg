@@ -4,6 +4,7 @@
 #include "Render.h"
 #include "State.h"
 #include "Third_party/imgui/imgui.h"
+#include "Animation_Utilities.h"
 #include "UI.h"
 
 using namespace glm;
@@ -21,6 +22,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   reset_mouse_delta();
 
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
+
+  scene.particle_emitters.push_back({});
+  scene.particle_emitters.push_back({});
+  scene.particle_emitters.push_back({});
+  scene.particle_emitters.push_back({});
+  scene.lights.light_count = 4;
 }
 
 void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
@@ -680,6 +687,27 @@ void Warg_State::update()
   update_spell_object_nodes();
   update_game_interface();
   // update_animation_objects();
+
+  //-5.15, -17.5
+  // 5.15 -17.5
+
+  //-5.15 17.5
+  // 5.15 17.5
+
+  // 9.6z
+
+  // camera must be set before render entities, or they get a 1 frame lag
+  renderer.set_camera(cam.pos, cam.dir);
+
+  fire_emitter(
+      &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
+  fire_emitter(
+      &renderer, &scene, &scene.particle_emitters[1], &scene.lights.lights[1], vec3(5.15, -17.5, 8.6), vec2(.5));
+  fire_emitter(
+      &renderer, &scene, &scene.particle_emitters[2], &scene.lights.lights[2], vec3(-5.15, 17.5, 8.6), vec2(.5));
+  fire_emitter(
+      &renderer, &scene, &scene.particle_emitters[3], &scene.lights.lights[3], vec3(5.15, 17.5, 8.6), vec2(.5));
+
   scene.draw_imgui();
 }
 

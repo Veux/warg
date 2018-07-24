@@ -799,6 +799,7 @@ struct Particle_Emitter_Descriptor
 
 struct Particle_Emitter
 {
+  Particle_Emitter();
   Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, Material_Index mat);
   Particle_Emitter(const Particle_Emitter &rhs);
   Particle_Emitter(Particle_Emitter &&rhs);

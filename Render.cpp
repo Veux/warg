@@ -2627,6 +2627,14 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, 
   thread_launched = true;
 }
 
+Particle_Emitter::Particle_Emitter()
+{
+  shared_data = std::make_unique<Physics_Shared_Data>();
+  t = std::thread(thread, shared_data);
+  t.detach();
+  thread_launched = true;
+}
+
 Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
     : descriptor(rhs.descriptor), mesh_index(rhs.mesh_index), material_index(rhs.material_index)
 {
@@ -2728,6 +2736,11 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       SDL_Delay(1);
       continue;
     }
+    if (emission_type != shared_data->descriptor.emission_descriptor.type)
+      emission = construct_emission_method(shared_data->descriptor);
+    if (physics_type != shared_data->descriptor.physics_descriptor.type)
+      physics = construct_physics_method(shared_data->descriptor);
+
     const float32 time = shared_data->completed_update * dt;
     vec3 pos = shared_data->descriptor.position;
     vec3 vel = shared_data->descriptor.velocity;
@@ -2760,7 +2773,11 @@ bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulato
   ASSERT(shared_data);
   ASSERT(accumulator);
   spin_until_up_to_date();
-  return shared_data->particles.prepare_instance(accumulator);
+  if (mesh_index.i != NODE_NULL && material_index.i != NODE_NULL)
+  {
+    return shared_data->particles.prepare_instance(accumulator);
+  }
+  return false;
 }
 
 void Particle_Emitter::clear()
