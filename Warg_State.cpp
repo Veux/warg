@@ -713,7 +713,8 @@ void Warg_State::update()
 
 void Warg_State::add_character_mesh(UID character_id)
 {
-  // set_message("add_character_mesh with uid:", s(character_id), 1000.0f);
+  Character *character = get_character(&game_state, character_id);
+
   vec4 skin_color = rgb_vec4(253, 228, 200);
 
   Material_Descriptor material;
@@ -736,7 +737,7 @@ void Warg_State::add_character_mesh(UID character_id)
   hp_bar_material.emissive = "color(1, 1, 1, 1)";
   Node_Index hp_bar = scene.add_mesh(cube, "hp_bar", &hp_bar_material);
   scene.set_parent(hp_bar, character_node);
-  float32 bar_z_pos = game_state.characters[character_id].radius.z;
+  float32 bar_z_pos = character->radius.z;
   scene.nodes[hp_bar].position = vec3(0.f, 0.f, 0.6f);
   scene.nodes[hp_bar].scale = vec3(1.2f, 1.2f, 0.07f);
 
