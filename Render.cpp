@@ -417,7 +417,8 @@ void Texture::load()
     texture = nullptr;
     return;
   }
-  auto ptr = TEXTURE2D_CACHE[t.name].lock();
+  
+  auto ptr = TEXTURE2D_CACHE.count(t.name) ? TEXTURE2D_CACHE[t.name].lock() : nullptr;
   if (ptr)
   {
     texture = ptr;
