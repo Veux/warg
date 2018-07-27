@@ -1,5 +1,35 @@
 #include "stdafx.h"
 #include "Spell.h"
+#include "Warg_Common.h"
+
+Spell_Database SPELL_DB;
+
+void Character_Stats::operator*=(const Character_Stats &b)
+{
+  global_cooldown *= b.global_cooldown;
+  speed *= b.speed;
+  cast_speed *= b.cast_speed;
+  mana_regen *= b.mana_regen;
+  hp_regen *= b.hp_regen;
+  damage_mod *= b.damage_mod;
+  atk_dmg *= b.atk_dmg;
+  atk_speed *= b.atk_dmg;
+}
+
+Character_Stats operator*(const Character_Stats &a, const Character_Stats &b)
+{
+  Character_Stats c;
+  c.global_cooldown = a.global_cooldown * b.global_cooldown;
+  c.speed = a.speed * b.speed;
+  c.cast_speed = a.cast_speed * b.cast_speed;
+  c.mana_regen = a.mana_regen * b.mana_regen;
+  c.hp_regen = a.hp_regen * b.hp_regen;
+  c.damage_mod = a.damage_mod * b.damage_mod;
+  c.atk_dmg = a.atk_dmg * b.atk_dmg;
+  c.atk_speed = a.atk_speed * b.atk_speed;
+
+  return c;
+}
 
 Spell_Formula *Spell_Database::get_spell(Spell_Index index)
 {
@@ -17,16 +47,18 @@ Spell_Formula *Spell_Database::get_spell(const char *name)
   return nullptr;
 }
 
-Spell_Effect_Formula *Spell_Database::get_spell_effect(Spell_Index index)
-{
-  ASSERT(index < effects.size());
-  return &effects[index];
-}
-
 Spell_Object_Formula *Spell_Database::get_spell_object(Spell_Index index)
 {
   ASSERT(index < objects.size());
   return &objects[index];
+}
+
+Spell_Object_Formula *Spell_Database::get_spell_object(Spell_ID id)
+{
+  for (Spell_Object_Formula &formula : objects)
+    if (formula._id == id)
+      return &formula;
+  return nullptr;
 }
 
 BuffDef *Spell_Database::get_buff(Spell_Index index)
@@ -35,10 +67,12 @@ BuffDef *Spell_Database::get_buff(Spell_Index index)
   return &buffs[index];
 }
 
-CharMod *Spell_Database::get_character_modifier(Spell_Index index)
+BuffDef *Spell_Database::get_buff(Spell_ID id)
 {
-  ASSERT(index < char_mods.size());
-  return &char_mods[index];
+  for (BuffDef &buff : buffs)
+    if (buff._id == id)
+      return &buff;
+  return nullptr;
 }
 
 Spell_Formula *Spell_Database::add_spell()
@@ -47,14 +81,6 @@ Spell_Formula *Spell_Database::add_spell()
   spell.index = spells.size();
   spells.push_back(spell);
   return &spells.back();
-}
-
-Spell_Effect_Formula *Spell_Database::add_spell_effect()
-{
-  Spell_Effect_Formula effect;
-  effect.index = effects.size();
-  effects.push_back(effect);
-  return &effects.back();
 }
 
 Spell_Object_Formula *Spell_Database::add_spell_object()
@@ -73,55 +99,220 @@ BuffDef *Spell_Database::add_buff()
   return &buffs.back();
 }
 
-CharMod *Spell_Database::add_character_modifier()
+void shadow_word_pain_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
 {
-  CharMod character_modifier;
-  character_modifier.index = char_mods.size();
-  char_mods.push_back(character_modifier);
-  return &char_mods.back();
+  const uint32 shadow_word_pain_tick_damage = 5;
+
+  ASSERT(character);
+
+  if (!character->alive)
+    return;
+
+  int effective = shadow_word_pain_tick_damage;
+  int overkill = 0;
+
+  character->hp -= effective;
+
+  if (character->hp <= 0)
+  {
+    effective += character->hp;
+    overkill = -character->hp;
+    character->hp = 0;
+    character->alive = false;
+
+    float32 new_height = character->radius.y;
+    character->physics.grounded = false;
+    character->physics.position.z -= character->radius.z - character->radius.y;
+
+    return;
+  }
+}
+
+void shadow_word_pain_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+  Character *target = game_state->get_character(caster->cast_target);
+  ASSERT(target);
+
+  BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Shadow_Word_Pain);
+  Buff buff;
+  buff.formula_index = buff_formula->index;
+  buff.duration = buff_formula->duration;
+  buff.time_since_last_tick = 0.f;
+
+  if (target->debuff_count < MAX_DEBUFFS)
+    target->debuffs[target->debuff_count++] = buff;
+}
+
+void frostbolt_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  Spell_Object_Formula *object_formula = SPELL_DB.get_spell_object(Spell_ID::Frostbolt);
+  Spell_Object object;
+  object.formula_index = object_formula->index;
+  object.caster = caster->id;
+  object.target = caster->target_id;
+  object.pos = caster->physics.position;
+  object.id = uid();
+  game_state->spell_objects[game_state->spell_object_count++] = object;
+}
+
+void blink_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+
+  vec3 dir = caster->physics.orientation * vec3(0, 1, 0);
+  vec3 delta = normalize(dir) * vec3(15.f);
+  collide_and_slide_char(caster->physics, caster->radius, delta, vec3(0, 0, -100), *colliders);
+}
+
+void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+
+  BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Sprint);
+  Buff buff;
+  buff.formula_index = buff_formula->index;
+  buff.duration = buff_formula->duration;
+
+  if (caster->buff_count < MAX_BUFFS)
+    caster->buffs[caster->buff_count++] = buff;
+}
+
+void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+
+  BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Icy_Veins);
+  Buff buff;
+  buff.formula_index = buff_formula->index;
+  buff.duration = buff_formula->duration;
+
+  if (caster->buff_count < MAX_BUFFS)
+    caster->buffs[caster->buff_count++] = buff;
+}
+
+void frostbolt_object_on_hit(
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders)
+{
+  uint32 frostbolt_damage = 10;
+
+  ASSERT(formula);
+  ASSERT(object);
+
+  Character *target = game_state->get_character(object->target);
+  ASSERT(target);
+
+  if (!target->alive)
+    return;
+
+  int effective = frostbolt_damage;
+  int overkill = 0;
+
+  target->hp -= effective;
+
+  if (target->hp <= 0)
+  {
+    effective += target->hp;
+    overkill = -target->hp;
+    target->hp = 0;
+    target->alive = false;
+
+    float32 new_height = target->radius.y;
+    target->physics.grounded = false;
+    target->physics.position.z -= target->radius.z - target->radius.y;
+
+    return;
+  }
+
+  BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Frostbolt);
+  Buff debuff;
+  debuff.formula_index = debuff_formula->index;
+  debuff.duration = debuff_formula->duration;
+
+  if (target->debuff_count < MAX_DEBUFFS)
+    target->debuffs[target->debuff_count++] = debuff;
+}
+
+struct Demonic_Circle_Buff_Data
+{
+  vec3 position = vec3(0.f);
+  quat orientation = quat();
+  bool grounded = false;
+};
+
+void *demonic_circle_buff_init()
+{
+  Demonic_Circle_Buff_Data data_struct;
+  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)malloc(sizeof *data_ptr);
+  *data_ptr = data_struct;
+  return data_ptr;
+}
+
+void demonic_circle_buff_destroy(void *data)
+{
+  free(data);
+}
+
+void demonic_circle_summon_release(
+    Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+
+  if (caster->buff_count >= MAX_BUFFS)
+    return;
+
+  BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Demonic_Circle_Summon);
+  Buff buff;
+  buff._id = Spell_ID::Demonic_Circle_Summon;
+  buff.formula_index = buff_formula->index;
+  buff.duration = buff_formula->duration;
+  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)buff_formula->_init();
+  data_ptr->position = caster->physics.position;
+  data_ptr->orientation = caster->physics.orientation;
+  data_ptr->grounded = caster->physics.grounded;
+  buff._data = data_ptr;
+
+  caster->buffs[caster->buff_count++] = buff;
+}
+
+void demonic_circle_teleport_release(
+  Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+
+  Buff *circle_buff = nullptr;
+  for (size_t i = 0; i < caster->buff_count; i++)
+    if (caster->buffs[i]._id == Spell_ID::Demonic_Circle_Summon)
+      circle_buff = &caster->buffs[i];
+
+  if (!circle_buff)
+    return;
+
+  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)circle_buff->_data;
+
+  caster->physics.position = data_ptr->position;
+  caster->physics.orientation = data_ptr->orientation;
+  caster->physics.grounded = data_ptr->grounded;
 }
 
 Spell_Database::Spell_Database()
 {
-  auto icon = [](const char *filename)
-  {
-    return Texture(s("../Assets/Icons/", filename));
-  };
+  auto icon = [](const char *filename) { return Texture(s("../Assets/Icons/", filename)); };
 
   // FROSTBOLT
 
-  CharMod *fb_slow = add_character_modifier();
-  fb_slow->type = Character_Modifier_Type::Speed;
-  fb_slow->speed.factor = 0.2;
-
   BuffDef *fb_debuff = add_buff();
+  fb_debuff->_id = Spell_ID::Frostbolt;
   fb_debuff->name = "FrostboltSlowDebuff";
   fb_debuff->icon = icon("frostbolt.jpg");
   fb_debuff->duration = 10;
-  fb_debuff->character_modifiers.push_back(fb_slow->index);
-
-  Spell_Effect_Formula *fb_debuff_appl = add_spell_effect();
-  fb_debuff_appl->name = "FrostboltDebuffApplyEffect";
-  fb_debuff_appl->type = Spell_Effect_Type::Apply_Debuff;
-  fb_debuff_appl->apply_debuff.debuff_formula = fb_debuff->index;
-
-  Spell_Effect_Formula *fb_damage = add_spell_effect();
-  fb_damage->name = "FrostboltDamageEffect";
-  fb_damage->type = Spell_Effect_Type::Damage;
-  fb_damage->damage.amount = 15;
-  fb_damage->damage.pierce_absorb = false;
-  fb_damage->damage.pierce_mod = false;
+  fb_debuff->stats_modifiers.speed = 0.2;
 
   Spell_Object_Formula *fb_object = add_spell_object();
   fb_object->name = "Frostbolt";
+  fb_object->_id = Spell_ID::Frostbolt;
   fb_object->speed = 30;
-  fb_object->effects.push_back(fb_debuff_appl->index);
-  fb_object->effects.push_back(fb_damage->index);
-
-  Spell_Effect_Formula *fb_object_launch = add_spell_effect();
-  fb_object_launch->name = "FrostboltObjectLaunchEffect";
-  fb_object_launch->type = Spell_Effect_Type::Object_Launch;
-  fb_object_launch->object_launch.object_formula = fb_object->index;
+  fb_object->_on_hit = frostbolt_object_on_hit;
 
   Spell_Formula *frostbolt = add_spell();
   frostbolt->name = "Frostbolt";
@@ -132,13 +323,9 @@ Spell_Database::Spell_Database()
   frostbolt->cooldown = 0;
   frostbolt->cast_time = 1.5f;
   frostbolt->on_global_cooldown = true;
-  frostbolt->effects.push_back(fb_object_launch->index);
+  frostbolt->_on_release = frostbolt_release;
 
   // BLINK
-
-  Spell_Effect_Formula *blink_effect = add_spell_effect();
-  blink_effect->blink.distance = 15.f;
-  blink_effect->type = Spell_Effect_Type::Blink;
 
   Spell_Formula *blink = add_spell();
   blink->name = "Blink";
@@ -149,27 +336,17 @@ Spell_Database::Spell_Database()
   blink->cooldown = 15.f;
   blink->cast_time = 0.f;
   blink->on_global_cooldown = false;
-  blink->effects.push_back(blink_effect->index);
+  blink->_on_release = blink_release;
 
   // SHADOW WORD: PAIN
 
-  Spell_Effect_Formula *swp_tick = add_spell_effect();
-  swp_tick->type = Spell_Effect_Type::Damage;
-  swp_tick->damage.amount = 5;
-  swp_tick->damage.pierce_absorb = false;
-  swp_tick->damage.pierce_mod = false;
-
   BuffDef *swp_buff = add_buff();
+  swp_buff->_id = Spell_ID::Shadow_Word_Pain;
   swp_buff->name = "ShadowWordPainBuff";
   swp_buff->icon = icon("shadow_word_pain.jpg");
   swp_buff->duration = 15;
   swp_buff->tick_freq = 1.0 / 3;
-  swp_buff->tick_effects.push_back(swp_tick->index);
-
-  Spell_Effect_Formula *swp_effect = add_spell_effect();
-  swp_effect->name = "ShadowWordPainEffect";
-  swp_effect->type = Spell_Effect_Type::Apply_Debuff;
-  swp_effect->apply_debuff.debuff_formula = swp_buff->index;
+  swp_buff->_on_tick = shadow_word_pain_debuff_tick;
 
   Spell_Formula *swp = add_spell();
   swp->name = "Shadow Word: Pain";
@@ -179,25 +356,17 @@ Spell_Database::Spell_Database()
   swp->cooldown = 0;
   swp->cast_time = 0;
   swp->on_global_cooldown = true;
-  swp->targets = Spell_Targets::Self;
-  swp->effects.push_back(swp_effect->index);
+  swp->targets = Spell_Targets::Hostile;
+  swp->_on_release = shadow_word_pain_release;
 
   // ICY VEINS
 
-  CharMod *icy_veins_mod = add_character_modifier();
-  icy_veins_mod->type = Character_Modifier_Type::CastSpeed;
-  icy_veins_mod->cast_speed.factor = 2.f;
-
   BuffDef *icy_veins_buff = add_buff();
+  icy_veins_buff->_id = Spell_ID::Icy_Veins;
   icy_veins_buff->name = "IcyVeinsBuff";
   icy_veins_buff->icon = Texture("../Assets/Icons/icy_veins.jpg");
   icy_veins_buff->duration = 20;
-  icy_veins_buff->character_modifiers.push_back(icy_veins_mod->index);
-
-  Spell_Effect_Formula *icy_veins_buff_appl = add_spell_effect();
-  icy_veins_buff_appl->name = "IcyVeinsBuffEffect";
-  icy_veins_buff_appl->type = Spell_Effect_Type::Apply_Buff;
-  icy_veins_buff_appl->apply_buff.buff_formula = icy_veins_buff->index;
+  icy_veins_buff->stats_modifiers.cast_speed = 2.f;
 
   Spell_Formula *icy_veins = add_spell();
   icy_veins->name = "Icy Veins";
@@ -208,24 +377,16 @@ Spell_Database::Spell_Database()
   icy_veins->cooldown = 0.f;
   icy_veins->cast_time = 0;
   icy_veins->on_global_cooldown = false;
-  icy_veins->effects.push_back(icy_veins_buff_appl->index);
+  icy_veins->_on_release = icy_veins_release;
 
   // SPRINT
 
-  CharMod *sprint_modifier = add_character_modifier();
-  sprint_modifier->type = Character_Modifier_Type::Speed;
-  sprint_modifier->speed.factor = 2.f;
-
   BuffDef *sprint_buff = add_buff();
+  sprint_buff->_id = Spell_ID::Sprint;
   sprint_buff->name = "Sprint";
   sprint_buff->duration = 15.f;
   sprint_buff->icon = icon("sprint.jpg");
-  sprint_buff->character_modifiers.push_back(sprint_modifier->index);
-
-  Spell_Effect_Formula *sprint_effect = add_spell_effect();
-  sprint_effect->name = "Sprint";
-  sprint_effect->type = Spell_Effect_Type::Apply_Buff;
-  sprint_effect->apply_buff.buff_formula = sprint_buff->index;
+  sprint_buff->stats_modifiers.speed = 2.f;
 
   Spell_Formula *sprint = add_spell();
   sprint->name = "Sprint";
@@ -235,5 +396,39 @@ Spell_Database::Spell_Database()
   sprint->cast_time = 0.f;
   sprint->on_global_cooldown = false;
   sprint->targets = Spell_Targets::Self;
-  sprint->effects.push_back(sprint_effect->index);
+  sprint->_on_release = sprint_release;
+
+  // DEMONIC CIRCLE: SUMMON
+
+  BuffDef *demonic_circle_buff = add_buff();
+  demonic_circle_buff->_id = Spell_ID::Demonic_Circle_Summon;
+  demonic_circle_buff->name = "Demonic Circle";
+  demonic_circle_buff->duration = 3600.f;
+  demonic_circle_buff->icon = icon("demonic_circle_summon.jpg");
+  demonic_circle_buff->_init = demonic_circle_buff_init;
+  demonic_circle_buff->_destroy = demonic_circle_buff_destroy;
+
+  Spell_Formula *demonic_circle_summon = add_spell();
+  demonic_circle_summon->name = "Demonic Circle: Summon";
+  demonic_circle_summon->cooldown = 30.f;
+  demonic_circle_summon->icon = icon("demonic_circle_summon.jpg");
+  demonic_circle_summon->mana_cost = 5;
+  demonic_circle_summon->cast_time = 0.f;
+  demonic_circle_summon->on_global_cooldown = true;
+  demonic_circle_summon->targets = Spell_Targets::Self;
+  demonic_circle_summon->_on_release = demonic_circle_summon_release;
+
+  // DEMONIC CIRCLE: TELEPORT
+
+  Spell_Formula *demonic_circle_teleport = add_spell();
+  demonic_circle_teleport->name = "Demonic Circle: Teleport";
+  demonic_circle_teleport->cooldown = 5.f;
+  demonic_circle_teleport->icon = icon("demonic_circle_teleport.jpg");
+  demonic_circle_teleport->mana_cost = 5;
+  demonic_circle_teleport->cast_time = 0.f;
+  demonic_circle_teleport->on_global_cooldown = false;
+  demonic_circle_teleport->targets = Spell_Targets::Self;
+  demonic_circle_teleport->_on_release = demonic_circle_teleport_release;
+
+  SPELL_DB = *this;
 }

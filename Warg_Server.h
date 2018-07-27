@@ -33,20 +33,10 @@ struct Warg_Server
   void interrupt_cast(UID caster_);
   void update_cast(UID caster_, float32 dt);
   void release_spell(UID caster_, UID target_, Spell_Status *spell);
-  void invoke_spell_effect(Spell_Effect &effect);
-  void invoke_spell_effect_aoe(Spell_Effect &effect);
-  void invoke_spell_effect_apply_buff(Spell_Effect &effect);
-  void invoke_spell_effect_clear_debuffs(Spell_Effect &effect);
-  void invoke_spell_effect_damage(Spell_Effect &effect);
-  void invoke_spell_effect_heal(Spell_Effect &effect);
-  void invoke_spell_effect_interrupt(Spell_Effect &effect);
-  void invoke_spell_effect_object_launch(Spell_Effect &effect);
-  void invoke_spell_effect_blink(Spell_Effect &effect);
   void update_buffs(UID character);
   void update_target(UID ch);
   bool update_spell_object(Spell_Object *so);
   Character *get_character(UID id);
-  void apply_character_modifiers(Character *character);
 
   std::map<UID, std::shared_ptr<Peer>> peers;
   float64 time = 0;

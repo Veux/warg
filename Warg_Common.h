@@ -5,19 +5,6 @@
 #include <string>
 #include <vector>
 
-struct Character_Stats
-{
-  float32 global_cooldown;
-  float32 speed;
-  float32 cast_speed;
-  float32 cast_damage;
-  float32 mana_regen;
-  float32 hp_regen;
-  float32 damage_mod;
-  float32 atk_dmg;
-  float32 atk_speed;
-};
-
 enum Move_Status
 {
   None = 0,
@@ -86,7 +73,6 @@ struct Character
   void update_mana(float32 dt);
   void update_spell_cooldowns(float32 dt);
   void update_global_cooldown(float32 dt);
-  void apply_modifier(CharMod &modifier);
 
   UID id;
 
@@ -132,6 +118,8 @@ struct Map
 
 struct Game_State
 {
+  Character *get_character(UID id);
+
   uint32 tick = 0;
   uint32 input_number = 0;
   Character characters[MAX_CHARACTERS];

@@ -69,26 +69,6 @@ void Character::update_global_cooldown(float32 dt)
     global_cooldown = 0;
 }
 
-void Character::apply_modifier(CharMod &modifier)
-{
-  switch (modifier.type)
-  {
-    case Character_Modifier_Type::DamageTaken:
-      effective_stats.damage_mod *= modifier.damage_taken.factor;
-      break;
-    case Character_Modifier_Type::Speed:
-      effective_stats.speed *= modifier.speed.factor;
-      break;
-    case Character_Modifier_Type::CastSpeed:
-      effective_stats.cast_speed *= modifier.cast_speed.factor;
-      break;
-    case Character_Modifier_Type::Silence:
-      silenced = true;
-    default:
-      break;
-  }
-}
-
 void move_char(Character &character, Input command, std::vector<Triangle> colliders)
 {
   vec3 &pos = character.physics.position;
@@ -380,4 +360,15 @@ void game_state_copy(Game_State *dst, Game_State *src)
 Spell_Index get_casting_spell_formula_index(Character *character)
 {
   return character->spell_set.spell_statuses[character->casting_spell_status_index].formula_index;
+}
+
+Character *Game_State::get_character(UID id)
+{
+  for (size_t i = 0; i < character_count; i++)
+  {
+    Character *character = &characters[i];
+    if (character->id == id)
+      return character;
+  }
+  return nullptr;
 }

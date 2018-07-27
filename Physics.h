@@ -10,6 +10,8 @@ struct Triangle
   vec3 a, b, c;
 };
 
+typedef std::vector<Triangle> Colliders;
+
 struct Ellipsoid
 {
   vec3 c, r;

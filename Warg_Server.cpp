@@ -60,7 +60,6 @@ void Warg_Server::update(float32 dt)
       if (ch.physics.position != old_pos)
         interrupt_cast(cid);
       update_buffs(cid);
-      apply_character_modifiers(&ch);
       update_cast(cid, dt);
       update_target(cid);
       ch.update_hp(dt);
@@ -121,16 +120,8 @@ bool Warg_Server::update_spell_object(Spell_Object *spell_object)
   float epsilon = object_formula->speed * dt / 2.f * 1.05f;
   if (d < epsilon)
   {
-    for (Spell_Index i : object_formula->effects)
-    {
-      Spell_Effect_Formula *spell_effect_formula = spell_db.get_spell_effect(i);
-      Spell_Effect effect;
-      effect.formula_index = spell_effect_formula->index;
-      effect.caster = spell_object->caster;
-      effect.position = spell_object->pos;
-      effect.target = spell_object->target;
-      invoke_spell_effect(effect);
-    }
+    object_formula->_on_hit(object_formula, spell_object, &game_state, &collider_cache);
+
     return true;
   }
 
@@ -202,6 +193,9 @@ void Warg_Server::try_cast_spell(Character &caster, UID target_id, Spell_Index s
 void Warg_Server::cast_spell(UID caster_id, UID target_id, Spell_Status *spell_status)
 {
   ASSERT(spell_status);
+
+  Character *caster = game_state.get_character(caster_id);
+  caster->cast_target = target_id;
 
   Spell_Formula *formula = spell_db.get_spell(spell_status->formula_index);
   if (formula->cast_time > 0)
@@ -323,214 +317,12 @@ void Warg_Server::release_spell(UID caster_id, UID target_id, Spell_Status *spel
   if (static_cast<int>(err = cast_viable(caster_id, target_id, spell_status)))
     return;
 
-  for (Spell_Index effect_formula_index : spell_formula->effects)
-  {
-    Spell_Effect effect;
-    effect.formula_index = effect_formula_index;
-    effect.caster = caster_id;
-    effect.position = caster->physics.position;
-    effect.target = target_id;
-
-    invoke_spell_effect(effect);
-  }
+  if (spell_formula->_on_release)
+    spell_formula->_on_release(spell_formula, &game_state, caster, &collider_cache);
 
   if (!spell_formula->cast_time && spell_formula->on_global_cooldown)
     caster->global_cooldown = caster->effective_stats.global_cooldown;
   spell_status->cooldown_remaining = spell_formula->cooldown;
-}
-
-void Warg_Server::invoke_spell_effect(Spell_Effect &effect)
-{
-  Spell_Effect_Formula *effect_formula = spell_db.get_spell_effect(effect.formula_index);
-  switch (effect_formula->type)
-  {
-    case Spell_Effect_Type::Area:
-      invoke_spell_effect_aoe(effect);
-      break;
-    case Spell_Effect_Type::Apply_Buff:
-    case Spell_Effect_Type::Apply_Debuff:
-      invoke_spell_effect_apply_buff(effect);
-      break;
-    case Spell_Effect_Type::Clear_Debuffs:
-      invoke_spell_effect_clear_debuffs(effect);
-      break;
-    case Spell_Effect_Type::Damage:
-      invoke_spell_effect_damage(effect);
-      break;
-    case Spell_Effect_Type::Heal:
-      invoke_spell_effect_heal(effect);
-      break;
-    case Spell_Effect_Type::Interrupt:
-      invoke_spell_effect_interrupt(effect);
-      break;
-    case Spell_Effect_Type::Object_Launch:
-      invoke_spell_effect_object_launch(effect);
-      break;
-    case Spell_Effect_Type::Blink:
-      invoke_spell_effect_blink(effect);
-      break;
-    default:
-      ASSERT(false);
-  }
-}
-
-void Warg_Server::invoke_spell_effect_aoe(Spell_Effect &effect)
-{
-  ASSERT(effect.caster);
-  Character *caster = get_character(effect.caster);
-  ASSERT(caster);
-
-  Spell_Effect_Formula *formula = spell_db.get_spell_effect(effect.formula_index);
-
-  for (size_t i = 0; i < game_state.character_count; i++)
-  {
-    Character *character = &game_state.characters[i];
-
-    bool in_range = length(character->physics.position - effect.position) <= formula->area.radius;
-    if (!in_range)
-      continue;
-    bool at_ally = formula->area.targets == Spell_Targets::Ally && character->team == caster->team;
-    bool at_hostile = formula->area.targets == Spell_Targets::Hostile && character->team != caster->team;
-    if (!(at_ally || at_hostile))
-      continue;
-
-    Spell_Effect effect;
-    effect.formula_index = formula->area.effect_formula;
-    effect.caster = effect.caster;
-    effect.position = {0, 0, 0};
-    effect.target = i;
-
-    invoke_spell_effect(effect);
-  }
-}
-
-void Warg_Server::invoke_spell_effect_apply_buff(Spell_Effect &effect)
-{
-  ASSERT(effect.target);
-  Character *target = get_character(effect.target);
-  ASSERT(target);
-
-  Spell_Effect_Formula *formula = spell_db.get_spell_effect(effect.formula_index);
-
-  bool is_buff = formula->type == Spell_Effect_Type::Apply_Buff;
-
-  Buff buff;
-  buff.formula_index = is_buff ? formula->apply_buff.buff_formula : formula->apply_debuff.debuff_formula;
-  BuffDef *buff_formula = spell_db.get_buff(buff.formula_index);
-  buff.duration = buff_formula->duration;
-  buff.time_since_last_tick = 0.f;
-
-  if (is_buff && target->buff_count < MAX_BUFFS)
-    target->buffs[target->buff_count++] = buff;
-  else if (!is_buff && target->debuff_count < MAX_DEBUFFS)
-    target->debuffs[target->debuff_count++] = buff;
-}
-
-void Warg_Server::invoke_spell_effect_clear_debuffs(Spell_Effect &effect)
-{
-  ASSERT(effect.caster);
-  Character *character = get_character(effect.target);
-  ASSERT(character);
-  character->debuff_count = 0;
-}
-
-void Warg_Server::invoke_spell_effect_damage(Spell_Effect &effect)
-{
-  ASSERT(effect.target);
-  Character *target = get_character(effect.target);
-  ASSERT(target);
-
-  if (!target->alive)
-    return;
-
-  Spell_Effect_Formula *formula = spell_db.get_spell_effect(effect.formula_index);
-  Damage_Effect *damage_effect = &formula->damage;
-
-  int effective = damage_effect->amount;
-  int overkill = 0;
-
-  if (!damage_effect->pierce_mod)
-    effective = (int)round(effective * target->effective_stats.damage_mod);
-
-  target->hp -= effective;
-
-  if (target->hp <= 0)
-  {
-    effective += target->hp;
-    overkill = -target->hp;
-    target->hp = 0;
-    target->alive = false;
-
-    float32 new_height = target->radius.y;
-    target->physics.grounded = false;
-    target->physics.position.z -= target->radius.z - target->radius.y;
-  }
-}
-
-void Warg_Server::invoke_spell_effect_heal(Spell_Effect &effect)
-{
-  ASSERT(effect.target);
-  Character *target = get_character(effect.target);
-  ASSERT(target);
-
-  Spell_Effect_Formula *formula = spell_db.get_spell_effect(effect.formula_index);
-  Heal_Effect *heal_effect = &formula->heal;
-
-  int effective = heal_effect->amount;
-  int overheal = 0;
-
-  target->hp += effective;
-
-  if (target->hp > target->hp_max)
-  {
-    overheal = target->hp - target->hp_max;
-    effective -= overheal;
-    target->hp = target->hp_max;
-  }
-}
-
-void Warg_Server::invoke_spell_effect_interrupt(Spell_Effect &effect)
-{
-  ASSERT(effect.target);
-  Character *target = get_character(effect.target);
-  ASSERT(target);
-
-  if (!target->casting)
-    return;
-
-  target->casting = false;
-  target->cast_progress = 0;
-  target->cast_target = 0;
-}
-
-void Warg_Server::invoke_spell_effect_object_launch(Spell_Effect &effect)
-{
-  Spell_Effect_Formula *effect_formula = spell_db.get_spell_effect(effect.formula_index);
-  Spell_Object object;
-  object.formula_index = effect_formula->object_launch.object_formula;
-  object.caster = effect.caster;
-  object.target = effect.target;
-  Character *caster = get_character(effect.caster);
-  Character *target = get_character(effect.target);
-
-  vec3 launch_pos = caster->physics.position +
-                    normalize(target->physics.position - caster->physics.position) * caster->radius.y * 1.5f;
-  object.pos = effect.position;
-  object.id = uid();
-  game_state.spell_objects[game_state.spell_object_count++] = object;
-}
-
-void Warg_Server::invoke_spell_effect_blink(Spell_Effect &effect)
-{
-  Spell_Effect_Formula *formula = spell_db.get_spell_effect(effect.formula_index);
-
-  ASSERT(effect.caster);
-  Character *caster = get_character(effect.caster);
-  ASSERT(caster);
-
-  vec3 dir = caster->physics.orientation * vec3(0, 1, 0);
-  vec3 delta = normalize(dir) * formula->blink.distance;
-  collide_and_slide_char(caster->physics, caster->radius, delta, vec3(0, 0, -100), collider_cache);
 }
 
 void Warg_Server::update_buffs(UID character_id)
@@ -539,6 +331,9 @@ void Warg_Server::update_buffs(UID character_id)
   Character *character = get_character(character_id);
   ASSERT(character);
 
+  character->effective_stats = character->base_stats;
+  character->silenced = false;
+
   auto update_buffs_ = [&](Buff *buffs, uint8 *buff_count) {
     for (size_t i = 0; i < *buff_count; i++)
     {
@@ -546,22 +341,19 @@ void Warg_Server::update_buffs(UID character_id)
       BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
       buff->duration -= dt;
       buff->time_since_last_tick += dt;
+      character->effective_stats *= buff_formula->stats_modifiers;
+      if (buff_formula->_on_update)
+        buff_formula->_on_update(buff_formula, buff, &game_state, character);
       if (buff->time_since_last_tick > 1.f / buff_formula->tick_freq)
       {
-        for (Spell_Index effect_formula_index : buff_formula->tick_effects)
-        {
-          Spell_Effect effect;
-          effect.formula_index = effect_formula_index;
-          effect.caster = 0;
-          effect.target = character_id;
-          effect.position = {0, 0, 0};
-
-          invoke_spell_effect(effect);
-        }
+        if (buff_formula->_on_tick)
+          buff_formula->_on_tick(buff_formula, buff, &game_state, character);
         buff->time_since_last_tick = 0;
       }
       if (buff->duration <= 0)
       {
+        if (buff->_data)
+          buff_formula->_destroy(buff->_data);
         *buff = buffs[*buff_count - 1];
         (*buff_count)--;
       }
@@ -667,6 +459,8 @@ UID Warg_Server::add_char(int team, const char *name)
   add_spell("Shadow Word: Pain");
   add_spell("Icy Veins");
   add_spell("Sprint");
+  add_spell("Demonic Circle: Summon");
+  add_spell("Demonic Circle: Teleport");
 
   return id;
 }
@@ -685,31 +479,4 @@ Character *Warg_Server::get_character(UID id)
       return character;
   }
   return nullptr;
-}
-
-void Warg_Server::apply_character_modifiers(Character *character)
-{
-  character->effective_stats = character->base_stats;
-  character->silenced = false;
-
-  for (size_t i = 0; i < character->buff_count; i++)
-  {
-    Buff *buff = &character->buffs[i];
-    BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
-    for (size_t j = 0; j < buff_formula->character_modifiers.size(); j++)
-    {
-      CharMod *character_modifier = spell_db.get_character_modifier(buff_formula->character_modifiers[j]);
-      character->apply_modifier(*character_modifier);
-    }
-  }
-  for (size_t i = 0; i < character->debuff_count; i++)
-  {
-    Buff *debuff = &character->debuffs[i];
-    BuffDef *debuff_formula = spell_db.get_buff(debuff->formula_index);
-    for (size_t j = 0; j < debuff_formula->character_modifiers.size(); j++)
-    {
-      CharMod *character_modifier = spell_db.get_character_modifier(debuff_formula->character_modifiers[j]);
-      character->apply_modifier(*character_modifier);
-    }
-  }
 }
