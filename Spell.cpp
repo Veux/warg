@@ -101,31 +101,8 @@ BuffDef *Spell_Database::add_buff()
 
 void shadow_word_pain_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
 {
-  const uint32 shadow_word_pain_tick_damage = 5;
-
   ASSERT(character);
-
-  if (!character->alive)
-    return;
-
-  int effective = shadow_word_pain_tick_damage;
-  int overkill = 0;
-
-  character->hp -= effective;
-
-  if (character->hp <= 0)
-  {
-    effective += character->hp;
-    overkill = -character->hp;
-    character->hp = 0;
-    character->alive = false;
-
-    float32 new_height = character->radius.y;
-    character->physics.grounded = false;
-    character->physics.position.z -= character->radius.z - character->radius.y;
-
-    return;
-  }
+  character->take_damage(5);
 }
 
 void shadow_word_pain_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
@@ -134,14 +111,14 @@ void shadow_word_pain_release(Spell_Formula *formula, Game_State *game_state, Ch
   Character *target = game_state->get_character(caster->cast_target);
   ASSERT(target);
 
+  target->remove_debuff(Spell_ID::Shadow_Word_Pain);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Shadow_Word_Pain);
   Buff buff;
+  buff._id = Spell_ID::Shadow_Word_Pain;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.time_since_last_tick = 0.f;
-
-  if (target->debuff_count < MAX_DEBUFFS)
-    target->debuffs[target->debuff_count++] = buff;
+  target->apply_debuff(&buff);
 }
 
 void frostbolt_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
@@ -169,110 +146,73 @@ void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *c
 {
   ASSERT(caster);
 
+  caster->remove_buff(Spell_ID::Sprint);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Sprint);
   Buff buff;
+  buff._id = Spell_ID::Sprint;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-
-  if (caster->buff_count < MAX_BUFFS)
-    caster->buffs[caster->buff_count++] = buff;
+  caster->apply_buff(&buff);
 }
 
 void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
 {
   ASSERT(caster);
 
+  caster->remove_buff(Spell_ID::Icy_Veins);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Icy_Veins);
   Buff buff;
+  buff._id = Spell_ID::Icy_Veins;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-
-  if (caster->buff_count < MAX_BUFFS)
-    caster->buffs[caster->buff_count++] = buff;
+  caster->apply_buff(&buff);
 }
 
 void frostbolt_object_on_hit(
     Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders)
 {
-  uint32 frostbolt_damage = 10;
-
+  Character *target = game_state->get_character(object->target);
+  ASSERT(target);
   ASSERT(formula);
   ASSERT(object);
 
-  Character *target = game_state->get_character(object->target);
-  ASSERT(target);
+  target->take_damage(10);
 
-  if (!target->alive)
-    return;
-
-  int effective = frostbolt_damage;
-  int overkill = 0;
-
-  target->hp -= effective;
-
-  if (target->hp <= 0)
-  {
-    effective += target->hp;
-    overkill = -target->hp;
-    target->hp = 0;
-    target->alive = false;
-
-    float32 new_height = target->radius.y;
-    target->physics.grounded = false;
-    target->physics.position.z -= target->radius.z - target->radius.y;
-
-    return;
-  }
-
+  target->remove_debuff(Spell_ID::Frostbolt);
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Frostbolt);
   Buff debuff;
+  debuff._id = Spell_ID::Frostbolt;
   debuff.formula_index = debuff_formula->index;
   debuff.duration = debuff_formula->duration;
-
-  if (target->debuff_count < MAX_DEBUFFS)
-    target->debuffs[target->debuff_count++] = debuff;
+  target->apply_debuff(&debuff);
 }
 
 struct Demonic_Circle_Buff_Data
 {
   vec3 position = vec3(0.f);
-  quat orientation = quat();
   bool grounded = false;
 };
 
-void *demonic_circle_buff_init()
-{
-  Demonic_Circle_Buff_Data data_struct;
-  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)malloc(sizeof *data_ptr);
-  *data_ptr = data_struct;
-  return data_ptr;
-}
-
-void demonic_circle_buff_destroy(void *data)
-{
-  free(data);
-}
-
 void demonic_circle_summon_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+  Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
 {
   ASSERT(caster);
 
-  if (caster->buff_count >= MAX_BUFFS)
-    return;
-
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Demonic_Circle_Summon);
+  ASSERT(buff_formula);
+
+  caster->remove_buff(Spell_ID::Demonic_Circle_Summon);
   Buff buff;
   buff._id = Spell_ID::Demonic_Circle_Summon;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)buff_formula->_init();
+  Demonic_Circle_Buff_Data data_struct;
+  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)malloc(sizeof *data_ptr);
+  *data_ptr = data_struct;
   data_ptr->position = caster->physics.position;
-  data_ptr->orientation = caster->physics.orientation;
   data_ptr->grounded = caster->physics.grounded;
   buff._data = data_ptr;
-
-  caster->buffs[caster->buff_count++] = buff;
+  caster->apply_buff(&buff);
 }
 
 void demonic_circle_teleport_release(
@@ -280,10 +220,7 @@ void demonic_circle_teleport_release(
 {
   ASSERT(caster);
 
-  Buff *circle_buff = nullptr;
-  for (size_t i = 0; i < caster->buff_count; i++)
-    if (caster->buffs[i]._id == Spell_ID::Demonic_Circle_Summon)
-      circle_buff = &caster->buffs[i];
+  Buff *circle_buff = caster->find_buff(Spell_ID::Demonic_Circle_Summon);
 
   if (!circle_buff)
     return;
@@ -291,7 +228,6 @@ void demonic_circle_teleport_release(
   Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)circle_buff->_data;
 
   caster->physics.position = data_ptr->position;
-  caster->physics.orientation = data_ptr->orientation;
   caster->physics.grounded = data_ptr->grounded;
 }
 
@@ -405,8 +341,6 @@ Spell_Database::Spell_Database()
   demonic_circle_buff->name = "Demonic Circle";
   demonic_circle_buff->duration = 3600.f;
   demonic_circle_buff->icon = icon("demonic_circle_summon.jpg");
-  demonic_circle_buff->_init = demonic_circle_buff_init;
-  demonic_circle_buff->_destroy = demonic_circle_buff_destroy;
 
   Spell_Formula *demonic_circle_summon = add_spell();
   demonic_circle_summon->name = "Demonic Circle: Summon";

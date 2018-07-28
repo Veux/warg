@@ -101,8 +101,6 @@ struct BuffDef
   float32 duration;
   float32 tick_freq;
   Character_Stats stats_modifiers;
-  void *(*_init)() = nullptr;
-  void (*_destroy)(void *data) = nullptr;
   void (*_on_update)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
   void (*_on_tick)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
 };

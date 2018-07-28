@@ -73,6 +73,14 @@ struct Character
   void update_mana(float32 dt);
   void update_spell_cooldowns(float32 dt);
   void update_global_cooldown(float32 dt);
+  void take_damage(float32 damage);
+  void take_heal(float32 heal);
+  void apply_buff(Buff *buff);
+  void apply_debuff(Buff *debuff);
+  Buff *find_buff(Spell_ID buff_id);
+  Buff *find_debuff(Spell_ID debuff_id);
+  void remove_buff(Spell_ID buff_id);
+  void remove_debuff(Spell_ID debuff_id);
 
   UID id;
 

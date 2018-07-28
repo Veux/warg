@@ -353,7 +353,7 @@ void Warg_Server::update_buffs(UID character_id)
       if (buff->duration <= 0)
       {
         if (buff->_data)
-          buff_formula->_destroy(buff->_data);
+          free(buff->_data);
         *buff = buffs[*buff_count - 1];
         (*buff_count)--;
       }

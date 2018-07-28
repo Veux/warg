@@ -69,6 +69,109 @@ void Character::update_global_cooldown(float32 dt)
     global_cooldown = 0;
 }
 
+void Character::take_damage(float32 damage)
+{
+  if (!alive)
+    return;
+
+  hp -= damage;
+
+  if (hp <= 0)
+  {
+    hp = 0;
+    alive = false;
+
+    float32 new_height = radius.y;
+    physics.grounded = false;
+    physics.position.z -= radius.z - radius.y;
+  }
+}
+
+void Character::take_heal(float32 heal)
+{
+  if (!alive)
+    return;
+
+  hp += heal;
+
+  if (hp > hp_max)
+  {
+    hp = hp_max;
+  }
+}
+
+void Character::apply_buff(Buff *buff)
+{
+  if (buff_count >= MAX_BUFFS)
+  {
+    if (buff->_data)
+      free(buff->_data);
+  }
+
+  buffs[buff_count++] = *buff;
+}
+
+void Character::apply_debuff(Buff *debuff)
+{
+  if (debuff_count >= MAX_DEBUFFS)
+  {
+    if (debuff->_data)
+      free(debuff->_data);
+  }
+
+  debuffs[debuff_count++] = *debuff;
+}
+
+Buff *Character::find_buff(Spell_ID buff_id)
+{
+  Buff *buff = nullptr;
+  for (size_t i = 0; i < buff_count; i++)
+    if (buffs[i]._id == buff_id)
+      buff = &buffs[i];
+
+  return buff;
+}
+
+Buff * Character::find_debuff(Spell_ID debuff_id)
+{
+  Buff *debuff = nullptr;
+  for (size_t i = 0; i < debuff_count; i++)
+    if (debuffs[i]._id == debuff_id)
+      debuff = &debuffs[i];
+
+  return debuff;
+}
+
+void Character::remove_buff(Spell_ID buff_id)
+{
+  for (size_t i = 0; i < buff_count; i++)
+  {
+    Buff *buff = &buffs[i];
+    if (buff->_id == buff_id)
+    {
+      if (buff->_data)
+        free(buff->_data);
+      *buff = buffs[buff_count - 1];
+      buff_count--;
+    }
+  }
+}
+
+void Character::remove_debuff(Spell_ID debuff_id)
+{
+  for (size_t i = 0; i < debuff_count; i++)
+  {
+    Buff *debuff = &debuffs[i];
+    if (debuff->_id == debuff_id)
+    {
+      if (debuff->_data)
+        free(debuff->_data);
+      *debuff = debuffs[debuff_count - 1];
+      debuff_count--;
+    }
+  }
+}
+
 void move_char(Character &character, Input command, std::vector<Triangle> colliders)
 {
   vec3 &pos = character.physics.position;
