@@ -638,93 +638,83 @@ void Config::save(std::string filename)
   file.write(str.c_str(), str.size());
 }
 
-void loader_loop(std::unordered_map<std::string, Image_Data> &database, std::queue<std::string> &load_queue,
-    std::mutex &db_mtx, std::mutex &queue_mtx)
+Image_Data load_image(std::string path)
 {
-  while (true)
+  Image_Data data;
+  const bool is_hdr = stbi_is_hdr(path.c_str());
+  if (is_hdr)
   {
-    std::string path;
+    data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
+    data.format = GL_FLOAT;
+  }
+  else
+  {
+    data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
+    data.format = GL_UNSIGNED_BYTE;
+  }
+  data.initialized = true;
+  return data;
+}
+
+void Image_Loader::loader_loop(Image_Loader *loader)
+{
+  while (loader->running)
+  {
     Sleep(1);
-    bool empty = true;
-    {
-      std::lock_guard<std::mutex> guard(queue_mtx);
-      empty = load_queue.empty();
-    }
-    if (!empty)
-    {
-      {
-        std::lock_guard<std::mutex> guard(queue_mtx);
-        path = load_queue.front();
-        load_queue.pop();
-      }
+    if (loader->queue_size == 0)
+      continue;
 
-      {
-        std::lock_guard<std::mutex> guard(db_mtx);
-        ASSERT(database.count(path));
-      }
-      const bool is_hdr = stbi_is_hdr(path.c_str());
-      Image_Data data;
-      if (is_hdr)
-      {
-        data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
-        data.format = GL_FLOAT;
-      }
-      else
-      {
-        data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
-        data.format = GL_UNSIGNED_BYTE;
-      }
-      data.initialized = true;
-      std::lock_guard<std::mutex> guard(db_mtx);
-      database[path] = data;
+    std::string task;
+    {
+      std::lock_guard<std::mutex> lock0(loader->queue_mtx);
+      if (loader->queue_size == 0)
+        continue;
+      task = loader->load_queue.front();
+      loader->load_queue.pop();
+      loader->queue_size = loader->load_queue.size();
     }
+
+    Image_Data data = load_image(task);
+    std::lock_guard<std::mutex> lock1(loader->db_mtx);
+    loader->database[task] = data;
   }
 }
 
-void Image_Loader::init()
+Image_Loader::Image_Loader()
 {
-  loader_thread =
-      std::thread(loader_loop, std::ref(database), std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
-  loader_thread.detach();
+  threads[0] = std::thread(loader_loop, this);
+  threads[1] = std::thread(loader_loop, this);
+  threads[2] = std::thread(loader_loop, this);
+  threads[3] = std::thread(loader_loop, this);
+}
+Image_Loader::~Image_Loader()
+{
+  threads[0].join();
+  threads[1].join();
+  threads[2].join();
+  threads[3].join();
 }
 
-bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
+bool Image_Loader::load(std::string path, Image_Data *data)
 {
-  std::string path(filepath);
-
-  bool in_db = false;
+  std::lock_guard<std::mutex> lock0(db_mtx);
+  if (database.count(path))
   {
-    std::lock_guard<std::mutex> guard(db_mtx);
-    in_db = database.count(path);
-  }
-  if (in_db)
-  {
-    bool ready = false;
+    if (database[path].initialized)
     {
-      std::lock_guard<std::mutex> guard(db_mtx);
-      ready = database[path].initialized;
-    }
-    if (ready)
-    {
-      std::lock_guard<std::mutex> guard(db_mtx);
       *data = database[path];
       database.erase(path);
+      return true;
     }
-    return ready;
+    return false;
   }
-
-  Image_Data imgdata;
-  imgdata.data = nullptr;
-  {
-    std::lock_guard<std::mutex> guard(db_mtx);
-    database[path] = imgdata;
-  }
-  {
-    std::lock_guard<std::mutex> guard(queue_mtx);
-    load_queue.push(path);
-  }
+  database[path];
+  std::lock_guard<std::mutex> lock1(queue_mtx);
+  load_queue.push(path);
+  queue_size = load_queue.size();
   return false;
 }
+
 bool has_img_file_extension(std::string name)
 {
   uint32 size = name.size();

@@ -60,7 +60,6 @@ int main(int argc, char *argv[])
   uint8_t team;
 
   WARG_SERVER = false;
-  IMAGE_LOADER.init();
 
   if (argc > 1 && std::string(argv[1]) == "--server")
   {

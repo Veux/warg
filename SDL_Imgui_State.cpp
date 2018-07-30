@@ -637,10 +637,10 @@ void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, b
   Imgui_Texture_Descriptor descriptor;
   descriptor.ptr = handle;
   descriptor.y_invert = y_invert;
-  descriptor.is_cubemap = handle->is_cubemap;
   descriptor.size = size;
   if (descriptor.ptr)
   {
+    descriptor.is_cubemap = handle->is_cubemap;
     GLenum format = descriptor.ptr->get_format();
     bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
                       format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;

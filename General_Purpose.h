@@ -82,7 +82,7 @@ struct Config
 
 struct Image_Data
 {
-  void *data;
+  void *data = nullptr;
   int32 x;
   int32 y;
   int32 comp;
@@ -93,15 +93,19 @@ struct Image_Data
 struct Image_Loader
 {
 public:
-  void init();
-  bool load(const char *filename, int32 req_comp, Image_Data *data);
+  Image_Loader();
+  ~Image_Loader();
+  bool load(std::string filename, Image_Data *data);
+  static void loader_loop(Image_Loader *loader);
 
 private:
   std::unordered_map<std::string, Image_Data> database;
   std::queue<std::string> load_queue;
   std::mutex db_mtx;
   std::mutex queue_mtx;
-  std::thread loader_thread;
+  std::atomic<uint32> queue_size;
+  bool running = true;
+  std::thread threads[4];
 };
 
 bool all_equal(int32 a, int32 b, int32 c);

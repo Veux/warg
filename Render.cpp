@@ -417,8 +417,8 @@ void Texture::load()
     texture = nullptr;
     return;
   }
-  
-  auto ptr = TEXTURE2D_CACHE.count(t.name) ? TEXTURE2D_CACHE[t.name].lock() : nullptr;
+
+  auto ptr = TEXTURE2D_CACHE[t.name].lock();
   if (ptr)
   {
     texture = ptr;
@@ -453,13 +453,14 @@ void Texture::load()
       initialized = true;
       return;
     }
+    return;
   }
 
   void *data = nullptr;
   GLenum data_format = GL_UNSIGNED_BYTE;
   Image_Data imgdata;
   int32 width, height, n;
-  if (IMAGE_LOADER.load(t.name.c_str(), 4, &imgdata))
+  if (IMAGE_LOADER.load(t.name, &imgdata))
   {
     texture = make_shared<Texture_Handle>();
     TEXTURE2D_CACHE[t.name] = texture;
@@ -1114,7 +1115,7 @@ void Renderer::opaque_pass(float32 time)
   uv_map_grid.bind(uv_grid);
 #endif
   brdf_integration_lut.bind(brdf_ibl_lut);
-  lights.environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
   for (Render_Entity &entity : render_entities)
   {
     ASSERT(entity.mesh);
@@ -1291,7 +1292,7 @@ void Renderer::translucent_pass(float32 time)
   glFrontFace(GL_CW);
   glCullFace(GL_BACK);
   brdf_integration_lut.bind(brdf_ibl_lut);
-  lights.environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
   for (Render_Entity &entity : translucent_entities)
   {
     ASSERT(entity.mesh);
@@ -1848,6 +1849,7 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
 void Renderer::set_lights(Light_Array new_lights)
 {
   lights = new_lights;
+  environment = lights.environment;
 }
 
 void check_FBO_status()
@@ -2255,6 +2257,7 @@ Cubemap::Cubemap(string equirectangular_filename)
   equi_to_cube.set_uniform("projection", projection);
   equi_to_cube.set_uniform("rotation", rot);
 
+  check_gl_error();
   // load source texture
   Texture_Descriptor d;
   d.name = equirectangular_filename;
@@ -2265,6 +2268,7 @@ Cubemap::Cubemap(string equirectangular_filename)
     source.load();
   }
 
+  check_gl_error();
   source.bind(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);

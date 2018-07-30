@@ -272,8 +272,8 @@ void Flat_Scene_Graph::draw_imgui_light_array()
     static auto picker = File_Picker(".");
     static bool browsing = false;
     static bool type = false; // true for radiance, false for irradiance
-    std::string radiance_map_result = lights.environment.radiance.handle->peek_filename();
-    std::string irradiance_map_result = lights.environment.irradiance.handle->peek_filename();
+    std::string radiance_map_result = lights.environment.radiance;
+    std::string irradiance_map_result = lights.environment.irradiance;
     check_gl_error();
     bool updated = false;
     ImGui::Separator();

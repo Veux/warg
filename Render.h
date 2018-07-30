@@ -384,7 +384,7 @@ struct Light_Array
   Light_Array() {}
   void bind(Shader &shader);
   std::array<Light, MAX_LIGHTS> lights;
-  Environment_Map environment =
+  Environment_Map_Descriptor environment =
       Environment_Map_Descriptor(".//Assets/Textures/Environment_Maps/Arches_E_PineTree/radiance.hdr",
           ".//Assets/Textures/Environment_Maps/Arches_E_PineTree/irradiance.hdr");
 
@@ -886,7 +886,7 @@ struct Renderer
   vec3 clear_color = vec3(1, 0, 0);
   uint32 draw_calls_last_frame = 0;
   static mat4 ortho_projection(ivec2 dst_size);
-
+  Environment_Map environment;
   Mesh quad;
   Shader temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
   Shader passthrough = Shader("passthrough.vert", "passthrough.frag");
