@@ -100,18 +100,6 @@ struct Texture_Handle
   bool is_cubemap = false;
 };
 
-struct Imgui_Texture_Descriptor
-{
-  std::shared_ptr<Texture_Handle> ptr = nullptr;
-  glm::vec2 size = vec2(0);
-  float aspect = 1.0f;
-  float mip_lod_to_draw = 0.f;
-  bool y_invert = false;
-  bool gamma_encode = false;
-  bool is_cubemap = false;
-  bool is_mipmap_list_command = false;
-};
-
 struct Texture_Descriptor
 {
   Texture_Descriptor() {}
@@ -540,113 +528,22 @@ struct Particle
 };
 struct Particle_Array
 {
-  // Buffer(const Buffer &rhs) Buffer(Buffer &&rhs) Buffer &operator=(const Buffer &rhs) Buffer &operator=(Buffer &&rhs)
-
-  Particle_Array()
-  {
-    glGenBuffers(1, &instance_mvp_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-    glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
-    glGenBuffers(1, &instance_model_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
-    glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
-
-    glGenBuffers(1, &instance_attribute0_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
-    glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
-    glGenBuffers(1, &instance_attribute1_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
-    glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
-    glGenBuffers(1, &instance_attribute2_buffer);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
-    glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-  }
+  Particle_Array() {}
+  void init();
+  void destroy();
   ~Particle_Array()
   {
-    glDeleteBuffers(1, &instance_mvp_buffer);
-    glDeleteBuffers(1, &instance_model_buffer);
-    glDeleteBuffers(1, &instance_attribute0_buffer);
-    glDeleteBuffers(1, &instance_attribute1_buffer);
-    glDeleteBuffers(1, &instance_attribute2_buffer);
+    ASSERT(!initialized); // destroy wasnt called
   }
-  Particle_Array(Particle_Array &rhs) = delete;
+
   // todo: copy/move functions
-  /*
-  this could just be left deleted, and instead, the owning object Particle_Emitter
-  could handle all the opengl data duplication and recreation of this object
-  ? for what reason?
-  reason is there might be a thread working on the data
-  let this class manage the copying, let the particle emitter
-  handle the mutex and thread
-  */
-  Particle_Array(Particle_Array &&rhs) {}
-  Particle_Array &operator=(Particle_Array &rhs)
-  {
-    // todo: particle_array copy
-    return *this;
-  }
-  Particle_Array &operator=(Particle_Array &&rhs)
-  {
-    particles = std::move(rhs.particles);
-    return *this;
-  }
+  Particle_Array(Particle_Array &rhs) = delete;
+  Particle_Array(Particle_Array &&rhs);
+  Particle_Array &operator=(Particle_Array &rhs);
+  Particle_Array &operator=(Particle_Array &&rhs);
 
-  void compute_attributes(mat4 projection, mat4 camera)
-  {
-    MVP_Matrices.clear();
-    Model_Matrices.clear();
-    attributes0.clear();
-    attributes1.clear();
-    attributes2.clear();
-    // set_message("compute_attributes projection:", s(projection), 1.0f);
-    // set_message("compute_attributes camera:", s(camera), 1.0f);
-    for (auto &i : particles)
-    {
-      const mat4 R = toMat4(i.orientation);
-      const mat4 S = scale(i.scale);
-      const mat4 T = translate(i.position);
-      const mat4 model = T * R * S;
-      const mat4 MVP = projection * camera * model;
-      MVP_Matrices.push_back(MVP);
-      Model_Matrices.push_back(model);
-      attributes0.push_back(i.attribute0);
-      attributes1.push_back(i.attribute1);
-      attributes2.push_back(i.attribute2);
-    }
-  }
-  bool prepare_instance(std::vector<Render_Instance> *accumulator)
-  {
-    Render_Instance result;
-    uint32 num_instances = MVP_Matrices.size();
-    if (num_instances == 0)
-      return false;
-
-    ASSERT(num_instances <= MAX_INSTANCE_COUNT);
-    set_message("Particle count:", s(num_instances), 1.0f);
-
-    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &Model_Matrices[0][0][0]);
-
-    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes0[0]);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes1[0]);
-    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes2[0]);
-
-    result.mvp_buffer = instance_mvp_buffer;
-    result.model_buffer = instance_model_buffer;
-    result.attribute0_buffer = instance_attribute0_buffer;
-    result.attribute1_buffer = instance_attribute1_buffer;
-    result.attribute2_buffer = instance_attribute2_buffer;
-    result.size = num_instances;
-    accumulator->push_back(result);
-    return true;
-  }
+  void compute_attributes(mat4 projection, mat4 camera);
+  bool prepare_instance(std::vector<Render_Instance> *accumulator);
   std::vector<Particle> particles;
 
   std::vector<mat4> MVP_Matrices;
@@ -660,6 +557,7 @@ struct Particle_Array
   GLuint instance_attribute0_buffer;
   GLuint instance_attribute1_buffer;
   GLuint instance_attribute2_buffer;
+  bool initialized = false;
 };
 
 /*
@@ -805,7 +703,10 @@ struct Particle_Emitter
   Particle_Emitter(Particle_Emitter &&rhs);
   Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs);
   Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs);
-
+  void init()
+  {
+    shared_data->particles.init();
+  }
   void update(mat4 projection, mat4 camera, float32 dt);
   void clear();
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
@@ -887,6 +788,12 @@ struct Renderer
   uint32 draw_calls_last_frame = 0;
   static mat4 ortho_projection(ivec2 dst_size);
   Environment_Map environment;
+
+  bool imgui_this_tick = false;
+  bool show_renderer_window = true;
+  bool show_imgui_fxaa = false;
+  void draw_imgui();
+
   Mesh quad;
   Shader temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
   Shader passthrough = Shader("passthrough.vert", "passthrough.frag");

@@ -3,14 +3,13 @@
 #include "Globals.h"
 #include "Render.h"
 #include "State.h"
-#include "Third_party/imgui/imgui.h"
 #include "Animation_Utilities.h"
 #include "UI.h"
 
 using namespace glm;
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
-    : State(name, window, window_size)
+    : State(name, window, window_size, &IMGUI)
 {
   session = session_;
 
@@ -18,8 +17,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   spell_db = Spell_Database();
   map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   collider_cache = collect_colliders(scene);
-  SDL_SetRelativeMouseMode(SDL_bool(true));
-  reset_mouse_delta();
 
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
@@ -27,25 +24,29 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
+
   scene.lights.light_count = 4;
 }
 
-void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
+Warg_State::~Warg_State()
 {
-  auto is_pressed = [block_kb](int key) {
-    const static Uint8 *keys = SDL_GetKeyboardState(NULL);
-    SDL_PumpEvents();
-    return block_kb ? 0 : keys[key];
-  };
+  session->end();
+}
+
+void Warg_State::handle_input_events()
+{
+  if (!recieves_input)
+    return;
+
+  auto is_pressed = [this](int key) { return key_state[key]; };
 
   // set_message("warg state block kb state: ", s(block_kb), 1.0f);
   // set_message("warg state block mouse state: ", s(block_mouse), 1.0f);
 
-  for (auto &_e : events)
+  for (auto &_e : events_this_tick)
   {
     if (_e.type == SDL_KEYDOWN)
     {
-      ASSERT(!block_kb);
       if (_e.key.keysym.sym == SDLK_ESCAPE)
       {
         running = false;
@@ -77,42 +78,28 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     }
     else if (_e.type == SDL_KEYUP)
     {
-      ASSERT(!block_kb);
       if (_e.key.keysym.sym == SDLK_F5)
       {
         free_cam = !free_cam;
-        SDL_SetRelativeMouseMode(SDL_bool(free_cam));
+        mouse_relative_mode = free_cam;
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
-      ASSERT(!block_mouse);
       if (_e.wheel.y < 0)
       {
-        cam.zoom += ZOOM_STEP;
+        camera.zoom += ZOOM_STEP;
       }
       else if (_e.wheel.y > 0)
       {
-        cam.zoom -= ZOOM_STEP;
+        camera.zoom -= ZOOM_STEP;
       }
     }
   }
   // first person style camera control:
-  ivec2 mouse;
-  uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
 
-  if (block_mouse)
-  {
-    mouse_state = 0;
-    mouse = last_seen_mouse_position;
-  }
-  ivec2 mouse_delta = mouse - last_seen_mouse_position;
-  last_seen_mouse_position = mouse;
-
-  // set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
-  // set_message("mouse grab position:",
-  //    s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y),
-  //    1.0f);
+  set_message("cursor_position:", s(cursor_position.x, " ", cursor_position.y), 1.0f);
+  set_message("mouse grab position:", s(last_grabbed_cursor_position.x, " ", last_grabbed_cursor_position.y), 1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -123,120 +110,129 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     return;
   if (free_cam)
   {
-    SDL_SetRelativeMouseMode(SDL_bool(true));
-    SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
-    cam.theta += mouse_delta.x * MOUSE_X_SENS;
-    cam.phi += mouse_delta.y * MOUSE_Y_SENS;
+    mouse_relative_mode = true;
+    draw_cursor = false;
+
+    if (!IMGUI.context->IO.WantCaptureMouse)
+      IMGUI.ignore_all_input = true;
+
+    camera.theta += mouse_delta.x * MOUSE_X_SENS;
+    camera.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
-    if (cam.theta > two_pi<float32>())
+    if (camera.theta > two_pi<float32>())
     {
-      cam.theta = cam.theta - two_pi<float32>();
+      camera.theta = camera.theta - two_pi<float32>();
     }
-    if (cam.theta < 0)
+    if (camera.theta < 0)
     {
-      cam.theta = two_pi<float32>() + cam.theta;
+      camera.theta = two_pi<float32>() + camera.theta;
     }
     // clamp y
     const float32 upper = half_pi<float32>() - 100 * epsilon<float32>();
-    if (cam.phi > upper)
+    if (camera.phi > upper)
     {
-      cam.phi = upper;
+      camera.phi = upper;
     }
     const float32 lower = -half_pi<float32>() + 100 * epsilon<float32>();
-    if (cam.phi < lower)
+    if (camera.phi < lower)
     {
-      cam.phi = lower;
+      camera.phi = lower;
     }
 
-    mat4 rx = rotate(-cam.theta, vec3(0, 0, 1));
+    mat4 rx = rotate(-camera.theta, vec3(0, 0, 1));
     vec4 vr = rx * vec4(0, 1, 0, 0);
     vec3 perp = vec3(-vr.y, vr.x, 0);
-    mat4 ry = rotate(cam.phi, perp);
-    cam.dir = normalize(vec3(ry * vr));
+    mat4 ry = rotate(camera.phi, perp);
+    camera.dir = normalize(vec3(ry * vr));
 
     if (is_pressed(SDL_SCANCODE_W))
     {
-      cam.pos += MOVE_SPEED * cam.dir;
+      camera.pos += MOVE_SPEED * camera.dir;
     }
     if (is_pressed(SDL_SCANCODE_S))
     {
-      cam.pos -= MOVE_SPEED * cam.dir;
+      camera.pos -= MOVE_SPEED * camera.dir;
     }
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * r * v);
+      camera.pos += vec3(MOVE_SPEED * r * v);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * r * v);
+      camera.pos += vec3(MOVE_SPEED * r * v);
     }
   }
   else
-  { // wow style camera
+  {
+    // wow style camera
     // grab mouse, rotate camera, restore mouse
     if ((left_button_down || right_button_down) && (last_seen_lmb || last_seen_rmb))
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
-        // set_message("mouse grab event", "", 1.0f);
+        set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
-        last_grabbed_mouse_position = mouse;
-        SDL_SetRelativeMouseMode(SDL_bool(true));
-        SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+        last_grabbed_cursor_position = cursor_position;
+        mouse_relative_mode = true;
       }
-      // set_message("mouse delta: ", s(mouse_delta.x, " ",
-      // mouse_delta.y), 1.0f);
-      SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
-      cam.theta += mouse_delta.x * MOUSE_X_SENS;
-      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
-      // set_message("mouse is grabbed", "", 1.0f);
+
+      if (!IMGUI.context->IO.WantCaptureMouse)
+      {
+        IMGUI.ignore_all_input = true;
+      }
+      draw_cursor = false;
+      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      camera.theta += mouse_delta.x * MOUSE_X_SENS;
+      camera.phi += mouse_delta.y * MOUSE_Y_SENS;
+      set_message("mouse is grabbed", "", 1.0f);
     }
     else
     { // not holding button
-      // set_message("mouse is free", "", 1.0f);
+      set_message("mouse is free", "", 1.0f);
       if (mouse_grabbed)
       { // first unhold
-        // set_message("mouse release event", "", 1.0f);
+        set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-        // set_message("mouse warp:",
-        //    s("from:", mouse.x, " ", mouse.y,
-        //        " to:", last_grabbed_mouse_position.x, " ",
-        //        last_grabbed_mouse_position.y),
-        //    1.0f);
-        SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x, last_grabbed_mouse_position.y);
+        set_message("mouse warp:",
+            s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
+                last_grabbed_cursor_position.y),
+            1.0f);
+        mouse_relative_mode = false;
+        request_cursor_warp_to = last_grabbed_cursor_position;
       }
+      draw_cursor = true;
+      IMGUI.ignore_all_input = false;
     }
     // wrap x
-    if (cam.theta > two_pi<float32>())
+    if (camera.theta > two_pi<float32>())
     {
-      cam.theta = cam.theta - two_pi<float32>();
+      camera.theta = camera.theta - two_pi<float32>();
     }
-    if (cam.theta < 0)
+    if (camera.theta < 0)
     {
-      cam.theta = two_pi<float32>() + cam.theta;
+      camera.theta = two_pi<float32>() + camera.theta;
     }
     // clamp y
     const float32 upper = half_pi<float32>() - 100 * epsilon<float32>();
-    if (cam.phi > upper)
+    if (camera.phi > upper)
     {
-      cam.phi = upper;
+      camera.phi = upper;
     }
     const float32 lower = 100 * epsilon<float32>() - half_pi<float32>();
-    if (cam.phi < lower)
+    if (camera.phi < lower)
     {
-      cam.phi = lower;
+      camera.phi = lower;
     }
 
     //+x right, +y forward, +z up
 
     // construct a matrix that represents a rotation around the z axis by
     // theta(x) radians
-    mat4 rx = rotate(-cam.theta, vec3(0, 0, 1));
+    mat4 rx = rotate(-camera.theta, vec3(0, 0, 1));
 
     //'default' position of camera is behind the Character
 
@@ -249,7 +245,7 @@ void Warg_State::handle_input_events(const std::vector<SDL_Event> &events, bool 
     vec3 perp = vec3(-character_to_camera.y, character_to_camera.x, 0);
 
     // construct a matrix that represents a rotation around perp by -phi
-    mat4 ry = rotate(-cam.phi, perp);
+    mat4 ry = rotate(-camera.phi, perp);
 
     // rotate the camera vector around perp
     character_to_camera = normalize(ry * character_to_camera);
@@ -310,7 +306,7 @@ void Warg_State::set_camera_geometry()
   if (!player_character)
     return;
 
-  float effective_zoom = cam.zoom;
+  float effective_zoom = camera.zoom;
   for (Triangle &surface : collider_cache)
   {
     vec3 intersection_point;
@@ -321,9 +317,9 @@ void Warg_State::set_camera_geometry()
       effective_zoom = length(player_character->physics.position - intersection_point);
     }
   }
-  cam.pos = player_character->physics.position +
-            vec3(character_to_camera.x, character_to_camera.y, character_to_camera.z) * (effective_zoom * 0.98f);
-  cam.dir = -vec3(character_to_camera);
+  camera.pos = player_character->physics.position +
+               vec3(character_to_camera.x, character_to_camera.y, character_to_camera.z) * (effective_zoom * 0.98f);
+  camera.dir = -vec3(character_to_camera);
 }
 
 void Warg_State::update_hp_bar(UID character_id)
@@ -383,17 +379,11 @@ void Warg_State::update_hp_bar(UID character_id)
   if (hp_bar == NODE_NULL)
     return;
 
-  static float32 debug_hp_percent = 1.f;
-  ImGui::Begin("HP DEBUG WINDOW");
-  ImGui::SliderFloat("hp slider", &debug_hp_percent, 0.0f, 1.f);
-  ImGui::End();
-
   float32 hp_percent = ((float32)character->hp) / ((float32)character->hp_max);
 
   Material_Index material_index = scene.nodes[hp_bar].model[0].second;
   Material_Descriptor *mat = scene.resource_manager->retrieve_pool_material_descriptor(material_index);
   mat->emissive.mod = vec4(1.f - hp_percent, hp_percent, 0.f, 1.f);
-  scene.resource_manager->update_material_pool_index(material_index);
 }
 
 void Warg_State::update_character_nodes()
@@ -443,6 +433,10 @@ void Warg_State::update_prediction_ghost()
 
 void Warg_State::update_stats_bar()
 {
+  if (!imgui_this_tick)
+    return;
+  IMGUI_LOCK lock(this);
+
   vec2 resolution = CONFIG.resolution;
 
   bool show_stats_bar = true;
@@ -670,6 +664,7 @@ void Warg_State::update_animation_objects()
 
 void Warg_State::update()
 {
+
   // set_message("Warg update. Time:", s(current_time), 1.0f);
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
@@ -685,30 +680,29 @@ void Warg_State::update()
   update_character_nodes();
   update_prediction_ghost();
   update_spell_object_nodes();
-  update_game_interface();
   // update_animation_objects();
 
-  //-5.15, -17.5
-  // 5.15 -17.5
-
-  //-5.15 17.5
-  // 5.15 17.5
-
-  // 9.6z
-
   // camera must be set before render entities, or they get a 1 frame lag
-  renderer.set_camera(cam.pos, cam.dir);
+  renderer.set_camera(camera.pos, camera.dir);
 
-  fire_emitter(
-      &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
-  fire_emitter(
-      &renderer, &scene, &scene.particle_emitters[1], &scene.lights.lights[1], vec3(5.15, -17.5, 8.6), vec2(.5));
-  fire_emitter(
-      &renderer, &scene, &scene.particle_emitters[2], &scene.lights.lights[2], vec3(-5.15, 17.5, 8.6), vec2(.5));
-  fire_emitter(
-      &renderer, &scene, &scene.particle_emitters[3], &scene.lights.lights[3], vec3(5.15, 17.5, 8.6), vec2(.5));
+  //
+  // fire_emitter(
+  //    &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
+  // fire_emitter(
+  //    &renderer, &scene, &scene.particle_emitters[1], &scene.lights.lights[1], vec3(5.15, -17.5, 8.6), vec2(.5));
+  // fire_emitter(
+  //    &renderer, &scene, &scene.particle_emitters[2], &scene.lights.lights[2], vec3(-5.15, 17.5, 8.6), vec2(.5));
+  // fire_emitter(
+  //    &renderer, &scene, &scene.particle_emitters[3], &scene.lights.lights[3], vec3(5.15, 17.5, 8.6), vec2(.5));
+}
 
-  scene.draw_imgui();
+void Warg_State::draw_gui()
+{
+  // opengl code is allowed in here
+  IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
+
+  update_game_interface();
+  scene.draw_imgui(state_name);
 }
 
 void Warg_State::add_character_mesh(UID character_id)
@@ -1133,6 +1127,7 @@ void Warg_State::update_unit_frames()
 
 void Warg_State::update_icons()
 {
+
   Character *player_character = get_character(&game_state, player_character_id);
   ASSERT(player_character);
 

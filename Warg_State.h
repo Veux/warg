@@ -44,8 +44,10 @@ struct Interface_State
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session);
+  ~Warg_State();
   void update();
-  virtual void handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse) final;
+  void draw_gui();
+  virtual void handle_input_events() final;
   void process_messages();
   void register_move_command(Move_Status m, quat orientation);
   void add_character_mesh(UID character_id);

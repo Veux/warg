@@ -1,9 +1,9 @@
 #include "stdafx.h"
 #include "Warg_Server.h"
-#include "Third_party/imgui/imgui.h"
 
-Warg_Server::Warg_Server() : scene(&GL_DISABLED_RESOURCE_MANAGER)
+Warg_Server::Warg_Server() : scene(&resource_manager)
 {
+  resource_manager.init();
   map = make_blades_edge();
   map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
   collider_cache = collect_colliders(scene);
@@ -445,8 +445,7 @@ UID Warg_Server::add_char(int team, const char *name)
   character->base_stats = stats;
   character->effective_stats = stats;
 
-  auto add_spell = [&](const char *name)
-  {
+  auto add_spell = [&](const char *name) {
     Spell_Status *spell_status = &character->spell_set.spell_statuses[character->spell_set.spell_count];
     spell_status->cooldown_remaining = 0.f;
     spell_status->formula_index = spell_db.get_spell(name)->index;

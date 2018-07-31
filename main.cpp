@@ -5,12 +5,11 @@
 #include "Render.h"
 #include "Render_Test_State.h"
 #include "State.h"
+#include "Sarg_State.h"
 #include "Timer.h"
 #include "Warg_State.h"
 #undef main
 #include "SDL_Imgui_State.h"
-#include "Third_party/imgui/imgui.h"
-#include "Third_party/imgui/imgui_internal.h"
 
 void gl_before_check(const glbinding::FunctionCall &f)
 {
@@ -49,8 +48,145 @@ void gl_after_check(const glbinding::FunctionCall &f)
   check_gl_error();
 }
 
+void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> &available_states, bool WantTextInput,
+    bool WantCaptureMouse, std::vector<SDL_Event> *imgui_events, std::vector<SDL_Event> *state_key_events,
+    std::vector<SDL_Event> *state_mouse_events)
+{
+  if (e.type == SDL_QUIT)
+  {
+    WARG_RUNNING = false;
+    return;
+  }
+  if (e.type == SDL_KEYDOWN)
+  {
+    if (e.key.keysym.sym == SDLK_ESCAPE)
+    {
+      WARG_RUNNING = false;
+      return;
+    }
+  }
+  if (e.type == SDL_WINDOWEVENT)
+  {
+    if (e.window.event == SDL_WINDOWEVENT_RESIZED)
+    {
+      // resize
+      return;
+    }
+    else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e.window.event == SDL_WINDOWEVENT_ENTER)
+    { // dumping mouse delta prevents camera teleport on focus gain
+
+      for (State *&state : available_states)
+      {
+        SDL_GetMouseState(&state->cursor_position.x, &state->cursor_position.y);
+      }
+      return;
+    }
+  }
+
+  if (e.type == SDL_KEYUP)
+  {
+    if (e.key.keysym.sym == SDLK_F1)
+    {
+      if (available_states.size() < 1)
+        return;
+
+      (*current_state)->recieves_input = false;
+      *current_state = available_states[0];
+      (*current_state)->recieves_input = true;
+
+      ivec2 trash;
+      SDL_GetRelativeMouseState(&trash.x, &trash.y);
+      //(*current_state)->reset_mouse_delta();
+      (*current_state)->renderer.previous_color_target_missing = true;
+      return;
+    }
+    else if (e.key.keysym.sym == SDLK_F2)
+    {
+      if (available_states.size() < 2)
+        return;
+      ;
+      (*current_state)->recieves_input = false;
+      *current_state = available_states[1];
+      (*current_state)->recieves_input = true;
+
+      if ((*current_state)->free_cam)
+        SDL_SetRelativeMouseMode(SDL_bool(true));
+      else
+      {
+        SDL_SetRelativeMouseMode(SDL_bool(false));
+        SDL_WarpMouseInWindow(nullptr, (*current_state)->cursor_position.x, (*current_state)->cursor_position.y);
+      }
+      ivec2 trash;
+      SDL_GetRelativeMouseState(&trash.x, &trash.y);
+      //(*current_state)->reset_mouse_delta();
+      (*current_state)->renderer.previous_color_target_missing = true;
+      return;
+    }
+    else if (e.key.keysym.sym == SDLK_F3)
+    {
+      if (available_states.size() < 3)
+        return;
+      ;
+      (*current_state)->recieves_input = false;
+      *current_state = available_states[2];
+      (*current_state)->recieves_input = true;
+
+      ivec2 trash;
+      SDL_GetRelativeMouseState(&trash.x, &trash.y);
+      //(*current_state)->reset_mouse_delta();
+      (*current_state)->renderer.previous_color_target_missing = true;
+      return;
+    }
+    else if (e.key.keysym.sym == SDLK_F4)
+    {
+      if (available_states.size() < 4)
+        return;
+      ;
+      (*current_state)->recieves_input = false;
+      *current_state = available_states[3];
+      (*current_state)->recieves_input = true;
+
+      ivec2 trash;
+      SDL_GetRelativeMouseState(&trash.x, &trash.y);
+      (*current_state)->renderer.previous_color_target_missing = true;
+      return;
+    }
+  }
+
+  if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP)
+  {
+    if (WantTextInput && (!IMGUI.ignore_all_input))
+    {
+      imgui_events->push_back(e);
+      return;
+    }
+    else
+    {
+      state_key_events->push_back(e);
+      return;
+    }
+  }
+
+  if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL)
+  {
+    if (WantCaptureMouse && (!IMGUI.ignore_all_input))
+    {
+      imgui_events->push_back(e);
+      return;
+    }
+    else
+    {
+      state_mouse_events->push_back(e);
+      return;
+    }
+  }
+
+  return;
+}
+
 int main(int argc, char *argv[])
 {
+  MAIN_THREAD_ID = std::this_thread::get_id();
   const char *config_filename = "config.json";
   CONFIG.load(config_filename);
   // SDL_Delay(1000); ??
@@ -68,6 +204,7 @@ int main(int argc, char *argv[])
     // server_main();
     return 0;
   }
+
   else if (argc > 1 && std::string(argv[1]) == "--connect")
   {
     client = true;
@@ -75,7 +212,7 @@ int main(int argc, char *argv[])
     if (argc <= 4)
     {
       std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
-                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
+                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --wargconnect "
                    "127.0.0.1 Warriorguy 0"
                 << std::endl;
       return 1;
@@ -85,215 +222,306 @@ int main(int argc, char *argv[])
     team = std::stoi(argv[4]);
   }
   ASSERT(!WARG_SERVER);
-
-  SDL_ClearError();
   generator.seed(uint32(SDL_GetPerformanceCounter()));
-  SDL_Init(SDL_INIT_EVERYTHING);
-  uint32 display_count = uint32(SDL_GetNumVideoDisplays());
-  std::stringstream s;
-  for (uint32 i = 0; i < display_count; ++i)
+
+  SDL_GLContext context = nullptr;
+  SDL_Window *window = nullptr;
+  ivec2 window_size = ivec2(0);
+  if (PROCESS_USES_SDL_AND_OPENGL)
   {
-    s << "Display " << i << ":\n";
-    SDL_DisplayMode mode;
-    uint32 mode_count = uint32(SDL_GetNumDisplayModes(i));
-    for (uint32 j = 0; j < mode_count; ++j)
+    SDL_ClearError();
+    SDL_Init(SDL_INIT_EVERYTHING);
+    uint32 display_count = uint32(SDL_GetNumVideoDisplays());
+    std::stringstream s;
+    for (uint32 i = 0; i < display_count; ++i)
     {
-      SDL_GetDisplayMode(i, j, &mode);
-      s << "Supported resolution: " << mode.w << "x" << mode.h << " " << mode.refresh_rate << "hz  "
-        << SDL_GetPixelFormatName(mode.format) << "\n";
+      s << "Display " << i << ":\n";
+      SDL_DisplayMode mode;
+      uint32 mode_count = uint32(SDL_GetNumDisplayModes(i));
+      for (uint32 j = 0; j < mode_count; ++j)
+      {
+        SDL_GetDisplayMode(i, j, &mode);
+        s << "Supported resolution: " << mode.w << "x" << mode.h << " " << mode.refresh_rate << "hz  "
+          << SDL_GetPixelFormatName(mode.format) << "\n";
+      }
     }
-  }
-  set_message(s.str());
+    set_message(s.str());
 
-  ivec2 window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
-  int32 flags = SDL_WINDOW_OPENGL;
-  // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-  SDL_Window *window = SDL_CreateWindow("title", 100, 130, window_size.x, window_size.y, flags);
-  SDL_GLContext context = SDL_GL_CreateContext(window);
-
-  int32 major, minor;
-  SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
-  SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
-  set_message("OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
-  if (major <= 3)
-  {
-    if (major < 3 || minor < 1)
+    window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
+    int32 flags = SDL_WINDOW_OPENGL;
+    // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    window = SDL_CreateWindow("Warg_Engine", 100, 130, window_size.x, window_size.y, flags);
+    SDL_RaiseWindow(window);
+    context = SDL_GL_CreateContext(window);
+    SDL_GL_MakeCurrent(window, context);
+    int32 major, minor;
+    SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
+    SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
+    set_message("OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
+    if (major <= 3)
     {
-      set_message("Unsupported OpenGL Version.");
-      push_log_to_disk();
-      throw;
+      if (major < 3 || minor < 1)
+      {
+        set_message("Unsupported OpenGL Version.");
+        push_log_to_disk();
+        throw;
+      }
     }
-  }
-  // 1 vsync, 0 no vsync, -1 late-swap
-  int32 swap = SDL_GL_SetSwapInterval(0);
-  if (swap == -1)
-  {
-    swap = SDL_GL_SetSwapInterval(1);
-  }
+    // 1 vsync, 0 no vsync, -1 late-swap
+    int32 swap = SDL_GL_SetSwapInterval(0);
+    if (swap == -1)
+    {
+      swap = SDL_GL_SetSwapInterval(1);
+    }
 
-  glbinding::Binding::initialize();
-  glbinding::setCallbackMaskExcept(
-      glbinding::CallbackMask::After | glbinding::CallbackMask::ParametersAndReturnValue, {"glGetError", "glFlush"});
+    glbinding::Binding::initialize();
+    glbinding::setCallbackMaskExcept(
+        glbinding::CallbackMask::After | glbinding::CallbackMask::ParametersAndReturnValue, {"glGetError", "glFlush"});
 #if ENABLE_OPENGL_ERROR_CATCHING_AND_LOG
-  glbinding::setBeforeCallback(gl_before_check);
-  glbinding::setAfterCallback(gl_after_check);
+    glbinding::setBeforeCallback(gl_before_check);
+    glbinding::setAfterCallback(gl_after_check);
 #endif
-  glClearColor(0, 0, 0, 1);
-  checkSDLError(__LINE__);
-  SDL_ClearError();
+    glClearColor(0, 0, 0, 1);
+    checkSDLError(__LINE__);
+    SDL_ClearError();
 
-  SDL_Imgui_State trash_imgui(window);
-  SDL_Imgui_State imgui(window);
-  ImGui::StyleColorsDark();
-  check_gl_error();
-  trash_imgui.bind();
-  trash_imgui.new_frame(window, 0.1f);
-  trash_imgui.end_frame();
+    SDL_SetRelativeMouseMode(SDL_bool(false));
+  }
 
-  GL_ENABLED_RESOURCE_MANAGER.init();
-  GL_DISABLED_RESOURCE_MANAGER.init();
-
-  Render_Test_State *render_test_state = new Render_Test_State("Render Test State", window, window_size);
   Local_Session warg_session = Local_Session();
-  Warg_State *game_state = new Warg_State("Warg", window, window_size, (Session *)&warg_session);
+
+  IMGUI.init(window);
+  ImGui::SetCurrentContext(IMGUI.context);
+  ImGui::StyleColorsDark();
+
   std::vector<State *> states;
-  states.push_back((State *)game_state);
-  states.push_back((State *)render_test_state);
-  State *current_state = &*states[0];
+  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  states[0]->recieves_input = true;
+  states[0]->draws_imgui = true;
+
+  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
+  states.emplace_back((State *)new Sarg_Client_State("Sarg Client", window, window_size));
+  states.emplace_back((State *)new Sarg_Server_State("Sarg Server", window, window_size));
+
+  // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
+  // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it global
+  // is best?
+
+  // rendered state has control of the mouse as well
+  State *rendered_state = states[0];
+
   std::vector<SDL_Event> imgui_event_accumulator;
-
-  SDL_SetRelativeMouseMode(SDL_bool(false));
-
   bool first_update = false;
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
-  bool renderer_requires_trashgui_wrapping = false;
-  while (current_state->running)
+  float64 current_time = 0.0f;
+  bool imgui_frame_active = false;
+  while (WARG_RUNNING)
   {
-    const float64 real_time = get_real_time();
-    if (current_state->paused)
-    {
-      float64 past_accum = current_state->paused_time_accumulator;
-      float64 real_time_of_last_update = current_state->current_time + past_accum;
-      float64 real_time_since_last_update = real_time - real_time_of_last_update;
-      current_state->paused_time_accumulator += real_time_since_last_update;
-      current_state->paused = false;
-      continue;
-    }
-    const float64 time = real_time - current_state->paused_time_accumulator;
-    elapsed_time = time - current_state->current_time;
-    // set_message("time", std::to_string(time), 1);
+    const float64 time = get_real_time();
+    elapsed_time = time - current_time;
     if (elapsed_time > 0.3)
       elapsed_time = 0.3;
-    last_time = current_state->current_time;
 
-    trash_imgui.bind();
-    renderer_requires_trashgui_wrapping = true;
+    last_time = current_time;
+    imgui_frame_active = false;
     float64 imgui_dt_accumulator = 0;
-    while (current_state->current_time + dt < last_time + elapsed_time)
+    while (current_time + dt < last_time + elapsed_time)
     {
       first_update = true;
-      State *state_ptr = current_state;
-      state_ptr->current_time += dt;
+      current_time += dt;
       imgui_dt_accumulator += dt;
-      bool last_state_update = !(state_ptr->current_time + dt < last_time + elapsed_time);
 
-      std::vector<SDL_Event> new_events;
+      SDL_PumpEvents();
+
+      // get keyboard state
+      std::vector<uint8> key_state;
+      int32 numkeys = 0;
+      const Uint8 *keys = SDL_GetKeyboardState(&numkeys);
+      key_state.resize(numkeys);
+      for (uint32 i = 0; i < numkeys; ++i)
+      {
+        key_state[i] = keys[i];
+      }
+
+      // get mouse state
+      ivec2 cursor_position;
+      ivec2 mouse_delta;
+      uint32 mouse_state = SDL_GetMouseState(&cursor_position.x, &cursor_position.y);
+      SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+
+      // gather events
+      std::vector<SDL_Event> state_keyboard_events;
+      std::vector<SDL_Event> state_mouse_events;
       SDL_Event e;
       while (SDL_PollEvent(&e))
       {
-        new_events.push_back(e);
-        imgui_event_accumulator.push_back(e);
+        input_preprocess(e, &rendered_state, states, IMGUI.context->IO.WantTextInput,
+            IMGUI.context->IO.WantCaptureMouse, &imgui_event_accumulator, &state_keyboard_events, &state_mouse_events);
       }
-
-      imgui.ignore_all_input = state_ptr->free_cam;
-
-      state_ptr->handle_input(
-          &current_state, &states, &new_events, imgui.context->IO.WantTextInput, imgui.context->IO.WantCaptureMouse);
-
-      if (state_ptr != current_state)
-      {
-        state_ptr->paused = true;
-        current_state->renderer.set_render_scale(state_ptr->renderer.get_render_scale());
+      if (!WARG_RUNNING)
         break;
-      }
 
+      // start imgui frame if last tick before rendering
+      const bool last_state_update = !(current_time + dt < last_time + elapsed_time);
       if (last_state_update)
-      { // possible bug: two clicks faster than 1 frame aren't seen
-
-        imgui.bind();
-        imgui.handle_input(&imgui_event_accumulator);
-        imgui_event_accumulator.clear();
-        imgui.new_frame(window, imgui_dt_accumulator);
-        renderer_requires_trashgui_wrapping = false;
-        IMGUI_TEXTURE_DRAWS.clear();
-        state_ptr->update();
-      }
-      else
       {
-        trash_imgui.bind();
-        trash_imgui.new_frame(window, dt);
-        state_ptr->update();
-        trash_imgui.end_frame();
+        IMGUI.cursor_position = cursor_position;
+        IMGUI.mouse_state = mouse_state;
+        IMGUI.handle_input(&imgui_event_accumulator);
+        IMGUI.new_frame(window, imgui_dt_accumulator);
+        IMGUI_TEXTURE_DRAWS.clear();
+        imgui_event_accumulator.clear();
+        imgui_frame_active = true;
       }
+
+      // setup this tick
+      for (uint32 i = 0; i < states.size(); ++i)
+      {
+        const bool this_state_gets_rendered = rendered_state == states[i];
+        const bool this_state_recieves_input = states[i]->recieves_input;
+        const bool this_state_draws_imgui = states[i]->draws_imgui;
+        states[i]->events_this_tick.clear();
+        states[i]->key_state.resize(key_state.size());
+        for (uint32 j = 0; j < states[i]->key_state.size(); ++j)
+        {
+          states[i]->key_state[j] = uint8(0);
+        }
+
+        if (this_state_recieves_input)
+        {
+          if ((!IMGUI.context->IO.WantTextInput) || IMGUI.ignore_all_input)
+          { // append keyboard events and state if imgui doesnt want the keyboard or we are ignoring imgui's request
+            states[i]->events_this_tick.insert(
+                states[i]->events_this_tick.end(), state_keyboard_events.begin(), state_keyboard_events.end());
+            states[i]->key_state = key_state;
+          }
+          if ((!IMGUI.context->IO.WantCaptureMouse) || IMGUI.ignore_all_input)
+          { // append mouse events and state if imgui doesnt want the mouse or we are ignoring imgui's request
+            states[i]->events_this_tick.insert(
+                states[i]->events_this_tick.end(), state_mouse_events.begin(), state_mouse_events.end());
+            states[i]->mouse_state = mouse_state;
+            states[i]->cursor_position = cursor_position;
+            states[i]->mouse_delta = mouse_delta;
+          }
+          if (IMGUI.context->IO.WantCaptureMouse && !(IMGUI.ignore_all_input))
+          {
+            states[i]->mouse_delta = ivec2(0);
+          }
+        }
+        states[i]->imgui_this_tick = this_state_draws_imgui && last_state_update;
+      }
+
+      // allows state threads to update the state
+      for (uint32 i = 0; i < states.size(); ++i)
+      {
+        states[i]->tick_block = false;
+      }
+
+      // spin main thread to wait on all state threads
+      for (uint32 i = 0; i < states.size(); ++i)
+      {
+        while (states[i]->tick_block == false)
+        {
+          SDL_Delay(1);
+          // spin and wait
+        }
+        const bool this_state_draws_imgui = states[i]->draws_imgui;
+        if (this_state_draws_imgui)
+        {
+          if (imgui_frame_active)
+            states[i]->draw_gui();
+        }
+      }
+
+      uint32 count = 0;
+      for (uint32 i = 0; i < states.size(); ++i)
+      {
+        const bool this_state_gets_rendered = rendered_state == states[i];
+
+        if (this_state_gets_rendered)
+        {
+          count++;
+          if (states[i]->free_cam)
+          {
+            // SDL_WarpMouseInWindow(nullptr, 0.5f * CONFIG.resolution.x, 0.5f * CONFIG.resolution.y);
+          }
+
+          SDL_ShowCursor(states[i]->draw_cursor);
+
+          SDL_SetRelativeMouseMode(SDL_bool(states[i]->mouse_relative_mode));
+          if (states[i]->request_cursor_warp_to != ivec2(-1))
+          {
+            SDL_WarpMouseInWindow(nullptr, states[i]->request_cursor_warp_to.x, states[i]->request_cursor_warp_to.y);
+            states[i]->request_cursor_warp_to = ivec2(-1);
+          }
+        }
+      }
+      set_message("count: ", s(count), 1.0f);
     }
+
+    if (!WARG_RUNNING)
+      break;
 
     if (!first_update)
       continue;
 
-    if (renderer_requires_trashgui_wrapping)
-    {
-      ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
-      trash_imgui.new_frame(window, 0.1f);
-    }
-    check_gl_error();
-    current_state->render(current_state->current_time);
-    check_gl_error();
-    std::string messages = get_messages();
-    ImGui::Text("%s", messages.c_str());
+    rendered_state->renderer.imgui_this_tick = imgui_frame_active;
+    rendered_state->render(rendered_state->current_time);
 
-    static bool show_demo_window = true;
-    if (show_demo_window)
+    if (imgui_frame_active)
     {
-      ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver);
-      ImGui::ShowDemoWindow(&show_demo_window);
-    }
-    if (renderer_requires_trashgui_wrapping)
-    {
-      ASSERT(ImGui::GetCurrentContext() == trash_imgui.context);
-      trash_imgui.end_frame();
-    }
-    if (ImGui::GetCurrentContext() == imgui.context)
-    {
-      imgui.build_draw_data();
-      imgui.render();
-      imgui.end_frame();
+      std::string messages = get_messages();
+      ImGui::Text("%s", messages.c_str());
+
+      static bool show_demo_window = true;
+      if (show_demo_window)
+      {
+        ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiCond_FirstUseEver);
+        ImGui::ShowDemoWindow(&show_demo_window);
+      }
+
+      IMGUI.build_draw_data();
+      IMGUI.render();
+      IMGUI.end_frame();
     }
     else
     {
-      imgui.bind();
-      imgui.render();
-      trash_imgui.bind();
+      IMGUI.render();
     }
-
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();
     FRAME_TIMER.start();
 
-    current_state->performance_output();
-    if (uint32(get_real_time()) % 30 == 0)
+    rendered_state->performance_output();
+    if (uint32(get_real_time()) % 2 == 0)
     {
       push_log_to_disk();
     }
   }
-  delete game_state;
-  delete render_test_state;
+
+  for (uint32 i = 0; i < states.size(); ++i)
+  {
+    states[i]->running = false;
+
+    while (states[i]->tick_block == false)
+    {
+      // spin and wait
+    }
+    if (states[i]->thread.joinable())
+    {
+      states[i]->thread.join();
+    }
+
+    delete states[i];
+  }
   push_log_to_disk();
-  imgui.destroy();
+  IMGUI.destroy();
+  warg_session.end();
   SDL_Quit();
   CONFIG.save(config_filename);
   return 0;

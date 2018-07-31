@@ -1,35 +1,48 @@
 #pragma once
-#include "Render.h"
 #include "Third_Party/imgui/imgui.h"
+#include "Third_party/imgui/imgui_internal.h"
+#include "Forward_Declarations.h"
+#include "Render.h"
 
 struct SDL_Window;
 typedef union SDL_Event SDL_Event;
 
+struct Imgui_Texture_Descriptor
+{
+  std::shared_ptr<Texture_Handle> ptr = nullptr;
+  glm::vec2 size = vec2(0);
+  float aspect = 1.0f;
+  float mip_lod_to_draw = 0.f;
+  bool y_invert = false;
+  bool gamma_encode = false;
+  bool is_cubemap = false;
+  bool is_mipmap_list_command = false;
+};
+
 struct SDL_Imgui_State
 {
-  SDL_Imgui_State(SDL_Window *window);
+  SDL_Imgui_State();
+  void init(SDL_Window *window);
   void destroy();
 
-  void bind();
   void new_frame(SDL_Window *window, float64 dt_since_last_frame);
   void end_frame();
+
   void handle_input(std::vector<SDL_Event> *input);
+  bool ignore_all_input = false;
+  bool draw_cursor = true;
 
   void build_draw_data();
   void render();
 
-  ImGuiIO *state_io = nullptr;
   ImGuiContext *context = nullptr;
+  ImGuiIO *state_io = nullptr;
 
-  ivec2 mouse_position = ivec2(0);
+  ivec2 cursor_position = ivec2(0);
   uint32 mouse_state = 0;
-
-  bool ignore_all_input = false;
 
 private:
   bool process_event(SDL_Event *event);
-
-  bool init(SDL_Window *window);
   static const char *get_clipboard(void *);
   static void set_clipboard(void *, const char *text);
   void create_fonts_texture();

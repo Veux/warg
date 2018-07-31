@@ -24,6 +24,14 @@ struct Config;
 struct Image_Loader;
 struct Texture;
 struct Texture_Descriptor;
+struct SDL_Imgui_State;
+struct State;
+struct Warg_State;
+struct Warg_Server;
+struct Sarg_State;
+struct Sarg_Server_State;
+struct Sarg_Client_State;
+struct Context_Managed_Imgui;
 
 #include <glm/glm.hpp>
 using namespace glm;

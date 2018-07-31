@@ -233,14 +233,14 @@ void demonic_circle_teleport_release(
 
 Spell_Database::Spell_Database()
 {
-  auto icon = [](const char *filename) { return Texture(s("../Assets/Icons/", filename)); };
+  //auto icon = [](const char *filename) { return Texture(s("../Assets/Icons/", filename)); };
 
   // FROSTBOLT
 
   BuffDef *fb_debuff = add_buff();
   fb_debuff->_id = Spell_ID::Frostbolt;
   fb_debuff->name = "FrostboltSlowDebuff";
-  fb_debuff->icon = icon("frostbolt.jpg");
+  //fb_debuff->icon = icon("frostbolt.jpg");
   fb_debuff->duration = 10;
   fb_debuff->stats_modifiers.speed = 0.2;
 
@@ -252,7 +252,7 @@ Spell_Database::Spell_Database()
 
   Spell_Formula *frostbolt = add_spell();
   frostbolt->name = "Frostbolt";
-  frostbolt->icon = icon("frostbolt.jpg");
+  //frostbolt->icon = icon("frostbolt.jpg");
   frostbolt->mana_cost = 20;
   frostbolt->range = 30;
   frostbolt->targets = Spell_Targets::Hostile;
@@ -265,7 +265,7 @@ Spell_Database::Spell_Database()
 
   Spell_Formula *blink = add_spell();
   blink->name = "Blink";
-  blink->icon = icon("blink.jpg");
+  //blink->icon = icon("blink.jpg");
   blink->mana_cost = 5;
   blink->range = 0.f;
   blink->targets = Spell_Targets::Self;
@@ -279,14 +279,14 @@ Spell_Database::Spell_Database()
   BuffDef *swp_buff = add_buff();
   swp_buff->_id = Spell_ID::Shadow_Word_Pain;
   swp_buff->name = "ShadowWordPainBuff";
-  swp_buff->icon = icon("shadow_word_pain.jpg");
+  //swp_buff->icon = icon("shadow_word_pain.jpg");
   swp_buff->duration = 15;
   swp_buff->tick_freq = 1.0 / 3;
   swp_buff->_on_tick = shadow_word_pain_debuff_tick;
 
   Spell_Formula *swp = add_spell();
   swp->name = "Shadow Word: Pain";
-  swp->icon = icon("shadow_word_pain.jpg");
+  //swp->icon = icon("shadow_word_pain.jpg");
   swp->mana_cost = 50;
   swp->range = 30;
   swp->cooldown = 0;
@@ -300,13 +300,13 @@ Spell_Database::Spell_Database()
   BuffDef *icy_veins_buff = add_buff();
   icy_veins_buff->_id = Spell_ID::Icy_Veins;
   icy_veins_buff->name = "IcyVeinsBuff";
-  icy_veins_buff->icon = Texture("../Assets/Icons/icy_veins.jpg");
+  //icy_veins_buff->icon = Texture("../Assets/Icons/icy_veins.jpg");
   icy_veins_buff->duration = 20;
   icy_veins_buff->stats_modifiers.cast_speed = 2.f;
 
   Spell_Formula *icy_veins = add_spell();
   icy_veins->name = "Icy Veins";
-  icy_veins->icon = icon("icy_veins.jpg");
+  //icy_veins->icon = icon("icy_veins.jpg");
   icy_veins->mana_cost = 20;
   icy_veins->range = 0;
   icy_veins->targets = Spell_Targets::Self;
@@ -321,13 +321,13 @@ Spell_Database::Spell_Database()
   sprint_buff->_id = Spell_ID::Sprint;
   sprint_buff->name = "Sprint";
   sprint_buff->duration = 15.f;
-  sprint_buff->icon = icon("sprint.jpg");
+  //sprint_buff->icon = icon("sprint.jpg");
   sprint_buff->stats_modifiers.speed = 2.f;
 
   Spell_Formula *sprint = add_spell();
   sprint->name = "Sprint";
   sprint->cooldown = 10.f;
-  sprint->icon = icon("sprint.jpg");
+  //sprint->icon = icon("sprint.jpg");
   sprint->mana_cost = 5;
   sprint->cast_time = 0.f;
   sprint->on_global_cooldown = false;
@@ -340,12 +340,12 @@ Spell_Database::Spell_Database()
   demonic_circle_buff->_id = Spell_ID::Demonic_Circle_Summon;
   demonic_circle_buff->name = "Demonic Circle";
   demonic_circle_buff->duration = 3600.f;
-  demonic_circle_buff->icon = icon("demonic_circle_summon.jpg");
+  //demonic_circle_buff->icon = icon("demonic_circle_summon.jpg");
 
   Spell_Formula *demonic_circle_summon = add_spell();
   demonic_circle_summon->name = "Demonic Circle: Summon";
   demonic_circle_summon->cooldown = 30.f;
-  demonic_circle_summon->icon = icon("demonic_circle_summon.jpg");
+  //demonic_circle_summon->icon = icon("demonic_circle_summon.jpg");
   demonic_circle_summon->mana_cost = 5;
   demonic_circle_summon->cast_time = 0.f;
   demonic_circle_summon->on_global_cooldown = true;
@@ -357,7 +357,7 @@ Spell_Database::Spell_Database()
   Spell_Formula *demonic_circle_teleport = add_spell();
   demonic_circle_teleport->name = "Demonic Circle: Teleport";
   demonic_circle_teleport->cooldown = 5.f;
-  demonic_circle_teleport->icon = icon("demonic_circle_teleport.jpg");
+  //demonic_circle_teleport->icon = icon("demonic_circle_teleport.jpg");
   demonic_circle_teleport->mana_cost = 5;
   demonic_circle_teleport->cast_time = 0.f;
   demonic_circle_teleport->on_global_cooldown = false;

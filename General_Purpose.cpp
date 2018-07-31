@@ -336,9 +336,10 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
     messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
-  message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, " File: ", file, ": ", line, "\n\n"));
+  message_log.append(s("Thread: ", ss.str(), " Time: ", time, " Event: ", identifier, " ", message, " File: ", file,
+      ": ", line, "\n\n"));
 #else
-  message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, "\n"));
+  message_log.append(s("Thread: ", ss.str(), "Time: ", time, " Event: ", identifier, " ", message, "\n"));
 #endif
 }
 

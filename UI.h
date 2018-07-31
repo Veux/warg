@@ -18,6 +18,7 @@ public:
   bool run();
   std::string get_result();
   bool get_closed();
+
 private:
   void set_dir(std::string directory);
 
@@ -34,7 +35,8 @@ class Layout_Grid
 {
 public:
   Layout_Grid(vec2 size_, vec2 borders_, vec2 spacing_, uint32 columns_, uint32 rows_);
-  Layout_Grid(vec2 size_, vec2 borders_, vec2 spacing_, vec2 layout, vec2 ratio_identity_lhs, float32 ratio_identity_rhs);
+  Layout_Grid(
+      vec2 size_, vec2 borders_, vec2 spacing_, vec2 layout, vec2 ratio_identity_lhs, float32 ratio_identity_rhs);
   vec2 get_position(uint32 column, uint32 row);
   vec2 get_section_size(uint32 number_columns, uint32 number_rows);
   vec2 get_total_size();
