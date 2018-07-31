@@ -690,6 +690,7 @@ Image_Loader::Image_Loader()
 }
 Image_Loader::~Image_Loader()
 {
+  running = false;
   threads[0].join();
   threads[1].join();
   threads[2].join();

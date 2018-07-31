@@ -56,7 +56,7 @@ struct Spell_Formula
 {
   Spell_Index index;
   std::string name;
-  Texture icon;
+  Texture_Descriptor icon;
   uint32 mana_cost = 0;
   float32 range = 0.f;
   Spell_Targets targets = Spell_Targets::Self;
@@ -97,7 +97,7 @@ struct BuffDef
   Spell_Index index;
   Spell_ID _id;
   std::string name;
-  Texture icon;
+  Texture_Descriptor icon;
   float32 duration;
   float32 tick_freq;
   Character_Stats stats_modifiers;

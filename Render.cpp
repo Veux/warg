@@ -409,6 +409,7 @@ void Texture::load()
     texture->size = t.size;
     texture->format = t.format;
     initialized = true;
+    ASSERT(texture);
     check_set_parameters();
     return;
   }
@@ -494,7 +495,7 @@ void Texture::load()
 #else
     if (!data)
     {
-      // set_message("STBI failed to find or load texture: ", t.name, 3.0);
+      set_message("STBI failed to find or load texture: ", t.name, 3.0);
       texture = nullptr;
       initialized = imgdata.initialized;
       return;
@@ -1154,6 +1155,15 @@ void Renderer::build_shadow_maps()
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void run_pixel_shader(Shader *shader, vector<Texture> *src_textures, Framebuffer *dst, bool clear_dst)
+{
+  std::vector<Texture *> src;
+  for (auto &t : *src_textures)
+  {
+    src.push_back(&t);
+  }
+  run_pixel_shader(shader, &src, dst, clear_dst);
+}
 // shader must use passthrough.vert, and must use texture1, texture2 ...
 // texturen for input texture sampler names
 void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuffer *dst, bool clear_dst)

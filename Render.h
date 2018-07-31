@@ -508,7 +508,7 @@ struct Spotlight_Shadow_Map
   GLenum format = GL_RG32F;
   bool initialized = false;
 };
-
+void run_pixel_shader(Shader *shader, std::vector<Texture> *src_textures, Framebuffer *dst, bool clear_dst = false);
 void run_pixel_shader(Shader *shader, std::vector<Texture *> *src_textures, Framebuffer *dst, bool clear_dst = false);
 
 struct Particle

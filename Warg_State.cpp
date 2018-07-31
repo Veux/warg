@@ -1098,10 +1098,8 @@ void Warg_State::update_unit_frames()
               ImGuiWindowFlags_NoFocusOnAppearing);
 
       BuffDef *buff_formula = spell_db.get_buff(buffs[i].formula_index);
-      ImTextureID icon = (ImTextureID)buff_formula->icon.get_handle();
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
-      ImGui::Image(icon, v(inner_grid.get_section_size(1, 1)));
-
+      put_imgui_texture(&buff_formula->icon, inner_grid.get_section_size(1, 1));
       ImGui::End();
       ImGui::PopStyleVar(4);
     }
@@ -1133,7 +1131,7 @@ void Warg_State::update_icons()
 
   static Framebuffer framebuffer = Framebuffer();
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
-  static std::vector<Texture *> sources;
+  static std::vector<Texture> sources;
 
   static bool configured = false;
   static size_t num_spells = 0;
@@ -1156,7 +1154,7 @@ void Warg_State::update_icons()
       Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = &formula->icon;
+      sources[i] = formula->icon;
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
     }
     configured = true;
@@ -1234,7 +1232,8 @@ void Warg_State::update_buff_indicators()
 
   const vec2 resolution = CONFIG.resolution;
 
-  auto create_indicator = [&](vec2 position, vec2 size, ImTextureID icon, float64 duration, bool debuff, size_t i) {
+  auto create_indicator = [&](vec2 position, vec2 size, Texture_Descriptor *icon, float64 duration, bool debuff,
+                              size_t i) {
     Layout_Grid grid(size, vec2(2), vec2(1), vec2(1, 3), vec2(1, 2), 1);
 
     std::string countdown_string = duration_string(duration);
@@ -1255,7 +1254,7 @@ void Warg_State::update_buff_indicators()
 
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
     ImGui::SetCursorPos(v(grid.get_position(0, 0)));
-    ImGui::Image(icon, v(grid.get_section_size(1, 2)));
+    put_imgui_texture(icon, grid.get_section_size(1, 2));
     ImGui::PopStyleVar();
 
     ImGui::SetCursorPos(v(grid.get_position(0, 2)));
@@ -1274,8 +1273,8 @@ void Warg_State::update_buff_indicators()
     BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
 
     float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(i, 0).y), grid.get_section_size(1, 1),
-        (ImTextureID)buff_formula->icon.get_handle(), buff->duration, false, i);
+    create_indicator(vec2(position_x, grid.get_position(i, 0).y), grid.get_section_size(1, 1), &buff_formula->icon,
+        buff->duration, false, i);
   }
 
   for (size_t i = 0; i < player_character->debuff_count && i < max_columns; i++)
@@ -1284,8 +1283,8 @@ void Warg_State::update_buff_indicators()
     BuffDef *debuff_formula = spell_db.get_buff(debuff->formula_index);
 
     float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(i, 2).y), grid.get_section_size(1, 1),
-        (ImTextureID)debuff_formula->icon.get_handle(), debuff->duration, true, i);
+    create_indicator(vec2(position_x, grid.get_position(i, 2).y), grid.get_section_size(1, 1), &debuff_formula->icon,
+        debuff->duration, true, i);
   }
 }
 
