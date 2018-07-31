@@ -336,9 +336,10 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
     messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
-  message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, " File: ", file, ": ", line, "\n\n"));
+  message_log.append(s("Thread: ", ss.str(), " Time: ", time, " Event: ", identifier, " ", message, " File: ", file,
+      ": ", line, "\n\n"));
 #else
-  message_log.append(s("Time: ", time, " Event: ", identifier, " ", message, "\n"));
+  message_log.append(s("Thread: ", ss.str(), "Time: ", time, " Event: ", identifier, " ", message, "\n"));
 #endif
 }
 
@@ -639,9 +640,9 @@ void Config::save(std::string filename)
 }
 
 void loader_loop(std::unordered_map<std::string, Image_Data> &database, std::queue<std::string> &load_queue,
-    std::mutex &db_mtx, std::mutex &queue_mtx)
+    std::mutex &db_mtx, std::mutex &queue_mtx, bool *running)
 {
-  while (true)
+  while (*running)
   {
     std::string path;
     Sleep(1);
@@ -683,9 +684,8 @@ void loader_loop(std::unordered_map<std::string, Image_Data> &database, std::que
 
 void Image_Loader::init()
 {
-  loader_thread =
-      std::thread(loader_loop, std::ref(database), std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx));
-  loader_thread.detach();
+  loader_thread = std::thread(
+      loader_loop, std::ref(database), std::ref(load_queue), std::ref(db_mtx), std::ref(queue_mtx), &running);
 }
 
 bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
@@ -724,6 +724,11 @@ bool Image_Loader::load(const char *filepath, int32 req_comp, Image_Data *data)
     load_queue.push(path);
   }
   return false;
+}
+void Image_Loader::exit()
+{
+  running = false;
+  loader_thread.join();
 }
 bool has_img_file_extension(std::string name)
 {

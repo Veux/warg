@@ -9,14 +9,11 @@
 #include <map>
 #include <queue>
 
-using std::vector;
+using std::make_unique;
 using std::queue;
 using std::unique_ptr;
-using std::make_unique;
+using std::vector;
 
-
-// todo: change all built in dynamic types to static types, eg int, float
-// todo: change all instances of dt to use float64 for identical precision with game loop
 struct Warg_Server
 {
   Warg_Server();
@@ -51,8 +48,9 @@ struct Warg_Server
   std::map<UID, std::shared_ptr<Peer>> peers;
   float64 time = 0;
   uint32 tick = 0;
-
+  std::atomic<bool> running = false;
   Map map;
+  Resource_Manager resource_manager;
   Flat_Scene_Graph scene;
   Spell_Database spell_db;
   Game_State game_state;

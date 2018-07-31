@@ -5,7 +5,7 @@ void server_loop(std::shared_ptr<Warg_Server> server)
   float64 current_time = get_real_time();
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
-  while (true)
+  while (server->running)
   {
     const float64 time = get_real_time();
     elapsed_time = time - current_time;
@@ -14,9 +14,9 @@ void server_loop(std::shared_ptr<Warg_Server> server)
     {
       current_time += dt;
       server->update(dt);
-      SDL_Delay(random_between(0, 3));
+      // SDL_Delay(random_between(0, 3));
     }
-    SDL_Delay(random_between(1, 20));
+    SDL_Delay(5);
   }
 }
 
@@ -26,9 +26,8 @@ Local_Session::Local_Session()
 
   server = std::make_shared<Warg_Server>();
   server->connect(peer);
-
+  server->running = true;
   server_thread = std::thread(server_loop, std::ref(server));
-  server_thread.detach();
 }
 
 void Local_Session::push(unique_ptr<Message> message)
@@ -39,4 +38,10 @@ void Local_Session::push(unique_ptr<Message> message)
 std::vector<unique_ptr<Message>> Local_Session::pull()
 {
   return peer->pull_from_server();
+}
+
+void Local_Session::end()
+{
+  server->running = false;
+  server_thread.join();
 }

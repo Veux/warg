@@ -73,15 +73,16 @@ void fire_emitter(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter 
   pe->material_index = material_index;
   pe->descriptor.position = pos;
   ped->emission_descriptor.initial_position_variance = vec3(size, .1f);
-  ped->emission_descriptor.initial_scale = vec3(0.035f);
+  ped->emission_descriptor.initial_scale = vec3(0.025f);
   ped->emission_descriptor.initial_scale_variance = vec3(0.01f);
   ped->emission_descriptor.initial_velocity = vec3(0, 0, 5);
-  ped->emission_descriptor.particles_per_second = area * 2500.f;
+  ped->emission_descriptor.particles_per_second = area * 5500.f;
   ped->emission_descriptor.time_to_live = .25f;
   ped->emission_descriptor.time_to_live_variance = 1.05f;
   ped->physics_descriptor.type = wind;
 
-  ped->emission_descriptor.initial_velocity_variance = vec3(abs(3.5f * sin(5 * time)), abs(3.5f * cos(4 * time)), 3);
+  ped->emission_descriptor.initial_velocity_variance =
+      vec3(abs(3.5f * sin(2 * time)), abs(3.5f * cos(1.5 * time)), abs(1.f + sin(time) * 2.f));
   ped->physics_descriptor.intensity = random_between(11.f, 35.f);
   static vec3 dir;
   if (fract(sin(time)) > .5)

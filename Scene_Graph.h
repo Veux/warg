@@ -110,55 +110,53 @@ Notes:
 */
 struct Resource_Manager
 {
-  Resource_Manager(bool disable_opengl = false) : opengl_disabled(disable_opengl) {}
-
+  Resource_Manager() {}
   void init();
   std::string serialize_mesh_descriptor_pool();
   std::string serialize_material__descriptor_pool();
 
-  // immediately allocates resource if opengl_enabled
+  // state thread
   Material_Index push_custom_material(Material_Descriptor *d);
   Mesh_Index push_custom_mesh(Mesh_Descriptor *d);
 
   // immediately overwrites mesh_descriptor_pool
   // async loads assimp imports (but the assimp load will only be applied if this function is called again sometime
-  // after it has finished) immediately uploads primitives/custom mesh assimp meshes are only uploaded to gpu if opengl
   // is enabled and the import is available
+  // state thread
   void deserialize_mesh_descriptor_pool(json data);
 
   // immediately overwrites material_descriptor_pool
-  // immediately overwrites material_pool to gpu upload the material (if opengl enabled)
+  // state thread
   void deserialize_material_descriptor_pool(json data);
 
   // begins loading of the assimp resource
   // returns pointer to the import if it is ready, else returns null
   // blocks and guarantees a valid scene if wait_for_valid is true
-  // resources are guaranteed to be gpu allocated if return ptr is valid
   // if wait_for_valid is false, this must be called repeatedly in order for it to
   // eventually produce the Imported_Scene_Data
+  // state thread
   Imported_Scene_Data *request_valid_resource(std::string assimp_path, bool wait_for_valid = true);
 
   // retrieves a pointer to the GPU resource if available
   // returns null if assimp import hasnt finished
+  // requires opengl thread
   Mesh *retrieve_assimp_mesh_resource(std::string assimp_path, Mesh_Index i);
   Material *retrieve_assimp_material_resource(std::string assimp_path, Material_Index i);
 
   // returns null if it doesnt yet exist
+  // state thread
   Material_Descriptor *retrieve_assimp_material_descriptor(std::string assimp_path, Material_Index i);
   Mesh_Descriptor *retrieve_assimp_mesh_descriptor(std::string assimp_path, Mesh_Index i);
 
   // pointers invalid after call to scene_graph::add_mesh*
   // or Resource_Manager::push_custom*
+  // requires opengl thread
   Mesh *retrieve_pool_mesh(Mesh_Index i);
   Material *retrieve_pool_material(Material_Index i);
+
+  // state thread
   Material_Descriptor *retrieve_pool_material_descriptor(Material_Index i);
   Mesh_Descriptor *retrieve_pool_mesh_descriptor(Mesh_Index i);
-
-  // simply makes changes made to the descriptor pool apply to the main pool
-  void update_material_pool_index(Material_Index i);
-  void push_mesh_pool_change(Mesh_Index i);
-
-  const bool opengl_disabled;
 
 private:
   friend Flat_Scene_Graph;
@@ -176,8 +174,9 @@ private:
   // to release ownership of gpu resource, simply overwrite the Imported_Scene_Data with default construct
   std::unordered_map<std::string, Imported_Scene_Data> import_data;
 
-  std::vector<Mesh> mesh_pool;         // empty if opengl is disabled
-  std::vector<Material> material_pool; // empty if opengl is disabled
+#define MAX_POOL_SIZE 5000
+  std::array<Mesh, MAX_POOL_SIZE> mesh_pool;
+  std::array<Material, MAX_POOL_SIZE> material_pool;
 
   std::vector<Mesh_Descriptor> mesh_descriptor_pool;
   std::vector<Material_Descriptor> material_descriptor_pool;
@@ -235,23 +234,7 @@ struct Flat_Scene_Graph
 
   Node_Index new_node();
 
-  Node_Index find_child_by_name(Node_Index parent, const char *name)
-  {
-    Flat_Scene_Graph_Node *ptr = &nodes[parent];
-    for (uint32 i = 0; i < ptr->children.size(); ++i)
-    {
-      Node_Index child = ptr->children[i];
-      if (child != NODE_NULL)
-      {
-        Flat_Scene_Graph_Node *cptr = &nodes[child];
-        if (cptr->name == Array_String(name))
-        {
-          return child;
-        }
-      }
-    }
-    return NODE_NULL;
-  }
+  Node_Index find_child_by_name(Node_Index parent, const char *name);
   // grab doesnt require any particular parent/child relation before calling, it can even be a child of another parent
   void grab(Node_Index grabber, Node_Index grabee);
   // brings the node to world basis and world parent
@@ -272,10 +255,6 @@ struct Flat_Scene_Graph
   void reset_material(Node_Index node_index, Model_Index model_index);
   void reset_all_materials(Node_Index node_index, bool children_too = true);
 
-  // if you made a change to a Material_Descriptor* you got from a Material_Index
-  // you will need to call this after making changes to it
-  void push_material_change(Material_Index i);
-
   void delete_node(Node_Index i);
   void set_parent(Node_Index i, Node_Index desired_parent = NODE_NULL);
 
@@ -292,9 +271,13 @@ struct Flat_Scene_Graph
   Light_Array lights;
 
   std::vector<Particle_Emitter> particle_emitters;
+
+  // particle_emitters need to be initialized in the main thread -
+  //    they have opengl state so we need yet another descriptor->object interface like the pools
+
   Resource_Manager *resource_manager;
 
-  void draw_imgui();
+  void draw_imgui(std::string name);
 
 private:
   std::vector<Render_Entity> accumulator;

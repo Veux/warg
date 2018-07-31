@@ -95,6 +95,7 @@ struct Image_Loader
 public:
   void init();
   bool load(const char *filename, int32 req_comp, Image_Data *data);
+  void exit();
 
 private:
   std::unordered_map<std::string, Image_Data> database;
@@ -102,6 +103,7 @@ private:
   std::mutex db_mtx;
   std::mutex queue_mtx;
   std::thread loader_thread;
+  bool running = true;
 };
 
 bool all_equal(int32 a, int32 b, int32 c);

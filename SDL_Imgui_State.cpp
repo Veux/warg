@@ -10,9 +10,7 @@
 #include "stdafx.h"
 #include "SDL_Imgui_State.h"
 #include "Render.h"
-#include "Third_Party/imgui/imgui.h"
-#include "Third_Party/imgui/imgui_internal.h"
-
+#include "State.h"
 #include "Globals.h"
 
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
@@ -28,6 +26,8 @@ void SDL_Imgui_State::render()
 {
   if (!draw_data)
     return;
+
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
 
   // Avoid rendering when minimized, scale coordinates for retina displays
   // (screen coordinates != framebuffer coordinates)
@@ -296,6 +296,8 @@ bool SDL_Imgui_State::process_event(SDL_Event *event)
 
 void SDL_Imgui_State::create_fonts_texture()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+
   // Build texture atlas
   ImGuiIO &io = ImGui::GetIO();
   unsigned char *pixels;
@@ -323,6 +325,8 @@ void SDL_Imgui_State::create_fonts_texture()
 
 bool SDL_Imgui_State::create_device_objects()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+
   // Backup GL state
   GLint last_texture, last_array_buffer, last_vertex_array;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
@@ -410,11 +414,6 @@ bool SDL_Imgui_State::create_device_objects()
   return true;
 }
 
-void SDL_Imgui_State::bind()
-{
-  ImGui::SetCurrentContext(context);
-}
-
 void SDL_Imgui_State::build_draw_data()
 {
   ImGui::Render();
@@ -423,6 +422,7 @@ void SDL_Imgui_State::build_draw_data()
 
 void SDL_Imgui_State::invalidate_device_objects()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   if (vao)
     glDeleteVertexArrays(1, &vao);
   if (vbo)
@@ -455,16 +455,18 @@ void SDL_Imgui_State::invalidate_device_objects()
   }
 }
 
-SDL_Imgui_State::SDL_Imgui_State(SDL_Window *window)
+SDL_Imgui_State::SDL_Imgui_State() {}
+
+void SDL_Imgui_State::init(SDL_Window *window)
 {
+  if (!window)
+    return;
+
+  std::lock_guard<std::mutex> lock(IMGUI_MUTEX);
   context = ImGui::CreateContext();
   ImGui::SetCurrentContext(context);
-  init(window);
   state_io = &ImGui::GetIO();
-}
 
-bool SDL_Imgui_State::init(SDL_Window *window)
-{
   // Keyboard mapping. ImGui will use those indices to peek into the
   // io.KeyDown[] array.
   ImGuiIO &io = ImGui::GetIO();
@@ -510,8 +512,9 @@ bool SDL_Imgui_State::init(SDL_Window *window)
 #else
   (void)window;
 #endif
+  // create_device_objects();
 
-  return true;
+  return;
 }
 
 void SDL_Imgui_State::destroy()
@@ -524,71 +527,72 @@ void SDL_Imgui_State::destroy()
 
 void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
 {
+  if (window)
+  {
+    if (!font_texture)
+      create_device_objects();
 
-  if (!font_texture)
-    create_device_objects();
+    ImGuiIO &io = ImGui::GetIO();
 
-  ImGuiIO &io = ImGui::GetIO();
+    // Setup display size (every frame to accommodate for window resizing)
+    int w, h;
+    int display_w, display_h;
+    SDL_GetWindowSize(window, &w, &h);
+    SDL_GL_GetDrawableSize(window, &display_w, &display_h);
 
-  // Setup display size (every frame to accommodate for window resizing)
-  int w, h;
-  int display_w, display_h;
-  SDL_GetWindowSize(window, &w, &h);
-  SDL_GL_GetDrawableSize(window, &display_w, &display_h);
+    io.MouseDrawCursor = false;
+    //  ASSERT(framebuffer);
+    // if (!framebuffer->color_attachments.size())
+    //  framebuffer->color_attachments.emplace_back(Texture());
+    // framebuffer->color_attachments[0].format = GL_RGBA;
+    // framebuffer->color_attachments[0].size = vec2(display_w, display_h);
+    // framebuffer->init();
 
-  io.MouseDrawCursor = false;
-  //  ASSERT(framebuffer);
-  // if (!framebuffer->color_attachments.size())
-  //  framebuffer->color_attachments.emplace_back(Texture());
-  // framebuffer->color_attachments[0].format = GL_RGBA;
-  // framebuffer->color_attachments[0].size = vec2(display_w, display_h);
-  // framebuffer->init();
+    io.DisplaySize = ImVec2((float)w, (float)h);
+    io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
 
-  io.DisplaySize = ImVec2((float)w, (float)h);
-  io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float)display_w / w) : 0, h > 0 ? ((float)display_h / h) : 0);
+    io.DeltaTime = (float32)dt;
 
-  io.DeltaTime = (float32)dt;
+    // Setup mouse inputs (we already got mouse wheel, keyboard keys &
+    // characters from our event handler)
+    io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+    io.MouseDown[0] = mouse_pressed[0] ||
+                      (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0; // If a mouse press event came, always pass it
+                                                                        // as "mouse held this frame", so we don't
+                                                                        // miss click-release events that are shorter
+                                                                        // than 1 frame.
+    io.MouseDown[1] = mouse_pressed[1] || (mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
+    io.MouseDown[2] = mouse_pressed[2] || (mouse_state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
+    mouse_pressed[0] = mouse_pressed[1] = mouse_pressed[2] = false;
 
-  // Setup mouse inputs (we already got mouse wheel, keyboard keys &
-  // characters from our event handler)
-  io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
-  io.MouseDown[0] = mouse_pressed[0] ||
-                    (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0; // If a mouse press event came, always pass it
-                                                                      // as "mouse held this frame", so we don't
-                                                                      // miss click-release events that are shorter
-                                                                      // than 1 frame.
-  io.MouseDown[1] = mouse_pressed[1] || (mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
-  io.MouseDown[2] = mouse_pressed[2] || (mouse_state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
-  mouse_pressed[0] = mouse_pressed[1] = mouse_pressed[2] = false;
-
-  // We need to use SDL_CaptureMouse() to easily retrieve mouse coordinates
-  // outside of the client area. This is only supported from SDL 2.0.4
-  // (released Jan 2016)
+    // We need to use SDL_CaptureMouse() to easily retrieve mouse coordinates
+    // outside of the client area. This is only supported from SDL 2.0.4
+    // (released Jan 2016)
 #if (SDL_MAJOR_VERSION >= 2) && (SDL_MINOR_VERSION >= 0) && (SDL_PATCHLEVEL >= 4)
-  if ((SDL_GetWindowFlags(window) & (SDL_WINDOW_MOUSE_FOCUS | SDL_WINDOW_MOUSE_CAPTURE)) != 0)
-    io.MousePos = ImVec2((float)mouse_position.x, (float)mouse_position.y);
-  bool any_mouse_button_down = false;
-  for (int n = 0; n < IM_ARRAYSIZE(io.MouseDown); n++)
-    any_mouse_button_down |= io.MouseDown[n];
-  if (any_mouse_button_down && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_CAPTURE) == 0)
-    SDL_CaptureMouse(SDL_TRUE);
-  if (!any_mouse_button_down && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_CAPTURE) != 0)
-    SDL_CaptureMouse(SDL_FALSE);
+    if ((SDL_GetWindowFlags(window) & (SDL_WINDOW_MOUSE_FOCUS | SDL_WINDOW_MOUSE_CAPTURE)) != 0)
+      io.MousePos = ImVec2((float)cursor_position.x, (float)cursor_position.y);
+    bool any_mouse_button_down = false;
+    for (int n = 0; n < IM_ARRAYSIZE(io.MouseDown); n++)
+      any_mouse_button_down |= io.MouseDown[n];
+    if (any_mouse_button_down && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_CAPTURE) == 0)
+      SDL_CaptureMouse(SDL_TRUE);
+    if (!any_mouse_button_down && (SDL_GetWindowFlags(window) & SDL_WINDOW_MOUSE_CAPTURE) != 0)
+      SDL_CaptureMouse(SDL_FALSE);
 #else
-  if ((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0)
-    io.MousePos = ImVec2((float)mx, (float)my);
+    if ((SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0)
+      io.MousePos = ImVec2((float)mx, (float)my);
 #endif
 
-  // Hide OS mouse cursor if ImGui is drawing it
-  ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
-  if (io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
-  {
-    SDL_ShowCursor(1);
-  }
-  else
-  {
-    SDL_SetCursor(sdl_cursors[cursor]);
-    SDL_ShowCursor(1);
+    // Hide OS mouse cursor if ImGui is drawing it
+    // ImGuiMouseCursor cursor = ImGui::GetMouseCursor();
+    // if (io.MouseDrawCursor || cursor == ImGuiMouseCursor_None)
+    //{
+    //    // SDL_ShowCursor(1);
+    //} //  else
+    //{
+    //  // SDL_SetCursor(sdl_cursors[cursor]);
+    //  SDL_ShowCursor(1);
+    //}
   }
 
   // Start the frame. This call will update the io.WantCaptureMouse,
@@ -607,11 +611,10 @@ void SDL_Imgui_State::end_frame()
 void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
 {
   ASSERT(input);
-  mouse_state = SDL_GetMouseState(&mouse_position.x, &mouse_position.y);
 
   if (ignore_all_input)
   {
-    mouse_position = ivec2(0);
+    cursor_position = ivec2(0);
     mouse_state = 0;
     return;
   }

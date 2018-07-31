@@ -2,8 +2,6 @@
 #include "UI.h"
 #include "SDL_Imgui_State.h"
 
-extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
-
 ImVec2 v(vec2 v_)
 {
   ImVec2 result;

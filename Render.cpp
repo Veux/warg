@@ -42,16 +42,21 @@ const vec4 Conductor_Reflectivity::gold = vec4(1.0, 0.71, 0.29, 1.0f);
 const vec4 Conductor_Reflectivity::aluminum = vec4(0.91, 0.92, 0.92, 1.0f);
 const vec4 Conductor_Reflectivity::silver = vec4(0.95, 0.93, 0.88, 1.0f);
 
-unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
-
+static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
-vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS; // each one is a draw call - necessary because of multiple calls
-                                                      // with the same handle for mipmaps
-
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
 
 void check_FBO_status();
-
+uint32 mip_levels_for_resolution(ivec2 resolution)
+{
+  uint count = 0;
+  while (resolution.x > 2)
+  {
+    count += 1;
+    resolution = resolution / 2;
+  }
+  return count;
+}
 Framebuffer_Handle::~Framebuffer_Handle()
 {
   glDeleteFramebuffers(1, &fbo);
@@ -59,6 +64,9 @@ Framebuffer_Handle::~Framebuffer_Handle()
 Framebuffer::Framebuffer() {}
 void Framebuffer::init()
 {
+  // opengl calls no longer allowed in state.update()
+  // render your imgui ui that requires textures in state.render()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   if (!fbo)
   {
     fbo = make_shared<Framebuffer_Handle>();
@@ -333,6 +341,8 @@ Texture::Texture(string name, ivec2 size, GLenum format, GLenum minification_fil
 }
 Texture_Handle::~Texture_Handle()
 {
+  // opengl calls no longer allowed in state.update()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   // set_message("Deleting texture: ", s(texture, " ", filename), 45.f);
   glDeleteTextures(1, &texture);
   texture = 0;
@@ -354,6 +364,9 @@ Texture::Texture(string path, bool premul)
 
 void Texture::load()
 {
+  // opengl calls no longer allowed in state.update()
+  // render your imgui ui that requires textures in state.render()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   if (initialized && !texture)
   { // file doesnt exist
 #if !DYNAMIC_TEXTURE_RELOADING
@@ -696,6 +709,9 @@ void Mesh_Handle::enable_assign_attributes()
 
 shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 {
+  // opengl calls no longer allowed in state.update()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+
   shared_ptr<Mesh_Handle> mesh = make_shared<Mesh_Handle>();
   mesh->descriptor.mesh_data = mesh_data;
 
@@ -869,10 +885,11 @@ Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat
 
 Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 {
-
-  check_gl_error();
   set_message("Renderer constructor");
   this->name = name;
+  if (!window)
+    return;
+
   this->window = window;
   this->window_size = window_size;
   SDL_DisplayMode current;
@@ -884,16 +901,6 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   set_message("Initializing renderer...");
 
   quad = Mesh(Mesh_Descriptor(plane, "RENDERER's PLANE"));
-
-  /*
-   temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
-   passthrough = Shader("passthrough.vert", "passthrough.frag");
-   variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
-   gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
-   fxaa = Shader("passthrough.vert", "fxaa.frag");
-   equi_to_cube = Shader("equi_to_cube.vert", "equi_to_cube.frag");
-   bloom_mix = Shader("passthrough.vert", "bloom_mix.frag");
-   gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur.frag");*/
 
   Texture_Descriptor uvtd;
   uvtd.name = "uvgrid.png";
@@ -963,6 +970,113 @@ mat4 Renderer::ortho_projection(ivec2 dst_size)
   mat4 s = scale(vec3(dst_size, 1));
 
   return o * t * s;
+}
+
+void Renderer::draw_imgui()
+{
+  if (!imgui_this_tick)
+    return;
+
+  if (show_renderer_window)
+  {
+    ImGui::Begin("Renderer", &show_renderer_window);
+    ImGui::BeginChild("ScrollingRegion");
+    if (ImGui::Button("FXAA Settings"))
+    {
+      show_imgui_fxaa = !show_imgui_fxaa;
+    }
+    if (ImGui::CollapsingHeader("GPU Textures"))
+    { // todo improve texture names for generated textures
+
+      ImGui::Indent(5);
+      vector<Imgui_Texture_Descriptor> imgui_texture_array; // all the unique textures
+      for (auto &tex : TEXTURE2D_CACHE)
+      {
+        auto ptr = tex.second.lock();
+        if (ptr)
+        {
+          ASSERT(!ptr->is_cubemap);
+          Imgui_Texture_Descriptor iid;
+          iid.ptr = ptr;
+          imgui_texture_array.push_back(iid);
+        }
+      }
+      for (auto &tex : TEXTURECUBEMAP_CACHE)
+      {
+        auto ptr = tex.second.lock();
+        if (ptr)
+        {
+          ASSERT(ptr->is_cubemap);
+          Imgui_Texture_Descriptor iid;
+          iid.ptr = ptr;
+          imgui_texture_array.push_back(iid);
+        }
+      }
+      sort(imgui_texture_array.begin(), imgui_texture_array.end(),
+          [](Imgui_Texture_Descriptor a, Imgui_Texture_Descriptor b) {
+            return a.ptr->peek_filename().compare(b.ptr->peek_filename()) < 0;
+          });
+      for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
+      {
+        Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
+        shared_ptr<Texture_Handle> ptr = itd->ptr;
+
+        ImGui::PushID(s(i).c_str());
+        if (ImGui::TreeNode(ptr->peek_filename().c_str()))
+        {
+          ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
+          ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
+          ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
+          ImGui::Text(s("Format:", texture_format_to_string(ptr->format)).c_str());
+
+          if (ptr->is_cubemap)
+            ImGui::Text(s("Type:", "Cubemap").c_str());
+          else
+            ImGui::Text(s("Type:", "Texture2D").c_str());
+          ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
+          Imgui_Texture_Descriptor descriptor;
+          descriptor.ptr = ptr;
+          GLenum format = descriptor.ptr->get_format();
+          bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
+                            format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
+          descriptor.gamma_encode = gamma_flag;
+          descriptor.is_cubemap = ptr->is_cubemap;
+
+          ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
+          ImGui::InputFloat("LOD", &ptr->imgui_mipmap_setting, 0.1f);
+          descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
+          descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
+          descriptor.size = ptr->imgui_size_scale * vec2(256);
+          descriptor.y_invert = true;
+          put_imgui_texture(&descriptor);
+
+          if (ImGui::TreeNode("List Mipmaps"))
+          {
+            uint32 mip_levels = mip_levels_for_resolution(ptr->size);
+            ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
+            for (uint32 i = 0; i < mip_levels; ++i)
+            {
+              Imgui_Texture_Descriptor d = descriptor;
+              d.mip_lod_to_draw = (float)i;
+              d.is_mipmap_list_command = true;
+              put_imgui_texture(&d);
+            }
+            ImGui::TreePop();
+          }
+          ImGui::TreePop();
+        }
+        ImGui::PopID();
+      }
+      ImGui::Unindent(5.f);
+    }
+    ImGui::EndChild();
+    ImGui::End();
+  }
+  else
+  {
+    show_imgui_fxaa = false;
+  }
 }
 void Renderer::build_shadow_maps()
 {
@@ -1042,6 +1156,10 @@ void Renderer::build_shadow_maps()
 // texturen for input texture sampler names
 void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuffer *dst, bool clear_dst)
 {
+
+  // opengl calls no longer allowed in state.update()
+  // render your imgui ui that requires textures in state.render()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(shader);
   ASSERT(shader->vs == "passthrough.vert");
 
@@ -1327,32 +1445,6 @@ void Renderer::translucent_pass(float32 time)
   glDepthMask(GL_TRUE);
 }
 
-void imgui_fxaa(Shader *fxaa)
-{
-  static float EDGE_THRESHOLD_MIN = 0.0312;
-  static float EDGE_THRESHOLD_MAX = 0.125;
-  static float SUBPIXEL_QUALITY = 0.75f;
-  static int ITERATIONS = 8;
-  static int QUALITY = 1;
-
-  static bool open = true;
-  ImGui::Begin("fxaa adjustment", &open);
-  ImGui::SetWindowSize(ImVec2(300, 160));
-  ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
-  ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
-  ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
-  ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
-  ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
-
-  fxaa->set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
-  fxaa->set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
-  fxaa->set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
-  fxaa->set_uniform("ITERATIONS", ITERATIONS);
-  fxaa->set_uniform("QUALITY", QUALITY);
-
-  ImGui::End();
-}
-
 void Renderer::postprocess_pass(float32 time)
 {
   // Scene Luminance
@@ -1497,16 +1589,7 @@ void Renderer::postprocess_pass(float32 time)
   glBindTexture(GL_TEXTURE_2D, 0);
   glDisable(GL_BLEND);
 }
-uint32 mip_levels_for_resolution(ivec2 resolution)
-{
-  uint count = 0;
-  while (resolution.x > 2)
-  {
-    count += 1;
-    resolution = resolution / 2;
-  }
-  return count;
-}
+
 void Renderer::render(float64 state_time)
 {
   check_gl_error();
@@ -1521,100 +1604,9 @@ void Renderer::render(float64 state_time)
 #if SHOW_UV_TEST_GRID
   uv_map_grid.t.mod = vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
 #endif
-
-  // set_message("Render entity size:", s(render_entities.size()), 1.0f);
-  static bool show_renderer_window = true;
-  if (show_renderer_window)
+  if (imgui_this_tick)
   {
-    ImGui::Begin("Renderer", &show_renderer_window);
-    ImGui::BeginChild("ScrollingRegion");
-    if (ImGui::CollapsingHeader("GPU Textures"))
-    { // todo improve texture names for generated textures
-
-      ImGui::Indent(5);
-      vector<Imgui_Texture_Descriptor> imgui_texture_array; // all the unique textures
-      for (auto &tex : TEXTURE2D_CACHE)
-      {
-        auto ptr = tex.second.lock();
-        if (ptr)
-        {
-          ASSERT(!ptr->is_cubemap);
-          Imgui_Texture_Descriptor iid;
-          iid.ptr = ptr;
-          imgui_texture_array.push_back(iid);
-        }
-      }
-      for (auto &tex : TEXTURECUBEMAP_CACHE)
-      {
-        auto ptr = tex.second.lock();
-        if (ptr)
-        {
-          ASSERT(ptr->is_cubemap);
-          Imgui_Texture_Descriptor iid;
-          iid.ptr = ptr;
-          imgui_texture_array.push_back(iid);
-        }
-      }
-      sort(imgui_texture_array.begin(), imgui_texture_array.end(),
-          [](Imgui_Texture_Descriptor a, Imgui_Texture_Descriptor b) {
-            return a.ptr->peek_filename().compare(b.ptr->peek_filename()) < 0;
-          });
-      for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
-      {
-        Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
-        shared_ptr<Texture_Handle> ptr = itd->ptr;
-
-        ImGui::PushID(s(i).c_str());
-        if (ImGui::TreeNode(ptr->peek_filename().c_str()))
-        {
-          ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
-          ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
-          ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          ImGui::Text(s("Format:", texture_format_to_string(ptr->format)).c_str());
-
-          if (ptr->is_cubemap)
-            ImGui::Text(s("Type:", "Cubemap").c_str());
-          else
-            ImGui::Text(s("Type:", "Texture2D").c_str());
-          ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
-          Imgui_Texture_Descriptor descriptor;
-          descriptor.ptr = ptr;
-          GLenum format = descriptor.ptr->get_format();
-          bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
-                            format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-
-          descriptor.gamma_encode = gamma_flag;
-          descriptor.is_cubemap = ptr->is_cubemap;
-
-          ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
-          ImGui::InputFloat("LOD", &ptr->imgui_mipmap_setting, 0.1f);
-          descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
-          descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
-          descriptor.size = ptr->imgui_size_scale * vec2(256);
-          descriptor.y_invert = true;
-          put_imgui_texture(&descriptor);
-
-          if (ImGui::TreeNode("List Mipmaps"))
-          {
-            uint32 mip_levels = mip_levels_for_resolution(ptr->size);
-            ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
-            for (uint32 i = 0; i < mip_levels; ++i)
-            {
-              Imgui_Texture_Descriptor d = descriptor;
-              d.mip_lod_to_draw = (float)i;
-              d.is_mipmap_list_command = true;
-              put_imgui_texture(&d);
-            }
-            ImGui::TreePop();
-          }
-          ImGui::TreePop();
-        }
-        ImGui::PopID();
-      }
-      ImGui::Unindent(5.f);
-    }
-    ImGui::EndChild();
-    ImGui::End();
+    draw_imgui();
   }
 
   float32 time = (float32)get_real_time();
@@ -1717,8 +1709,30 @@ void Renderer::render(float64 state_time)
   draw_target_fxaa.bind();
   if (use_fxaa)
   {
+    static float EDGE_THRESHOLD_MIN = 0.0312;
+    static float EDGE_THRESHOLD_MAX = 0.125;
+    static float SUBPIXEL_QUALITY = 0.75f;
+    static int ITERATIONS = 8;
+    static int QUALITY = 1;
+
+    if (imgui_this_tick && show_imgui_fxaa)
+    {
+      ImGui::Begin("fxaa adjustment", &show_imgui_fxaa);
+      ImGui::SetWindowSize(ImVec2(300, 160));
+      ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
+      ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
+      ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
+      ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
+      ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
+      ImGui::End();
+    }
+
     fxaa.use();
-    imgui_fxaa(&fxaa);
+    fxaa.set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
+    fxaa.set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
+    fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
+    fxaa.set_uniform("ITERATIONS", ITERATIONS);
+    fxaa.set_uniform("QUALITY", QUALITY);
     fxaa.set_uniform("transform", ortho_projection(window_size));
     fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
     fxaa.set_uniform("time", (float32)state_time);
@@ -2736,6 +2750,7 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       SDL_Delay(1);
       continue;
     }
+
     if (emission_type != shared_data->descriptor.emission_descriptor.type)
       emission = construct_emission_method(shared_data->descriptor);
     if (physics_type != shared_data->descriptor.physics_descriptor.type)
@@ -2911,4 +2926,114 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
     new_particle.time_left_to_live = new_particle.time_to_live;
     p->particles.push_back(new_particle);
   }
+}
+
+void Particle_Array::init()
+{
+  if (initialized)
+    return;
+
+  glGenBuffers(1, &instance_mvp_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
+  glGenBuffers(1, &instance_model_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
+
+  glGenBuffers(1, &instance_attribute0_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
+  glGenBuffers(1, &instance_attribute1_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
+  glGenBuffers(1, &instance_attribute2_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
+
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  initialized = true;
+}
+
+void Particle_Array::destroy()
+{
+  glDeleteBuffers(1, &instance_mvp_buffer);
+  glDeleteBuffers(1, &instance_model_buffer);
+  glDeleteBuffers(1, &instance_attribute0_buffer);
+  glDeleteBuffers(1, &instance_attribute1_buffer);
+  glDeleteBuffers(1, &instance_attribute2_buffer);
+  initialized = false;
+}
+
+Particle_Array::Particle_Array(Particle_Array &&rhs) {}
+
+void Particle_Array::compute_attributes(mat4 projection, mat4 camera)
+{
+  MVP_Matrices.clear();
+  Model_Matrices.clear();
+  attributes0.clear();
+  attributes1.clear();
+  attributes2.clear();
+  // set_message("compute_attributes projection:", s(projection), 1.0f);
+  // set_message("compute_attributes camera:", s(camera), 1.0f);
+  for (auto &i : particles)
+  {
+    const mat4 R = toMat4(i.orientation);
+    const mat4 S = scale(i.scale);
+    const mat4 T = translate(i.position);
+    const mat4 model = T * R * S;
+    const mat4 MVP = projection * camera * model;
+    MVP_Matrices.push_back(MVP);
+    Model_Matrices.push_back(model);
+    attributes0.push_back(i.attribute0);
+    attributes1.push_back(i.attribute1);
+    attributes2.push_back(i.attribute2);
+  }
+}
+
+bool Particle_Array::prepare_instance(std::vector<Render_Instance> *accumulator)
+{
+  if (!initialized)
+  {
+    set_message("Uninitialized particle array", "", 1.0f);
+    return false;
+  }
+
+  Render_Instance result;
+  uint32 num_instances = MVP_Matrices.size();
+  if (num_instances == 0)
+    return false;
+
+  ASSERT(num_instances <= MAX_INSTANCE_COUNT);
+  set_message("Particle count:", s(num_instances), 1.0f);
+
+  glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &Model_Matrices[0][0][0]);
+
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes0[0]);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes1[0]);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes2[0]);
+
+  result.mvp_buffer = instance_mvp_buffer;
+  result.model_buffer = instance_model_buffer;
+  result.attribute0_buffer = instance_attribute0_buffer;
+  result.attribute1_buffer = instance_attribute1_buffer;
+  result.attribute2_buffer = instance_attribute2_buffer;
+  result.size = num_instances;
+  accumulator->push_back(result);
+  return true;
+}
+Particle_Array &Particle_Array::operator=(Particle_Array &&rhs)
+{
+  particles = std::move(rhs.particles);
+  return *this;
+}
+Particle_Array &Particle_Array::operator=(Particle_Array &rhs)
+{
+  // todo: particle_array copy
+  return *this;
 }

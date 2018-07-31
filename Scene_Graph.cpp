@@ -79,7 +79,6 @@ Material_Index Flat_Scene_Graph::copy_material_to_new_pool_slot(
   {
     modify_material(new_index, m, modify_or_overwrite);
   }
-  resource_manager->update_material_pool_index(new_index);
   node->model[model_index].second = new_index;
   return new_index;
 }
@@ -103,7 +102,6 @@ void Flat_Scene_Graph::modify_material(
   {
     *current_descriptor = Material_Descriptor();
   }
-  resource_manager->update_material_pool_index(material_index);
 }
 
 void Flat_Scene_Graph::modify_all_materials(
@@ -214,7 +212,6 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
     ImGui::Checkbox("Discard On Alpha", &ptr->discard_on_alpha);
     ImGui::Checkbox("Casts Shadows", &ptr->casts_shadows);
     ImGui::PopItemWidth();
-    resource_manager->update_material_pool_index(material_index);
   }
   else
   {
@@ -265,16 +262,13 @@ void Flat_Scene_Graph::draw_imgui_light_array()
   uint32 width = 243;
 
   uint32 height = initial_height + height_per_inactive_light * lights.light_count;
-  check_gl_error();
   // ImGui::Begin("lighting adjustment", &open, ImGuiWindowFlags_NoResize);
   {
-    check_gl_error();
     static auto picker = File_Picker(".");
     static bool browsing = false;
     static bool type = false; // true for radiance, false for irradiance
     std::string radiance_map_result = lights.environment.radiance.handle->peek_filename();
     std::string irradiance_map_result = lights.environment.irradiance.handle->peek_filename();
-    check_gl_error();
     bool updated = false;
     ImGui::Separator();
     if (ImGui::Button("Radiance Map"))
@@ -849,13 +843,14 @@ void Flat_Scene_Graph::draw_active_nodes()
 
 // uses assimp's defined material if assimp import, else a default-constructed material
 
-void Flat_Scene_Graph::draw_imgui()
+void Flat_Scene_Graph::draw_imgui(std::string name)
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   const float32 selected_node_draw_height = 340;
   const float32 default_window_height = 800;
   const float32 horizontal_split_size = 350;
   static float32 last_seen_height = 600;
-  ImGui::Begin("Scene Graph", &imgui_open);
+  ImGui::Begin(s("Scene Graph:", name).c_str(), &imgui_open);
   float32 fudge = 50.f;
   float32 width = ImGui::GetWindowWidth();
   if (!ImGui::IsWindowCollapsed())
@@ -1062,6 +1057,23 @@ Node_Index Flat_Scene_Graph::new_node()
   ASSERT(0); // graph full
   return NODE_NULL;
 }
+Node_Index Flat_Scene_Graph::find_child_by_name(Node_Index parent, const char *name)
+{
+  Flat_Scene_Graph_Node *ptr = &nodes[parent];
+  for (uint32 i = 0; i < ptr->children.size(); ++i)
+  {
+    Node_Index child = ptr->children[i];
+    if (child != NODE_NULL)
+    {
+      Flat_Scene_Graph_Node *cptr = &nodes[child];
+      if (cptr->name == Array_String(name))
+      {
+        return child;
+      }
+    }
+  }
+  return NODE_NULL;
+}
 void Flat_Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
 {
   if (nodes[grabee].parent != NODE_NULL)
@@ -1148,15 +1160,6 @@ Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Node *import_node, N
     Node_Index child_index = add_import_node(&import_node->children[i], node_index, assimp_filename);
   }
   return node_index;
-}
-
-// if you made a change to a Material_Descriptor* you got from a Material_Index
-// you will need to call this after making changes to it
-
-void Flat_Scene_Graph::push_material_change(Material_Index i)
-{
-  ASSERT(i.use_material_index_for_material_pool); // only pool indices are modifiable
-  resource_manager->update_material_pool_index(i);
 }
 
 void Flat_Scene_Graph::delete_node(Node_Index i)
@@ -1342,8 +1345,9 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
     Material *material_ptr = nullptr;
     string assimp_filename = s(entity->filename_of_import);
 
-    // did you mean to call visit_nodes_server()?
-    ASSERT(!resource_manager->opengl_disabled);
+    // opengl calls no longer allowed in state.update()
+    ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+
     // mesh:
     if (mesh_index.use_mesh_index_for_mesh_pool)
     { // all non-assimp meshes
@@ -1644,11 +1648,9 @@ Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 as
 
 void Resource_Manager::init()
 {
+  // opengl calls no longer allowed in state.update()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   null_material_descriptor = std::make_unique<Material_Descriptor>();
-  if (!opengl_disabled)
-  {
-    null_material = std::make_unique<Material>(*null_material_descriptor.get());
-  }
 }
 
 std::string Resource_Manager::serialize_mesh_descriptor_pool()
@@ -1673,93 +1675,48 @@ std::string Resource_Manager::serialize_material__descriptor_pool()
   return pretty_dump(j);
 }
 
-// immediately allocates resource if opengl_enabled
 // invalidates all pool material_descriptor pointers
 Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
 {
   // careful, if ptr d points back into the pool, we will read garbage data if pushback reallocates
   ASSERT(d);
   material_descriptor_pool.push_back(*d);
-  if (!opengl_disabled)
-  {
-    material_pool.emplace_back(Material(*d));
-  }
-  return {material_descriptor_pool.size() - 1, true};
+  Material_Index result;
+  result.i = material_descriptor_pool.size() - 1;
+  result.use_material_index_for_material_pool = true;
+  ASSERT(result.i < MAX_POOL_SIZE);
+  return result;
 }
 
-// immediately allocates resource if opengl_enabled
 // invalidates all pool mesh_descriptor pointers
 Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
 {
   ASSERT(d);
   mesh_descriptor_pool.push_back(*d);
-  if (!opengl_disabled)
-  {
-    mesh_pool.emplace_back(Mesh(*d));
-  }
-  return {mesh_descriptor_pool.size() - 1, true};
+  Mesh_Index result;
+  result.i = mesh_descriptor_pool.size() - 1;
+  result.use_mesh_index_for_mesh_pool = true;
+  ASSERT(result.i < MAX_POOL_SIZE);
+  return result;
 }
 
 void Resource_Manager::deserialize_mesh_descriptor_pool(json data)
 {
-  // hold references to the gpu resources so we dont destroy
-  std::vector<Mesh> current = move(mesh_pool);
   mesh_descriptor_pool.clear();
-  mesh_pool.clear();
   for (uint32 i = 0; i < data.size(); ++i)
   {
     Mesh_Descriptor update = data[i];
     mesh_descriptor_pool.push_back(update);
-    mesh_pool.emplace_back(Mesh());
-    // if this is default constructed, visitnodes will get a nullptr
-    // and not create the entity
-
-    // technically, its pointless to have this filled out - just turn off
-    // the mesh pool pointer in the node that references this
-    // but we can do it anyway...
-    if (update.assimp_filename != "")
-    { // if its an assimp import, it might be available in import_data[filename]
-      Imported_Scene_Data *entry = request_valid_resource(update.assimp_filename, false);
-      if (entry->valid)
-      { // success - this import exists and can be copied
-        if (!opengl_disabled)
-          mesh_pool.back() = Mesh(entry->meshes[update.assimp_index]);
-      }
-      else
-      {
-        // it's loading - the mesh will be invisible
-        // refresh this function at a later time to check again
-      }
-    }
-    else if (update.primitive != null)
-    { // primitives can be created immediately, locally
-      // could start an async job for this
-      if (!opengl_disabled)
-        mesh_pool.back() = Mesh(update);
-    }
-    else if (update.is_custom_mesh_data)
-    { // custom data can be immediately uploaded
-      // could start an async job for this
-      if (!opengl_disabled)
-        mesh_pool.back() = Mesh(update);
-    }
   }
 }
 
 void Resource_Manager::deserialize_material_descriptor_pool(json data)
 {
-  // hold references to the gpu resources so we dont destroy
-  std::vector<Material> current = move(material_pool);
   material_descriptor_pool.clear();
-  material_pool.clear();
   for (uint32 i = 0; i < data.size(); ++i)
   {
     Material_Descriptor update = data[i];
     material_descriptor_pool.push_back(update);
-    if (!opengl_disabled)
-    {
-      material_pool.emplace_back(Material(update));
-    }
   }
 }
 
@@ -1781,20 +1738,12 @@ Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, 
         *import = *ptr;
         ASSERT(import->valid);
         ASSERT(import->assimp_filename == path);
-        if (!opengl_disabled)
-        {
-          import->allocate_resources();
-        }
         return import;
       }
 
       *import = import_aiscene(path, default_assimp_flags);
       ASSERT(import->valid);
       ASSERT(import->assimp_filename == path);
-      if (!opengl_disabled)
-      {
-        import->allocate_resources();
-      }
       return import;
     }
     else
@@ -1805,10 +1754,6 @@ Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, 
         *import = *ptr;
         ASSERT(import->valid);
         ASSERT(import->assimp_filename == path);
-        if (!opengl_disabled)
-        {
-          import->allocate_resources();
-        }
         return import;
       }
       return nullptr;
@@ -1816,32 +1761,6 @@ Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, 
   }
   return import;
 }
-
-Mesh *Resource_Manager::retrieve_assimp_mesh_resource(std::string assimp_path, Mesh_Index i)
-{
-  ASSERT(!opengl_disabled);
-  Imported_Scene_Data *import = &import_data[assimp_path];
-  if (!import->valid)
-    return nullptr;
-
-  ASSERT(!i.use_mesh_index_for_mesh_pool);
-  ASSERT(import->allocated);
-  ASSERT(i.i < import->allocated_meshes.size());
-  return &import->allocated_meshes[i.i];
-}
-
-Material *Resource_Manager::retrieve_assimp_material_resource(std::string assimp_path, Material_Index i)
-{
-  ASSERT(!opengl_disabled);
-  Imported_Scene_Data *import = &import_data[assimp_path];
-  if (!import->valid)
-    return nullptr;
-  ASSERT(!i.use_material_index_for_material_pool);
-  ASSERT(i.i < import->allocated_materials.size());
-  ASSERT(import->allocated);
-  return &import->allocated_materials[i.i];
-}
-
 Material_Descriptor *Resource_Manager::retrieve_assimp_material_descriptor(std::string assimp_path, Material_Index i)
 {
   Imported_Scene_Data *import = &import_data[assimp_path];
@@ -1857,56 +1776,79 @@ Mesh_Descriptor *Resource_Manager::retrieve_assimp_mesh_descriptor(std::string a
     return nullptr;
   return &import->meshes[i.i];
 }
+
+Mesh *Resource_Manager::retrieve_assimp_mesh_resource(std::string assimp_path, Mesh_Index i)
+{
+  // opengl calls no longer allowed in state.update()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  Imported_Scene_Data *import = &import_data[assimp_path];
+  if (!import->valid)
+    return nullptr;
+
+  ASSERT(!i.use_mesh_index_for_mesh_pool);
+  if (!import->allocated)
+  {
+    import->allocate_resources();
+  }
+  ASSERT(i.i < import->allocated_meshes.size());
+  return &import->allocated_meshes[i.i];
+}
+
+Material *Resource_Manager::retrieve_assimp_material_resource(std::string assimp_path, Material_Index i)
+{
+  // opengl calls no longer allowed in state.update()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  Imported_Scene_Data *import = &import_data[assimp_path];
+  if (!import->valid)
+    return nullptr;
+  ASSERT(!i.use_material_index_for_material_pool);
+  if (!import->allocated)
+  {
+    import->allocate_resources();
+  }
+  ASSERT(i.i < import->allocated_materials.size());
+  return &import->allocated_materials[i.i];
+}
 Mesh *Resource_Manager::retrieve_pool_mesh(Mesh_Index i)
 {
-  ASSERT(!opengl_disabled);
-  ASSERT(i.i < mesh_pool.size());
-  if (mesh_pool[i.i].mesh == nullptr)
-  { // mesh doesnt exist
-    return nullptr;
-  }
+  // opengl calls no longer allowed in state.update()
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(i.use_mesh_index_for_mesh_pool);
+  ASSERT(i.i < MAX_POOL_SIZE);
+  Mesh temp = mesh_pool[i.i];
+  mesh_pool[i.i] = mesh_descriptor_pool[i.i];
   return &mesh_pool[i.i];
 }
 Material *Resource_Manager::retrieve_pool_material(Material_Index i)
 {
-  ASSERT(!opengl_disabled);
   ASSERT(i.use_material_index_for_material_pool);
   if (i.i == NODE_NULL)
+  {
+    if (!null_material)
+      null_material = std::make_unique<Material>(*null_material_descriptor.get());
     return null_material.get();
+  }
   ASSERT(i.i < material_descriptor_pool.size());
-  ASSERT(i.i < material_pool.size());
+  ASSERT(i.i < MAX_POOL_SIZE);
+  Material temp = material_pool[i.i];
+  material_pool[i.i] = material_descriptor_pool[i.i];
   return &material_pool[i.i];
 }
 Material_Descriptor *Resource_Manager::retrieve_pool_material_descriptor(Material_Index i)
 {
   ASSERT(i.i < material_descriptor_pool.size());
   ASSERT(i.use_material_index_for_material_pool);
+  ASSERT(i.i < MAX_POOL_SIZE);
   return &material_descriptor_pool[i.i];
 }
 Mesh_Descriptor *Resource_Manager::retrieve_pool_mesh_descriptor(Mesh_Index i)
 {
   ASSERT(i.i < mesh_descriptor_pool.size());
   ASSERT(i.use_mesh_index_for_mesh_pool);
+  ASSERT(i.i < MAX_POOL_SIZE);
   return &mesh_descriptor_pool[i.i];
 }
 
-// simply makes changes made to the descriptor pool apply to the main pool
-
-void Resource_Manager::update_material_pool_index(Material_Index i)
-{
-  if (opengl_disabled)
-    return;
-  ASSERT(i.i < material_pool.size());
-  material_pool[i.i] = material_descriptor_pool[i.i];
-}
-void Resource_Manager::push_mesh_pool_change(Mesh_Index i)
-{
-  if (opengl_disabled)
-    return;
-  ASSERT(i.i < mesh_pool.size());
-  mesh_pool[i.i] = mesh_descriptor_pool[i.i];
-}
 void Imported_Scene_Data::allocate_resources()
 {
   ASSERT(!allocated);

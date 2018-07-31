@@ -4,12 +4,11 @@
 #include "Json.h"
 #include "Render.h"
 #include "State.h"
-#include "Third_party/imgui/imgui.h"
 #include "Animation_Utilities.h"
 using namespace glm;
 
 Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
-    : State(name, window, window_size)
+    : State(name, window, window_size, &IMGUI)
 {
   free_cam = true;
 
@@ -83,9 +82,9 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   scene.set_parent(arm_test, shoulder_joint);
 
   // camera spawn
-  cam.phi = .25;
-  cam.theta = -1.5f * half_pi<float32>();
-  cam.pos = vec3(3.3, 2.3, 1.4);
+  camera.phi = .25;
+  camera.theta = -1.5f * half_pi<float32>();
+  camera.pos = vec3(3.3, 2.3, 1.4);
 
   // tigers
   Material_Descriptor tiger_mat;
@@ -135,21 +134,18 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   scene.lights.light_count = 1;
 }
 
-void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events, bool block_kb, bool block_mouse)
+void Render_Test_State::handle_input_events()
 {
-  auto is_pressed = [block_kb](int key) {
-    const static Uint8 *keys = SDL_GetKeyboardState(NULL);
-    SDL_PumpEvents();
-    return block_kb ? 0 : keys[key];
-  };
+  if (!recieves_input)
+    return;
 
-  for (auto &_e : events)
+  auto is_pressed = [this](int key) { return key_state[key]; };
+
+  for (auto &_e : events_this_tick)
   {
 
     if (_e.type == SDL_KEYDOWN)
     {
-      if (block_kb)
-        continue;
       if (_e.key.keysym.sym == SDLK_ESCAPE)
       {
         running = false;
@@ -158,48 +154,23 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     }
     else if (_e.type == SDL_KEYUP)
     {
-      if (block_kb)
-        continue;
       if (_e.key.keysym.sym == SDLK_F5)
       {
         free_cam = !free_cam;
-        if (free_cam)
-        {
-          SDL_SetRelativeMouseMode(SDL_bool(true));
-          ivec2 trash;
-          SDL_GetRelativeMouseState(&trash.x, &trash.y);
-        }
-        else
-        {
-          SDL_SetRelativeMouseMode(SDL_bool(false));
-        }
+        mouse_relative_mode = free_cam;
       }
     }
     else if (_e.type == SDL_MOUSEWHEEL)
     {
-      if (block_mouse)
-        continue;
       if (_e.wheel.y < 0)
-        cam.zoom += ZOOM_STEP;
+        camera.zoom += ZOOM_STEP;
       else if (_e.wheel.y > 0)
-        cam.zoom -= ZOOM_STEP;
+        camera.zoom -= ZOOM_STEP;
     }
   }
 
-  // first person style camera control:
-  ivec2 mouse;
-  uint32 mouse_state = SDL_GetMouseState(&mouse.x, &mouse.y);
-
-  if (block_mouse)
-  {
-    mouse_state = 0;
-    mouse = last_seen_mouse_position;
-  }
-  ivec2 mouse_delta = mouse - last_seen_mouse_position;
-  last_seen_mouse_position = mouse;
-
-  set_message("mouse position:", s(mouse.x, " ", mouse.y), 1.0f);
-  set_message("mouse grab position:", s(last_grabbed_mouse_position.x, " ", last_grabbed_mouse_position.y), 1.0f);
+  set_message("mouse position:", s(cursor_position.x, " ", cursor_position.y), 1.0f);
+  set_message("mouse grab position:", s(last_grabbed_cursor_position.x, " ", last_grabbed_cursor_position.y), 1.0f);
 
   bool left_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool right_button_down = mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -208,45 +179,48 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
 
   if (free_cam)
   {
-    SDL_SetRelativeMouseMode(SDL_bool(true));
-    SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+    mouse_relative_mode = true;
+    draw_cursor = false;
 
-    cam.theta += mouse_delta.x * MOUSE_X_SENS;
-    cam.phi += mouse_delta.y * MOUSE_Y_SENS;
+    if (!IMGUI.context->IO.WantCaptureMouse)
+      IMGUI.ignore_all_input = true;
+
+    camera.theta += mouse_delta.x * MOUSE_X_SENS;
+    camera.phi += mouse_delta.y * MOUSE_Y_SENS;
     // wrap x
-    if (cam.theta > two_pi<float32>())
-      cam.theta = cam.theta - two_pi<float32>();
-    if (cam.theta < 0)
-      cam.theta = two_pi<float32>() + cam.theta;
+    if (camera.theta > two_pi<float32>())
+      camera.theta = camera.theta - two_pi<float32>();
+    if (camera.theta < 0)
+      camera.theta = two_pi<float32>() + camera.theta;
     // clamp y
     const float32 upper = half_pi<float32>() - 100 * epsilon<float32>();
-    if (cam.phi > upper)
-      cam.phi = upper;
+    if (camera.phi > upper)
+      camera.phi = upper;
     const float32 lower = -half_pi<float32>() + 100 * epsilon<float32>();
-    if (cam.phi < lower)
-      cam.phi = lower;
+    if (camera.phi < lower)
+      camera.phi = lower;
 
-    mat4 rx = rotate(-cam.theta, vec3(0, 0, 1));
+    mat4 rx = rotate(-camera.theta, vec3(0, 0, 1));
     vec4 vr = rx * vec4(0, 1, 0, 0);
     vec3 perp = vec3(-vr.y, vr.x, 0);
-    mat4 ry = rotate(cam.phi, perp);
-    cam.dir = normalize(vec3(ry * vr));
+    mat4 ry = rotate(camera.phi, perp);
+    camera.dir = normalize(vec3(ry * vr));
 
     if (is_pressed(SDL_SCANCODE_W))
-      cam.pos += MOVE_SPEED * dt * cam.dir;
+      camera.pos += MOVE_SPEED * dt * camera.dir;
     if (is_pressed(SDL_SCANCODE_S))
-      cam.pos -= MOVE_SPEED * dt * cam.dir;
+      camera.pos -= MOVE_SPEED * dt * camera.dir;
     if (is_pressed(SDL_SCANCODE_D))
     {
       mat4 r = rotate(-half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * dt * r * v);
+      camera.pos += vec3(MOVE_SPEED * dt * r * v);
     }
     if (is_pressed(SDL_SCANCODE_A))
     {
       mat4 r = rotate(half_pi<float>(), vec3(0, 0, 1));
       vec4 v = vec4(vr.x, vr.y, 0, 0);
-      cam.pos += vec3(MOVE_SPEED * dt * r * v);
+      camera.pos += vec3(MOVE_SPEED * dt * r * v);
     }
   }
   else
@@ -258,15 +232,20 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
       if (!mouse_grabbed)
       { // first hold
         set_message("mouse grab event", "", 1.0f);
+
         mouse_grabbed = true;
-        last_grabbed_mouse_position = mouse;
-        SDL_SetRelativeMouseMode(SDL_bool(true));
-        SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
+        last_grabbed_cursor_position = cursor_position;
+        mouse_relative_mode = true;
       }
+      if (!IMGUI.context->IO.WantCaptureMouse)
+      {
+        IMGUI.ignore_all_input = true;
+      }
+
+      draw_cursor = false;
       set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
-      SDL_GetRelativeMouseState(&mouse_delta.x, &mouse_delta.y);
-      cam.theta += mouse_delta.x * MOUSE_X_SENS;
-      cam.phi += mouse_delta.y * MOUSE_Y_SENS;
+      camera.theta += mouse_delta.x * MOUSE_X_SENS;
+      camera.phi += mouse_delta.y * MOUSE_Y_SENS;
       set_message("mouse is grabbed", "", 1.0f);
     }
     else
@@ -277,31 +256,33 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
         set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
         set_message("mouse warp:",
-            s("from:", mouse.x, " ", mouse.y, " to:", last_grabbed_mouse_position.x, " ",
-                last_grabbed_mouse_position.y),
+            s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
+                last_grabbed_cursor_position.y),
             1.0f);
-        SDL_SetRelativeMouseMode(SDL_bool(false));
-        SDL_WarpMouseInWindow(nullptr, last_grabbed_mouse_position.x, last_grabbed_mouse_position.y);
+        mouse_relative_mode = false;
+        request_cursor_warp_to = last_grabbed_cursor_position;
       }
+      draw_cursor = true;
+      IMGUI.ignore_all_input = false;
     }
     // wrap x
-    if (cam.theta > two_pi<float32>())
-      cam.theta = cam.theta - two_pi<float32>();
-    if (cam.theta < 0)
-      cam.theta = two_pi<float32>() + cam.theta;
+    if (camera.theta > two_pi<float32>())
+      camera.theta = camera.theta - two_pi<float32>();
+    if (camera.theta < 0)
+      camera.theta = two_pi<float32>() + camera.theta;
     // clamp y
     const float32 upper = half_pi<float32>() - 100 * epsilon<float32>();
-    if (cam.phi > upper)
-      cam.phi = upper;
+    if (camera.phi > upper)
+      camera.phi = upper;
     const float32 lower = 100 * epsilon<float32>();
-    if (cam.phi < lower)
-      cam.phi = lower;
+    if (camera.phi < lower)
+      camera.phi = lower;
 
     //+x right, +y forward, +z up
 
     // construct a matrix that represents a rotation around the z axis by
     // theta(x) radians
-    mat4 rx = rotate(-cam.theta, vec3(0, 0, 1));
+    mat4 rx = rotate(-camera.theta, vec3(0, 0, 1));
 
     //'default' position of camera is behind the character
     // rotate that vector by our rx matrix
@@ -313,7 +294,7 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
     vec3 perp = vec3(-cam_rel.y, cam_rel.x, 0);
 
     // construct a matrix that represents a rotation around perp by -phi
-    mat4 ry = rotate(-cam.phi, perp);
+    mat4 ry = rotate(-camera.phi, perp);
 
     // rotate the camera vector around perp
     cam_rel = normalize(ry * cam_rel);
@@ -344,8 +325,8 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
       vec4 v = vec4(player_dir.x, player_dir.y, 0, 0);
       player_pos += MOVE_SPEED * dt * vec3(r * v);
     }
-    cam.pos = player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * cam.zoom;
-    cam.dir = -vec3(cam_rel);
+    camera.pos = player_pos + vec3(cam_rel.x, cam_rel.y, cam_rel.z) * camera.zoom;
+    camera.dir = -vec3(cam_rel);
   }
   previous_mouse_state = mouse_state;
 }
@@ -353,7 +334,7 @@ void Render_Test_State::handle_input_events(const std::vector<SDL_Event> &events
 void Render_Test_State::update()
 {
 
-  scene.nodes[skybox].position = cam.pos;
+  scene.nodes[skybox].position = camera.pos;
 
   const float32 height = 1.25;
 
@@ -430,19 +411,16 @@ void Render_Test_State::update()
   Material_Descriptor *md0 = scene.resource_manager->retrieve_pool_material_descriptor(light0_mat);
   vec3 c0 = lights[0].brightness * lights[0].color;
   md0->emissive.name = s("color(", c0.r, ",", c0.g, ",", c0.b, ",", 1, ")");
-  scene.push_material_change(light0_mat);
 
   Material_Index light1_mat = scene.nodes[cone_light1].model[0].second;
   Material_Descriptor *md1 = scene.resource_manager->retrieve_pool_material_descriptor(light1_mat);
   vec3 c1 = lights[1].brightness * lights[1].color;
   md1->emissive.name = s("color(", c1.r, ",", c1.g, ",", c1.b, ",", 1, ")");
-  scene.push_material_change(light0_mat);
 
   Material_Index light2_mat = scene.nodes[small_light].model[0].second;
   Material_Descriptor *md2 = scene.resource_manager->retrieve_pool_material_descriptor(light2_mat);
   vec3 c2 = lights[2].brightness * lights[2].color;
   md2->emissive.name = s("color(", c2.r, ",", c2.g, ",", c2.b, ",", 1, ")");
-  scene.push_material_change(light2_mat);
 
   // scene.nodes[gun].orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
   scene.nodes[tiger].orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
@@ -473,9 +451,6 @@ void Render_Test_State::update()
       Material_Index material_index = scene.nodes[arm_test].model[0].second;
       Material_Descriptor *md = scene.resource_manager->retrieve_pool_material_descriptor(material_index);
       md->albedo.mod = vec4(1, 0, 0, 1);
-      scene.push_material_change(material_index);
-      // alternatively we could just have one resource manager function that pushes all the descriptors into
-      // the pool at once, called at prepare_renderer every frame
 
       last = (float32)current_time;
       is_world = true;
@@ -494,7 +469,6 @@ void Render_Test_State::update()
       Material_Index material_index = scene.nodes[arm_test].model[0].second;
       Material_Descriptor *md = scene.resource_manager->retrieve_pool_material_descriptor(material_index);
       md->albedo.mod = vec4(0, 1, 0, 1);
-      scene.push_material_change(material_index);
 
       set_message(s("arm_test GRAB"), "", 1.5f);
       scene.grab(arm_test, tiger1);
@@ -521,7 +495,7 @@ void Render_Test_State::update()
   scene.nodes[arm_test].scale_vertex = {arm_radius, arm_radius, 1.5f};
   scene.nodes[arm_test].position = {0.5f * arm_radius, 0.0f, -0.75f};
 
-  renderer.set_camera(cam.pos, cam.dir);
+  renderer.set_camera(camera.pos, camera.dir);
 
   // pe->descriptor.position = vec3(5.f * sin(current_time), 5.f * cos(current_time), 1.0f);
 
@@ -534,8 +508,9 @@ void Render_Test_State::update()
   // pe->descriptor.orientation = orientation;
   //// pe->descriptor.position = translation;
 
-  fire_emitter(&renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(0), vec2(3, 3));
-  scene.draw_imgui();
+  // fire_emitter(&renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(0), vec2(3, 3));
+
+  // IMGUI_LOCK lock(this);
 }
 
 void test_spheres(Flat_Scene_Graph &scene)
