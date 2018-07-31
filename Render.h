@@ -785,6 +785,8 @@ struct Renderer
   float64 target_frame_time = 1.0 / 60.0;
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
+  float32 blur_radius = 0.0021;
+  float32 blur_factor = 2.12f;
   uint32 draw_calls_last_frame = 0;
   static mat4 ortho_projection(ivec2 dst_size);
   Environment_Map environment;
@@ -792,6 +794,7 @@ struct Renderer
   bool imgui_this_tick = false;
   bool show_renderer_window = true;
   bool show_imgui_fxaa = false;
+  bool show_bloom = false;
   void draw_imgui();
 
   Mesh quad;

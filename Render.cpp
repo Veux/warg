@@ -988,6 +988,11 @@ void Renderer::draw_imgui()
     {
       show_imgui_fxaa = !show_imgui_fxaa;
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Bloom Settings"))
+    {
+      show_bloom = !show_bloom;
+    }
     if (ImGui::CollapsingHeader("GPU Textures"))
     { // todo improve texture names for generated textures
 
@@ -1524,18 +1529,21 @@ void Renderer::postprocess_pass(float32 time)
   draw_target.color_attachments[0].bind(0);
   quad.draw();
 
-  static float32 radius = 0.0021;
-  static float32 factor = 2.12f;
   static bool enabled = true;
-  ImGui::Begin("bloom");
-  ImGui::Checkbox("Enabled", &enabled);
-  ImGui::DragFloat("radius", &radius, 0.00001, 0.0f, 0.5f, "%.6f");
-  ImGui::DragFloat("factor", &factor, 0.001, 0.0f, 10.5f, "%.3f");
-  ImGui::Text(s("mip_count:", mip_levels).c_str());
+  if (imgui_this_tick)
+  {
+    if (show_bloom)
+    {
+      ImGui::Begin("bloom", &show_bloom);
+      ImGui::Checkbox("Enabled", &enabled);
+      ImGui::DragFloat("blur_radius", &blur_radius, 0.00001, 0.0f, 0.5f, "%.6f");
+      ImGui::DragFloat("mip_scale_factor", &blur_factor, 0.001, 0.0f, 10.5f, "%.3f");
+      ImGui::Text(s("mip_count:", mip_levels).c_str());
+      ImGui::End();
+    }
+  }
 
-  ImGui::End();
-
-  float32 original = radius;
+  float32 original = blur_radius;
   // in a loop
   // blur: src:bloom_target, dst:intermediate (x), src:intermediate, dst:target (y)
   for (uint32 i = 0; i < mip_levels; ++i)
@@ -1547,22 +1555,22 @@ void Renderer::postprocess_pass(float32 time)
     bloom_target.bind(0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_intermediate.get_handle(), i + 1);
     float32 aspect_ratio_factor = (float32)resolution.y / (float32)resolution.x;
-    vec2 gaus_scale = vec2(aspect_ratio_factor * radius, 0.0);
+    vec2 gaus_scale = vec2(aspect_ratio_factor * blur_radius, 0.0);
     gaussian_blur_15x.set_uniform("gauss_axis_scale", gaus_scale);
     gaussian_blur_15x.set_uniform("lod", i);
     gaussian_blur_15x.set_uniform("transform", ortho_projection(resolution));
     quad.draw();
 
-    gaus_scale = vec2(0.0f, radius);
+    gaus_scale = vec2(0.0f, blur_radius);
     gaussian_blur_15x.set_uniform("gauss_axis_scale", gaus_scale);
     bloom_intermediate.bind(0);
     gaussian_blur_15x.set_uniform("lod", i + 1);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_target.get_handle(), i + 1);
     quad.draw();
 
-    radius += (factor * radius);
+    blur_radius += (blur_factor * blur_radius);
   }
-  radius = original;
+  blur_radius = original;
   // bloom target is now the screen high pass filtered, lod0 no blur, increasing bluriness on each mip level below that
 
   if (!bloom_result.get_handle())
