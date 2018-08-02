@@ -8,21 +8,19 @@ struct Serialization_Buffer
 // and assert that the sizes match
 #define BUFFER_DEBUG 1
 
-  template <typename T> void push(T d)
+  // push:
+  template <typename T, typename = std::enable_if_t<std::is_fundamental<T>>> void push(T d)
   {
-    const uint32 size = sizeof(T);
-
+    const uint8 size = sizeof(T);
 #if BUFFER_DEBUG
     const uint32 debug_end = data.size();
-    data.resize(data.size() + sizeof(uint32));
-    memcpy(&data[debug_end], &debug_end, sizeof(uint32));
+    data.resize(data.size() + sizeof(uint8));
+    memcpy(&data[debug_end], &debug_end, sizeof(uint8));
 #endif
-
     const uint32 end = data.size();
     data.resize(data.size() + size);
     memcpy(&data[end], &d, size);
   }
-  template <> void push(const char *s) = delete;
 
   template <> void push(std::string s)
   {
@@ -33,14 +31,51 @@ struct Serialization_Buffer
     data.resize(data.size() + length);
     memcpy(&data[end], &s[0], length);
   }
+  template <> void push(vec2 v)
+  {
+    push(v.x);
+    push(v.y);
+  }
+  template <> void push(vec3 v)
+  {
+    push(v.x);
+    push(v.y);
+    push(v.z);
+  }
+  template <> void push(vec4 v)
+  {
+    push(v.x);
+    push(v.y);
+    push(v.z);
+    push(v.w);
+  }
+  template <> void push(ivec2 v)
+  {
+    push(v.x);
+    push(v.y);
+  }
+  template <> void push(ivec3 v)
+  {
+    push(v.x);
+    push(v.y);
+    push(v.z);
+  }
+  template <> void push(ivec4 v)
+  {
+    push(v.x);
+    push(v.y);
+    push(v.z);
+    push(v.w);
+  }
 
-  template <typename T> void read(T *t)
+  // read:
+  template <typename T, typename = std::enable_if_t<std::is_fundamental<T>>> void read(T *t)
   {
     ASSERT(t);
     const uint32 size = sizeof(T);
-    read(t, size);
+    _read(t, size);
   }
-  template <> void read(const char *s) = delete;
+
   template <> void read(std::string *dst)
   {
     ASSERT(dst);
@@ -48,6 +83,7 @@ struct Serialization_Buffer
     read(&length);
 
     dst->resize(length);
+    // cannot use _read because of the debug size assert
     ASSERT(read_index + length <= data.size());
     uint8 *const write_ptr = (uint8 *)&dst[0];
     for (uint32 i = 0; i < length; ++i)
@@ -56,23 +92,56 @@ struct Serialization_Buffer
       ++read_index;
     }
   }
+  template <> void read(vec2 *v)
+  {
+    read(&v->x);
+    read(&v->y);
+  }
+  template <> void read(vec3 *v)
+  {
+    read(&v->x);
+    read(&v->y);
+    read(&v->z);
+  }
+  template <> void read(vec4 *v)
+  {
+    read(&v->x);
+    read(&v->y);
+    read(&v->z);
+    read(&v->w);
+  }
+  template <> void read(ivec2 *v)
+  {
+    read(&v->x);
+    read(&v->y);
+  }
+  template <> void read(ivec3 *v)
+  {
+    read(&v->x);
+    read(&v->y);
+    read(&v->z);
+  }
+  template <> void read(ivec4 *v)
+  {
+    read(&v->x);
+    read(&v->y);
+    read(&v->z);
+    read(&v->w);
+  }
 
-  void read(void *dst, size_t size)
+private:
+  void _read(void *dst, size_t size)
   {
 #if BUFFER_DEBUG
-    ASSERT(read_index + sizeof(uint32) <= data.size());
-    uint32 debug_size;
-    uint8 *const debug_ptr = (uint8 *)&debug_size;
-    for (uint32 i = 0; i < sizeof(uint32); ++i)
-    {
-      *(debug_ptr + i) = data[read_index];
-      ++read_index;
-    }
+    ASSERT(read_index + sizeof(uint8) <= data.size());
+    uint8 debug_size;
+    debug_size = data[read_index];
+    ++read_index;
     ASSERT(debug_size == size);
 #endif
 
     ASSERT(read_index + size <= data.size());
-    uint8 *write_ptr = (uint8 *)dst;
+    uint8 *const write_ptr = (uint8 *)dst;
     for (uint32 i = 0; i < size; ++i)
     {
       *(write_ptr + i) = data[read_index];
@@ -80,7 +149,6 @@ struct Serialization_Buffer
     }
   }
 
-private:
-  std::vector<uint8_t> data;
+  std::vector<uint8> data;
   uint32 read_index = 0;
 };
