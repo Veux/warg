@@ -301,10 +301,10 @@ int main(int argc, char *argv[])
   states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
-
+/*
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   states.emplace_back((State *)new Sarg_Client_State("Sarg Client", window, window_size));
-  states.emplace_back((State *)new Sarg_Server_State("Sarg Server", window, window_size));
+  states.emplace_back((State *)new Sarg_Server_State("Sarg Server", window, window_size));*/
 
   // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
   // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it global

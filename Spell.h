@@ -22,6 +22,8 @@ enum class Spell_ID
   Shadow_Word_Pain,
   Demonic_Circle_Summon,
   Demonic_Circle_Teleport,
+  Corruption,
+  Seed_of_Corruption,
   COUNT
 };
 
@@ -103,6 +105,9 @@ struct BuffDef
   Character_Stats stats_modifiers;
   void (*_on_update)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
   void (*_on_tick)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
+  void (*_on_end)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
+  void (*_on_damage)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object,
+      float32 damage) = nullptr;
 };
 
 enum class Cast_Error

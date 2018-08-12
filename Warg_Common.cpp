@@ -60,24 +60,6 @@ void Character::update_global_cooldown(float32 dt)
     global_cooldown = 0;
 }
 
-void Character::take_damage(float32 damage)
-{
-  if (!alive)
-    return;
-
-  hp -= damage;
-
-  if (hp <= 0)
-  {
-    hp = 0;
-    alive = false;
-
-    float32 new_height = radius.y;
-    physics.grounded = false;
-    physics.position.z -= radius.z - radius.y;
-  }
-}
-
 void Character::take_heal(float32 heal)
 {
   if (!alive)
@@ -465,4 +447,34 @@ Character *Game_State::get_character(UID id)
       return character;
   }
   return nullptr;
+}
+
+void Game_State::damage_character(Character *subject, Character *object, float32 damage)
+{
+  ASSERT(characters <= object && object <= &characters[character_count - 1]);
+
+  if (!object->alive)
+    return;
+
+  object->hp -= damage;
+
+  if (object->hp <= 0)
+  {
+    object->hp = 0;
+    object->alive = false;
+
+    float32 new_height = object->radius.y;
+    object->physics.grounded = false;
+    object->physics.position.z -= object->radius.z - object->radius.y;
+
+    return;
+  }
+
+  for (size_t i = 0; i < object->debuff_count; i++)
+  {
+    Buff *buff = &object->debuffs[i];
+    BuffDef *buff_formula = SPELL_DB.get_buff(buff->formula_index);
+    if (buff_formula->_on_damage && subject)
+      buff_formula->_on_damage(buff_formula, buff, this, subject, object, damage);
+  }
 }

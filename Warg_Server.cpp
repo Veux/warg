@@ -353,6 +353,8 @@ void Warg_Server::update_buffs(UID character_id)
       }
       if (buff->duration <= 0)
       {
+        if (buff_formula->_on_end)
+          buff_formula->_on_end(buff_formula, buff, &game_state, character);
         if (buff->_data)
           free(buff->_data);
         *buff = buffs[*buff_count - 1];
@@ -456,7 +458,7 @@ UID Warg_Server::add_char(int team, const char *name)
 
   add_spell("Frostbolt");
   add_spell("Blink");
-  add_spell("Shadow Word: Pain");
+  add_spell("Seed of Corruption");
   add_spell("Icy Veins");
   add_spell("Sprint");
   add_spell("Demonic Circle: Summon");

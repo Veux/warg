@@ -102,7 +102,7 @@ BuffDef *Spell_Database::add_buff()
 void shadow_word_pain_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
 {
   ASSERT(character);
-  character->take_damage(5);
+  game_state->damage_character(nullptr, character, 5);
 }
 
 void shadow_word_pain_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
@@ -115,6 +115,28 @@ void shadow_word_pain_release(Spell_Formula *formula, Game_State *game_state, Ch
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Shadow_Word_Pain);
   Buff buff;
   buff._id = Spell_ID::Shadow_Word_Pain;
+  buff.formula_index = buff_formula->index;
+  buff.duration = buff_formula->duration;
+  buff.time_since_last_tick = 0.f;
+  target->apply_debuff(&buff);
+}
+
+void corruption_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+{
+  ASSERT(character);
+  game_state->damage_character(nullptr, character, 5);
+}
+
+void corruption_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  ASSERT(caster);
+  Character *target = game_state->get_character(caster->cast_target);
+  ASSERT(target);
+
+  target->remove_debuff(Spell_ID::Corruption);
+  BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
+  Buff buff;
+  buff._id = Spell_ID::Corruption;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.time_since_last_tick = 0.f;
@@ -171,12 +193,13 @@ void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character
 void frostbolt_object_on_hit(
     Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders)
 {
+  Character *caster = game_state->get_character(object->caster);
   Character *target = game_state->get_character(object->target);
   ASSERT(target);
   ASSERT(formula);
   ASSERT(object);
 
-  target->take_damage(10);
+  game_state->damage_character(caster, target, 10);
 
   target->remove_debuff(Spell_ID::Frostbolt);
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Frostbolt);
@@ -184,6 +207,89 @@ void frostbolt_object_on_hit(
   debuff._id = Spell_ID::Frostbolt;
   debuff.formula_index = debuff_formula->index;
   debuff.duration = debuff_formula->duration;
+  target->apply_debuff(&debuff);
+}
+
+struct Seed_of_Corruption_Buff_Data
+{
+  UID caster = 0;
+  int damage_taken = 0;
+};
+
+void seed_of_corruption_debuff_on_damage(
+    BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage)
+{
+  Seed_of_Corruption_Buff_Data *data;
+  data = (Seed_of_Corruption_Buff_Data *)buff->_data;
+
+  if (subject->id != data->caster)
+    return;
+
+  data->damage_taken += damage;
+  if (data->damage_taken >= 20)
+  {
+    formula->_on_end(formula, buff, game_state, object);
+    object->remove_debuff(Spell_ID::Seed_of_Corruption);
+  }
+}
+
+void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+{
+  for (size_t i = 0; i < game_state->character_count; i++)
+  {
+    Character *target = &game_state->characters[i];
+    if (length(target->physics.position - character->physics.position) < 10.f && character->team == target->team)
+    {
+      BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
+      Buff buff;
+      buff._id = Spell_ID::Corruption;
+      buff.formula_index = buff_formula->index;
+      buff.duration = buff_formula->duration;
+      buff.time_since_last_tick = 0.f;
+      target->apply_debuff(&buff);
+    }
+  }
+}
+
+void seed_of_corruption_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  Spell_Object_Formula *object_formula = SPELL_DB.get_spell_object(Spell_ID::Seed_of_Corruption);
+  Spell_Object object;
+  object.formula_index = object_formula->index;
+  object.caster = caster->id;
+  object.target = caster->target_id;
+  object.pos = caster->physics.position;
+  object.id = uid();
+  game_state->spell_objects[game_state->spell_object_count++] = object;
+}
+
+void seed_of_corruption_object_on_hit(
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders)
+{
+  Character *target = game_state->get_character(object->target);
+  ASSERT(target);
+  ASSERT(formula);
+  ASSERT(object);
+
+  BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Seed_of_Corruption);
+
+  Buff *existing = target->find_debuff(Spell_ID::Seed_of_Corruption);
+  if (existing)
+  {
+    debuff_formula->_on_end(debuff_formula, existing, game_state, target);
+    target->remove_debuff(Spell_ID::Seed_of_Corruption);
+    return;
+  }
+
+  Buff debuff;
+  debuff._id = Spell_ID::Seed_of_Corruption;
+  debuff.formula_index = debuff_formula->index;
+  debuff.duration = debuff_formula->duration;
+  Seed_of_Corruption_Buff_Data data_struct;
+  Seed_of_Corruption_Buff_Data *data_ptr = (Seed_of_Corruption_Buff_Data *)malloc(sizeof *data_ptr);
+  *data_ptr = data_struct;
+  data_ptr->caster = object->caster;
+  debuff._data = data_ptr;
   target->apply_debuff(&debuff);
 }
 
@@ -361,6 +467,54 @@ Spell_Database::Spell_Database()
   demonic_circle_teleport->on_global_cooldown = false;
   demonic_circle_teleport->targets = Spell_Targets::Self;
   demonic_circle_teleport->_on_release = demonic_circle_teleport_release;
+
+  // CORRUPTION
+
+  BuffDef *corruption_buff = add_buff();
+  corruption_buff->_id = Spell_ID::Corruption;
+  corruption_buff->name = "Corruption";
+  corruption_buff->icon = "corruption.jpg";
+  corruption_buff->duration = 15;
+  corruption_buff->tick_freq = 1.0 / 3;
+  corruption_buff->_on_tick = corruption_debuff_tick;
+
+  Spell_Formula *corruption = add_spell();
+  corruption->name = "Corruption";
+  corruption->icon = "corruption.jpg";
+  corruption->mana_cost = 50;
+  corruption->range = 30;
+  corruption->cooldown = 0;
+  corruption->cast_time = 0;
+  corruption->on_global_cooldown = true;
+  corruption->targets = Spell_Targets::Hostile;
+  corruption->_on_release = corruption_release;
+
+  // SEED OF CORRUPTION
+
+  BuffDef *soc_buff = add_buff();
+  soc_buff->_id = Spell_ID::Seed_of_Corruption;
+  soc_buff->name = "Seed of Corruption";
+  soc_buff->duration = 20.f;
+  soc_buff->icon = "seed_of_corruption.jpg";
+  soc_buff->_on_damage = seed_of_corruption_debuff_on_damage;
+  soc_buff->_on_end = seed_of_corruption_debuff_on_end;
+
+  Spell_Object_Formula *soc_object = add_spell_object();
+  soc_object->name = "Seed of Corruption";
+  soc_object->_id = Spell_ID::Seed_of_Corruption;
+  soc_object->speed = 30;
+  soc_object->_on_hit = seed_of_corruption_object_on_hit;
+
+  Spell_Formula *seed_of_corruption = add_spell();
+  seed_of_corruption->name = "Seed of Corruption";
+  seed_of_corruption->cooldown = 5.f;
+  seed_of_corruption->icon = "seed_of_corruption.jpg";
+  seed_of_corruption->mana_cost = 5;
+  seed_of_corruption->range = 30.f;
+  seed_of_corruption->cast_time = 1.f;
+  seed_of_corruption->on_global_cooldown = true;
+  seed_of_corruption->targets = Spell_Targets::Hostile;
+  seed_of_corruption->_on_release = seed_of_corruption_release;
 
   SPELL_DB = *this;
 }

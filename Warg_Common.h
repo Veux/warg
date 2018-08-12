@@ -73,7 +73,6 @@ struct Character
   void update_mana(float32 dt);
   void update_spell_cooldowns(float32 dt);
   void update_global_cooldown(float32 dt);
-  void take_damage(float32 damage);
   void take_heal(float32 heal);
   void apply_buff(Buff *buff);
   void apply_debuff(Buff *debuff);
@@ -133,6 +132,8 @@ struct Blades_Edge : public Map
 struct Game_State
 {
   Character *get_character(UID id);
+  void damage_character(Character *subject, Character *object, float32 damage);
+
   Map *map = nullptr;
 
   uint32 tick = 0;
