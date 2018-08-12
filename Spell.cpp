@@ -210,25 +210,16 @@ void frostbolt_object_on_hit(
   target->apply_debuff(&debuff);
 }
 
-struct Seed_of_Corruption_Buff_Data
-{
-  UID caster = 0;
-  int damage_taken = 0;
-};
-
 void seed_of_corruption_debuff_on_damage(
     BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage)
 {
-  Seed_of_Corruption_Buff_Data *data;
-  data = (Seed_of_Corruption_Buff_Data *)buff->_data;
-
-  if (subject->id != data->caster)
+  if (subject->id != buff->u.seed_of_corruption.caster)
     return;
 
-  data->damage_taken += damage;
-  if (data->damage_taken >= 20)
+  buff->u.seed_of_corruption.damage_taken += damage;
+  if (buff->u.seed_of_corruption.damage_taken >= 20)
   {
-    formula->_on_end(formula, buff, game_state, object);
+    buff_on_end_dispatch(formula, buff, game_state, object);
     object->remove_debuff(Spell_ID::Seed_of_Corruption);
   }
 }
@@ -238,7 +229,9 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
   for (size_t i = 0; i < game_state->character_count; i++)
   {
     Character *target = &game_state->characters[i];
-    if (length(target->physics.position - character->physics.position) < 10.f && character->team == target->team)
+    bool within_range = length(target->physics.position - character->physics.position) < 10.f;
+    bool same_team = character->team == target->team;
+    if (within_range && same_team)
     {
       BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
       Buff buff;
@@ -276,7 +269,7 @@ void seed_of_corruption_object_on_hit(
   Buff *existing = target->find_debuff(Spell_ID::Seed_of_Corruption);
   if (existing)
   {
-    debuff_formula->_on_end(debuff_formula, existing, game_state, target);
+    buff_on_end_dispatch(debuff_formula, existing, game_state, target);
     target->remove_debuff(Spell_ID::Seed_of_Corruption);
     return;
   }
@@ -285,19 +278,10 @@ void seed_of_corruption_object_on_hit(
   debuff._id = Spell_ID::Seed_of_Corruption;
   debuff.formula_index = debuff_formula->index;
   debuff.duration = debuff_formula->duration;
-  Seed_of_Corruption_Buff_Data data_struct;
-  Seed_of_Corruption_Buff_Data *data_ptr = (Seed_of_Corruption_Buff_Data *)malloc(sizeof *data_ptr);
-  *data_ptr = data_struct;
-  data_ptr->caster = object->caster;
-  debuff._data = data_ptr;
+  debuff.u.seed_of_corruption.caster = object->caster;
+  debuff.u.seed_of_corruption.damage_taken = 0;
   target->apply_debuff(&debuff);
 }
-
-struct Demonic_Circle_Buff_Data
-{
-  vec3 position = vec3(0.f);
-  bool grounded = false;
-};
 
 void demonic_circle_summon_release(
     Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
@@ -312,12 +296,8 @@ void demonic_circle_summon_release(
   buff._id = Spell_ID::Demonic_Circle_Summon;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  Demonic_Circle_Buff_Data data_struct;
-  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)malloc(sizeof *data_ptr);
-  *data_ptr = data_struct;
-  data_ptr->position = caster->physics.position;
-  data_ptr->grounded = caster->physics.grounded;
-  buff._data = data_ptr;
+  buff.u.demonic_circle.position = caster->physics.position;
+  buff.u.demonic_circle.grounded = caster->physics.grounded;
   caster->apply_buff(&buff);
 }
 
@@ -331,10 +311,99 @@ void demonic_circle_teleport_release(
   if (!circle_buff)
     return;
 
-  Demonic_Circle_Buff_Data *data_ptr = (Demonic_Circle_Buff_Data *)circle_buff->_data;
+  caster->physics.position = circle_buff->u.demonic_circle.position;
+  caster->physics.grounded = circle_buff->u.demonic_circle.grounded;
+}
 
-  caster->physics.position = data_ptr->position;
-  caster->physics.grounded = data_ptr->grounded;
+void buff_on_end_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+{
+  switch (formula->_id)
+  {
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_debuff_on_end(formula, buff, game_state, character);
+      break;
+    default:
+      break;
+  }
+}
+
+void buff_on_damage_dispatch(
+    BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage)
+{
+  switch (formula->_id)
+  {
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_debuff_on_damage(formula, buff, game_state, subject, object, damage);
+      break;
+    default:
+      break;
+  }
+}
+
+void buff_on_tick_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+{
+  switch (formula->_id)
+  {
+    case Spell_ID::Shadow_Word_Pain:
+      shadow_word_pain_debuff_tick(formula, buff, game_state, character);
+      break;
+    case Spell_ID::Corruption:
+      corruption_debuff_tick(formula, buff, game_state, character);
+    default:
+      break;
+  }
+}
+
+void spell_object_on_hit_dispatch(
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders)
+{
+  switch (formula->_id)
+  {
+    case Spell_ID::Frostbolt:
+      frostbolt_object_on_hit(formula, object, game_state, colliders);
+      break;
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_object_on_hit(formula, object, game_state, colliders);
+      break;
+    default:
+      break;
+  }
+}
+
+void spell_on_release_dispatch(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders)
+{
+  switch (formula->_id)
+  {
+  case Spell_ID::Blink:
+    blink_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Corruption:
+    corruption_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Frostbolt:
+    frostbolt_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Icy_Veins:
+    icy_veins_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Shadow_Word_Pain:
+    shadow_word_pain_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Sprint:
+    sprint_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Seed_of_Corruption:
+    seed_of_corruption_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Demonic_Circle_Summon:
+    demonic_circle_summon_release(formula, game_state, caster, colliders);
+    break;
+  case Spell_ID::Demonic_Circle_Teleport:
+    demonic_circle_teleport_release(formula, game_state, caster, colliders);
+    break;
+  default:
+    break;
+  }
 }
 
 Spell_Database::Spell_Database()
@@ -352,9 +421,9 @@ Spell_Database::Spell_Database()
   fb_object->name = "Frostbolt";
   fb_object->_id = Spell_ID::Frostbolt;
   fb_object->speed = 30;
-  fb_object->_on_hit = frostbolt_object_on_hit;
 
   Spell_Formula *frostbolt = add_spell();
+  frostbolt->_id = Spell_ID::Frostbolt;
   frostbolt->name = "Frostbolt";
   frostbolt->icon = "frostbolt.jpg";
   frostbolt->mana_cost = 20;
@@ -363,11 +432,11 @@ Spell_Database::Spell_Database()
   frostbolt->cooldown = 0;
   frostbolt->cast_time = 1.5f;
   frostbolt->on_global_cooldown = true;
-  frostbolt->_on_release = frostbolt_release;
 
   // BLINK
 
   Spell_Formula *blink = add_spell();
+  blink->_id = Spell_ID::Blink;
   blink->name = "Blink";
   blink->icon = "blink.jpg";
   blink->mana_cost = 5;
@@ -376,7 +445,6 @@ Spell_Database::Spell_Database()
   blink->cooldown = 15.f;
   blink->cast_time = 0.f;
   blink->on_global_cooldown = false;
-  blink->_on_release = blink_release;
 
   // SHADOW WORD: PAIN
 
@@ -386,9 +454,9 @@ Spell_Database::Spell_Database()
   swp_buff->icon = "shadow_word_pain.jpg";
   swp_buff->duration = 15;
   swp_buff->tick_freq = 1.0 / 3;
-  swp_buff->_on_tick = shadow_word_pain_debuff_tick;
 
   Spell_Formula *swp = add_spell();
+  swp->_id = Spell_ID::Shadow_Word_Pain;
   swp->name = "Shadow Word: Pain";
   swp->icon = "shadow_word_pain.jpg";
   swp->mana_cost = 50;
@@ -397,7 +465,6 @@ Spell_Database::Spell_Database()
   swp->cast_time = 0;
   swp->on_global_cooldown = true;
   swp->targets = Spell_Targets::Hostile;
-  swp->_on_release = shadow_word_pain_release;
 
   // ICY VEINS
 
@@ -409,6 +476,7 @@ Spell_Database::Spell_Database()
   icy_veins_buff->stats_modifiers.cast_speed = 2.f;
 
   Spell_Formula *icy_veins = add_spell();
+  icy_veins->_id = Spell_ID::Icy_Veins;
   icy_veins->name = "Icy Veins";
   icy_veins->icon = "icy_veins.jpg";
   icy_veins->mana_cost = 20;
@@ -417,7 +485,6 @@ Spell_Database::Spell_Database()
   icy_veins->cooldown = 0.f;
   icy_veins->cast_time = 0;
   icy_veins->on_global_cooldown = false;
-  icy_veins->_on_release = icy_veins_release;
 
   // SPRINT
 
@@ -429,6 +496,7 @@ Spell_Database::Spell_Database()
   sprint_buff->stats_modifiers.speed = 2.f;
 
   Spell_Formula *sprint = add_spell();
+  sprint->_id = Spell_ID::Sprint;
   sprint->name = "Sprint";
   sprint->cooldown = 10.f;
   // sprint->icon = "sprint.jpg");
@@ -436,7 +504,6 @@ Spell_Database::Spell_Database()
   sprint->cast_time = 0.f;
   sprint->on_global_cooldown = false;
   sprint->targets = Spell_Targets::Self;
-  sprint->_on_release = sprint_release;
 
   // DEMONIC CIRCLE: SUMMON
 
@@ -447,6 +514,7 @@ Spell_Database::Spell_Database()
   demonic_circle_buff->icon = "demonic_circle_summon.jpg";
 
   Spell_Formula *demonic_circle_summon = add_spell();
+  demonic_circle_summon->_id = Spell_ID::Demonic_Circle_Summon;
   demonic_circle_summon->name = "Demonic Circle: Summon";
   demonic_circle_summon->cooldown = 30.f;
   demonic_circle_summon->icon = "demonic_circle_summon.jpg";
@@ -454,11 +522,11 @@ Spell_Database::Spell_Database()
   demonic_circle_summon->cast_time = 0.f;
   demonic_circle_summon->on_global_cooldown = true;
   demonic_circle_summon->targets = Spell_Targets::Self;
-  demonic_circle_summon->_on_release = demonic_circle_summon_release;
 
   // DEMONIC CIRCLE: TELEPORT
 
   Spell_Formula *demonic_circle_teleport = add_spell();
+  demonic_circle_teleport->_id = Spell_ID::Demonic_Circle_Teleport;
   demonic_circle_teleport->name = "Demonic Circle: Teleport";
   demonic_circle_teleport->cooldown = 5.f;
   demonic_circle_teleport->icon = "demonic_circle_teleport.jpg";
@@ -466,7 +534,6 @@ Spell_Database::Spell_Database()
   demonic_circle_teleport->cast_time = 0.f;
   demonic_circle_teleport->on_global_cooldown = false;
   demonic_circle_teleport->targets = Spell_Targets::Self;
-  demonic_circle_teleport->_on_release = demonic_circle_teleport_release;
 
   // CORRUPTION
 
@@ -476,9 +543,9 @@ Spell_Database::Spell_Database()
   corruption_buff->icon = "corruption.jpg";
   corruption_buff->duration = 15;
   corruption_buff->tick_freq = 1.0 / 3;
-  corruption_buff->_on_tick = corruption_debuff_tick;
 
   Spell_Formula *corruption = add_spell();
+  corruption->_id = Spell_ID::Corruption;
   corruption->name = "Corruption";
   corruption->icon = "corruption.jpg";
   corruption->mana_cost = 50;
@@ -487,7 +554,6 @@ Spell_Database::Spell_Database()
   corruption->cast_time = 0;
   corruption->on_global_cooldown = true;
   corruption->targets = Spell_Targets::Hostile;
-  corruption->_on_release = corruption_release;
 
   // SEED OF CORRUPTION
 
@@ -496,16 +562,14 @@ Spell_Database::Spell_Database()
   soc_buff->name = "Seed of Corruption";
   soc_buff->duration = 20.f;
   soc_buff->icon = "seed_of_corruption.jpg";
-  soc_buff->_on_damage = seed_of_corruption_debuff_on_damage;
-  soc_buff->_on_end = seed_of_corruption_debuff_on_end;
 
   Spell_Object_Formula *soc_object = add_spell_object();
   soc_object->name = "Seed of Corruption";
   soc_object->_id = Spell_ID::Seed_of_Corruption;
   soc_object->speed = 30;
-  soc_object->_on_hit = seed_of_corruption_object_on_hit;
 
   Spell_Formula *seed_of_corruption = add_spell();
+  seed_of_corruption->_id = Spell_ID::Seed_of_Corruption;
   seed_of_corruption->name = "Seed of Corruption";
   seed_of_corruption->cooldown = 5.f;
   seed_of_corruption->icon = "seed_of_corruption.jpg";
@@ -514,7 +578,6 @@ Spell_Database::Spell_Database()
   seed_of_corruption->cast_time = 1.f;
   seed_of_corruption->on_global_cooldown = true;
   seed_of_corruption->targets = Spell_Targets::Hostile;
-  seed_of_corruption->_on_release = seed_of_corruption_release;
 
   SPELL_DB = *this;
 }

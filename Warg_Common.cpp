@@ -76,10 +76,7 @@ void Character::take_heal(float32 heal)
 void Character::apply_buff(Buff *buff)
 {
   if (buff_count >= MAX_BUFFS)
-  {
-    if (buff->_data)
-      free(buff->_data);
-  }
+    return;
 
   buffs[buff_count++] = *buff;
 }
@@ -87,10 +84,7 @@ void Character::apply_buff(Buff *buff)
 void Character::apply_debuff(Buff *debuff)
 {
   if (debuff_count >= MAX_DEBUFFS)
-  {
-    if (debuff->_data)
-      free(debuff->_data);
-  }
+    return;
 
   debuffs[debuff_count++] = *debuff;
 }
@@ -122,8 +116,6 @@ void Character::remove_buff(Spell_ID buff_id)
     Buff *buff = &buffs[i];
     if (buff->_id == buff_id)
     {
-      if (buff->_data)
-        free(buff->_data);
       *buff = buffs[buff_count - 1];
       buff_count--;
     }
@@ -137,8 +129,6 @@ void Character::remove_debuff(Spell_ID debuff_id)
     Buff *debuff = &debuffs[i];
     if (debuff->_id == debuff_id)
     {
-      if (debuff->_data)
-        free(debuff->_data);
       *debuff = debuffs[debuff_count - 1];
       debuff_count--;
     }
@@ -474,7 +464,7 @@ void Game_State::damage_character(Character *subject, Character *object, float32
   {
     Buff *buff = &object->debuffs[i];
     BuffDef *buff_formula = SPELL_DB.get_buff(buff->formula_index);
-    if (buff_formula->_on_damage && subject)
-      buff_formula->_on_damage(buff_formula, buff, this, subject, object, damage);
+    if (subject)
+      buff_on_damage_dispatch(buff_formula, buff, this, subject, object, damage);
   }
 }

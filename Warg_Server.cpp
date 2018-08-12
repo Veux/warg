@@ -121,8 +121,7 @@ bool Warg_Server::update_spell_object(Spell_Object *spell_object)
   float epsilon = object_formula->speed * dt / 2.f * 1.05f;
   if (d < epsilon)
   {
-    object_formula->_on_hit(object_formula, spell_object, &game_state, &map->colliders);
-
+    spell_object_on_hit_dispatch(object_formula, spell_object, &game_state, &map->colliders);
     return true;
   }
 
@@ -318,8 +317,7 @@ void Warg_Server::release_spell(UID caster_id, UID target_id, Spell_Status *spel
   if (static_cast<int>(err = cast_viable(caster_id, target_id, spell_status, true)))
     return;
 
-  if (spell_formula->_on_release)
-    spell_formula->_on_release(spell_formula, &game_state, caster, &map->colliders);
+  spell_on_release_dispatch(spell_formula, &game_state, caster, &map->colliders);
 
   if (!spell_formula->cast_time && spell_formula->on_global_cooldown)
     caster->global_cooldown = caster->effective_stats.global_cooldown;
@@ -343,20 +341,14 @@ void Warg_Server::update_buffs(UID character_id)
       buff->duration -= dt;
       buff->time_since_last_tick += dt;
       character->effective_stats *= buff_formula->stats_modifiers;
-      if (buff_formula->_on_update)
-        buff_formula->_on_update(buff_formula, buff, &game_state, character);
       if (buff->time_since_last_tick > 1.f / buff_formula->tick_freq)
       {
-        if (buff_formula->_on_tick)
-          buff_formula->_on_tick(buff_formula, buff, &game_state, character);
+        buff_on_tick_dispatch(buff_formula, buff, &game_state, character);
         buff->time_since_last_tick = 0;
       }
       if (buff->duration <= 0)
       {
-        if (buff_formula->_on_end)
-          buff_formula->_on_end(buff_formula, buff, &game_state, character);
-        if (buff->_data)
-          free(buff->_data);
+        buff_on_end_dispatch(buff_formula, buff, &game_state, character);
         *buff = buffs[*buff_count - 1];
         (*buff_count)--;
       }

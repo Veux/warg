@@ -42,8 +42,6 @@ struct Spell_Object_Formula
   Spell_Index index;
   std::string name;
   float32 speed;
-  void (*_on_hit)(
-      Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders) = nullptr;
 };
 
 enum class Spell_Targets
@@ -56,6 +54,7 @@ enum class Spell_Targets
 
 struct Spell_Formula
 {
+  Spell_ID _id;
   Spell_Index index;
   std::string name;
   Texture_Descriptor icon;
@@ -65,8 +64,6 @@ struct Spell_Formula
   float32 cooldown = 0.f;
   float32 cast_time = 0.f;
   bool on_global_cooldown = true;
-  void (*_on_release)(
-      Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders) = nullptr;
 };
 
 struct Character_Stats
@@ -91,7 +88,20 @@ struct Buff
   Spell_Index formula_index;
   float64 duration;
   float64 time_since_last_tick = 0;
-  void *_data = nullptr;
+  union U {
+    U() : none(false) {}
+    bool none;
+    struct
+    {
+      UID caster;
+      int damage_taken;
+    } seed_of_corruption;
+    struct
+    {
+      bool grounded;
+      vec3 position;
+    } demonic_circle;
+  } u;
 };
 
 struct BuffDef
@@ -103,11 +113,6 @@ struct BuffDef
   float32 duration;
   float32 tick_freq;
   Character_Stats stats_modifiers;
-  void (*_on_update)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
-  void (*_on_tick)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
-  void (*_on_end)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character) = nullptr;
-  void (*_on_damage)(BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object,
-      float32 damage) = nullptr;
 };
 
 enum class Cast_Error
@@ -144,3 +149,11 @@ private:
 };
 
 extern Spell_Database SPELL_DB;
+
+void buff_on_end_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character);
+void buff_on_damage_dispatch(
+    BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage);
+void buff_on_tick_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character);
+void spell_object_on_hit_dispatch(
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Colliders *colliders);
+void spell_on_release_dispatch(Spell_Formula *formula, Game_State *game_state, Character *caster, Colliders *colliders);
