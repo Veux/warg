@@ -1793,6 +1793,34 @@ void Renderer::render(float64 state_time)
   frame_count += 1;
 }
 
+vec3 Renderer::ray_from_screen_pixel(ivec2 pixel)
+{
+  const vec3 origin = camera_position;
+  set_message("origin", s(origin.x, " ", origin.y, " ", origin.z), 5);
+  const vec3 camera_direction = camera_gaze - origin;
+  set_message("camera_direction", s(camera_direction.x, " ", camera_direction.y, " ", camera_direction.z), 5);
+  const vec3 origin_to_center = origin + (znear * normalize(camera_direction));
+  set_message("origin_to_center", s(origin_to_center.x, " ", origin_to_center.y, " ", origin_to_center.z), 5);
+  const vec2 pixel_normalized = vec2(pixel) / vec2(window_size);
+  set_message("pixel_normalized", s(pixel_normalized.x, " ", pixel_normalized.y), 5);
+  const vec3 screen_ndc = vec3(2.0f * (pixel_normalized - vec2(0.5f)), 0);
+  set_message("screen_ndc", s(screen_ndc.x, " ", screen_ndc.y, " ", screen_ndc.z), 5);
+  const vec3 x_axis = camera[0];
+  set_message("x_axis", s(x_axis.x, " ", x_axis.y, " ", x_axis.z), 5);
+  const vec3 y_axis = camera[1];
+  set_message("y_axis", s(y_axis.x, " ", y_axis.y, " ", y_axis.z), 5);
+  const vec3 z_axis = camera[2];
+  set_message("z_axis", s(z_axis.x, " ", z_axis.y, " ", z_axis.z), 5);
+  const vec3 center_to_p = (screen_ndc.x * x_axis) + (screen_ndc.y * y_axis);
+  set_message("center_to_p", s(center_to_p.x, " ", center_to_p.y, " ", center_to_p.z), 5);
+  const vec3 origin_to_p = origin_to_center + center_to_p;
+  set_message("origin_to_p", s(origin_to_p.x, " ", origin_to_p.y, " ", origin_to_p.z), 5);
+  const vec3 returnval = vec3(0) - normalize(origin_to_p);
+  set_message("returnval", s(returnval.x, " ", returnval.y, " ", returnval.z), 5);
+
+  return returnval;
+}
+
 void Renderer::resize_window(ivec2 window_size)
 {
   ASSERT(0);
@@ -1817,11 +1845,13 @@ void Renderer::set_render_scale(float32 scale)
 void Renderer::set_camera(vec3 pos, vec3 camera_gaze_dir)
 {
   vec3 p = pos + camera_gaze_dir;
+  camera_gaze = p;
   camera_position = pos;
   camera = lookAt(pos, p, {0, 0, 1});
 }
 void Renderer::set_camera_gaze(vec3 pos, vec3 p)
 {
+  camera_gaze = p;
   camera_position = pos;
   camera = lookAt(pos, p, {0, 0, 1});
 }
@@ -1832,6 +1862,7 @@ void Renderer::set_vfov(float32 vfov)
   const float32 znear = 0.1f;
   const float32 zfar = 10000;
   projection = perspective(radians(vfov), aspect, znear, zfar);
+  this->znear = znear;
 }
 
 void Renderer::set_render_entities(vector<Render_Entity> *new_entities)

@@ -226,20 +226,53 @@ void seed_of_corruption_debuff_on_damage(
 
 void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
 {
-  for (size_t i = 0; i < game_state->character_count; i++)
+  BuffDef *corruption_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
+
+  struct {
+    Character *character;
+    Buff *buff;
+  } to_detonate[MAX_CHARACTERS];
+  size_t to_detonate_count = 0;
+
+  to_detonate[0].character = character;
+  to_detonate[0].buff = buff;
+  to_detonate_count++;
+
+  for (size_t i = 0; i < to_detonate_count; i++)
   {
-    Character *target = &game_state->characters[i];
-    bool within_range = length(target->physics.position - character->physics.position) < 10.f;
-    bool same_team = character->team == target->team;
-    if (within_range && same_team)
+    Character *caster = to_detonate[i].character;
+    Buff *buff = to_detonate[i].buff;
+    
+    for (size_t j = 0; j < game_state->character_count; j++)
     {
-      BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
+      Character *target = &game_state->characters[j];
+
+      bool within_range = length(target->physics.position - character->physics.position) < 10.f;
+      bool same_team = character->team == target->team;
+
+      if (!within_range || !same_team)
+        continue;
+
       Buff buff;
       buff._id = Spell_ID::Corruption;
-      buff.formula_index = buff_formula->index;
-      buff.duration = buff_formula->duration;
+      buff.formula_index = corruption_formula->index;
+      buff.duration = corruption_formula->duration;
       buff.time_since_last_tick = 0.f;
       target->apply_debuff(&buff);
+
+      bool should_detonate = true;
+      for (size_t k = 0; k < to_detonate_count; k++)
+      {
+        if (to_detonate[k].character == target)
+          should_detonate = false;
+      }
+      Buff *existing_seed = target->find_debuff(Spell_ID::Seed_of_Corruption);
+      if (should_detonate && existing_seed)
+      {
+        to_detonate[to_detonate_count].character = target;
+        to_detonate[to_detonate_count].buff = existing_seed;
+        to_detonate_count++;
+      }
     }
   }
 }
@@ -471,7 +504,7 @@ Spell_Database::Spell_Database()
   BuffDef *icy_veins_buff = add_buff();
   icy_veins_buff->_id = Spell_ID::Icy_Veins;
   icy_veins_buff->name = "IcyVeinsBuff";
-  icy_veins_buff->icon = "../Assets/Icons/icy_veins.jpg";
+  icy_veins_buff->icon = "icy_veins.jpg";
   icy_veins_buff->duration = 20;
   icy_veins_buff->stats_modifiers.cast_speed = 2.f;
 
@@ -499,7 +532,7 @@ Spell_Database::Spell_Database()
   sprint->_id = Spell_ID::Sprint;
   sprint->name = "Sprint";
   sprint->cooldown = 10.f;
-  // sprint->icon = "sprint.jpg");
+  sprint->icon = "sprint.jpg";
   sprint->mana_cost = 5;
   sprint->cast_time = 0.f;
   sprint->on_global_cooldown = false;

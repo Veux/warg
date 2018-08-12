@@ -6,7 +6,8 @@ Warg_Server::Warg_Server() : scene(&resource_manager)
   resource_manager.init();
   map = new Blades_Edge(scene);
   spell_db = Spell_Database();
-  add_dummy();
+  for (int i = -10; i <= 10; i++)
+    add_dummy({ 1, i, 5 });
 }
 
 Warg_Server::~Warg_Server()
@@ -34,7 +35,8 @@ void Warg_Server::update(float32 dt)
   }
   if (!found_living_dummy)
   {
-    add_dummy();
+    for (int i = -10; i <= 10; i++)
+      add_dummy({ 1, i, 5 });
     set_message("NEEEEEEXTTTT", "", 5);
   }
 
@@ -375,7 +377,7 @@ void Warg_Server::update_target(UID character_id)
     character->target_id = 0;
 }
 
-UID Warg_Server::add_dummy()
+UID Warg_Server::add_dummy(vec3 position)
 {
   UID id = uid();
 
@@ -385,7 +387,7 @@ UID Warg_Server::add_dummy()
   dummy->id = id;
   dummy->team = 2;
   strcpy(dummy->name, "Combat Dummy");
-  dummy->physics.position = {1, 0, 15};
+  dummy->physics.position = position;
   dummy->physics.orientation = map->spawn_orientation[0];
   dummy->hp_max = 50;
   dummy->hp = dummy->hp_max;

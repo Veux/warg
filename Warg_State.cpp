@@ -684,6 +684,27 @@ void Warg_State::update()
   // camera must be set before render entities, or they get a 1 frame lag
   renderer.set_camera(camera.pos, camera.dir);
 
+  vec3 ray = renderer.ray_from_screen_pixel(cursor_position);
+  set_message("cursor ray", s(ray.x, " ", ray.y, " ", ray.z), 5);
+
+  //float32 closest = 100000;
+  //vec3 closest_pos;
+  //for (Triangle &surface : map->colliders)
+  //{
+  //  vec3 intersection_point;
+  //  bool intersects = ray_intersects_triangle(camera.pos, ray, surface, &intersection_point);
+  //  if (intersects && length(camera.pos - intersection_point) < closest)
+  //  {
+  //    closest = length(closest - intersection_point);
+  //    closest_pos = intersection_point;
+  //  }
+  //}
+
+  Material_Descriptor material;
+  material.albedo.mod = rgb_vec4(255, 0, 0);
+  static Node_Index meme = scene.add_mesh(cube, "curosr meme", &material);
+  scene.nodes[meme].position = camera.pos + (5.f) * ray;
+
   //
   // fire_emitter(
   //    &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));

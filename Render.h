@@ -763,6 +763,7 @@ struct Renderer
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
   void render(float64 state_time);
+  vec3 ray_from_screen_pixel(ivec2 pixel);
   std::string name = "Unnamed Renderer";
   bool use_txaa = true;
   bool use_fxaa = true;
@@ -846,8 +847,10 @@ struct Renderer
   mat4 projection;
   vec3 camera_position = vec3(0);
   vec3 prev_camera_position = vec3(0);
+  vec3 camera_gaze;
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
+  float32 znear;
 
   Framebuffer previous_draw_target; // full render scaled, float linear
 
