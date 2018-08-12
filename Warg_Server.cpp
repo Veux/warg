@@ -185,7 +185,7 @@ void Warg_Server::try_cast_spell(Character &caster, UID target_id, Spell_Index s
     target = get_character(target_id);
 
   Cast_Error err;
-  if (static_cast<int>(err = cast_viable(caster.id, target_id, spell_status)))
+  if (static_cast<int>(err = cast_viable(caster.id, target_id, spell_status, false)))
     /*    push_all(new Cast_Error_Message(caster.id, target_, spell_, (int)err))*/;
   else
     cast_spell(caster.id, target ? target->id : 0, spell_status);
@@ -267,7 +267,7 @@ void Warg_Server::update_cast(UID caster_id, float32 dt)
   }
 }
 
-Cast_Error Warg_Server::cast_viable(UID caster_id, UID target_id, Spell_Status *spell_status)
+Cast_Error Warg_Server::cast_viable(UID caster_id, UID target_id, Spell_Status *spell_status, bool ignore_gcd)
 {
   ASSERT(spell_status);
   Spell_Formula *spell_formula = spell_db.get_spell(spell_status->formula_index);
@@ -286,7 +286,7 @@ Cast_Error Warg_Server::cast_viable(UID caster_id, UID target_id, Spell_Status *
     return Cast_Error::Invalid_Target;
   if (caster->silenced)
     return Cast_Error::Silenced;
-  if (caster->global_cooldown > 0 && spell_formula->on_global_cooldown)
+  if (!ignore_gcd && caster->global_cooldown > 0 && spell_formula->on_global_cooldown)
     return Cast_Error::Global_Cooldown;
   if (spell_status->cooldown_remaining > 0)
     return Cast_Error::Cooldown;
@@ -315,7 +315,7 @@ void Warg_Server::release_spell(UID caster_id, UID target_id, Spell_Status *spel
   Character *target = get_character(target_id);
 
   Cast_Error err;
-  if (static_cast<int>(err = cast_viable(caster_id, target_id, spell_status)))
+  if (static_cast<int>(err = cast_viable(caster_id, target_id, spell_status, true)))
     return;
 
   if (spell_formula->_on_release)

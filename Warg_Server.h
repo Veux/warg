@@ -24,7 +24,7 @@ struct Warg_Server
 
   UID add_char(int team, const char *name);
   UID add_dummy();
-  Cast_Error cast_viable(UID caster_, UID target_, Spell_Status *spell);
+  Cast_Error cast_viable(UID caster_, UID target_, Spell_Status *spell, bool ignore_gcd);
   void try_cast_spell(Character &caster, UID target_id, Spell_Index spell_formula_index);
   void cast_spell(UID caster, UID target, Spell_Status *spell);
   void begin_cast(UID caster_, UID target_, Spell_Status *spell);
