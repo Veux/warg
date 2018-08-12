@@ -6,33 +6,24 @@ void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &coll
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
 
-Map make_blades_edge()
+Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
 {
-  Map blades_edge;
+  spawn_pos[0] = { 0, 0, 15 };
+  spawn_pos[1] = { 45, 45, 5 };
+  spawn_orientation[0] = angleAxis(0.f, vec3(0, 1, 0));
+  spawn_orientation[1] = angleAxis(0.f, vec3(0, -1, 0));
 
-  // spawns
-  blades_edge.spawn_pos[0] = {0, 0, 15};
-  blades_edge.spawn_pos[1] = {45, 45, 5};
-  blades_edge.spawn_orientation[0] = angleAxis(0.f, vec3(0, 1, 0));
-  blades_edge.spawn_orientation[1] = angleAxis(0.f, vec3(0, -1, 0));
-
-  // blades_edge.mesh.unique_identifier = "blades_edge_map";
-  // blades_edge.material.backface_culling = false;
-  // blades_edge.material.albedo = "crate_diffuse.png";
-  // blades_edge.material.emissive = "";
-  // blades_edge.material.normal = "test_normal.png";
-  // blades_edge.material.roughness = "crate_roughness.png";
-  // blades_edge.material.vertex_shader = "vertex_shader.vert";
-  // blades_edge.material.frag_shader = "fragment_shader.frag";
-  // blades_edge.material.casts_shadows = true;
-  // blades_edge.material.uv_scale = vec2(16);
-  blades_edge.material.albedo.wrap_s = GL_TEXTURE_WRAP_S;
-  blades_edge.material.albedo.wrap_t = GL_TEXTURE_WRAP_T;
-  blades_edge.material.metalness.mod = vec4(0);
+  material.albedo.wrap_s = GL_TEXTURE_WRAP_S;
+  material.albedo.wrap_t = GL_TEXTURE_WRAP_T;
+  material.metalness.mod = vec4(0);
   if (CONFIG.render_simple)
-    blades_edge.material.albedo.mod = vec4(0.4f);
+    material.albedo.mod = vec4(0.4f);
 
-  return blades_edge;
+  node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &material);
+  colliders = collect_colliders(scene);
+
+  // collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
+  // collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
 }
 
 void Character::update_hp(float32 dt)

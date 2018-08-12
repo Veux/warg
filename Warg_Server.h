@@ -17,6 +17,7 @@ using std::vector;
 struct Warg_Server
 {
   Warg_Server();
+  ~Warg_Server();
   void update(float32 dt);
   void connect(std::shared_ptr<Peer> peer);
   void process_messages();
@@ -39,10 +40,9 @@ struct Warg_Server
   float64 time = 0;
   uint32 tick = 0;
   std::atomic<bool> running = false;
-  Map map;
+  Map *map;
   Resource_Manager resource_manager;
   Flat_Scene_Graph scene;
   Spell_Database spell_db;
   Game_State game_state;
-  vector<Triangle> collider_cache;
 };

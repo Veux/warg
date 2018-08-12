@@ -4,13 +4,14 @@
 Warg_Server::Warg_Server() : scene(&resource_manager)
 {
   resource_manager.init();
-  map = make_blades_edge();
-  map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
-  collider_cache = collect_colliders(scene);
-  // collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
-  // collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
+  map = new Blades_Edge(scene);
   spell_db = Spell_Database();
   add_dummy();
+}
+
+Warg_Server::~Warg_Server()
+{
+  delete map;
 }
 
 void Warg_Server::update(float32 dt)
@@ -52,9 +53,9 @@ void Warg_Server::update(float32 dt)
     }
 
     vec3 old_pos = ch.physics.position;
-    move_char(ch, last_input, collider_cache);
+    move_char(ch, last_input, map->colliders);
     if (_isnan(ch.physics.position.x) || _isnan(ch.physics.position.y) || _isnan(ch.physics.position.z))
-      ch.physics.position = map.spawn_pos[ch.team];
+      ch.physics.position = map->spawn_pos[ch.team];
     if (ch.alive)
     {
       if (ch.physics.position != old_pos)
@@ -120,7 +121,7 @@ bool Warg_Server::update_spell_object(Spell_Object *spell_object)
   float epsilon = object_formula->speed * dt / 2.f * 1.05f;
   if (d < epsilon)
   {
-    object_formula->_on_hit(object_formula, spell_object, &game_state, &collider_cache);
+    object_formula->_on_hit(object_formula, spell_object, &game_state, &map->colliders);
 
     return true;
   }
@@ -318,7 +319,7 @@ void Warg_Server::release_spell(UID caster_id, UID target_id, Spell_Status *spel
     return;
 
   if (spell_formula->_on_release)
-    spell_formula->_on_release(spell_formula, &game_state, caster, &collider_cache);
+    spell_formula->_on_release(spell_formula, &game_state, caster, &map->colliders);
 
   if (!spell_formula->cast_time && spell_formula->on_global_cooldown)
     caster->global_cooldown = caster->effective_stats.global_cooldown;
@@ -391,7 +392,7 @@ UID Warg_Server::add_dummy()
   dummy->team = 2;
   strcpy(dummy->name, "Combat Dummy");
   dummy->physics.position = {1, 0, 15};
-  dummy->physics.orientation = map.spawn_orientation[0];
+  dummy->physics.orientation = map->spawn_orientation[0];
   dummy->hp_max = 50;
   dummy->hp = dummy->hp_max;
   dummy->mana_max = 10000;
@@ -425,8 +426,8 @@ UID Warg_Server::add_char(int team, const char *name)
   character->id = id;
   character->team = team;
   strncpy(character->name, name, MAX_CHARACTER_NAME_LENGTH);
-  character->physics.position = map.spawn_pos[team];
-  character->physics.orientation = map.spawn_orientation[team];
+  character->physics.position = map->spawn_pos[team];
+  character->physics.orientation = map->spawn_orientation[team];
   character->hp_max = 100;
   character->hp = character->hp_max;
   character->mana_max = 500;

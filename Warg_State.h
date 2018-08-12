@@ -71,8 +71,7 @@ struct Warg_State : protected State
   Session *session = nullptr;
   Latency_Tracker latency_tracker;
 
-  Map map;
-  vector<Triangle> collider_cache;
+  Map *map;
 
   UID player_character_id = 0;
   UID target_id = 0;

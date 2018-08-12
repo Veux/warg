@@ -13,10 +13,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 {
   session = session_;
 
-  map = make_blades_edge();
+  map = new Blades_Edge(scene);
   spell_db = Spell_Database();
-  map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &map.material);
-  collider_cache = collect_colliders(scene);
 
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
@@ -31,6 +29,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 Warg_State::~Warg_State()
 {
   session->end();
+  delete map;
 }
 
 void Warg_State::handle_input_events()
@@ -307,7 +306,7 @@ void Warg_State::set_camera_geometry()
     return;
 
   float effective_zoom = camera.zoom;
-  for (Triangle &surface : collider_cache)
+  for (Triangle &surface : map->colliders)
   {
     vec3 intersection_point;
     bool intersects =
@@ -507,9 +506,9 @@ void Warg_State::predict_state()
     vec3 radius = player_character->radius;
     float32 movement_speed = player_character->effective_stats.speed;
 
-    move_char(*player_character, input, collider_cache);
+    move_char(*player_character, input, map->colliders);
     if (vec3_has_nan(physics.position))
-      physics.position = map.spawn_pos[player_character->team];
+      physics.position = map->spawn_pos[player_character->team];
 
     predicted_state.input_number = input.number;
     state_buffer.push_back(predicted_state);
@@ -650,7 +649,7 @@ void Warg_State::update_animation_objects()
       animation_object.physics.velocity.z = 0;
 
     collide_and_slide_char(animation_object.physics, animation_object.radius, animation_object.physics.velocity,
-        vec3(0.f, 0.f, animation_object.physics.velocity.z), collider_cache);
+        vec3(0.f, 0.f, animation_object.physics.velocity.z), map->colliders);
 
     scene.nodes[animation_object.node].position = animation_object.physics.position;
 
