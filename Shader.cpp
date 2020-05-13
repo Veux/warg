@@ -3,7 +3,9 @@
 #include "Globals.h"
 #include "Render.h"
 
-static GLuint load_shader(const std::string &vertex_path, const std::string &fragment_path)
+std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
+
+GLuint load_shader(const std::string &vertex_path, const std::string &fragment_path)
 {
   check_gl_error();
   std::string full_vertex_path = BASE_SHADER_PATH + vertex_path;
@@ -66,7 +68,8 @@ static GLuint load_shader(const std::string &vertex_path, const std::string &fra
   if (!success)
   {
     set_message("GL Shader failed.");
-    ASSERT(0);
+    return 0;
+    //ASSERT(0);
   }
   set_message("Shader loaded successfully");
 
@@ -74,8 +77,8 @@ static GLuint load_shader(const std::string &vertex_path, const std::string &fra
   return program;
 }
 
-Shader::Shader_Handle::Shader_Handle(GLuint i) { program = i; }
-Shader::Shader_Handle::~Shader_Handle() { glDeleteProgram(program); }
+Shader_Handle::Shader_Handle(GLuint i) { program = i; }
+Shader_Handle::~Shader_Handle() { glDeleteProgram(program); }
 Shader::Shader() {}
 Shader::Shader(const std::string &vertex, const std::string &fragment) { load(vertex.c_str(), fragment.c_str()); }
 
@@ -83,13 +86,12 @@ void Shader::load(const std::string &vertex, const std::string &fragment)
 {
   std::string key = vertex;
   key.append(fragment);
-  static std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> cache;
 
-  auto ptr = cache[key].lock();
+  auto ptr = SHADER_CACHE[key].lock();
   if (!ptr)
   {
     program = ptr = std::make_shared<Shader_Handle>(load_shader(vertex, fragment));
-    cache[key] = ptr;
+    SHADER_CACHE[key] = ptr;
     // set_message("Caching light uniform locations");
     program->vs = vs = std::string(vertex);
     program->fs = fs = std::string(fragment);
@@ -124,20 +126,20 @@ void Shader::set_uniform(const char *name, int32 i)
   glUniform1i(location, i);
 }
 
-void Shader::set_uniform(const char *name, glm::vec2 v)
+void Shader::set_uniform(const char *name, const glm::vec2& v)
 {
   GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform2fv(location, 1, &v[0]);
 }
 
-void Shader::set_uniform(const char *name, glm::vec3 &v)
+void Shader::set_uniform(const char *name, const glm::vec3 &v)
 {
   GLint location = program->get_uniform_location(name);
   check_err(location, name);
   glUniform3fv(location, 1, &v[0]);
 }
-void Shader::set_uniform(const char *name, glm::vec4 &v)
+void Shader::set_uniform(const char *name, const glm::vec4 &v)
 {
   GLint location = program->get_uniform_location(name);
   check_err(location, name);
@@ -149,7 +151,7 @@ void Shader::set_uniform(const char *name, const glm::mat4 &m)
   check_err(location, name);
   glUniformMatrix4fv(location, 1, GL_FALSE, &m[0][0]);
 }
-GLint Shader::Shader_Handle::get_uniform_location(const char *name)
+GLint Shader_Handle::get_uniform_location(const char *name)
 {
   GLint location;
   auto search = location_cache.find(name);
@@ -183,7 +185,7 @@ void Shader::check_err(GLint loc, const char *name)
   }
 }
 
-void Shader::Shader_Handle::set_location_cache()
+void Shader_Handle::set_location_cache()
 {
 #ifdef DEBUG
   GLint id;

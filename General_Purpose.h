@@ -1,14 +1,11 @@
 #pragma once
-#include "Forward_Declarations.h"
 #include "Timer.h"
 #include "Array_String.h"
-#include <glbinding/Binding.h>
-#include <glbinding/gl33core/gl.h>
 #include <unordered_map>
 #include <queue>
 #include <mutex>
-using namespace gl;
-using namespace gl33core;
+#include "glad/glad.h"
+enum struct Light_Type;
 #define ASSERT(x) _errr(x, __FILE__, __LINE__)
 
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *, uint32);
@@ -52,8 +49,8 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
     std::string message_log = get_message_log();
     push_log_to_disk();
     std::string end_of_log;
-    uint32 length = message_log.size();
-    uint32 char_count = 1000;
+    size_t length = message_log.size();
+    size_t char_count = 1000;
     if (length < char_count)
       char_count = length;
     else
@@ -98,14 +95,15 @@ public:
   bool load(std::string filename, Image_Data *data);
   static void loader_loop(Image_Loader *loader);
 
+  bool running = true;
+
 private:
   std::unordered_map<std::string, Image_Data> database;
   std::queue<std::string> load_queue;
   std::mutex db_mtx;
   std::mutex queue_mtx;
-  std::atomic<uint32> queue_size;
-  bool running = true;
-  std::thread threads[4];
+  std::atomic<size_t> queue_size;
+  std::thread threads[3];
 };
 
 bool all_equal(int32 a, int32 b, int32 c);
@@ -129,10 +127,11 @@ std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
 std::string qtos(glm::quat v);
 
-std::string to_string(Light_Type value);
-std::string to_string(glm::mat4 m);
+std::string to_string(Light_Type& value);
+std::string to_string(glm::mat4& m);
 std::string to_string(Array_String &s);
-std::string to_string(vec4 value);
+std::string to_string(vec4& value);
+//std::string to_string(ivec4& value);
 
 vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
 float64 random_between(float64 min, float64 max);

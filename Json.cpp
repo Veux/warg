@@ -116,7 +116,7 @@ void from_json(const json &j, Light &p)
   p.shadow_fov = j.at("Shadow FoV");
 }
 
-void to_json(json &result, const Material &p) { result = p.descriptor; }
+void to_json(json &result, const Material &p) { result = *p.get_descriptor(); }
 
 void from_json(const json &j, Material &p)
 {
@@ -265,7 +265,6 @@ void from_json(const json &j, std::vector<vec2> &p)
 void to_json(json &result, const Mesh_Data &p)
 {
   json j;
-  j["Name"] = p.name;
   j["Positions"] = p.positions;
   j["Normals"] = p.normals;
   j["Texture_Coordinates"] = p.texture_coordinates;
@@ -277,7 +276,6 @@ void to_json(json &result, const Mesh_Data &p)
 void from_json(const json &j, Mesh_Data &p)
 {
   Mesh_Data result;
-  result.name = j.at("Name").get<std::string>();
   result.positions = j.at("Positions").get<std::vector<vec3>>();
   result.normals = j.at("Normals").get<std::vector<vec3>>();
   result.texture_coordinates = j.at("Texture_Coordinates").get<std::vector<vec2>>();
@@ -290,9 +288,6 @@ void to_json(json &result, const Mesh_Descriptor &p)
 {
   json j;
   j["Name"] = p.name;
-  j["Assimp_Filename"] = p.assimp_filename;
-  j["Assimp_Index"] = p.assimp_index;
-  j["Primitive"] = p.primitive;
   j["Mesh_Data"] = p.mesh_data;
   result = j;
 }
@@ -302,9 +297,6 @@ void from_json(const json &j, Mesh_Descriptor &p)
   Mesh_Descriptor result;
   std::string name = j.at("Name");
   result.name = name;
-  result.assimp_filename = j.at("Assimp_Filename").get<std::string>();
-  result.assimp_index = j["Assimp_Index"].get<uint32>();
-  result.primitive = j.at("Primitive");
   result.mesh_data = j.at("Mesh_Data");
   p = result;
 }

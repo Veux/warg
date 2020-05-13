@@ -1,4 +1,5 @@
 #pragma once
+#include "stdafx.h"
 #include "Array_String.h"
 #include "Globals.h"
 #include <SDL2/SDL.h>

@@ -5,47 +5,85 @@
 #include "Render.h"
 #include "Render_Test_State.h"
 #include "State.h"
-#include "Sarg_State.h"
 #include "Timer.h"
 #include "Warg_State.h"
-#undef main
 #include "SDL_Imgui_State.h"
 
-void gl_before_check(const glbinding::FunctionCall &f)
+// void gl_before_check(const glbinding::FunctionCall &f)
+//{
+//  std::stringstream opengl_call_ss;
+//  opengl_call_ss << f.function->name() << '(';
+//  for (size_t i = 0; i < f.parameters.size(); ++i)
+//  {
+//    opengl_call_ss << f.parameters[i];
+//    if (i < f.parameters.size() - 1)
+//      opengl_call_ss << ", ";
+//  }
+//  opengl_call_ss << ")";
+//  if (f.returnValue)
+//    opengl_call_ss << " Returned: " << f.returnValue;
+//
+//  set_message("BEFORE OPENGL call: ", opengl_call_ss.str());
+//}
+// void gl_after_check(const glbinding::FunctionCall &f)
+//{
+//  std::stringstream opengl_call_ss;
+//  opengl_call_ss << f.function->name() << '(';
+//  for (size_t i = 0; i < f.parameters.size(); ++i)
+//  {
+//    opengl_call_ss << f.parameters[i];
+//    if (i < f.parameters.size() - 1)
+//      opengl_call_ss << ", ";
+//  }
+//  opengl_call_ss << ")";
+//  if (f.returnValue)
+//    opengl_call_ss << " Returned: " << f.returnValue;
+//
+//  set_message("", opengl_call_ss.str());
+//  check_gl_error();
+//}
+
+void _post_call_callback_default(const char *name, void *funcptr, int len_args, ...)
 {
-  std::string opengl_call = f.function->name();
-  opengl_call += '(';
-  for (size_t i = 0; i < f.parameters.size(); ++i)
+  if (!WARG_RUNNING)
   {
-    opengl_call += f.parameters[i]->asString();
-    if (i < f.parameters.size() - 1)
-      opengl_call += ", ";
+    return;
   }
-  opengl_call += ")";
-
-  if (f.returnValue)
-    opengl_call += " Returned: " + f.returnValue->asString();
-
-  set_message("BEFORE OPENGL call: ", opengl_call);
-  check_gl_error();
-}
-void gl_after_check(const glbinding::FunctionCall &f)
-{
-  std::string opengl_call = f.function->name();
-  opengl_call += '(';
-  for (size_t i = 0; i < f.parameters.size(); ++i)
+  // return;
+  GLenum error_code;
+  error_code = glad_glGetError();
+  // check_gl_error();
+  va_list arg;
+  va_start(arg, len_args);
+  for (uint32 i = 0; i < len_args; ++i)
   {
-    opengl_call += f.parameters[i]->asString();
-    if (i < f.parameters.size() - 1)
-      opengl_call += ", ";
   }
-  opengl_call += ")";
 
-  if (f.returnValue)
-    opengl_call += " Returned: " + f.returnValue->asString();
-
-  set_message("", opengl_call);
-  check_gl_error();
+  if (error_code != GL_NO_ERROR)
+  {
+    std::string error;
+    switch (error_code)
+    {
+      case GL_INVALID_OPERATION:
+        error = "INVALID_OPERATION";
+        break;
+      case GL_INVALID_ENUM:
+        error = "INVALID_ENUM";
+        break;
+      case GL_INVALID_VALUE:
+        error = "INVALID_VALUE";
+        break;
+      case GL_OUT_OF_MEMORY:
+        error = "OUT_OF_MEMORY";
+        break;
+      case GL_INVALID_FRAMEBUFFER_OPERATION:
+        error = "INVALID_FRAMEBUFFER_OPERATION";
+        break;
+    }
+    set_message("GL ERROR", "GL_" + error);
+    push_log_to_disk();
+    ASSERT(0);
+  }
 }
 
 void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> &available_states, bool WantTextInput,
@@ -153,7 +191,7 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
     }
   }
 
-  if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP)
+  if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP || e.type == SDL_TEXTINPUT)
   {
     if (WantTextInput && (!IMGUI.ignore_all_input))
     {
@@ -162,12 +200,13 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
     }
     else
     {
+      if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP)
       state_key_events->push_back(e);
       return;
     }
   }
 
-  if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL)
+  if (e.type == SDL_MOUSEWHEEL)//e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL)
   {
     if (WantCaptureMouse && (!IMGUI.ignore_all_input))
     {
@@ -196,7 +235,7 @@ int main(int argc, char *argv[])
   uint8_t team;
 
   WARG_SERVER = false;
-
+  ASSERT(!enet_initialize());
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
     WARG_SERVER = true;
@@ -232,26 +271,26 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_Init(SDL_INIT_EVERYTHING);
     uint32 display_count = uint32(SDL_GetNumVideoDisplays());
-    std::stringstream s;
+    std::stringstream ss;
     for (uint32 i = 0; i < display_count; ++i)
     {
-      s << "Display " << i << ":\n";
+      ss << "Display " << i << ":\n";
       SDL_DisplayMode mode;
       uint32 mode_count = uint32(SDL_GetNumDisplayModes(i));
       for (uint32 j = 0; j < mode_count; ++j)
       {
         SDL_GetDisplayMode(i, j, &mode);
-        s << "Supported resolution: " << mode.w << "x" << mode.h << " " << mode.refresh_rate << "hz  "
-          << SDL_GetPixelFormatName(mode.format) << "\n";
+        ss << "Supported resolution: " << mode.w << "x" << mode.h << " " << mode.refresh_rate << "hz  "
+           << SDL_GetPixelFormatName(mode.format) << "\n";
       }
     }
-    set_message(s.str());
+    set_message(ss.str());
 
     window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
     int32 flags = SDL_WINDOW_OPENGL;
     // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     window = SDL_CreateWindow("Warg_Engine", 100, 130, window_size.x, window_size.y, flags);
     SDL_RaiseWindow(window);
@@ -261,9 +300,9 @@ int main(int argc, char *argv[])
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
     SDL_GL_GetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, &minor);
     set_message("OpenGL Version.", std::to_string(major) + " " + std::to_string(minor));
-    if (major <= 3)
+    if (major <= 4)
     {
-      if (major < 3 || minor < 1)
+      if (major < 4 || minor < 5)
       {
         set_message("Unsupported OpenGL Version.");
         push_log_to_disk();
@@ -276,18 +315,28 @@ int main(int argc, char *argv[])
     {
       swap = SDL_GL_SetSwapInterval(1);
     }
+    gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress);
+    
+  
 
-    glbinding::Binding::initialize();
-    glbinding::setCallbackMaskExcept(
-        glbinding::CallbackMask::After | glbinding::CallbackMask::ParametersAndReturnValue, {"glGetError", "glFlush"});
+   // set_message("glad OpenGL", s(GLVersion.major, ".", GLVersion.minor));
+    // GLAPI void glad_set_pre_callback(gl_before_check);
+
+    // glbinding::Binding::initialize();
+    // glbinding::setCallbackMaskExcept(
+    //   glbinding::CallbackMask::After | glbinding::CallbackMask::ParametersAndReturnValue, {"glGetError",
+    //   "glFlush"});
 #if ENABLE_OPENGL_ERROR_CATCHING_AND_LOG
-    glbinding::setBeforeCallback(gl_before_check);
-    glbinding::setAfterCallback(gl_after_check);
+
+    //glad_set_post_callback(_post_call_callback_default);
+
+    // glbinding::setBeforeCallback(gl_before_check);
+    // glbinding::setAfterCallback(gl_after_check);
 #endif
+
     glClearColor(0, 0, 0, 1);
     checkSDLError(__LINE__);
     SDL_ClearError();
-
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
 
@@ -298,17 +347,28 @@ int main(int argc, char *argv[])
   ImGui::StyleColorsDark();
 
   std::vector<State *> states;
+  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
-/*
-  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
-  states.emplace_back((State *)new Sarg_Client_State("Sarg Client", window, window_size));
-  states.emplace_back((State *)new Sarg_Server_State("Sarg Server", window, window_size));*/
+
+  
+  states.emplace_back((State *)new Nu_Warg_Server("Nu_Warg_Server", window, window_size));
+  //states.emplace_back((State *)new Nu_Warg_Client("Nu_Warg_Client", nullptr, window_size));
+
+
+
+
+
+
+
+
+
+  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
   // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
-  // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it global
-  // is best?
+  // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it
+  // global is best?
 
   // rendered state has control of the mouse as well
   State *rendered_state = states[0];
@@ -433,7 +493,10 @@ int main(int argc, char *argv[])
         if (this_state_draws_imgui)
         {
           if (imgui_frame_active)
+          {
+          
             states[i]->draw_gui();
+          }
         }
       }
 
@@ -516,12 +579,14 @@ int main(int argc, char *argv[])
     {
       states[i]->thread.join();
     }
-
     delete states[i];
   }
   push_log_to_disk();
+  states.clear();
+  IMAGE_LOADER.running = false;
+  //warg_session.end();
+  IMGUI_TEXTURE_DRAWS.clear();
   IMGUI.destroy();
-  warg_session.end();
   SDL_Quit();
   CONFIG.save(config_filename);
   return 0;

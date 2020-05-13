@@ -118,7 +118,6 @@ struct Map
   Node_Index node;
   Mesh_Data mesh;
   Material_Descriptor material;
-  std::vector<Triangle> colliders;
 
   vec3 spawn_pos[2];
   quat spawn_orientation[2];
@@ -144,10 +143,9 @@ struct Game_State
   uint8 spell_object_count = 0;
 };
 
-std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene);
-void move_char(Character &character, Input command, std::vector<Triangle> colliders);
+void move_char(Character &character, Input command, Flat_Scene_Graph* scene);
 void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
-    const std::vector<Triangle> &colliders);
+   Flat_Scene_Graph* scene);
 void character_copy(Character *dst, Character *src);
 void game_state_copy(Game_State *dst, Game_State *src);
 Spell_Index get_casting_spell_formula_index(Character *character);

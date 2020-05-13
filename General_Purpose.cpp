@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "General_Purpose.h"
 #include "Json.h"
 #include "Third_party/stb/stb_image.h"
@@ -41,7 +42,7 @@ vec3 rand(vec3 max)
 std::string fix_filename(std::string str)
 {
   std::string result;
-  uint32 size = str.size();
+  uint32 size = uint32(str.size());
   for (uint32 i = 0; i < size; ++i)
   {
     char c = str[i];
@@ -191,16 +192,18 @@ glm::vec4 string_to_float4_color(std::string color)
 
 Uint64 dankhash(const float32 *data, uint32 size)
 {
-  Uint64 h = 1631243561234777777;
-  Uint64 acc = 0;
+  uint32 h = 0;
+  std::hash<float32> hasher;
+  static Timer hashtimer(1000);
+  hashtimer.start();
   for (uint32 i = 0; i < size; ++i)
   {
-    float64 c = data[i] * h;
-    Uint64 a = (Uint64)c;
-    acc += a;
-    h = (h ^ a) * a * i; // idk what im doing
+    float32 f = data[i];
+    h ^= hasher(f) + 0x9e3779b9 + (h<<6) + (h>>2);
   }
-  return h + acc;
+  hashtimer.stop();
+  set_message("hashtimer:", hashtimer.string_report(), 30.0f);
+  return h;
 }
 
 // void _check_gl_error(const char *file, uint32 line)
@@ -243,7 +246,6 @@ Uint64 dankhash(const float32 *data, uint32 size)
 //}
 void check_gl_error()
 {
-  // glFlush();
   GLenum err = glGetError();
   if (err != GL_NO_ERROR)
   {
@@ -439,7 +441,7 @@ std::string qtos(glm::quat v)
   return result;
 }
 
-std::string to_string(glm::mat4 m)
+std::string to_string(glm::mat4 &m)
 {
   std::string result = "";
   for (uint32 column = 0; column < 4; ++column)
@@ -473,7 +475,7 @@ std::string to_string(glm::mat4 m)
   return result;
 }
 
-std::string to_string(vec4 value)
+std::string to_string(vec4& value)
 {
   std::string r = std::to_string(value.r);
   std::string g = std::to_string(value.g);
@@ -490,7 +492,7 @@ template <> std::string s<std::string>(std::string value)
   return value;
 }
 
-std::string to_string(Light_Type value)
+std::string to_string(Light_Type& value)
 {
   if (value == Light_Type::parallel)
     return "Parallel";
@@ -686,7 +688,7 @@ Image_Loader::Image_Loader()
   threads[0] = std::thread(loader_loop, this);
   threads[1] = std::thread(loader_loop, this);
   threads[2] = std::thread(loader_loop, this);
-  threads[3] = std::thread(loader_loop, this);
+  // threads[3] = std::thread(loader_loop, this);
 }
 Image_Loader::~Image_Loader()
 {
@@ -694,7 +696,7 @@ Image_Loader::~Image_Loader()
   threads[0].join();
   threads[1].join();
   threads[2].join();
-  threads[3].join();
+  // threads[3].join();
 }
 
 bool Image_Loader::load(std::string path, Image_Data *data)
@@ -719,7 +721,7 @@ bool Image_Loader::load(std::string path, Image_Data *data)
 
 bool has_img_file_extension(std::string name)
 {
-  uint32 size = name.size();
+  size_t size = name.size();
 
   if (size <= 3)
     return false;

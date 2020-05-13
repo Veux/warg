@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <assimp/Importer.hpp>
@@ -9,9 +10,9 @@
 #include <enet/enet.h>
 #include <fstream>
 #include <functional>
-#include <glm/glm.hpp>
+#include <glm/glm.hpp>/*
 #include <glbinding/Binding.h>
-#include <glbinding/gl33core/gl.h>
+#include <glbinding/gl33core/gl.h>*/
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -29,6 +30,7 @@
 #include <sys/types.h>
 #include <string>
 #include <sstream>
+#include <stack>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -37,6 +39,7 @@
 #include <SDL_image.h>
 #include <time.h>
 #include <thread>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 #include <Windows.h>

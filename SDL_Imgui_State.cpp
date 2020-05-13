@@ -273,17 +273,40 @@ bool SDL_Imgui_State::process_event(SDL_Event *event)
         mouse_pressed[2] = true;
       return true;
     }
+    case SDL_MOUSEBUTTONUP:
+    {
+      if (event->button.button == SDL_BUTTON_LEFT)
+        mouse_pressed[0] = false;
+      if (event->button.button == SDL_BUTTON_RIGHT)
+        mouse_pressed[1] = false;
+      if (event->button.button == SDL_BUTTON_MIDDLE)
+        mouse_pressed[2] = false;
+      return true;
+    }
+
     case SDL_TEXTINPUT:
     {
       io.AddInputCharactersUTF8(event->text.text);
       return true;
     }
     case SDL_KEYDOWN:
-    case SDL_KEYUP:
     {
+      //io.AddInputCharactersUTF8(event->text.text);
       int key = event->key.keysym.scancode;
       IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
       io.KeysDown[key] = (event->type == SDL_KEYDOWN);
+      io.KeyShift = ((SDL_GetModState() & KMOD_SHIFT) != 0);
+      io.KeyCtrl = ((SDL_GetModState() & KMOD_CTRL) != 0);
+      io.KeyAlt = ((SDL_GetModState() & KMOD_ALT) != 0);
+      io.KeySuper = ((SDL_GetModState() & KMOD_GUI) != 0);
+      return true;
+    }
+    case SDL_KEYUP:
+    {
+      
+      int key = event->key.keysym.scancode;
+      IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
+      io.KeysDown[key] = !(event->type == SDL_KEYUP);
       io.KeyShift = ((SDL_GetModState() & KMOD_SHIFT) != 0);
       io.KeyCtrl = ((SDL_GetModState() & KMOD_CTRL) != 0);
       io.KeyAlt = ((SDL_GetModState() & KMOD_ALT) != 0);
@@ -423,12 +446,18 @@ void SDL_Imgui_State::build_draw_data()
 void SDL_Imgui_State::invalidate_device_objects()
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  if (vao)
-    glDeleteVertexArrays(1, &vao);
-  if (vbo)
-    glDeleteBuffers(1, &vbo);
+  if (font_texture)
+  {
+    glDeleteTextures(1, &font_texture);
+    ImGui::GetIO().Fonts->TexID = 0;
+    font_texture = 0;
+  }
   if (element_buffer)
     glDeleteBuffers(1, &element_buffer);
+  if (vbo)
+    glDeleteBuffers(1, &vbo);
+  if (vao)
+    glDeleteVertexArrays(1, &vao);
   vao = vbo = element_buffer = 0;
 
   if (shader_handle && vert_handle)
@@ -447,12 +476,7 @@ void SDL_Imgui_State::invalidate_device_objects()
     glDeleteProgram(shader_handle);
   shader_handle = 0;
 
-  if (font_texture)
-  {
-    glDeleteTextures(1, &font_texture);
-    ImGui::GetIO().Fonts->TexID = 0;
-    font_texture = 0;
-  }
+
 }
 
 SDL_Imgui_State::SDL_Imgui_State() {}
@@ -492,6 +516,9 @@ void SDL_Imgui_State::init(SDL_Window *window)
   io.KeyMap[ImGuiKey_Y] = SDL_SCANCODE_Y;
   io.KeyMap[ImGuiKey_Z] = SDL_SCANCODE_Z;
 
+  //io.AddInputCharacter('a');
+  //io.KeyMap[ImGuiKey_0] = SDL_SCANCODE_0;
+  //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   io.SetClipboardTextFn = set_clipboard;
   io.GetClipboardTextFn = get_clipboard;
   io.ClipboardUserData = NULL;

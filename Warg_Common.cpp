@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "Warg_Common.h"
 
-std::vector<Triangle> collect_colliders(const Flat_Scene_Graph &scene);
+//std::vector<Triangle> collect_colliders(const Flat_Scene_Graph &scene);
 void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
@@ -19,11 +19,8 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   if (CONFIG.render_simple)
     material.albedo.mod = vec4(0.4f);
 
-  node = scene.add_aiscene("Blades Edge", "Blades_Edge/blades_edge.fbx", &material);
-  colliders = collect_colliders(scene);
+  node = scene.add_aiscene("Blades_Edge/bea2.fbx","Blades Edge");
 
-  // collider_cache.push_back({ {1000, 1000, 0}, {-1000,1000,0}, {-1000,-1000,0} });
-  // collider_cache.push_back({ {-1000, -1000, 0}, {1000, -1000, 0}, {1000, 1000, 0} });
 }
 
 void Character::update_hp(float32 dt)
@@ -135,8 +132,9 @@ void Character::remove_debuff(Spell_ID debuff_id)
   }
 }
 
-void move_char(Character &character, Input command, std::vector<Triangle> colliders)
+void move_char(Character &character, Input command, Flat_Scene_Graph* scene)
 {
+  //return;
   vec3 &pos = character.physics.position;
   character.physics.orientation = command.orientation;
   vec3 dir = command.orientation * vec3(0, 1, 0);
@@ -178,40 +176,54 @@ void move_char(Character &character, Input command, std::vector<Triangle> collid
   if (grounded)
     vel.z = 0;
 
-  collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, colliders);
+  collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, scene);
 }
 
-std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene)
+//std::vector<Triangle> collect_colliders(Flat_Scene_Graph &scene)
+//{
+//  std::vector<Triangle> collider_cache;
+//
+//  std::vector<Render_Entity> entities = scene.visit_nodes_start();
+//  for (Render_Entity &entity : entities)
+//  {
+//    auto transform = [&](vec3 p) {
+//      vec4 q = entity.transformation * vec4(p.x, p.y, p.z, 1.0);
+//      return vec3(q.x, q.y, q.z);
+//    };
+//    Mesh_Data &mesh_data = entity.mesh->mesh->descriptor.mesh_data;
+//     
+//    for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
+//    {
+//      uint32 a, b, c;
+//      a = mesh_data.indices[i];
+//      b = mesh_data.indices[i + 1];
+//      c = mesh_data.indices[i + 2];
+//      Triangle t;
+//      t.a = transform(mesh_data.positions[a]);
+//      t.c = transform(mesh_data.positions[b]);
+//      t.b = transform(mesh_data.positions[c]);
+//      collider_cache.push_back(t);
+//    }
+//  }
+//
+//  return collider_cache;
+//}
+
+
+
+void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
 {
-  std::vector<Triangle> collider_cache;
 
-  auto entities = scene.visit_nodes_server_start();
-  for (auto &entity : entities)
-  {
-    auto transform = [&](vec3 p) {
-      vec4 q = entity.transformation * vec4(p.x, p.y, p.z, 1.0);
-      return vec3(q.x, q.y, q.z);
-    };
-    auto &mesh_data = entity.mesh_descriptor->mesh_data;
-    for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
-    {
-      uint32 a, b, c;
-      a = mesh_data.indices[i];
-      b = mesh_data.indices[i + 1];
-      c = mesh_data.indices[i + 2];
-      Triangle t;
-      t.a = transform(mesh_data.positions[a]);
-      t.c = transform(mesh_data.positions[b]);
-      t.b = transform(mesh_data.positions[c]);
-      collider_cache.push_back(t);
-    }
-  }
+  AABB box;
+  box.min = colpkt.pos_r3;
+  box.max = colpkt.pos_r3;
+  push_aabb(box, colpkt.pos_r3 - (2.f*colpkt.e_radius)-colpkt.vel_r3);
+  push_aabb(box, colpkt.pos_r3 + (2.f*colpkt.e_radius)+colpkt.vel_r3);
+  uint32 counter = 0;
+  std::vector<Triangle_Normal> colliders = scene->collision_octree.test_all(box, &counter);
+  
 
-  return collider_cache;
-}
 
-void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders)
-{
   for (auto &surface : colliders)
   {
     Triangle t;
@@ -223,7 +235,7 @@ void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &coll
 }
 
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
-    const std::vector<Triangle> &colliders)
+    Flat_Scene_Graph* scene)
 {
   float epsilon = 0.005f;
 
@@ -235,7 +247,7 @@ vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_
   colpkt.base_point = pos;
   colpkt.found_collision = false;
 
-  check_collision(colpkt, colliders);
+  check_collision(colpkt, scene);
 
   if (!colpkt.found_collision)
   {
@@ -271,12 +283,13 @@ vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_
   }
 
   collision_recursion_depth++;
-  return collide_char_with_world(colpkt, collision_recursion_depth, new_base_point, new_vel_vec, colliders);
+  return collide_char_with_world(colpkt, collision_recursion_depth, new_base_point, new_vel_vec, scene);
 }
 
 void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3 &vel, const vec3 &gravity,
-    const std::vector<Triangle> &colliders)
+    Flat_Scene_Graph* scene)
 {
+
   Collision_Packet colpkt;
   int collision_recursion_depth;
 
@@ -289,7 +302,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
 
   collision_recursion_depth = 0;
 
-  vec3 final_pos = collide_char_with_world(colpkt, collision_recursion_depth, e_space_pos, e_space_vel, colliders);
+  vec3 final_pos = collide_char_with_world(colpkt, collision_recursion_depth, e_space_pos, e_space_vel, scene);
 
   if (physics.grounded)
   {
@@ -300,7 +313,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
     colpkt.base_point = final_pos;
     colpkt.found_collision = false;
 
-    check_collision(colpkt, colliders);
+    check_collision(colpkt, scene);
     if (colpkt.found_collision && colpkt.nearest_distance > 0.05f)
       final_pos.z -= colpkt.nearest_distance - 0.005f;
   }
@@ -311,7 +324,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
   e_space_vel = gravity / colpkt.e_radius;
   collision_recursion_depth = 0;
 
-  final_pos = collide_char_with_world(colpkt, collision_recursion_depth, final_pos, e_space_vel, colliders);
+  final_pos = collide_char_with_world(colpkt, collision_recursion_depth, final_pos, e_space_vel, scene);
 
   colpkt.pos_r3 = final_pos * colpkt.e_radius;
   colpkt.vel_r3 = vec3(0, 0, -0.05);
@@ -320,7 +333,7 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
   colpkt.base_point = final_pos;
   colpkt.found_collision = false;
 
-  check_collision(colpkt, colliders);
+  check_collision(colpkt, scene);
 
   physics.grounded = colpkt.found_collision && gravity.z <= 0;
 
@@ -421,6 +434,7 @@ void game_state_copy(Game_State *dst, Game_State *src)
     character_copy(dst->characters + i, src->characters + i);
   for (size_t i = 0; i < src->spell_object_count; i++)
     dst->spell_objects[i] = src->spell_objects[i];
+  
 }
 
 Spell_Index get_casting_spell_formula_index(Character *character)

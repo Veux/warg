@@ -8,7 +8,6 @@ struct FS_Node
 {
   std::string path;
   bool is_dir;
-  Texture texture;
 };
 
 class File_Picker
@@ -25,10 +24,9 @@ private:
   std::string dir;
   std::vector<FS_Node> dircontents;
   size_t ndirs = 0;
-  int current_item = 0;
+  int last_clicked_node = 0;
   std::string result;
   bool display = true;
-  Texture dir_icon;
 };
 
 class Layout_Grid

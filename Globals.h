@@ -1,4 +1,12 @@
 #pragma once
+#include <glm/glm.hpp>
+#include <string>
+#include <random>
+#include <mutex>
+#include <thread>
+#include "SDL_Imgui_State.h"
+#include "General_Purpose.h"
+#include "Timer.h"
 
 #define MAX_INSTANCE_COUNT 40000
 #define UNIFORM_LIGHT_LOCATION 20
@@ -6,7 +14,7 @@
 #define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define ENABLE_ASSERTS 1
-#define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 0
+#define ENABLE_OPENGL_ERROR_CATCHING_AND_LOG 1
 #define INCLUDE_FILE_LINE_IN_LOG 1
 #define MAX_TEXTURE_SAMPLERS 20
 #define MAX_ANISOTROPY 8
@@ -30,15 +38,11 @@
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
 #elif _WIN32
-#define ROOT_PATH std::string("../")
+#define ROOT_PATH std::string("")
 #endif
 
-#define MAX_ARRAY_STRING_LENGTH 128
-#include "Forward_Declarations.h"
-#include <glm/glm.hpp>
-#include <iostream>
-#include <random>
-#include <vector>
+#define MAX_ARRAY_STRING_LENGTH 64
+
 
 template <typename T> std::string s(T value)
 {
@@ -79,4 +83,4 @@ extern std::thread::id MAIN_THREAD_ID;
 extern std::mutex IMGUI_MUTEX;
 extern SDL_Imgui_State IMGUI;
 extern SDL_Imgui_State TRASH_IMGUI;
-#include "General_Purpose.h"
+extern const glm::vec4 MISSING_TEXTURE_MOD;

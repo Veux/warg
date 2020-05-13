@@ -21,8 +21,8 @@ void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data &mesh)
   bitangent = normalize(bitangent);
   std::vector<vec3> tan = {tangent, tangent, tangent};
   std::vector<vec3> bitan = {bitangent, bitangent, bitangent};
-  int32 environment = mesh.positions.size();
-  std::vector<int32> ind = {environment + 0, environment + 1, environment + 2};
+  int32 end = (int32)mesh.positions.size();
+  std::vector<int32> ind = {end + 0, end + 1, end + 2};
   mesh.tangents.insert(mesh.tangents.end(), tan.begin(), tan.end());
   mesh.bitangents.insert(mesh.bitangents.end(), bitan.begin(), bitan.end());
   mesh.positions.insert(mesh.positions.end(), pos.begin(), pos.end());
@@ -59,9 +59,9 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, Mesh_Data &mesh)
       bitangent,
       bitangent,
   };
-  int32 environment = mesh.positions.size();
+  int32 end = (int32)mesh.positions.size();
   std::vector<int32> ind = {
-      environment + 0, environment + 1, environment + 2, environment + 3, environment + 4, environment + 5};
+      end + 0, end + 1, end + 2, end + 3, end + 4, end + 5};
   mesh.tangents.insert(mesh.tangents.end(), tan.begin(), tan.end());
   mesh.bitangents.insert(mesh.bitangents.end(), bitan.begin(), bitan.end());
   mesh.positions.insert(mesh.positions.end(), pos.begin(), pos.end());
@@ -76,7 +76,6 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, Mesh_Data &mesh)
 Mesh_Data load_mesh_cube()
 {
   Mesh_Data cube;
-  cube.name = "cube";
   vec3 a, b, c, d;
 
   // top
@@ -124,11 +123,56 @@ Mesh_Data load_mesh_cube()
   return cube;
 }
 
+void add_aabb(vec3 min, vec3 max, Mesh_Data &mesh) {
+
+  vec3 a, b, c, d;
+
+  // top
+  a = {min.x, min.y, max.z};
+  b = {min.x, max.y, max.z};
+  c = {max.x, max.y, max.z};
+  d = {max.x, min.y, max.z};
+  add_quad(a, b, c, d, mesh);
+
+  // bottom
+  a = {min.x, min.y, min.z};
+  b = {max.x, min.y, min.z};
+  c = {max.x, max.y, min.z};
+  d = {min.x, max.y, min.z};
+  add_quad(a, b, c, d, mesh);
+
+  // left
+  a = {min.x, max.y, min.z};
+  b = {min.x, max.y, max.z};
+  c = {min.x, min.y, max.z};
+  d = {min.x, min.y, min.z};
+  add_quad(a, b, c, d, mesh);
+
+  // right
+  a = {max.x, min.y, min.z};
+  b = {max.x, min.y, max.z};
+  c = {max.x, max.y, max.z};
+  d = {max.x, max.y, min.z};
+  add_quad(a, b, c, d, mesh);
+
+  // front
+  a = {min.x, min.y, min.z};
+  b = {min.x, min.y, max.z};
+  c = {max.x, min.y, max.z};
+  d = {max.x, min.y, min.z};
+  add_quad(a, b, c, d, mesh);
+
+  // back
+  a = {max.x, max.y, min.z};
+  b = {max.x, max.y, max.z};
+  c = {min.x, max.y, max.z};
+  d = {min.x, max.y, min.z};
+  add_quad(a, b, c, d, mesh);
+}
+
 Mesh_Data load_mesh_plane()
 {
-  set_message("building plane mesh_data");
   Mesh_Data mesh;
-  mesh.name = "plane";
   mesh.positions = {{-0.5, -0.5, 0}, {-0.5, 0.5, 0}, {0.5, 0.5, 0}, {-0.5, -0.5, 0}, {0.5, 0.5, 0}, {0.5, -0.5, 0}};
   mesh.texture_coordinates = {{0, 0}, {0, 1}, {1, 1}, {0, 0}, {1, 1}, {1, 0}};
   mesh.indices = {0, 1, 2, 3, 4, 5};
@@ -229,13 +273,22 @@ Mesh_Descriptor build_mesh_descriptor(const aiScene *scene, uint32 i, std::strin
     ASSERT(s == scene); // post process failed
   }
   ASSERT(aimesh->HasTangentsAndBitangents());
-  ASSERT(aimesh->HasVertexColors(0) == false); // TODO: add support for this
+  ASSERT(aimesh->HasVertexColors(0) == false); // TODO: add support for vertex colors
   ASSERT(aimesh->mNumUVComponents[0] == 2);
 
-  d.mesh_data.name = copy(&aimesh->mName);
+  d.name = copy(&aimesh->mName);
 
   const int32 num_vertices = aimesh->mNumVertices;
-  copy_mesh_data(d.mesh_data.positions, aimesh->mVertices, num_vertices);
+  //const float32 cm_to_meters = 0.01;
+  d.mesh_data.positions.reserve(num_vertices);
+  for (uint32 i = 0; i < num_vertices; ++i)
+  {
+    d.mesh_data.positions.push_back(
+         vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
+    //d.mesh_data.positions.push_back(
+     //   cm_to_meters * vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
+  }
+  
   copy_mesh_data(d.mesh_data.normals, aimesh->mNormals, num_vertices);
   copy_mesh_data(d.mesh_data.tangents, aimesh->mTangents, num_vertices);
   copy_mesh_data(d.mesh_data.bitangents, aimesh->mBitangents, num_vertices);
@@ -260,11 +313,8 @@ Mesh_Descriptor build_mesh_descriptor(const aiScene *scene, uint32 i, std::strin
   }
   if (d.mesh_data.indices.size() < 3)
   {
-    set_message("Error: No triangles in mesh:", d.mesh_data.name);
+    set_message("Error: No triangles in mesh:", d.name);
     ASSERT(0); // will fail to upload
   }
-  d.assimp_filename = path;
-  d.assimp_index = i;
-
   return d;
 }

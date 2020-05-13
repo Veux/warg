@@ -35,7 +35,7 @@ void Timer::stop()
   {
     end = SDL_GetPerformanceCounter();
     stopped = true;
-    ASSERT(end > begin);
+    ASSERT(end >= begin);
     times[current_index] = (float64)(end - begin) / freq;
     last_index = current_index;
     ++current_index;

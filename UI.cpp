@@ -2,6 +2,9 @@
 #include "UI.h"
 #include "SDL_Imgui_State.h"
 
+std::unordered_map<std::string, Texture> FILE_PICKER_TEXTURE_CACHE;
+
+// static std::vector<Texture> FILE_PICKER_TEXTURE_CACHE;
 ImVec2 v(vec2 v_)
 {
   ImVec2 result;
@@ -26,16 +29,16 @@ std::vector<FS_Node> lsdir(std::string dir)
       if (std::string(fd.cFileName) == "." || std::string(fd.cFileName) == "..")
         continue;
       FS_Node node;
-      node.path = fd.cFileName;
+      node.path = dir + "/" + fd.cFileName;
       node.is_dir = fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
-      if (!node.is_dir)
-      {
-        std::string path = dir + "//" + node.path;
-        if (has_img_file_extension(path))
-        {
-          node.texture = Texture(path);
-        }
-      }
+      // if (!node.is_dir)
+      //{
+      //  std::string path = dir + "/" + node.path;
+      //  if (has_img_file_extension(path))
+      //  {
+      //    node.texture = path;
+      //  }
+      //}
       results.push_back(node);
     } while (::FindNextFile(hFind, &fd));
     ::FindClose(hFind);
@@ -47,13 +50,17 @@ std::vector<FS_Node> lsdir(std::string dir)
 File_Picker::File_Picker(const char *directory)
 {
   set_dir(directory);
-  dir_icon = Texture("../Assets/Icons/dir.png");
 }
 
 void File_Picker::set_dir(std::string directory)
 {
   dir = directory;
   dircontents = lsdir(dir.c_str());
+  std::stable_sort(dircontents.begin(), dircontents.end(), [](auto &left, auto &right) {
+    if ((left.is_dir && right.is_dir) || (!left.is_dir && !right.is_dir))
+      return lexicographical_compare(left.path.begin(), left.path.end(), right.path.begin(), right.path.end());
+    return left.is_dir > right.is_dir;
+  });
 }
 
 bool File_Picker::run()
@@ -64,15 +71,31 @@ bool File_Picker::run()
 
   auto winsize = ImGui::GetWindowSize();
 
-  std::vector<const char *> dirstrings;
-  for (auto &r : dircontents)
-    dirstrings.push_back(r.path.c_str());
+  // std::vector<const char *> dirstrings;
+  // for (FS_Node &r : dircontents)
+  //  dirstrings.push_back(r.path.c_str());
 
   if (ImGui::Button("Up"))
-    set_dir(s(dir, "//.."));
+  {
+    size_t i = dir.find_last_of("/\\");
+    if (i != -1)
+      dir.erase(i, dir.size() - i);
+    set_dir(dir);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Clear thumbnail cache"))
+  {
+    FILE_PICKER_TEXTURE_CACHE.clear();
+  }
+
+  // we cache the textures to hold on to the handle globally
+  // instead of holding a handle inside the file_picker object
+  // because the file_picker is
+  // std::vector<Texture> last_cache = FILE_PICKER_TEXTURE_CACHE;
+  // FILE_PICKER_TEXTURE_CACHE.clear();
 
   ImGui::PushID(0);
-  auto id0 = ImGui::GetID("Thumbnails");
+  ImGuiID id0 = ImGui::GetID("Thumbnails");
   ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
   vec2 thumbsize = vec2(128, 128);
   ImVec2 tframesize = ImVec2(thumbsize.x + 16, thumbsize.y + 29);
@@ -81,24 +104,37 @@ bool File_Picker::run()
     num_horizontal = 1;
   for (size_t i = 0; i < dircontents.size(); i++)
   {
-    auto &f = dircontents[i];
     if (i % num_horizontal != 0)
       ImGui::SameLine();
-    auto id1 = s("thumb", i);
+    std::string id1 = s("thumb", i);
     ImGui::PushID(id1.c_str());
-    auto id1_ = ImGui::GetID(id1.c_str());
+    ImGuiID id1_ = ImGui::GetID(id1.c_str());
     ImGui::BeginChildFrame(id1_, tframesize, ImGuiWindowFlags_NoScrollWithMouse);
 
-    Texture *t = f.is_dir ? &dir_icon : &f.texture;
-    t->load();
+    FS_Node &f = dircontents[i];
+    Texture_Descriptor td = "Assets/Icons/dir.png";
+    // Texture_Descriptor *t = &dir_icon;
+    if (!f.is_dir)
+    {
+      td = "Assets/Icons/file.png";
+      if (has_img_file_extension(f.path))
+      {
+        td.name = f.path;
+      }
+    }
+    FILE_PICKER_TEXTURE_CACHE[td.name] = Texture(td);
+    // FILE_PICKER_TEXTURE_CACHE.push_back(td);
+
     ImGui::PushID(s("thumbbutton", i).c_str());
-    if (put_imgui_texture_button(t, thumbsize))
+    if (put_imgui_texture_button(&td, thumbsize))
     {
       clicked = true;
-      current_item = i;
+      last_clicked_node = i;
     }
     ImGui::PopID();
-    ImGui::Text(f.path.c_str());
+    size_t path_i = f.path.find_last_of("/\\");
+    std::string filename = f.path.substr(path_i + 1);
+    ImGui::Text(filename.c_str());
     ImGui::EndChildFrame();
     ImGui::PopID();
   }
@@ -110,15 +146,15 @@ bool File_Picker::run()
   bool picked = false;
   if (clicked)
   {
-    if (dircontents[current_item].is_dir)
+    if (dircontents[last_clicked_node].is_dir)
     {
-      set_dir(s(dir, "//", dircontents[current_item].path));
-      current_item = 0;
+      set_dir(dircontents[last_clicked_node].path);
+      last_clicked_node = -1;
       picked = false;
     }
     else
     {
-      result = dircontents[current_item].path;
+      result = dircontents[last_clicked_node].path;
       picked = true;
     }
   }
@@ -128,7 +164,7 @@ bool File_Picker::run()
 
 std::string File_Picker::get_result()
 {
-  return s(dir + "//" + result);
+  return result;
 }
 
 bool File_Picker::get_closed()

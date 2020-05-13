@@ -24,8 +24,9 @@ struct IMGUI_LOCK
 
 struct State
 {
-  State(std::string name, SDL_Window *window, ivec2 window_size, SDL_Imgui_State *imgui);
-  ~State();
+  State() : scene(&resource_manager) {}
+  State(std::string name, SDL_Window *window, ivec2 window_size);
+
 
   std::string state_name;
 
@@ -80,8 +81,6 @@ struct State
   Flat_Scene_Graph scene;
 
   // utility
-  bool save_graph_on_exit = false;
-  std::string scene_graph_json_filename;
 
   // perf
   void performance_output();
@@ -92,7 +91,7 @@ struct State
   virtual void render(float64 t) final;
   Renderer renderer;
   Camera camera;
-  void prepare_renderer(double t);
+  virtual void prepare_renderer(double remaining_dt);
   bool draws_imgui = true;
 
   // input:

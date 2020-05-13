@@ -7,44 +7,15 @@
 
 using namespace glm;
 
-State::State(std::string name, SDL_Window *window, ivec2 window_size, SDL_Imgui_State *imgui)
-    : state_name(name), window(window), renderer(window, window_size, name), scene(&resource_manager), gui_state(imgui)
+State::State(std::string name, SDL_Window *window, ivec2 window_size)
+    : state_name(name), window(window), renderer(window, window_size, name), scene(&resource_manager), gui_state(&IMGUI)
 {
-  ASSERT(imgui == &IMGUI);
-  resource_manager.init();
-
-  save_graph_on_exit = true;
-  scene_graph_json_filename = s(ROOT_PATH, name, ".json");
-  std::string str = read_file(scene_graph_json_filename.c_str());
-  try
-  {
-    json j = json::parse(str);
-    Light_Array lights = j.at("Lights");
-    scene.deserialize(j.at("Node Serialization"));
-  }
-  catch (std::exception &e)
-  {
-    set_message("Exception loading scene graph json:", e.what(), 55.0f);
-    set_message("JSON:\n", str.c_str(), 55.0f);
-  }
-
+  
   thread = std::thread(State::_update, this);
   thread_launched = true;
 }
 
-State::~State()
-{
-  if (save_graph_on_exit)
-  {
-    json j = scene;
-    std::string str = pretty_dump(j);
-    set_message("state destructor saved scene graph: ", str, 1.0f);
-    std::fstream file(scene_graph_json_filename, std::ios::out | std::ios::trunc);
-    file.write(str.c_str(), str.size());
-  }
-}
 
-// timestep
 
 void State::_update(State *this_state)
 {
@@ -82,22 +53,6 @@ void State::prepare_renderer(double t)
   // todo: frustrum cull using primitive bounding volumes
   // todo: determine which lights affect which objects
 
-  /*Light diameter guideline for deferred rendering (not yet used)
-  Distance 	Constant 	Linear 	Quadratic
-7 	1.0 	0.7 	1.8
-13 	1.0 	0.35 	0.44
-20 	1.0 	0.22 	0.20
-32 	1.0 	0.14 	0.07
-50 	1.0 	0.09 	0.032
-65 	1.0 	0.07 	0.017
-100 	1.0 	0.045 	0.0075
-160 	1.0 	0.027 	0.0028
-200 	1.0 	0.022 	0.0019
-325 	1.0 	0.014 	0.0007
-600 	1.0 	0.007 	0.0002
-3250 	1.0 	0.0014 	0.000007
-
-  */
 
   // camera must be set before entities, or they get a 1 frame lag
   renderer.set_camera(camera.pos, camera.dir);
@@ -107,26 +62,16 @@ void State::prepare_renderer(double t)
   // TODO: add simple bounding colliders assignable to each Node_Index
   //       add a Node_Index to render_entity to point back to the owner
   //       octree for triangle data to optimize collision
-  auto render_entities = scene.visit_nodes_client_start();
-  renderer.set_render_entities(&render_entities);
-
-  renderer.render_instances.clear();
-
-  for (auto &emitter : scene.particle_emitters)
+  std::vector<Render_Entity> render_entities = scene.visit_nodes_start();
+  if (scene.draw_collision_octree)
   {
-    emitter.init();
-    if (emitter.prepare_instance(&renderer.render_instances))
-    {
-      Render_Instance *i = &renderer.render_instances.back();
-
-      Mesh_Index mesh_index = emitter.mesh_index;
-      Material_Index material_index = emitter.material_index;
-      i->mesh = scene.resource_manager->retrieve_pool_mesh(mesh_index);
-      ;
-      i->material = scene.resource_manager->retrieve_pool_material(material_index);
-    }
+    std::vector<Render_Entity> octree = scene.collision_octree.get_render_entities(&scene);
+    render_entities.insert(render_entities.end(), octree.begin(), octree.end());
   }
-  renderer.set_lights(scene.lights);
+  renderer.set_render_entities(&render_entities);
+  renderer.render_instances.clear();
+  scene.push_particle_emitters_for_renderer(&renderer);
+  scene.set_lights_for_renderer(&renderer);
 }
 
 void State::render(float64 t)

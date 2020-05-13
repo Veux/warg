@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "Physics.h"
+#include "Scene_Graph.h"
 
 Plane::Plane(const vec3 &origin, const vec3 &normal)
 {
@@ -23,9 +24,15 @@ Plane::Plane(const Triangle &t)
   equation[3] = -(normal.x * origin.x + normal.y * origin.y + normal.z * origin.z);
 }
 
-bool Plane::is_facing(const vec3 &direction) const { return dot(normal, direction) <= 0; }
+bool Plane::is_facing(const vec3 &direction) const
+{
+  return dot(normal, direction) <= 0;
+}
 
-float Plane::signed_distance_to(const vec3 &p) const { return dot(p, normal) + equation[3]; }
+float Plane::signed_distance_to(const vec3 &p) const
+{
+  return dot(p, normal) + equation[3];
+}
 
 float squared_length(vec3 v)
 {
@@ -320,4 +327,111 @@ bool ray_intersects_triangle(vec3 origin, vec3 dir, Triangle tri, vec3 *intersec
   }
 }
 
-bool vec3_has_nan(vec3 v) { return _isnan(v.x) || _isnan(v.y) || _isnan(v.z); }
+std::vector<Triangle_Normal> collect_colliders_with_normal(Flat_Scene_Graph &scene)
+{
+  std::vector<Triangle_Normal> collider_cache;
+  // these normals arent interpolated
+  std::vector<Render_Entity> entities = scene.visit_nodes_start();
+  for (Render_Entity &entity : entities)
+  {
+    auto transform = [&](vec3 p) {
+      vec4 q = entity.transformation * vec4(p.x, p.y, p.z, 1.0);
+      return vec3(q.x, q.y, q.z);
+    };
+    Mesh_Data &mesh_data = entity.mesh->mesh->descriptor.mesh_data;
+    for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
+    {
+      uint32 a, b, c;
+      a = mesh_data.indices[i];
+      b = mesh_data.indices[i + 1];
+      c = mesh_data.indices[i + 2];
+      Triangle_Normal t;
+      t.a = transform(mesh_data.positions[a]);
+      t.c = transform(mesh_data.positions[b]);
+      t.b = transform(mesh_data.positions[c]);
+
+      t.n = normalize(transform(mesh_data.normals[i]));
+
+      collider_cache.push_back(t);
+    }
+  }
+
+  return collider_cache;
+}
+
+
+
+bool ray_intersects_trianglet(vec3 origin, vec3 dir, const vec3 &v0, const vec3 &v1, const vec3 &v2, float *tptr) {
+
+  ASSERT(tptr);
+
+  const float epsilon = 0.0000001;
+  vec3 edge1, edge2, h, s, q;
+  float a, f, u, v;
+  edge1 = v1 - v0;
+  edge2 = v2 - v0;
+  h = cross(dir, edge2);
+  a = dot(edge1, h);
+  if (a > -epsilon && a < epsilon)
+    return false;
+  f = 1 / a;
+  s = origin - v0;
+  u = f * dot(s, h);
+  if (u < 0.0 || u > 1.0)
+    return false;
+  q = cross(s, edge1);
+  v = f * dot(dir, q);
+  if (v < 0.0 || u + v > 1.0)
+    return false;
+  float t = f * dot(edge2, q);
+  if (t > epsilon)
+  {
+    *tptr = t;
+    return true;
+  }
+  else
+  {
+    *tptr = t;
+    return false;
+  }
+}
+  
+  bool ray_intersects_triangle(
+    vec3 origin, vec3 dir, const vec3 &v0, const vec3 &v1, const vec3 &v2, vec3 *intersection_point)
+{
+  ASSERT(intersection_point);
+
+  const float epsilon = 0.0000001;
+  vec3 edge1, edge2, h, s, q;
+  float a, f, u, v;
+  edge1 = v1 - v0;
+  edge2 = v2 - v0;
+  h = cross(dir, edge2);
+  a = dot(edge1, h);
+  if (a > -epsilon && a < epsilon)
+    return false;
+  f = 1 / a;
+  s = origin - v0;
+  u = f * dot(s, h);
+  if (u < 0.0 || u > 1.0)
+    return false;
+  q = cross(s, edge1);
+  v = f * dot(dir, q);
+  if (v < 0.0 || u + v > 1.0)
+    return false;
+  float t = f * dot(edge2, q);
+  if (t > epsilon)
+  {
+    *intersection_point = origin + dir * t;
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+bool vec3_has_nan(vec3 v)
+{
+  return _isnan(v.x) || _isnan(v.y) || _isnan(v.z);
+}

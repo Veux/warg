@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Session.h"
 
 void server_loop(std::shared_ptr<Warg_Server> server)

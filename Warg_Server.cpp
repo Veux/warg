@@ -1,12 +1,20 @@
 #include "stdafx.h"
 #include "Warg_Server.h"
 
+
+using std::make_unique;
+using std::queue;
+using std::unique_ptr;
+using std::vector;
+
+
+
+
 Warg_Server::Warg_Server() : scene(&resource_manager)
 {
-  resource_manager.init();
   map = new Blades_Edge(scene);
   spell_db = Spell_Database();
-  for (int i = -10; i <= 10; i++)
+  for (int i = 0; i < 1; i++)
     add_dummy({ 1, i, 5 });
 }
 
@@ -20,7 +28,7 @@ void Warg_Server::update(float32 dt)
   time += dt;
   tick += 1;
 
-  // set_message(s("Server update(). Time:", time, " Tick:", tick, " Tick*dt:", tick * dt), "", 1.0f);
+  set_message("Server update() ", s("Time:", time, " Tick:", tick, " Tick*dt:", tick * dt), 1.0f);
 
   process_messages();
 
@@ -35,10 +43,12 @@ void Warg_Server::update(float32 dt)
   }
   if (!found_living_dummy)
   {
-    for (int i = -10; i <= 10; i++)
+    for (int i = 0; i <= 1; i++)
       add_dummy({ 1, i, 5 });
     set_message("NEEEEEEXTTTT", "", 5);
   }
+
+
 
   PERF_TIMER.start();
   for (size_t i = 0; i < game_state.character_count; i++)
@@ -55,7 +65,7 @@ void Warg_Server::update(float32 dt)
     }
 
     vec3 old_pos = ch.physics.position;
-    move_char(ch, last_input, map->colliders);
+    move_char(ch, last_input, &scene);
     if (_isnan(ch.physics.position.x) || _isnan(ch.physics.position.y) || _isnan(ch.physics.position.z))
       ch.physics.position = map->spawn_pos[ch.team];
     if (ch.alive)
@@ -80,6 +90,7 @@ void Warg_Server::update(float32 dt)
   for (auto &p : peers)
   {
     shared_ptr<Peer> peer = p.second;
+    
     peer->push_to_peer(make_unique<State_Message>(peer->character, &game_state));
   }
 
@@ -123,7 +134,7 @@ bool Warg_Server::update_spell_object(Spell_Object *spell_object)
   float epsilon = object_formula->speed * dt / 2.f * 1.05f;
   if (d < epsilon)
   {
-    spell_object_on_hit_dispatch(object_formula, spell_object, &game_state, &map->colliders);
+    spell_object_on_hit_dispatch(object_formula, spell_object, &game_state, &scene);
     return true;
   }
 
@@ -319,7 +330,7 @@ void Warg_Server::release_spell(UID caster_id, UID target_id, Spell_Status *spel
   if (static_cast<int>(err = cast_viable(caster_id, target_id, spell_status, true)))
     return;
 
-  spell_on_release_dispatch(spell_formula, &game_state, caster, &map->colliders);
+  spell_on_release_dispatch(spell_formula, &game_state, caster, &scene);
 
   if (!spell_formula->cast_time && spell_formula->on_global_cooldown)
     caster->global_cooldown = caster->effective_stats.global_cooldown;

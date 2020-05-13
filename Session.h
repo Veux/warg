@@ -7,14 +7,12 @@
 #include <memory>
 #include <vector>
 
-using std::shared_ptr;
-using std::unique_ptr;
 
 class Session
 {
 public:
-  virtual void push(unique_ptr<Message> ev) = 0;
-  virtual std::vector<unique_ptr<Message>> pull() = 0;
+  virtual void push(std::unique_ptr<Message> ev) = 0;
+  virtual std::vector<std::unique_ptr<Message>> pull() = 0;
   virtual void end() = 0;
 };
 
@@ -22,12 +20,12 @@ class Local_Session : Session
 {
 public:
   Local_Session();
-  void push(unique_ptr<Message> ev);
-  std::vector<unique_ptr<Message>> pull();
+  void push(std::unique_ptr<Message> ev);
+  std::vector<std::unique_ptr<Message>> pull();
   void end();
 
-private:
-  shared_ptr<Warg_Server> server;
-  shared_ptr<Local_Peer> peer;
+
+  std::shared_ptr<Warg_Server> server;
+  std::shared_ptr<Local_Peer> peer;
   std::thread server_thread;
 };

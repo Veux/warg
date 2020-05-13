@@ -9,13 +9,12 @@ uniform sampler2D texture5; // ambient occlusion
 uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
-
+uniform sampler2D texture9; // refraction source
 uniform sampler2D texture10; // uv map grid
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
 uniform vec4 texture2_mod;
-uniform vec4 texture3_mod;
 uniform vec4 texture4_mod;
 uniform vec4 texture5_mod;
 uniform vec4 texture6_mod;
@@ -26,7 +25,9 @@ uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
 uniform bool shadow_map_enabled[MAX_LIGHTS];
 uniform mat4 model;
-uniform mat4 view;
+uniform vec3 camera_forward;
+uniform vec3 camera_right;
+uniform vec3 camera_up;
 uniform mat4 projection;
 uniform vec3 additional_ambient;
 uniform float time;
@@ -34,6 +35,23 @@ uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
 uniform float alpha_albedo_override;
+uniform vec2 viewport_size;
+uniform float aspect_ratio;
+uniform float index_of_refraction;
+uniform float refraction_offset_factor;
+uniform float water_eps;
+uniform float water_scale;
+uniform float water_speed;
+uniform float water_height_scale;
+uniform float water_dist_exp;
+uniform float water_dist_scale;
+uniform float water_dist_min;    
+uniform float water_scale2;
+uniform float height_scale2;
+uniform float water_time2;
+uniform float surfdotv_exp;
+uniform bool water_use_uv;
+
 struct Light
 {
   vec3 position;
@@ -324,15 +342,117 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
 } 
+
+
+
+
+
+float random(float x) {
+ 
+    return fract(sin(x) * 10000.);
+          
+}
+
+float noise(vec2 p) {
+
+    return random(p.x + p.y * 10000.);
+            
+}
+
+vec2 sw(vec2 p) { return vec2(floor(p.x), floor(p.y)); }
+vec2 se(vec2 p) { return vec2(ceil(p.x), floor(p.y)); }
+vec2 nw(vec2 p) { return vec2(floor(p.x), ceil(p.y)); }
+vec2 ne(vec2 p) { return vec2(ceil(p.x), ceil(p.y)); }
+
+float smoothNoise(vec2 p) {
+
+    vec2 interp = smoothstep(0., 1., fract(p));
+    float s = mix(noise(sw(p)), noise(se(p)), interp.x);
+    float n = mix(noise(nw(p)), noise(ne(p)), interp.x);
+    return mix(s, n, interp.y);
+        
+}
+
+float fractalNoise(vec2 p) {
+
+    float x = 0.;
+    x += smoothNoise(p      );
+    x += smoothNoise(p * 2. ) / 2.;
+    x += smoothNoise(p * 4. ) / 4.;
+    x += smoothNoise(p * 8. ) / 8.;
+    x += smoothNoise(p * 16.) / 16.;
+    x /= 1. + 1./2. + 1./4. + 1./8. + 1./16.;
+    return x;
+            
+}
+
+float movingNoise(vec2 p,float time) {
+ 
+    float x = fractalNoise(p + time);
+    float y = fractalNoise(p - time);
+    return fractalNoise(p + vec2(x, y));   
+    
+}
+
+// call this for water noise function
+float nestedNoise(vec2 p,float time) 
+{
+  //float result;
+  float x = movingNoise(p,time);
+    
+//  if(do_extra_water)
+//  {
+//    float y = movingNoise(p + 100.,time);
+//    result = movingNoise(p + vec2(x, y),time);
+//  }
+//  else
+//  {
+//    result = x;
+//  }
+  return x;
+}
+
+
+
+
+
+vec3 water(vec2 uv, float wave_scale, float height_scale, float water_time)
+{
+  float eps = water_eps;
+
+  vec2 waterp = wave_scale*uv; 
+  //scale*vec2(sin(speed*time));
+  float h = height_scale*nestedNoise(waterp,water_time);
+
+  vec2 dx_sample = vec2(waterp.x+eps,waterp.y);
+  float hdx = height_scale*nestedNoise(dx_sample,water_time);
+  vec3 vdx = vec3(dx_sample,hdx);
+  
+  vec2 dy_sample = vec2(waterp.x,waterp.y+eps);
+  float hdy = height_scale*nestedNoise(dy_sample,water_time);
+  vec3 vdy = vec3(dy_sample,hdy);
+  
+  vec3 wave_p = vec3(waterp,h);
+  vec3 right = normalize(vdx - wave_p);
+  vec3 forward = normalize(vdy - wave_p);
+  vec3 normal = cross(right,forward);
+  
+  return normalize(normal);
+}
+
+
+
+
+
+
 void main()
 {
   vec3 result = vec3(0);
-  vec4 debug = vec4(-1);
 
   vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
   if (discard_on_alpha)
   {
-    if (texture0_mod.a*albedo_tex.a < 0.3)
+    if (albedo_tex.a < 0.3)
       discard;
   }
   gather_shadow_moments();
@@ -359,6 +479,14 @@ void main()
 
     so the diffuse component can be thought of as 'the amount of the (non-specular) light that is reflected back out to see' 
     and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or reflected back out
+
+    if we want to do refraction, we do not use opengls blending
+
+    we make a new texture target, copy the opaque pass into it and bind it as an input for refraction
+    then we sample the opaque pass to gather our refraction sample
+    and we overwrite the dst pixel - no opengl blending - if an object refracts and the ray is straight through, then
+    the object will look traditionally transparent
+
   */
   float premultiply_alpha = albedo_tex.a;
   if (alpha_albedo_override != -1.0f)
@@ -368,35 +496,84 @@ void main()
   premultiply_alpha *= texture0_mod.a;
 
   m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
-  m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
+
+  
+  
+  float dist_to_pixel = length(camera_position-frag_world_position);
+  float dist_factor = dist_to_pixel;
+  dist_factor = water_dist_scale*dist_factor;
+  dist_factor = 1.0f;
+  
+  //lets do less dist_factor when the camera is pointing at the surface
+  float surfdotv = 1.-dot(normalize(camera_position-frag_world_position),vec3(0,0,1));
+
+  surfdotv = clamp(surfdotv,0,1);
+  surfdotv = pow(surfdotv,surfdotv_exp);
+
+ // dist_factor = surfdotv*dist_factor;
+ // dist_factor = max(dist_factor,water_dist_min);
+
+
+  float height_scale = 1.0/pow(dist_factor,water_dist_exp);
+  //height_scale = clamp(height_scale,0,1);
+  //height_scale = 1.0/pow(dist_factor,1.5f);//sponge
+  height_scale = 1.;
+
+  //SMALL WAVE PARAMETERS:
+  float height_scale1f = 0.35f*water_height_scale*height_scale;
+  float water_time1f = water_speed*time;
+
+  //height_scale = 1.0/pow(dist_factor,1.05);//sponge
+  //height_scale = .0325;
+  //height_scale = clamp(height_scale,0.000001,1);
+
+  //LARGE WAVE PARAMETERS:
+  float height_scale2f= height_scale2*height_scale;
+ // height_scale2f = height_scale2;//sponge
+  float water_time2f = water_time2*time;
+
+  vec2 wateruv;
+  if(water_use_uv)
+  {
+    wateruv = frag_uv;
+  }
+  else
+  {
+    wateruv = frag_world_position.xy;
+  }
+
+  vec3 waternormal = water(wateruv,  water_scale,  height_scale1f,  water_time1f);
+  vec3 waternormal2 = water(wateruv,  water_scale2,  height_scale2f,  water_time2f);
+  
+  vec3 partial_d = dFdx(frag_world_position);
+  float lenpd = length(partial_d);
+  vec3 vertical_scale_normal = vec3(0,0,0.1) + vec3(0,0,730.5*lenpd);
+  waternormal = normalize(waternormal+waternormal2+vertical_scale_normal);
+
+  //float dy = nestedNoise(scale*vec2(waterp.x,waterp.y+eps));
+
+
+
+ // vec3 p2dy = p + vec3(waterp.x,waterp.y+dy,0);
+  //vec3 waternormal = vec3(dx,dy,0);
+ // waternormal = 1400.*waternormal;
+  //waternormal = normalize(waternormal);
+
+
+
+  m.normal = TBN*waternormal;
+   
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
-  m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
-  m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
-  // m.metalness = clamp(m.metalness,0.05f,0.45f);
+  m.roughness = 0.03;
+
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.04); // default dielectrics
-  //todo: could put dielectric reflectivity in a uniform
-  //this would let us specify more light absorbant materials
-  F0 = mix(F0, m.albedo, m.metalness);
-
+  vec3 F0 = vec3(0.02); //0.02 F0 for water
+  F0 =  vec3(0.12);
   float ndotv = clamp(dot(m.normal, v),0,1);
-
-  float roughnessclamp = clamp(m.roughness, 0.01, 1);
-
-  /*
-  metal should mul specular by albedo because albedo map means F0
-
-  plastic should not mul specular by albedo
-
-
-
-
-  */
-
   vec3 direct_ambient = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -439,39 +616,81 @@ void main()
     }
     // direct light
     float ndotl = saturate(dot(m.normal, l));
+    //we want to let light through the opposite side
+    //for diffuse component, but if we use ndotl, we get a seam
+    //at 90 degrees, so we use average of ndotl: 0.5
+    //but since the light is going through both sides
+    //we halve that again for conservation of energy
+    float diffuse_ndotl = 0.25;
+
     float ndoth = saturate(dot(m.normal, h));
     float vdoth = saturate(dot(v, h));
     // float G = G_smith_GGX_denom(a,ndotv,ndotl);
     // specular brdf
     vec3 F = F_schlick(F0, ndoth);
-    float G = G_smith_GGX(roughnessclamp, ndotv, ndotl);
-    float D = D_ggx(roughnessclamp, ndoth);
+    if(dot(m.normal, l) <0.0)
+    {
+       // F = 0.1 + (F*0.9);
+
+    }
+
+
+
+    float G = G_smith_schlick_GGX_direct(m.roughness, ndotv, ndotl);
+    float D = D_ggx(m.roughness, ndoth);
     float denominator = max(4.0f * ndotl * ndotv, 0.000001);
     vec3 specular = (F * G * D) / denominator;
     vec3 radiance = lights[i].flux * at;
     // specular result
     vec3 specular_result = radiance * specular;
     // diffuse result
-    vec3 Kd = (1.0f - F) * (1 - m.metalness); // Ks = F
+    //F = F0;
+    vec3 Kd = 1.0f - F;
     vec3 diffuse = Kd * m.albedo / PI;
     vec3 diffuse_result = radiance * diffuse;
-    result += (specular_result + diffuse_result) * visibility * ndotl;
-    // ambient
+
+    //this is where we used the special diffuse ndotl
+    //specular is occluded on the back, and diffuse is let through
+    
+    result += specular_result*ndotl* visibility;
+    result += diffuse_result*diffuse_ndotl* visibility;
+
+    //result += (specular_result + diffuse_result) * visibility * ndotl;
+ 
     direct_ambient += lights[i].ambient * at;
   }
 
   // ambient light
-
+ //m.roughness = mix(0,1,0.031*pow(dist_to_pixel,1.0/3.1));
+  //m.roughness = 0.1;
+ // F0 = vec3(0.333);
+ // m.metalness = 0.;
   // ambient specular
+
+  
+  m.roughness = 0.0951;
+
   vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  
+ // Ks = vec3(0);
+  //vec3 Ks = F_schlick(F0, ndotv);
+  //Ks = vec3(0.1);
   const float MAX_REFLECTION_LOD = 5.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
   vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
 
   // ambient diffuse
+
+  //as with direct diffuse, we want to let it bleed through
+  //and we want to keep conservation of energy
+  //lets sample both sides of the normal into the cubemap
+  //and average them
   vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
   vec3 irradiance = texture(texture7, -m.normal).rgb;
+  //vec3 irradiance2 = texture(texture7, m.normal).rgb;
+ // vec3 irradiance = 0.5f*(irradiance1 + irradiance2); 
+// vec3 irradiance = irradiance2;
   vec3 ambient_diffuse = Kd * irradiance * m.albedo / PI;
   // ambient result;
   vec3 ambient = (ambient_specular + ambient_diffuse);
@@ -479,6 +698,41 @@ void main()
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
   
-  
+  //refraction sampling
+  vec3 refracted_view = normalize(refract(v,m.normal,index_of_refraction).xyz);
+
+  vec2 offset = vec2(dot(refracted_view,camera_right),dot(refracted_view,camera_up));
+  float inv_aspect = viewport_size.y/viewport_size.x;
+  offset.x = offset.x*inv_aspect;
+  offset = refraction_offset_factor*offset;
+
+  vec2 this_pixel = gl_FragCoord.xy/viewport_size;
+  vec2 ref_sample_loc = this_pixel + offset;
+  //ref_sample_loc = ref_sample_loc;
+  if(ref_sample_loc.x < 0 || ref_sample_loc.x > 1)
+  {
+    ref_sample_loc.x = this_pixel.x;
+   // result = vec3(1,0,0);
+  }  
+  if(ref_sample_loc.y < 0 || ref_sample_loc.y > 1)
+  {
+    ref_sample_loc.y = this_pixel.y;
+   // result = vec3(1,0,0);
+  }
+
+  vec4 refraction_src = texture2D(texture9,ref_sample_loc);
+  if(length(offset) > 0.00001)
+  {
+    result = result + ((1.0-premultiply_alpha)*refraction_src.rgb);
+  }
+  else
+  {
+   // result = vec3(1,0,0);
+  }
+  //float thet = 1.0-dot(waternormal,vec3(0,0,1));
+// result = ambient_specular;
+
+  //result = vec3(nestedNoise(frag_world_position.xy));
+ // result = vec3(waternormal);
   out0 = vec4(result, premultiply_alpha);
 }

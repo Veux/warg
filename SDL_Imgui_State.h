@@ -1,16 +1,19 @@
 #pragma once
 #include "Third_Party/imgui/imgui.h"
 #include "Third_party/imgui/imgui_internal.h"
-#include "Forward_Declarations.h"
-#include "Render.h"
+#include <glm/glm.hpp>
+#include <glad/glad.h>
 
+struct Texture;
+struct Texture_Descriptor;
+struct Texture_Handle;
 struct SDL_Window;
 typedef union SDL_Event SDL_Event;
 
 struct Imgui_Texture_Descriptor
 {
   std::shared_ptr<Texture_Handle> ptr = nullptr;
-  glm::vec2 size = vec2(0);
+  glm::vec2 size = glm::vec2(0);
   float aspect = 1.0f;
   float mip_lod_to_draw = 0.f;
   bool y_invert = false;
@@ -25,7 +28,7 @@ struct SDL_Imgui_State
   void init(SDL_Window *window);
   void destroy();
 
-  void new_frame(SDL_Window *window, float64 dt_since_last_frame);
+  void new_frame(SDL_Window *window, glm::float64 dt_since_last_frame);
   void end_frame();
 
   void handle_input(std::vector<SDL_Event> *input);
@@ -38,8 +41,8 @@ struct SDL_Imgui_State
   ImGuiContext *context = nullptr;
   ImGuiIO *state_io = nullptr;
 
-  ivec2 cursor_position = ivec2(0);
-  uint32 mouse_state = 0;
+  glm::ivec2 cursor_position = glm::ivec2(0);
+  glm::uint32 mouse_state = 0;
 
 private:
   bool process_event(SDL_Event *event);
@@ -59,7 +62,7 @@ private:
   int gamma_location = 0;
   int mip_location = 0;
   int sample_lod_location = 0;
-  unsigned int vbo = 0, vao = 0, element_buffer = 0;
+  GLuint vbo = 0, vao = 0, element_buffer = 0;
   SDL_Cursor *sdl_cursors[ImGuiMouseCursor_Count_] = {0};
 };
 

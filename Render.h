@@ -1,10 +1,12 @@
 #pragma once
+#include <SDL2/SDL.h>
 #include "Forward_Declarations.h"
 #include "General_Purpose.h"
 #include "Mesh_Loader.h"
 #include "Shader.h"
-#include <SDL2/SDL.h>
 #include "Third_party/stb/stb_image.h"
+#include "Physics.h"
+#include "Globals.h"
 
 using json = nlohmann::json;
 using namespace glm;
@@ -30,7 +32,7 @@ enum Texture_Location
   irradiance,
 
   brdf_ibl_lut,
-  t9,
+  refraction,
   t10,
   uv_grid,
 
@@ -95,6 +97,7 @@ struct Texture_Handle
   GLenum format = GLenum(0);
 
   // specific for specular environment maps
+  bool ibl_mipmaps_started = false;
   bool ibl_mipmaps_generated = false;
 
   bool is_cubemap = false;
@@ -115,7 +118,7 @@ struct Texture_Descriptor
   // solid colors can be specified with "color(r,g,b,a)" float values
   std::string name = "";
 
-  vec4 mod = vec4(1);
+  vec4 mod = MISSING_TEXTURE_MOD;
   glm::ivec2 size = glm::ivec2(0);
   GLenum format = GL_RGBA;
   GLenum magnification_filter = GL_LINEAR;
@@ -164,16 +167,32 @@ struct Texture
 private:
   bool initialized = false;
 };
-
+struct Image
+{
+  Image() {}
+  Image(std::string filename);
+  void rotate90();
+  std::string filename = "NULL";
+  std::vector<float> data;
+  int32 width = 0, height = 0, n = 0;
+};
 struct Cubemap
 {
   Cubemap();
-  Cubemap(std::string equirectangular_filename);
+  Cubemap(std::string equirectangular_filename, bool gamma_encoded = false);
   Cubemap(std::array<std::string, 6> filenames);
   void bind(GLuint texture_unit);
-  std::array<std::string, 6> filenames;
-  std::shared_ptr<Texture_Handle> handle;
+  std::shared_ptr<Texture_Handle> handle = nullptr;
   glm::ivec2 size = ivec2(0, 0);
+
+  Texture source;
+
+private:
+  void produce_cubemap_from_equirectangular_source();
+  void produce_cubemap_from_texture_array();
+  std::array<Image, 6> sources;
+  bool is_equirectangular = true;
+  bool is_gamma_encoded = false;
 };
 
 struct Environment_Map_Descriptor
@@ -182,10 +201,25 @@ struct Environment_Map_Descriptor
   Environment_Map_Descriptor(std::string environment, std::string irradiance, bool equirectangular = true);
   std::string radiance = "NULL";
   std::string irradiance = "NULL";
-  std::array<std::string, 6> environment_faces = {};
-  std::array<std::string, 6> irradiance_faces = {};
+  std::array<std::string, 6> environment_faces = {""};
+  std::array<std::string, 6> irradiance_faces = {""};
   bool source_is_equirectangular = true;
 };
+
+/*
+when one of the constructors that take arguments is called
+load() is called:
+it initializes the cubemaps - first checks if the cubemap has already been created/cached and uses the shared ptr for
+that if theres no shared ptr for it, it creates a new cubemap and loads the source texture and stalls on it then draws
+the cubemap, and drops the source handle, and returns after both cubemaps are constructed, it checks the cubemap handles
+for whether or not theyve had their ibl mipmaps generated, and runs that if not.
+
+in both of these some opengl state may be set that isnt unset
+cubemap seems good
+
+
+
+*/
 
 struct Environment_Map
 {
@@ -194,6 +228,7 @@ struct Environment_Map
   Environment_Map(Environment_Map_Descriptor d);
   Cubemap radiance;
   Cubemap irradiance;
+  bool radiance_is_gamma_encoded = true;
 
   void load();
   void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit);
@@ -202,17 +237,21 @@ struct Environment_Map
 
   // todo: irradiance map generation
   void irradiance_convolution();
-
   void generate_ibl_mipmaps();
 
   // todo: rendered environment map
   void probe_world(glm::vec3 p, glm::vec2 resolution);
-  void blend(Environment_Map &a, Environment_Map &b); //?
+
+private:
+  GLuint ibl_texture_target = 0;
+  GLsync ibl_sync;
+  std::string filename_of_ibl_source = "";
 };
 
 struct Mesh_Handle
 {
   ~Mesh_Handle();
+  void upload_data();
   GLuint vao = 0;
   GLuint position_buffer = 0;
   GLuint normal_buffer = 0;
@@ -227,10 +266,12 @@ struct Mesh_Handle
 
 struct Mesh
 {
-  // todo: asynchronous gpu uploading for meshes
   Mesh();
-  Mesh(const Mesh_Descriptor &d); // mesh_data must be filled out, except for primitives
-  Mesh(const Mesh_Descriptor *d); // mesh_data must be filled out, except for primitives
+  Mesh(const Mesh_Descriptor &d);
+  Mesh(const Mesh_Descriptor *d);
+
+  void load();
+
   GLuint get_vao()
   {
     return mesh->vao;
@@ -245,40 +286,91 @@ struct Mesh
   }
   void draw();
   std::string name = "NULL";
-  Mesh_Descriptor get_descriptor()
-  {
-    if (mesh)
-      return mesh->descriptor;
-    return Mesh_Descriptor();
-  }
-  // private:
-  std::shared_ptr<Mesh_Handle> upload_data(const Mesh_Data &data);
   std::shared_ptr<Mesh_Handle> mesh;
+};
+
+struct Uniform_Set_Descriptor
+{
+  std::unordered_map<std::string, float32> float32_uniforms;
+  std::unordered_map<std::string, int32> int32_uniforms;
+  std::unordered_map<std::string, uint32> uint32_uniforms;
+  std::unordered_map<std::string, bool> bool_uniforms;
+  std::unordered_map<std::string, glm::vec2> vec2_uniforms;
+  std::unordered_map<std::string, glm::vec3> vec3_uniforms;
+  std::unordered_map<std::string, glm::vec4> vec4_uniforms;
+  std::unordered_map<std::string, glm::mat4> mat4_uniforms;
+  void clear()
+  {
+    float32_uniforms.clear();
+    int32_uniforms.clear();
+    uint32_uniforms.clear();
+    bool_uniforms.clear();
+    vec2_uniforms.clear();
+    vec3_uniforms.clear();
+    vec4_uniforms.clear();
+    mat4_uniforms.clear();
+  }
 };
 
 struct Material_Descriptor
 {
+  Material_Descriptor() {}
   void mod_by(const Material_Descriptor *override);
-  Texture_Descriptor albedo = Texture_Descriptor("color(1,1,1,1)");
-  Texture_Descriptor normal = Texture_Descriptor("color(0.5,.5,1,0)");
-  Texture_Descriptor roughness = Texture_Descriptor("color(0.3,0.3,0.3,0.3)");
-  Texture_Descriptor metalness = Texture_Descriptor("color(0,0,0,0)");
-  Texture_Descriptor emissive = Texture_Descriptor("color(0,0,0,0)");
-  Texture_Descriptor ambient_occlusion = Texture_Descriptor("color(1,1,1,1)");
-
+  Texture_Descriptor albedo;
+  Texture_Descriptor normal;
+  Texture_Descriptor roughness;
+  Texture_Descriptor metalness;
+  Texture_Descriptor emissive;
+  Texture_Descriptor ambient_occlusion;
   Texture_Descriptor tangent; // anisotropic surface roughness    - unused for now
-
-  std::string vertex_shader = "vertex_shader.vert";
-  std::string frag_shader = "fragment_shader.frag";
+  Uniform_Set_Descriptor uniform_set;
+  std::string vertex_shader;
+  std::string frag_shader;
   vec2 uv_scale = vec2(1);
   vec2 normal_uv_scale = vec2(1);
   float albedo_alpha_override = -1.f;
   bool backface_culling = true;
   bool uses_transparency = false;
-  bool discard_on_alpha = false;
+  bool discard_on_alpha = true;
   bool casts_shadows = true;
+  bool wireframe = false;
+  bool blending = false;
 
   /*
+
+  //forget this... its not stable
+  //back to the old plan
+  //name the objects in blender
+  //if they have the same name prefix such as Cube and Cube.001
+  //use only the prefix Cube, and append _albedo.png
+  //objects with the same named prefix will get the same textures
+  //and we never have to deal with material import problems
+  //
+  //so, todo: dont bother reading materials from assimp at all
+  //just manually set the texture filenames based on the object name
+  //perhaps we can add our warg specific attributes in to blender
+  //so we can have them set properly on load
+  //alternatively, a text file in the asset directory
+  //also, need to have every mesh also supply a collision mesh
+  //we determine what the collision mesh is by the collision_<name> prefix
+  //the names will be used to match the collision mesh with the render mesh
+
+  //also implement a basic spatial partition - a 3d grid of chunks, put the triangles that intersect the chunks into it
+  //particles can just check the single chunk theyre in for collision
+  //make a wireframe renderer pass, can do it after bloom and with depth checking disabled
+
+
+
+
+
+
+
+
+
+
+
+
+
   how to import anything from blender to warg with pbr materials:
 
   1:  open blender
@@ -287,7 +379,7 @@ struct Material_Descriptor
 
   warg mapping:      -> blender settings
   albedo map         -> diffuse - color
-  emissive map       -> diffuse - intensity
+  emissive map       -> diffuse - intensity   (new: emission)
   normal map         -> geometry - normal
   roughness map      -> specular - hardness
   metalness map      -> specular - intensity
@@ -313,9 +405,19 @@ struct Material
 {
   Material();
   Material(Material_Descriptor &m);
-  Material_Descriptor descriptor;
+  const Material_Descriptor *get_descriptor() const
+  {
+    return &descriptor;
+  }
+  Material_Descriptor *get_modifiable_descriptor()
+  {
+    reload_from_descriptor = true;
+    return &descriptor;
+  }
 
 private:
+  bool reload_from_descriptor = true;
+  Material_Descriptor descriptor;
   friend struct Renderer;
   Texture albedo;
   Texture normal;
@@ -324,9 +426,10 @@ private:
   Texture metalness;
   Texture ambient_occlusion;
   Shader shader;
-  void load(Material_Descriptor &m);
-  void bind(Shader *shader);
+  void load();
+  void bind();
   void unbind_textures();
+  void bind_texture_or_set_default(Texture &t, const char *uniform, const glm::vec4 &default_mod, Texture_Location loc);
 };
 
 enum struct Light_Type
@@ -343,8 +446,8 @@ struct Light
   float32 brightness = 1.0f;
   vec3 color = vec3(1, 1, 1);
   vec3 attenuation = vec3(1, 0.22, 0.0);
-  float32 ambient = 0.0004f;
-  float radius = 0.1f;
+  float32 ambient = 0.000014f;
+  float32 radius = .1f;
   float32 cone_angle = .15f;
   Light_Type type = Light_Type::omnidirectional;
   bool casts_shadows = false;
@@ -369,13 +472,17 @@ private:
 
 struct Light_Array
 {
-  Light_Array() {}
+  Light_Array()
+  {
+    for (auto &l : light_spheres)
+    {
+      l = Node_Index(NODE_NULL);
+    }
+  }
   void bind(Shader &shader);
   std::array<Light, MAX_LIGHTS> lights;
-  Environment_Map_Descriptor environment =
-      Environment_Map_Descriptor(".//Assets/Textures/Environment_Maps/Arches_E_PineTree/radiance.hdr",
-          ".//Assets/Textures/Environment_Maps/Arches_E_PineTree/irradiance.hdr");
-
+  std::array<Node_Index, MAX_LIGHTS> light_spheres;
+  Environment_Map_Descriptor environment;
   uint32 light_count = 0;
 };
 
@@ -384,12 +491,13 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
-  Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model);
+  Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index);
   mat4 transformation;
   Mesh *mesh;
   Material *material;
   Array_String name;
   uint32 ID;
+  Node_Index node = NODE_NULL;
   bool casts_shadows = true;
 };
 
@@ -400,6 +508,7 @@ struct World_Object
   Material_Descriptor *material_descriptor;
   Array_String name;
   uint32 ID;
+  Node_Index node = NODE_NULL;
 };
 
 // Similar to Render_Entity, but rendered with instancing
@@ -608,11 +717,11 @@ struct Particle_Emission_Method_Descriptor
   bool inherit_velocity = true; // particles gain the velocity of the emitter when spawned
   bool static_geometry_collision = true;
   bool dynamic_geometry_collision = true;
-  float32 simulate_for_n_secs_on_init = 5.0f; // particles will be generated as if the emitter has been on for n seconds
+  float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
                                               // when emitter is initialized, this is useful for things like fog or any
                                               // object that constantly emits particles
-  float32 time_to_live = 4.0f;
-  float32 time_to_live_variance = 1.0f;
+  float32 minimum_time_to_live = 4.0f;
+  float32 extra_time_to_live_variance = 1.0f;
   glm::vec3 initial_position_variance = glm::vec3(0);
 
   // first generated orientation - use to orient within a cone or an entire unit sphere
@@ -625,7 +734,7 @@ struct Particle_Emission_Method_Descriptor
   float32 initial_orientation_angle = 0.0f;
 
   glm::vec3 initial_scale = glm::vec3(1);
-  glm::vec3 initial_scale_variance = glm::vec3(0);
+  glm::vec3 initial_extra_scale_variance = glm::vec3(0);
   glm::vec3 initial_velocity = glm::vec3(0, 0, 1);
   glm::vec3 initial_velocity_variance = glm::vec3(0.15, 0.15, 0);
   glm::vec3 initial_angular_velocity = glm::vec3(0);
@@ -646,12 +755,16 @@ struct Particle_Physics_Method_Descriptor
   float32 mass = 1.0f;
   vec3 gravity = vec3(0, 0, -9.8);
   bool oriented_towards_camera = false;
+  float32 bounce_min = 0.45;
+  float32 bounce_max = 0.75;
 
   // simple
 
   // wind
   vec3 direction = vec3(1, .4, .3);
   float32 intensity = 1.0f;
+
+  Octree *octree = nullptr;
 };
 
 struct Particle_Emission_Method
@@ -760,12 +873,12 @@ struct Renderer
   // todo: negative glow
   // not describe them
   // with shader3 and materialB  these special effect methods would be hardcoded and the objects would point to them,
+  Renderer() {}
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
   void render(float64 state_time);
-  vec3 ray_from_screen_pixel(ivec2 pixel);
   std::string name = "Unnamed Renderer";
-  bool use_txaa = true;
+  bool use_txaa = false;
   bool use_fxaa = true;
   void resize_window(ivec2 window_size);
   float32 get_render_scale() const
@@ -776,13 +889,23 @@ struct Renderer
   {
     return vfov;
   }
+
+  vec3 ray_from_screen_pixel(ivec2 pixel)
+  {
+    pixel.y = window_size.y - pixel.y;
+    const vec2 pixel_normalized = vec2(pixel) / vec2(window_size);
+    const vec2 screen_ndc = 2.0f * (pixel_normalized - vec2(0.5f));
+   // set_message("cursor_ndc:", s(vec4(screen_ndc, 0, 0)), 1.0f);
+    mat4 inv = glm::inverse(projection * camera);
+    return normalize(inv * vec4(screen_ndc, 1, 1));
+  }
   void set_render_scale(float32 scale);
   void set_camera(vec3 camera_pos, vec3 dir);
   void set_camera_gaze(vec3 camera_pos, vec3 p);
   void set_vfov(float32 vfov); // vertical field of view in degrees
   SDL_Window *window;
   void set_render_entities(std::vector<Render_Entity> *entities);
-  void set_lights(Light_Array lights);
+
   float64 target_frame_time = 1.0 / 60.0;
   uint64 frame_count = 0;
   vec3 clear_color = vec3(1, 0, 0);
@@ -799,8 +922,10 @@ struct Renderer
   void draw_imgui();
 
   Mesh quad;
+  Mesh cube;
   Shader temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
   Shader passthrough = Shader("passthrough.vert", "passthrough.frag");
+  Shader tonemapping = Shader("passthrough.vert", "tonemapping.frag");
   Shader variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
   Shader gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
   Shader fxaa = Shader("passthrough.vert", "fxaa.frag");
@@ -810,9 +935,13 @@ struct Renderer
   Shader bloom_mix = Shader("passthrough.vert", "bloom_mix.frag");
   Shader high_pass_shader = Shader("passthrough.vert", "high_pass_filter.frag");
   Shader simple = Shader("vertex_shader.vert", "passthrough.frag");
+  Shader skybox = Shader("vertex_shader.vert", "skybox.frag");
+  Shader refraction = Shader("vertex_shader.vert", "refraction.frag");
+  Shader water = Shader("vertex_shader.vert", "water.frag");
 
   Texture uv_map_grid;
   Texture brdf_integration_lut;
+
   bool previous_color_target_missing = true;
 
   Light_Array lights;
@@ -827,6 +956,8 @@ struct Renderer
   void instance_pass(float32 time);
   void translucent_pass(float32 time);
   void postprocess_pass(float32 time);
+  void skybox_pass(float32 time);
+  void copy_to_primary_framebuffer_and_txaa(float32 time);
   Texture translucent_blur_target;
   Texture bloom_target;
   Texture bloom_result;
@@ -845,12 +976,14 @@ struct Renderer
   mat4 camera;
   mat4 previous_camera;
   mat4 projection;
+  float32 aspect = (float32)window_size.x / (float32)window_size.y;
+  float32 znear = 0.1f;
+  float32 zfar = 10000;
   vec3 camera_position = vec3(0);
+  vec3 camera_gaze = vec3(0);
   vec3 prev_camera_position = vec3(0);
-  vec3 camera_gaze;
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
-  float32 znear;
 
   Framebuffer previous_draw_target; // full render scaled, float linear
 

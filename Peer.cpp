@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "Peer.h"
 
 using std::make_unique;

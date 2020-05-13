@@ -2,8 +2,11 @@
 #include "Scene_Graph.h"
 #include "Globals.h"
 #include "Render.h"
+#include "Physics.h"
+#include "assimp/metadata.h"
 using json = nlohmann::json;
 using namespace std;
+using namespace ImGui;
 
 Assimp::Importer IMPORTER;
 
@@ -42,54 +45,39 @@ Node_Index Flat_Scene_Graph::add_mesh(std::string name, Mesh_Descriptor *d, Mate
 
 Node_Index Flat_Scene_Graph::add_mesh(Mesh_Primitive p, std::string name, Material_Descriptor *md)
 {
-  Mesh_Descriptor d;
-  d.name = s(p);
-  d.primitive = p;
+  Mesh_Descriptor d(p, name);
   return add_mesh(name, &d, md);
 }
 
-Material_Index Flat_Scene_Graph::copy_material_to_new_pool_slot(
-    Node_Index i, Model_Index model_index, Material_Descriptor *m, bool modify_or_overwrite)
-{
-  Flat_Scene_Graph_Node *node = &nodes[i];
-  ASSERT(model_index < MAX_MESHES_PER_NODE);
-  if (node->model[model_index].second.i == NODE_NULL)
-  {
-    ASSERT(0);
-  }
-
-  Material_Index current_index = node->model[model_index].second;
-  Material_Index new_index;
-  if (current_index.use_material_index_for_material_pool)
-  {
-    // if its already in the pool, we need to copy because pushing can invalidate the resource
-    Material_Descriptor valid = *resource_manager->retrieve_pool_material_descriptor(current_index);
-    new_index = resource_manager->push_custom_material(&valid);
-  }
-  else
-  {
-    Material_Descriptor *current =
-        resource_manager->retrieve_assimp_material_descriptor(s(node->filename_of_import), current_index);
-    new_index = resource_manager->push_custom_material(current);
-  }
-
-  Material_Descriptor *new_descriptor = resource_manager->retrieve_pool_material_descriptor(new_index);
-
-  if (m)
-  {
-    modify_material(new_index, m, modify_or_overwrite);
-  }
-  node->model[model_index].second = new_index;
-  return new_index;
-}
+// Material_Index Flat_Scene_Graph::copy_material_to_new_pool_slot(
+//    Node_Index i, Model_Index model_index, Material_Descriptor *m, bool modify_or_overwrite)
+//{
+//  Flat_Scene_Graph_Node *node = &nodes[i];
+//  ASSERT(model_index < MAX_MESHES_PER_NODE);
+//  if (node->model[model_index].second.i == NODE_NULL)
+//  {
+//    ASSERT(0);
+//  }
+//
+//  Material_Index current_index = node->model[model_index].second;
+//  Material_Index new_index;
+//  Material_Descriptor valid = *resource_manager->retrieve_pool_material(current_index)->get_descriptor();
+//  new_index = resource_manager->push_custom_material(&valid);
+//
+//  Material_Descriptor *new_descriptor = resource_manager->retrieve_pool_material_descriptor(new_index);
+//
+//  if (m)
+//  {
+//    modify_material(new_index, m, modify_or_overwrite);
+//  }
+//  node->model[model_index].second = new_index;
+//  return new_index;
+//}
 
 void Flat_Scene_Graph::modify_material(
     Material_Index material_index, Material_Descriptor *material, bool modify_or_overwrite)
 {
-  ASSERT(material_index.use_material_index_for_material_pool); // modify_material cannot be used on an assimp import
-                                                               // index - copy to pool first
-
-  Material_Descriptor *current_descriptor = resource_manager->retrieve_pool_material_descriptor(material_index);
+  Material_Descriptor *current_descriptor = resource_manager->material_pool[material_index].get_modifiable_descriptor();
   ASSERT(current_descriptor);
   if (material)
   {
@@ -129,130 +117,78 @@ void Flat_Scene_Graph::modify_all_materials(
 void Flat_Scene_Graph::draw_imgui_specific_mesh(Mesh_Index mesh_index)
 {
   std::unordered_map<std::string, Imported_Scene_Data> *import_data = &resource_manager->import_data;
-  std::vector<Mesh_Descriptor> *mesh_descriptor_pool = &resource_manager->mesh_descriptor_pool;
-
-  if (mesh_index.use_mesh_index_for_mesh_pool)
+  std::array<Mesh, MAX_POOL_SIZE> *mesh_pool = &resource_manager->mesh_pool;
+  // could you actually just... put an entirely new state object in here and render it but not to screen
+  // just to the renderers buffer and then use that as a imgui texture
+  if (!(mesh_index < resource_manager->current_mesh_pool_size))
   {
-    if (!(mesh_index.i < mesh_descriptor_pool->size()))
-    {
-      ImGui::Text("No mesh selected");
-      return;
-    }
-    Mesh_Descriptor *ptr = &(*mesh_descriptor_pool)[mesh_index.i];
-    ImGui::Text(s("Name:", ptr->name).c_str());
-    ImGui::Text(s("assimp_filename:", ptr->assimp_filename).c_str());
-    ImGui::Text(s("assimp_index:", ptr->assimp_index).c_str());
-    ImGui::Text(s("primitive:", ptr->primitive).c_str());
-    ImGui::Text(s("is_custom_mesh_data:", ptr->is_custom_mesh_data).c_str());
-    ImGui::Text(s("build_unique_identifier():", ptr->build_unique_identifier()).c_str());
+    ImGui::Text("No mesh selected");
+    return;
+  }
+  Mesh_Descriptor *ptr = &(resource_manager->mesh_pool[mesh_index].mesh->descriptor);
+  ImGui::Text(s("Name:", ptr->name).c_str());
+  ImGui::Text(s("unique_identifier:", ptr->unique_identifier).c_str());
 
-    if (showing_mesh_data)
-    {
-      if (ImGui::Button("Hide Mesh Data"))
-        showing_mesh_data = false;
+  if (showing_mesh_data)
+  {
+    if (ImGui::Button("Hide Mesh Data"))
+      showing_mesh_data = false;
 
-      ImGui::Text(s("Name: ", ptr->mesh_data.name).c_str());
-      ImGui::Text(s("Vertex count: ", ptr->mesh_data.positions.size()).c_str());
-      ImGui::Text(s("Indices count: ", ptr->mesh_data.indices.size()).c_str());
-      ImGui::Text(s("Unique Identifier: ", ptr->mesh_data.build_unique_identifier()).c_str());
+    ImGui::Text(s("Vertex count: ", ptr->mesh_data.positions.size()).c_str());
+    ImGui::Text(s("Indices count: ", ptr->mesh_data.indices.size()).c_str());
 
-      // todo: render wireframe
-    }
-    else
-    {
-
-      if (ImGui::Button("Show Mesh Data"))
-        showing_mesh_data = true;
-    }
+    // todo: render wireframe
   }
   else
   {
-    ImGui::Text("Assimp mesh");
-    ImGui::Text(s(imgui_selected_import_filename).c_str());
+
+    if (ImGui::Button("Show Mesh Data"))
+      showing_mesh_data = true;
   }
 }
 
 void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_index)
 {
   std::unordered_map<std::string, Imported_Scene_Data> *import_data = &resource_manager->import_data;
-  std::vector<Material_Descriptor> *material_descriptor_pool = &resource_manager->material_descriptor_pool;
 
-  if (material_index.use_material_index_for_material_pool)
+  if (!(material_index < resource_manager->current_material_pool_size))
   {
-    if (!(material_index.i < material_descriptor_pool->size()))
-    {
-      ImGui::Text("No material selected");
-      return;
-    }
-    Material_Descriptor *ptr = &(*material_descriptor_pool)[material_index.i];
-    draw_imgui_texture_element("Albedo", &ptr->albedo, 0);
-    ImGui::Separator();
-    draw_imgui_texture_element("Emissive", &ptr->emissive, 1);
-    ImGui::Separator();
-    draw_imgui_texture_element("Roughness", &ptr->roughness, 2);
-    ImGui::Separator();
-    draw_imgui_texture_element("Normal", &ptr->normal, 3);
-    ImGui::Separator();
-    draw_imgui_texture_element("Metalness", &ptr->metalness, 4);
-    ImGui::Separator();
-    draw_imgui_texture_element("Ambient Occlusion", &ptr->ambient_occlusion, 5);
-    ImGui::Separator();
-    ImGui::PushItemWidth(200);
-    Array_String str = ptr->vertex_shader;
-    ImGui::InputText("Vertex Shader", &str.str[0], str.str.size());
-    ptr->vertex_shader = s(str);
-    Array_String str2 = ptr->frag_shader;
-    ImGui::InputText("Fragment Shader", &str2.str[0], str2.str.size());
-    ptr->frag_shader = s(str2);
-    ImGui::DragFloat2("UV Scale", &ptr->uv_scale[0]);
-    ImGui::DragFloat2("Normal UV Scale", &ptr->normal_uv_scale[0]);
-    ImGui::DragFloat("Albedo Alpha Override", &ptr->albedo_alpha_override);
-    ImGui::Checkbox("Backface Culling", &ptr->backface_culling);
-    ImGui::Checkbox("Uses Transparency", &ptr->uses_transparency);
-    ImGui::Checkbox("Discard On Alpha", &ptr->discard_on_alpha);
-    ImGui::Checkbox("Casts Shadows", &ptr->casts_shadows);
-    ImGui::PopItemWidth();
+    ImGui::Text("No material selected");
+    return;
   }
-  else
-  {
-    ImGui::Text("Asimp Import Material:");
-    ImGui::Text(s(imgui_selected_import_filename).c_str());
-    Material_Descriptor *ptr =
-        resource_manager->retrieve_assimp_material_descriptor(s(imgui_selected_import_filename), material_index);
-    if (ptr)
-    {
-      draw_imgui_const_texture_element("Albedo", &ptr->albedo);
-      ImGui::Separator();
-      draw_imgui_const_texture_element("Emissive", &ptr->emissive);
-      ImGui::Separator();
-      draw_imgui_const_texture_element("Roughness", &ptr->roughness);
-      ImGui::Separator();
-      draw_imgui_const_texture_element("Normal", &ptr->normal);
-      ImGui::Separator();
-      draw_imgui_const_texture_element("Metalness", &ptr->metalness);
-      ImGui::Separator();
-      draw_imgui_const_texture_element("Ambient Occlusion", &ptr->ambient_occlusion);
-      ImGui::Separator();
-      ImGui::PushItemWidth(200);
-      ImGui::Text(s("Vertex Shader: ", ptr->vertex_shader).c_str());
-      ImGui::Text(s("Fragment Shader: ", ptr->frag_shader).c_str());
-      // ImGui::Text(s("UV Scale", ptr->uv_scale).c_str());
-      // ImGui::Text(s("Normal UV Scale", ptr->normal_uv_scale).c_str());
-      ImGui::Text(s("Albedo Alpha Override: ", ptr->albedo_alpha_override).c_str());
-      ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "These should be editable, but needs a way to apply:");
-      ImGui::Checkbox("Backface Culling", &ptr->backface_culling);
-      ImGui::Checkbox("Uses Transparency", &ptr->uses_transparency);
-      ImGui::Checkbox("Discard On Alpha", &ptr->discard_on_alpha);
-      ImGui::Checkbox("Casts Shadows", &ptr->casts_shadows);
-    }
-    else
-    {
-      ImGui::TextColored(
-          ImVec4(0.5f + 0.5f * (float32)sin(get_real_time() * 4.f), 0.0f, 0.0f, 1.0f), "Loading import...");
-    }
-  }
+  Material_Descriptor *ptr = resource_manager->material_pool[material_index].get_modifiable_descriptor();
+  draw_imgui_texture_element("Albedo", &ptr->albedo, 0);
+  // ImGui::Separator();
+  draw_imgui_texture_element("Emissive", &ptr->emissive, 1);
+  // ImGui::Separator();
+  draw_imgui_texture_element("Roughness", &ptr->roughness, 2);
+  // ImGui::Separator();
+  draw_imgui_texture_element("Normal", &ptr->normal, 3);
+  // ImGui::Separator();
+  draw_imgui_texture_element("Metalness", &ptr->metalness, 4);
+  // ImGui::Separator();
+  draw_imgui_texture_element("Ambient Occlusion", &ptr->ambient_occlusion, 5);
+  // ImGui::Separator();
+  ImGui::PushItemWidth(200);
+  Array_String str = ptr->vertex_shader;
+  ImGui::InputText("Vertex Shader", &str.str[0], str.str.size());
+  ptr->vertex_shader = s(str);
+  Array_String str2 = ptr->frag_shader;
+  ImGui::InputText("Fragment Shader", &str2.str[0], str2.str.size());
+  ptr->frag_shader = s(str2);
+  ImGui::DragFloat2("UV Scale", &ptr->uv_scale[0]);
+  ImGui::DragFloat2("Normal UV Scale", &ptr->normal_uv_scale[0]);
+  ImGui::DragFloat("Albedo Alpha Override", &ptr->albedo_alpha_override);
+  ImGui::Checkbox("Backface Culling", &ptr->backface_culling);
+  ImGui::Checkbox("Uses Transparency", &ptr->uses_transparency);
+  ImGui::Checkbox("Wireframe", &ptr->wireframe);
+  ImGui::Checkbox("Discard On Alpha", &ptr->discard_on_alpha);
+  ImGui::Checkbox("Casts Shadows", &ptr->casts_shadows);
+  ImGui::Checkbox("Blending", &ptr->blending);
+  ImGui::PopItemWidth();
 }
 
+File_Picker FILE_PICKER = File_Picker(".");
 void Flat_Scene_Graph::draw_imgui_light_array()
 {
   static bool open = false;
@@ -264,49 +200,46 @@ void Flat_Scene_Graph::draw_imgui_light_array()
   uint32 height = initial_height + height_per_inactive_light * lights.light_count;
   // ImGui::Begin("lighting adjustment", &open, ImGuiWindowFlags_NoResize);
   {
-    static auto picker = File_Picker(".");
-    static bool browsing = false;
-    static bool type = false; // true for radiance, false for irradiance
     std::string radiance_map_result = lights.environment.radiance;
     std::string irradiance_map_result = lights.environment.irradiance;
     bool updated = false;
     ImGui::Separator();
     if (ImGui::Button("Radiance Map"))
     {
-      type = true;
-      browsing = true;
+      file_type = true;
+      file_browsing = true;
     }
 
     ImGui::SameLine();
-    ImGui::TextWrapped(s("Radiance map: ", radiance_map_result).c_str());
+    // ImGui::TextWrapped(s("Radiance map: ", radiance_map_result).c_str());
 
-    ImGui::Separator();
+    // ImGui::Separator();
     if (ImGui::Button("Irradiance Map"))
     {
-      type = false;
-      browsing = true;
+      file_type = false;
+      file_browsing = true;
     }
-    ImGui::SameLine();
-    ImGui::TextWrapped(s("Irradiance map: ", irradiance_map_result).c_str());
+    // ImGui::SameLine();
+    // ImGui::TextWrapped(s("Irradiance map: ", irradiance_map_result).c_str());
 
-    ImGui::Separator();
-    if (browsing)
+    // ImGui::Separator();
+    if (file_browsing)
     {
-      if (picker.run())
+      if (FILE_PICKER.run())
       {
-        browsing = false;
-        if (type)
-          radiance_map_result = picker.get_result();
+        file_browsing = false;
+        if (file_type)
+          radiance_map_result = FILE_PICKER.get_result();
         else
-          irradiance_map_result = picker.get_result();
+          irradiance_map_result = FILE_PICKER.get_result();
         updated = true;
       }
-      else if (picker.get_closed())
+      else if (FILE_PICKER.get_closed())
       {
-        browsing = false;
+        file_browsing = false;
       }
     }
-    check_gl_error();
+
     if (updated)
     {
       Environment_Map_Descriptor d;
@@ -344,7 +277,7 @@ void Flat_Scene_Graph::draw_imgui_light_array()
   for (uint32 i = 0; i < lights.light_count; ++i)
   {
     ImGui::PushID(s(i).c_str());
-    ImGui::PushItemWidth(150);
+    // ImGui::PushItemWidth(150);
     if (want_collapse)
     {
       ImGui::SetNextTreeNodeOpen(false);
@@ -354,18 +287,18 @@ void Flat_Scene_Graph::draw_imgui_light_array()
       ImGui::PopID();
       continue;
     }
-    width = 270;
+    // width = 270;
     height = max_height;
     Light *light = &lights.lights[i];
     ImGui::Indent(5);
     ImGui::LabelText("Option", "Setting %u", i);
     ImGui::ColorPicker3("Radiance", &light->color[0], ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_RGB);
     ImGui::DragFloat3("Position", &light->position[0]);
-    ImGui::DragFloat("Brightness", &light->brightness, 0.1f);
+    ImGui::DragFloat("Brightness", &light->brightness, 0.1f, -1000000, 100000000, "%.3f", 3.f);
     light->brightness = glm::max(light->brightness, 0.0000001f);
     ImGui::DragFloat3("Attenuation", &light->attenuation[0], 0.01f);
-    ImGui::DragFloat("Ambient", &light->ambient, 0.001f);
-    light->ambient = glm::max(light->ambient, 0.f);
+    ImGui::DragFloat("Ambient", &light->ambient, 0.001f, 0.0, 100, "%0.8f", 3.0f);
+    // light->ambient = glm::max(light->ambient, 0.f);
     ImGui::DragFloat("radius", &light->radius, 0.01f);
     std::string current_type = s(light->type);
     if (ImGui::BeginCombo("Light Type", current_type.c_str()))
@@ -398,14 +331,14 @@ void Flat_Scene_Graph::draw_imgui_light_array()
       {
         if (ImGui::TreeNode("Shadow settings"))
         {
-          width = 320;
+          // width = 320;
           ImGui::InputInt2("Shadow Map Resolution", &light->shadow_map_resolution[0]);
           ImGui::InputInt("Blur Iterations", &light->shadow_blur_iterations, 1, 0);
-          ImGui::DragFloat("Blur Radius", &light->shadow_blur_radius, 0.1f, 0.00001f, 0.0f);
+          ImGui::DragFloat("Blur Radius", &light->shadow_blur_radius, 0.01f, 0.00001f, 0.0f, "%.5f", 2.0f);
           ImGui::DragFloat("Near Plane", &light->shadow_near_plane, 1.0f, 0.00001f);
           ImGui::DragFloat("Far Plane", &light->shadow_far_plane, 1.0f, 1.0f);
-          ImGui::InputFloat("Max Variance", &light->max_variance, 0.0000001f, 0.0001f, 12);
-          ImGui::DragFloat("FoV", &light->shadow_fov, 1.0f, 0.0000001f, 90.f);
+          ImGui::DragFloat("Max Variance", &light->max_variance, 0.001f, 0.0f, 12, "%.8f", 3.0f);
+          ImGui::DragFloat("FoV", &light->shadow_fov, 0.001f, 0.0f, 12, "%.8f", 3.0f);
           ImGui::TreePop();
 
           light->shadow_blur_iterations = glm::max(light->shadow_blur_iterations, 0);
@@ -414,8 +347,61 @@ void Flat_Scene_Graph::draw_imgui_light_array()
         }
       }
     }
+
+    if (ImGui::Button("Save Light"))
+    {
+      std::stringstream ss;
+      ss.precision(numeric_limits<float32>::digits10 - 1);
+      ss << fixed;
+      ss << "Light* light" << i << " = &scene.lights.lights[" << i << "];\n";
+      ss << "light" << i << "->position = vec3(" << light->position.x << "," << light->position.y << ","
+         << light->position.z << ");\n";
+      ss << "light" << i << "->direction = vec3(" << light->direction.x << "," << light->direction.y << ","
+         << light->direction.z << ");\n";
+      ss << "light" << i << "->brightness = " << light->brightness << ";\n";
+      ss << "light" << i << "->color = vec3(" << light->color.x << "," << light->color.y << "," << light->color.z
+         << ");\n";
+      ss << "light" << i << "->attenuation = vec3(" << light->attenuation.x << "," << light->attenuation.y << ","
+         << light->attenuation.z << ");\n";
+      ss << "light" << i << "->ambient = " << light->ambient << ";\n";
+      ss << "light" << i << "->radius = " << light->radius << ";\n";
+      ss << "light" << i << "->cone_angle = " << light->cone_angle << ";\n";
+      ss << "light" << i << "->type = Light_Type::";
+
+      if (light->type == Light_Type::parallel)
+      {
+        ss << "parallel;\n";
+      }
+      if (light->type == Light_Type::omnidirectional)
+      {
+        ss << "omnidirectional;\n";
+      }
+      if (light->type == Light_Type::spot)
+      {
+        ss << "spot;\n";
+      }
+      ss << "light" << i << "->casts_shadows = " << light->casts_shadows << ";\n";
+      ss << "light" << i << "->shadow_blur_iterations = " << light->shadow_blur_iterations << ";\n";
+      ss << "light" << i << "->shadow_blur_radius = " << light->shadow_blur_radius << ";\n";
+      ss << "light" << i << "->shadow_near_plane = " << light->shadow_near_plane << ";\n";
+      ss << "light" << i << "->shadow_far_plane = " << light->shadow_far_plane << ";\n";
+      ss << "light" << i << "->max_variance = " << light->max_variance << ";\n";
+      ss << "light" << i << "->shadow_fov = " << light->shadow_fov << ";\n";
+      ss << "light" << i << "->shadow_map_resolution = ivec2(" << light->shadow_map_resolution.x << ","
+         << light->shadow_map_resolution.y << ");\n";
+
+      int result = SDL_SetClipboardText(ss.str().c_str());
+      if (result == 0)
+      {
+        set_message("Copied to clipboard:", ss.str(), 1.0f);
+      }
+      else
+      {
+        set_message("Copied to clipboard failed.", "", 1.0f);
+      }
+    }
     ImGui::Unindent(5.f);
-    ImGui::PopItemWidth();
+    //ImGui::PopItemWidth();
     ImGui::PopID();
   }
   ImGui::EndChild();
@@ -476,22 +462,22 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   ImGui::DragFloat3("Velocity", &node->velocity[0], 0.01f);
   ImGui::DragFloat4("Orientation", &node->orientation[0], 0.01f);
 
-  bool non_default_basis = node->import_basis != mat4(1);
-  if (non_default_basis)
-  {
-    ImGui::PushStyleColor(0, ImVec4(0.75f + 0.5f * (float32)sin(4.0f * get_real_time()), 0.f, 0.f, 1.f));
-    if (ImGui::TreeNode("Import Basis:"))
-    {
-      ImGui::Text(s(node->import_basis).c_str());
-      ImGui::TreePop();
-    }
-    if (non_default_basis)
-      ImGui::PopStyleColor();
-  }
-  else
-  {
-    ImGui::Text("Import Basis: Identity");
-  }
+  // bool non_default_basis = node->import_basis != mat4(1);
+  // if (non_default_basis)
+  //{
+  //  ImGui::PushStyleColor(0, ImVec4(0.75f + 0.5f * (float32)sin(4.0f * get_real_time()), 0.f, 0.f, 1.f));
+  //  if (ImGui::TreeNode("Import Basis:"))
+  //  {
+  //    //ImGui::Text(s(node->import_basis).c_str());
+  //    ImGui::TreePop();
+  //  }
+  //  if (non_default_basis)
+  //    ImGui::PopStyleColor();
+  //}
+  // else
+  //{
+  //  ImGui::Text("Import Basis: Identity");
+  //}
 
   ImGui::Text("Parent:[");
   ImGui::SameLine();
@@ -499,6 +485,15 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
   else
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->parent).c_str());
+  ImGui::SameLine();
+  ImGui::Text("]");
+
+  ImGui::Text("Collider:[");
+  ImGui::SameLine();
+  if (node->collider == NODE_NULL)
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+  else
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->collider).c_str());
   ImGui::SameLine();
   ImGui::Text("]");
 
@@ -538,28 +533,15 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
       ImGui::SameLine();
 
       // mesh
-      if (mesh_index.i == NODE_NULL)
+      if (mesh_index == NODE_NULL)
       {
         ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
       }
       else
       {
-        if (mesh_index.use_mesh_index_for_mesh_pool)
+        if (ImGui::Button(s("Mesh Pool[", mesh_index, "]").c_str()))
         {
-          if (ImGui::Button(s("Mesh Pool[", mesh_index.i, "]").c_str()))
-          {
-            favor_resource_mesh = true;
-            imgui_selected_mesh = mesh_index;
-          }
-        }
-        else
-        {
-          if (ImGui::Button(s("Assimp Mesh[", mesh_index.i, "]").c_str()))
-          {
-            favor_resource_mesh = true;
-            imgui_selected_mesh = mesh_index;
-            imgui_selected_import_filename = node->filename_of_import;
-          }
+          imgui_selected_mesh = mesh_index;
         }
       }
 
@@ -568,28 +550,15 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
       ImGui::SameLine();
 
       // mat
-      if (material_index.i == NODE_NULL)
+      if (material_index == NODE_NULL)
       {
         ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
       }
       else
       {
-        if (material_index.use_material_index_for_material_pool)
+        if (ImGui::Button(s("Material Pool[", material_index, "]").c_str()))
         {
-          if (ImGui::Button(s("Material Pool[", material_index.i, "]").c_str()))
-          {
-            imgui_selected_material = material_index;
-            favor_resource_mesh = false;
-          }
-        }
-        else
-        {
-          if (ImGui::Button(s("Assimp Material[", material_index.i, "]").c_str()))
-          {
-            favor_resource_mesh = false;
-            imgui_selected_material = material_index;
-            imgui_selected_import_filename = node->filename_of_import;
-          }
+          imgui_selected_material = material_index;
         }
       }
       ImGui::SameLine();
@@ -608,6 +577,10 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   ImGui::Text("Final Transformation:");
   mat4 m = build_transformation(node_index, false);
   ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(m).c_str());
+  if (ImGui::Button(s("Delete Node (dangerous)").c_str()))
+  {
+    delete_node(node_index);
+  }
 }
 
 void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
@@ -665,39 +638,50 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
 
 void Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture_Descriptor *ptr, uint32 slot)
 {
-  if (ImGui::TreeNode(name))
-  {
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollWithMouse;
-    ImGui::BeginChild("Texture Stuff", ImVec2(250, 100), false, flags);
-    Array_String str = ptr->name;
-    ImGui::InputText("Name", &str.str[0], str.str.size());
-    ImGui::SameLine();
-    if (ImGui::Button("Browse"))
-      if (!texture_picker_in_use)
-      {
-        texture_picker_in_use = true;
-        texture_picking_slot = slot;
-      }
-    if (texture_picker_in_use)
+  Array_String str = ptr->name;
+  ImGui::PushID(int(name));
+  ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollWithMouse;
+  ImGui::BeginChild("Texture Stuff", ImVec2(160, 140), false, flags);
+  ImGui::Text(name);
+  ImGui::SameLine();
+  if (ImGui::Button("Browse"))
+    if (!texture_picker_in_use)
     {
-      if (slot == texture_picking_slot)
-      { // don't consume the result if it isnt for this texture
-        if (texture_picker.run())
-        {
-          texture_picker_in_use = false;
-          str = texture_picker.get_result();
-        }
-        else if (texture_picker.get_closed())
-          texture_picker_in_use = false;
-      }
+      texture_picker_in_use = true;
+      texture_picking_slot = slot;
     }
-    ptr->name = s(str);
-    ImGui::DragFloat4("mod", &ptr->mod[0], 0.001f, 0.0f);
-    ImGui::EndChild();
-    ImGui::SameLine();
-    put_imgui_texture(ptr, vec2(90, 90));
-    ImGui::TreePop();
+  if (texture_picker_in_use)
+  {
+    if (slot == texture_picking_slot)
+    { // don't consume the result if it isnt for this texture
+      if (texture_picker.run())
+      {
+        texture_picker_in_use = false;
+        str = texture_picker.get_result();
+      }
+      else if (texture_picker.get_closed())
+        texture_picker_in_use = false;
+    }
   }
+
+  // if (ImGui::TreeNode(name))
+  //{
+
+  ImGui::InputText("Name", &str.str[0], str.str.size());
+
+  ptr->name = s(str);
+  ImGui::DragFloat("mod_r", &ptr->mod[0], 0.001f, 0.0f);
+  ImGui::DragFloat("mod_g", &ptr->mod[1], 0.001f, 0.0f);
+  ImGui::DragFloat("mod_b", &ptr->mod[2], 0.001f, 0.0f);
+  ImGui::DragFloat("mod_a", &ptr->mod[3], 0.001f, 0.0f);
+  ImGui::EndChild();
+  ImGui::SameLine();
+  put_imgui_texture(ptr, vec2(140, 140));
+
+  // ImGui::TreePop();
+  ImGui::PopID();
+  ImGui::NewLine();
+  //}
 }
 
 void Flat_Scene_Graph::draw_imgui_const_texture_element(const char *name, Texture_Descriptor *ptr)
@@ -720,8 +704,8 @@ void Flat_Scene_Graph::draw_imgui_const_texture_element(const char *name, Textur
 void Flat_Scene_Graph::draw_imgui_resource_manager()
 {
   std::unordered_map<std::string, Imported_Scene_Data> *import_data = &resource_manager->import_data;
-  std::vector<Mesh_Descriptor> *mesh_descriptor_pool = &resource_manager->mesh_descriptor_pool;
-  std::vector<Material_Descriptor> *material_descriptor_pool = &resource_manager->material_descriptor_pool;
+  std::array<Mesh, MAX_POOL_SIZE> *mesh_pool = &resource_manager->mesh_pool;
+  std::array<Material, MAX_POOL_SIZE> *material_pool = &resource_manager->material_pool;
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
   if (ImGui::TreeNodeEx("Assimp Imports", flags))
   {
@@ -742,15 +726,14 @@ void Flat_Scene_Graph::draw_imgui_resource_manager()
   // draw and handle mesh selection
   if (ImGui::TreeNodeEx("Mesh Descriptor Pool", flags))
   {
-    for (uint32 i = 0; i < mesh_descriptor_pool->size(); ++i)
+    for (uint32 i = 0; i < resource_manager->current_mesh_pool_size; ++i)
     {
       ImGui::PushID(i);
       ImGuiTreeNodeFlags flags;
-      const bool this_mesh_matches_selected =
-          (imgui_selected_mesh.i == i) && (imgui_selected_mesh.use_mesh_index_for_mesh_pool);
+      const bool this_mesh_matches_selected = (imgui_selected_mesh == i);
 
       // highlight the node if its selected
-      if (imgui_selected_mesh.i == i)
+      if (imgui_selected_mesh == i)
         flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Selected;
       else
         flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
@@ -761,9 +744,7 @@ void Flat_Scene_Graph::draw_imgui_resource_manager()
       {
         if (!this_mesh_matches_selected)
         {
-          imgui_selected_mesh.i = i;
-          imgui_selected_mesh.use_mesh_index_for_mesh_pool = true;
-          favor_resource_mesh = true;
+          imgui_selected_mesh = i;
         }
         else
           imgui_selected_mesh = {};
@@ -784,16 +765,15 @@ void Flat_Scene_Graph::draw_imgui_resource_manager()
   // draw and handle material selection
   if (ImGui::TreeNodeEx("Material Descriptor Pool", flags))
   {
-    for (uint32 i = 0; i < material_descriptor_pool->size(); ++i)
+    for (uint32 i = 0; i < resource_manager->current_material_pool_size; ++i)
     {
       ImGui::PushID(i);
       ImGuiTreeNodeFlags flags;
 
-      const bool this_material_matches_selected =
-          (imgui_selected_material.i == i) && (imgui_selected_material.use_material_index_for_material_pool);
+      const bool this_material_matches_selected = (imgui_selected_material == i);
 
       // highlight the node if its selected
-      if (imgui_selected_material.i == i)
+      if (imgui_selected_material == i)
         flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Selected;
       else
         flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
@@ -804,9 +784,7 @@ void Flat_Scene_Graph::draw_imgui_resource_manager()
       {
         if (!this_material_matches_selected)
         {
-          imgui_selected_material.i = i;
-          imgui_selected_material.use_material_index_for_material_pool = true;
-          favor_resource_mesh = false;
+          imgui_selected_material = i;
         }
         else
           imgui_selected_material = {};
@@ -841,6 +819,153 @@ void Flat_Scene_Graph::draw_active_nodes()
   }
 }
 
+const char *imgui_pane_to_string(imgui_pane p)
+{
+  if (p == node_tree)
+  {
+    return "node_tree";
+  }
+  if (p == resource_man)
+  {
+    return "resource_man";
+  }
+  if (p == light_array)
+  {
+    return "light_array";
+  }
+  if (p == selected_node)
+  {
+    return "selected_node";
+  }
+  if (p == selected_mes)
+  {
+    return "selected_mes";
+  }
+  if (p == selected_mat)
+  {
+    return "selected_mat";
+  }
+  if (p == particle_emit)
+  {
+    return "particle_emit";
+  }
+  if (p == octree)
+  {
+    return "octree";
+  }
+  if (p == blank)
+  {
+    return "blank";
+  }
+  return "Unknown";
+}
+
+void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
+{
+  PushID(uint32(modifying));
+  if (Button("Pane Selection"))
+  {
+    OpenPopup("popperup");
+  }
+  SameLine();
+  TextColored(ImVec4(0, 1, 1, 1), imgui_pane_to_string(*modifying));
+  if (BeginPopup("popperup"))
+  {
+    TextColored(ImVec4(0, 1, 1, 1), "Pane:");
+    ImGui::Separator();
+
+    for (uint32 i = 0; i < imgui_pane::end; ++i)
+    {
+      if (ImGui::Selectable(imgui_pane_to_string(imgui_pane(i))))
+      {
+        *modifying = imgui_pane(i);
+      }
+    }
+
+    ImGui::EndPopup();
+  }
+  PopID();
+}
+
+void Flat_Scene_Graph::draw_imgui_particle_emitter() {}
+
+void Flat_Scene_Graph::draw_imgui_octree()
+{
+  Checkbox("Draw Octree", &draw_collision_octree);
+  Checkbox("Draw Triangles", &collision_octree.include_triangles);
+  Checkbox("Draw Normalss", &collision_octree.include_normals);
+  Checkbox("Draw Velocity", &collision_octree.include_velocity);
+}
+
+void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
+{
+  const float32 horizontal_tile_size = 350;
+  const float32 vertical_tile_size = 400;
+  if (p == node_tree)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Active Scene Graph Nodes:");
+    ImGui::BeginChild("Active Nodes:");
+    draw_active_nodes();
+    ImGui::EndChild();
+  }
+
+  if (p == resource_man)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Resource Manager:");
+    ImGui::BeginChild("Resource Manager:");
+    draw_imgui_resource_manager();
+    ImGui::EndChild();
+  }
+  if (p == light_array)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Light Array:");
+    ImGui::BeginChild("Light Array");
+    draw_imgui_light_array();
+    ImGui::EndChild();
+  }
+  if (p == selected_node)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Scene Graph Node:");
+    ImGui::BeginChild("Selected Node:");
+    draw_imgui_specific_node(imgui_selected_node);
+    ImGui::EndChild();
+  }
+  if (p == selected_mes)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Mesh:");
+    ImGui::BeginChild("Selected Mesh:");
+    draw_imgui_specific_mesh(imgui_selected_mesh);
+    ImGui::EndChild();
+  }
+  if (p == selected_mat)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Material:");
+    ImGui::BeginChild("Selected Material:");
+    draw_imgui_specific_material(imgui_selected_material);
+    ImGui::EndChild();
+  }
+  if (p == particle_emit)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Particle Emitters:");
+    ImGui::BeginChild("Particle Emitters:");
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Particle Emitters Draw Not Implemented");
+    ImGui::EndChild();
+  }
+  if (p == octree)
+  {
+    // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Octree:");
+    ImGui::BeginChild("Octree:");
+    draw_imgui_octree();
+    ImGui::EndChild();
+  }
+
+  if (p == blank)
+  {
+    ImGui::BeginChild("Blank:");
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Blank Pane:");
+    ImGui::EndChild();
+  }
+}
 // uses assimp's defined material if assimp import, else a default-constructed material
 
 void Flat_Scene_Graph::draw_imgui(std::string name)
@@ -848,70 +973,64 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   const float32 selected_node_draw_height = 340;
   const float32 default_window_height = 800;
-  const float32 horizontal_split_size = 350;
+  const float32 horizontal_tile_size = 350;
+  const float32 vertical_tile_size = 400;
   static float32 last_seen_height = 600;
-  ImGui::Begin(s("Scene Graph:", name).c_str(), &imgui_open);
-  float32 fudge = 50.f;
-  float32 width = ImGui::GetWindowWidth();
+  static float32 last_seen_width = 0;
+  ImGuiWindowFlags flags = ImGuiWindowFlags_HorizontalScrollbar;
+  ImGui::Begin(s("Scene Graph:", name).c_str(), &imgui_open, flags);
+
+  last_seen_width = ImGui::GetWindowWidth();
   if (!ImGui::IsWindowCollapsed())
   {
     last_seen_height = ImGui::GetWindowHeight();
   }
-  ImGui::SetWindowSize(ImVec2(3 * horizontal_split_size + fudge, last_seen_height));
+  float32 wid = glm::min(last_seen_width, 3 * horizontal_tile_size + 36);
+  ImGui::SetWindowSize(ImVec2(wid, last_seen_height));
   const float32 line_height = ImGui::GetTextLineHeight();
-  float32 upper_child_height = ImGui::GetContentRegionMax().y - selected_node_draw_height - fudge;
 
   // parent
-  ImGui::BeginChild("parent", ImVec2(horizontal_split_size * 2 + 15, 0), false);
+  // ImGui::BeginChild("parent", ImVec2(0 , 0), true);
   {
     // nodes
-    ImGui::BeginChild("Active Scene Graph Nodes_title", ImVec2(horizontal_split_size, upper_child_height), true);
-    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Active Scene Graph Nodes:");
-    ImGui::BeginChild("Active Nodes:");
-    draw_active_nodes();
-    ImGui::EndChild();
+
+    // ImGui::BeginPopupContextItem("thinger");
+    ImGui::BeginChild("pane0", ImVec2(horizontal_tile_size, vertical_tile_size), true);
+    draw_imgui_pane_selection_button(&imgui_panes[0]);
+    draw_imgui_selected_pane(imgui_panes[0]);
     ImGui::EndChild();
 
-    // resource manager
     ImGui::SameLine();
-    ImGui::BeginChild("resource_manager_title", ImVec2(horizontal_split_size, upper_child_height), true);
-    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Resource Manager:");
-    ImGui::BeginChild("Resource Manager:");
-    draw_imgui_resource_manager();
-    ImGui::EndChild();
+    ImGui::BeginChild("pane1", ImVec2(horizontal_tile_size, vertical_tile_size), true);
+    draw_imgui_pane_selection_button(&imgui_panes[1]);
+    draw_imgui_selected_pane(imgui_panes[1]);
     ImGui::EndChild();
 
-    // selected node
-    ImGui::BeginChild("Selected Scene Graph_title", ImVec2(horizontal_split_size, selected_node_draw_height), true);
-    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Scene Graph Node:");
-    ImGui::BeginChild("Selected Node:");
-    draw_imgui_specific_node(imgui_selected_node);
-    ImGui::EndChild();
-    ImGui::EndChild();
-
-    // selected resource
     ImGui::SameLine();
-    ImGui::BeginChild("Selected Resource title", ImVec2(horizontal_split_size, selected_node_draw_height), true);
-    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Resource:");
-    ImGui::BeginChild("Selected Resource:");
-    if (favor_resource_mesh)
-      draw_imgui_specific_mesh(imgui_selected_mesh);
-    else
-      draw_imgui_specific_material(imgui_selected_material);
+    ImGui::BeginChild("pane2", ImVec2(horizontal_tile_size, vertical_tile_size), true);
+    draw_imgui_pane_selection_button(&imgui_panes[2]);
+    draw_imgui_selected_pane(imgui_panes[2]);
     ImGui::EndChild();
+
+    ImGui::BeginChild("pane3", ImVec2(horizontal_tile_size, vertical_tile_size), true);
+    draw_imgui_pane_selection_button(&imgui_panes[3]);
+    draw_imgui_selected_pane(imgui_panes[3]);
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+    ImGui::BeginChild("pane4", ImVec2(horizontal_tile_size, vertical_tile_size), true);
+    draw_imgui_pane_selection_button(&imgui_panes[4]);
+    draw_imgui_selected_pane(imgui_panes[4]);
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+    ImGui::BeginChild("pane5", ImVec2(horizontal_tile_size, vertical_tile_size), true);
+    draw_imgui_pane_selection_button(&imgui_panes[5]);
+    draw_imgui_selected_pane(imgui_panes[5]);
     ImGui::EndChild();
   }
   // parent
-  ImGui::EndChild();
-
-  // light array
-  ImGui::SameLine();
-  ImGui::BeginChild("LightArrayTitle", ImVec2(horizontal_split_size, last_seen_height - 54), true);
-  ImGui::TextColored(ImVec4(1, 0, 0, 1), "Light Array:");
-  ImGui::BeginChild("Light Array");
-  draw_imgui_light_array();
-  ImGui::EndChild();
-  ImGui::EndChild();
+  // ImGui::EndChild();
 
   // draw_imgui_command_interface();
   // todo: UI for set parent, grab, drop, material changes,
@@ -924,62 +1043,27 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
 
   ImGui::End();
 }
+//
+// void Flat_Scene_Graph::copy_all_materials_to_new_pool_slots(
+//    Node_Index i, Material_Descriptor *material, bool modify_or_overwrite)
+//{
+//  if (i == NODE_NULL)
+//    return;
+//  Flat_Scene_Graph_Node *node = &nodes[i];
+//
+//  for (uint32 c = 0; c < node->model.size(); ++c)
+//  {
+//    if (node->model[c].second.i == NODE_NULL)
+//      continue;
+//    copy_material_to_new_pool_slot(i, c, material, modify_or_overwrite);
+//  }
+//  for (uint32 c = 0; c < node->children.size(); ++c)
+//  {
+//    copy_all_materials_to_new_pool_slots(node->children[c], material, modify_or_overwrite);
+//  }
+//}
 
-void Flat_Scene_Graph::reset_material(Node_Index node_index, Model_Index model_index)
-{
-  if (node_index == NODE_NULL)
-    return;
-  ASSERT(model_index < MAX_MESHES_PER_NODE);
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
-
-  if (node->model[model_index].second.assimp_original != NODE_NULL)
-  {
-    node->model[model_index].second.i = node->model[model_index].second.assimp_original;
-    node->model[model_index].second.use_material_index_for_material_pool = false;
-    return;
-  }
-  else
-  {
-    node->model[model_index].second.i = NODE_NULL;
-    node->model[model_index].second.use_material_index_for_material_pool = true;
-  }
-}
-
-void Flat_Scene_Graph::reset_all_materials(Node_Index node_index, bool children_too)
-{
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
-  for (uint32 i = 0; i < node->model.size(); ++i)
-  {
-    reset_material(node_index, i);
-  }
-
-  if (children_too)
-  {
-    for (uint32 i = 0; i < node->children.size(); ++i)
-    {
-      reset_all_materials(node->children[i], true);
-    }
-  }
-}
-
-void Flat_Scene_Graph::copy_all_materials_to_new_pool_slots(
-    Node_Index i, Material_Descriptor *material, bool modify_or_overwrite)
-{
-  if (i == NODE_NULL)
-    return;
-  Flat_Scene_Graph_Node *node = &nodes[i];
-
-  for (uint32 c = 0; c < node->model.size(); ++c)
-  {
-    if (node->model[c].second.i == NODE_NULL)
-      continue;
-    copy_material_to_new_pool_slot(i, c, material, modify_or_overwrite);
-  }
-  for (uint32 c = 0; c < node->children.size(); ++c)
-  {
-    copy_all_materials_to_new_pool_slots(node->children[c], material, modify_or_overwrite);
-  }
-}
+Flat_Scene_Graph::Flat_Scene_Graph(Resource_Manager *manager) : resource_manager(manager) {}
 
 void Flat_Scene_Graph::clear()
 {
@@ -990,10 +1074,156 @@ void Flat_Scene_Graph::clear()
   lights = Light_Array();
 }
 
-Node_Index Flat_Scene_Graph::add_aiscene(std::string name, std::string scene_file_path, bool wait_on_resource)
+Node_Index Flat_Scene_Graph::add_aiscene(std::string scene_file_path, std::string name, bool wait_on_resource)
 {
   scene_file_path = BASE_MODEL_PATH + scene_file_path;
   Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
+
+  uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
+  uint32 base_material_import_index = resource_manager->current_material_pool_size;
+
+  // all meshes with the same name will get the same mesh_index and material_index
+  unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
+
+  for (uint32 i = 0; i < resource->meshes.size(); ++i)
+  {
+    string &name = resource->meshes[i].name;
+    uint32 last_dot = name.find_last_of('.');
+    std::string name_before_dot = name.substr(0, last_dot);
+    if (!indices.contains(name_before_dot))
+    {
+      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
+      std::string path = resource->assimp_filename;
+      Material_Descriptor material;
+      path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
+      if (name_before_dot.find("collide_") != std::string::npos)
+      {
+        material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
+        material.frag_shader = "emission.frag";
+        material.wireframe = true;
+        material.backface_culling = false;
+        this->collision_octree.push(&resource->meshes[i]);
+      }
+      else
+      {
+        material.albedo = path + name_before_dot + "_albedo.png";
+        material.normal = path + name_before_dot + "_normal.png";
+        material.roughness = path + name_before_dot + "_roughness.png";
+        material.metalness = path + name_before_dot + "_metalness.png";
+        material.emissive = path + name_before_dot + "_emissive.png";
+        material.ambient_occlusion = path + name_before_dot + "_ao.png";
+        material.vertex_shader = "vertex_shader.vert";
+        material.frag_shader = "fragment_shader.frag";
+      }
+      Material_Index mat_i = resource_manager->push_custom_material(&material);
+      indices[name_before_dot] = {mesh_i, mat_i};
+    }
+  }
+
+  /*
+  Node_Index{
+  ...
+  vec3 position
+  Node_Index collider = NODE_NULL;
+  children[0] = that collider
+  }
+  */
+
+  // this would mean that any mesh could be used as a collider since theyre stored the same
+  // however, moving a rendered node doesnt move its collider...
+  // unless we set it as a child as well...
+  // which would work for rendering but how would all of this interface with a spatial partition?
+  // no problem for static geometry, we dont move the node, and we insert the node into the partition on startup
+  // for dynamic, the partition needs to be cleared completely and all dynamic objects need to be reinserted
+  // every tick
+
+  // block direct access to positional data
+
+  // Scene_Graph::move_node, orient_node, etc - they internally will update their status in the spatial partition
+
+  // now how do we store the spatial partition and how do we compute it properly
+
+  // simple version:
+
+  /*
+  struct Chunk
+  {
+    vector<Node_Index> occupying_nodes;
+  }
+  or
+
+  Chunk[size][size][size]; //say 10x10x10
+
+  or
+
+  struct Chunk2
+  {
+  vector<Triangle> occupying_triangles;
+  }
+  Chunk2[size][size][size];
+
+
+
+  //ok for static geometry it is trivial to do the per-triangle version
+  //because we can just process it once on import and leave it
+
+
+  but for dynamic objects moving themselves in the partition
+  perhaps we use a separate partition for dynamic objects
+  and objects that want to check for collision
+  would check both static geometry and dynamic
+  but if we implemented both why would we bother with the static one anyway
+  maybe the dynamic objects use a list of primitives only, while the static geometry can be done per triangle
+
+  //okay so static is solved enough, we can do something more clever than just a 3d array, like an octree or something
+  //but what about dynamics
+
+  //
+  we want to move a node through our spatial partition
+  how do you figure out which chunks our
+
+  //we can either recompute the partition every frame
+
+  //or move objects within it
+
+  //if they are dynamic objects, lets assume they are all moving every frame anyway
+  //is shifting them inside the partition faster or slower than just recomputing it from scratch
+
+  //the collider can have a bounding box
+  //the box can be recomputed from the pose every frame
+  //and then the corners of the box can easily 'touch' the spatial partition very simply
+
+
+    //when a dynamic colliding object wants to test other dynamic colliding objects in the partition:
+    spatial_partition* partition = ...
+    for(obj : dynamicobjs)
+    dynamic_collider_pack* mycollider = &obj.collider
+
+    my_touching_partition_elements* = intersect(mycollider,partition); //this needs to be cheap, it will be done per
+  object for(elem : partition_elements) //the smaller this number the better..
+    {
+      occupying_objects* = elem.occupying_objects; //this should very often be zero unless we're very close to another
+  object for(other_obj : occupying_objects)
+      {
+        do_collision(obj,other_obj);
+      }
+    }
+
+  */
+
+  /*
+
+
+    okay so an octree does have to be rebuilt every frame from scratch apparently
+
+    oooohhh okay so there is a maximum number of items per tree node
+    and if the node exceeds that, it is divided again until no node has more than n items in it
+
+
+
+
+
+  */
 
   if (!resource)
   {
@@ -1009,37 +1239,58 @@ Node_Index Flat_Scene_Graph::add_aiscene(std::string name, std::string scene_fil
   const uint32 number_of_children = resource->children.size();
   for (uint32 i = 0; i < number_of_children; ++i)
   {
-    Node_Index child_index = add_import_node(&resource->children[i], root_for_import, scene_file_path);
+    Node_Index child_index = add_import_node(resource, &resource->children[i], scene_file_path, &indices);
+    set_parent(child_index, root_for_import);
+
+    // assimp is giving us a scale of vec3(100) for blender fbx exports with scale:meters and Unit Scale: 1.0....
+    // but only for the un-parented objects of the import
+    // technically there is no root node for a blender export but we are grouping all objects in the import
+    // under a single root for convenience, so this is where we scale from cm to meters
+    const float32 cm_to_meters = 0.01f;
+    nodes[child_index].scale = cm_to_meters * nodes[child_index].scale;
   }
   return root_for_import;
 }
 
-Node_Index Flat_Scene_Graph::add_aiscene(std::string name, std::string scene_file_path,
-    Material_Descriptor *material_override, bool modify_or_overwrite, bool wait_on_resource)
+Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *import_node,
+    std::string assimp_filename, unordered_map<std::string, pair<Mesh_Index, Material_Index>> *indices)
 {
-  scene_file_path = BASE_MODEL_PATH + scene_file_path;
-  Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
-
-  if (!resource)
+  Node_Index node_index = new_node();
+  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  node->filename_of_import = assimp_filename;
+  node->name = import_node->name;
+  vec3 scale;
+  quat orientation;
+  vec3 translation;
+  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, vec3(), vec4());
+  node->orientation = conjugate(node->orientation);
+  node->scale = float32(scene->scale_factor) * node->scale;
+  uint32 number_of_mesh_indices = import_node->mesh_indices.size();
+  ASSERT(number_of_mesh_indices == 1); // maybe we should get rid of the mesh array and just use a single mesh per node
+  for (uint32 i = 0; i < number_of_mesh_indices; ++i)
   {
-    ASSERT(!wait_on_resource);
-    return NODE_NULL;
+    uint32 import_mesh_index = import_node->mesh_indices[i];
+    std::string mesh_name = scene->meshes[import_mesh_index].name;
+    uint32 last_dot = mesh_name.find_last_of('.');
+    std::string name_before_dot = mesh_name.substr(0, last_dot);
+    node->model[i] = (*indices)[name_before_dot];
   }
-
-  Node_Index root_for_import = new_node();
-  Flat_Scene_Graph_Node *root_node = &nodes[root_for_import];
-  root_node->filename_of_import = scene_file_path;
-  root_node->name = name;
-
-  const uint32 number_of_children = resource->children.size();
+  const uint32 number_of_children = import_node->children.size();
   for (uint32 i = 0; i < number_of_children; ++i)
   {
-    Node_Index child_index = add_import_node(
-        &resource->children[i], root_for_import, scene_file_path, material_override, modify_or_overwrite);
+    Imported_Scene_Node *child_node = &import_node->children[i];
+    Node_Index child_index = add_import_node(scene, child_node, assimp_filename, indices);
+    set_parent(child_index, node_index);
+    Flat_Scene_Graph_Node *child_ptr = &nodes[child_index];
+    std::string test = s("collide_", node->name);
+    bool child_is_collider = strcmp(&child_ptr->name.str[0], test.c_str()) == 0;
+    if (child_is_collider)
+    {
+      node->collider = child_index;
+      child_ptr->visible = false;
+    }
   }
-
-  copy_all_materials_to_new_pool_slots(root_for_import, material_override, modify_or_overwrite);
-  return root_for_import;
+  return node_index;
 }
 
 Node_Index Flat_Scene_Graph::new_node()
@@ -1056,6 +1307,71 @@ Node_Index Flat_Scene_Graph::new_node()
   }
   ASSERT(0); // graph full
   return NODE_NULL;
+}
+
+Node_Index Flat_Scene_Graph::new_node(std::string name, std::pair<Mesh_Index, Material_Index> model0, Node_Index parent)
+{
+  Node_Index node = new_node();
+  nodes[node].name = name;
+  nodes[node].model[0] = model0;
+  set_parent(node, parent);
+  return node;
+}
+
+// todo: accelerate these with spatial partitioning
+
+Node_Index Flat_Scene_Graph::ray_intersects_node(vec3 p, vec3 dir, Node_Index node, vec3 &result)
+{
+  if (!ray_intersects_node_aabb(p, dir, node))
+  {
+    return NODE_NULL;
+  }
+  vec3 closest_intersection = vec3(99999999999);
+  float32 length_of_closest_intersection = length(closest_intersection);
+  Flat_Scene_Graph_Node *node_ptr = &nodes[node];
+  mat4 model_to_world = build_transformation(node);
+  mat4 world_to_node_model = inverse(model_to_world);
+  p = world_to_node_model * vec4(p, 1);
+  dir = normalize(world_to_node_model * vec4(dir, 0));
+
+  for (auto &n : node_ptr->model)
+  {
+    Mesh_Index mesh_index = n.first;
+    if (mesh_index != NODE_NULL)
+    {
+      Mesh_Descriptor *md_ptr = &resource_manager->mesh_pool[mesh_index].mesh->descriptor;
+      ASSERT(md_ptr);
+      Mesh_Data &mesh_data = md_ptr->mesh_data;
+      for (size_t i = 0; i < mesh_data.indices.size(); i += 3)
+      {
+        vec3 &a = mesh_data.positions[mesh_data.indices[i]];
+        vec3 &b = mesh_data.positions[mesh_data.indices[i + 1]];
+        vec3 &c = mesh_data.positions[mesh_data.indices[i + 2]];
+
+        vec3 ta = model_to_world * vec4(a, 1);
+        vec3 tb = model_to_world * vec4(b, 1);
+        vec3 tc = model_to_world * vec4(c, 1);
+
+        vec3 intersection;
+        bool intersects = ray_intersects_triangle(p, dir, a, b, c, &intersection);
+        if (intersects)
+        {
+          float32 dist = length(intersection - p);
+          if (dist < length_of_closest_intersection)
+          {
+            closest_intersection = intersection;
+            length_of_closest_intersection = dist;
+          }
+        }
+      }
+    }
+    result = model_to_world * vec4(closest_intersection, 1);
+    if (closest_intersection != vec3(99999999999))
+    {
+      return node;
+    }
+    return NODE_NULL;
+  }
 }
 Node_Index Flat_Scene_Graph::find_child_by_name(Node_Index parent, const char *name)
 {
@@ -1091,7 +1407,7 @@ void Flat_Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
   nodes[grabee].position = translation;
   nodes[grabee].scale = scale;
   nodes[grabee].orientation = orientation;
-  nodes[grabee].import_basis = mat4(1);
+  // nodes[grabee].import_basis = mat4(1);
 }
 void Flat_Scene_Graph::drop(Node_Index child)
 {
@@ -1106,60 +1422,7 @@ void Flat_Scene_Graph::drop(Node_Index child)
   nodes[child].position = translation;
   nodes[child].scale = scale;
   nodes[child].orientation = orientation;
-  nodes[child].import_basis = mat4(1);
-}
-Node_Index Flat_Scene_Graph::add_import_node(
-    Imported_Scene_Node *import_node, Node_Index parent, std::string assimp_filename)
-{
-  Node_Index node_index = new_node();
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
-  node->import_basis = import_node->transform;
-
-  node->filename_of_import = assimp_filename;
-  node->name = import_node->name;
-  set_parent(node_index, parent);
-
-  uint32 number_of_mesh_indices = import_node->mesh_indices.size();
-  uint32 number_of_material_indices = import_node->material_indices.size();
-  ASSERT(number_of_mesh_indices == number_of_material_indices);
-  for (uint32 i = 0; i < number_of_mesh_indices; ++i)
-  {
-    node->model[i] = {import_node->mesh_indices[i], import_node->material_indices[i]};
-  }
-
-  const uint32 number_of_children = import_node->children.size();
-  for (uint32 i = 0; i < number_of_children; ++i)
-  {
-    Node_Index child_index = add_import_node(&import_node->children[i], node_index, assimp_filename);
-  }
-  return node_index;
-}
-
-Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Node *import_node, Node_Index parent,
-    std::string assimp_filename, Material_Descriptor *material_override, bool modify_or_overwrite)
-{
-  Node_Index node_index = new_node();
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
-  node->import_basis = import_node->transform;
-
-  node->filename_of_import = assimp_filename;
-  node->name = import_node->name;
-  set_parent(node_index, parent);
-
-  uint32 number_of_mesh_indices = import_node->mesh_indices.size();
-  uint32 number_of_material_indices = import_node->material_indices.size();
-  ASSERT(number_of_mesh_indices == number_of_material_indices);
-  for (uint32 i = 0; i < number_of_mesh_indices; ++i)
-  {
-    node->model[i] = {import_node->mesh_indices[i], import_node->material_indices[i]};
-  }
-
-  const uint32 number_of_children = import_node->children.size();
-  for (uint32 i = 0; i < number_of_children; ++i)
-  {
-    Node_Index child_index = add_import_node(&import_node->children[i], node_index, assimp_filename);
-  }
-  return node_index;
+  // nodes[child].import_basis = mat4(1);
 }
 
 void Flat_Scene_Graph::delete_node(Node_Index i)
@@ -1178,17 +1441,21 @@ void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
   ASSERT(i != NODE_NULL);
   Flat_Scene_Graph_Node *node = &nodes[i];
   Node_Index current_parent_index = node->parent;
+
   if (current_parent_index != NODE_NULL)
   {
+    bool found_i = false;
     Flat_Scene_Graph_Node *current_parent = &nodes[current_parent_index];
     for (auto &child : current_parent->children)
     {
       if (child == i)
       {
+        found_i = true;
         child = NODE_NULL;
         break;
       }
     }
+    ASSERT(found_i);
   }
   if (desired_parent != NODE_NULL)
   {
@@ -1208,12 +1475,37 @@ void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
       ASSERT(0); // out of children
     }
   }
-
-  set_message(s("Setting parent:child:", i, "to parent:", desired_parent), "");
   node->parent = desired_parent;
+
+  // iterate over all nodes and verify that only the desired parent has this node as a child
+  bool found_the_valid_child_node = false;
+  for (uint32 j = 0; j < nodes.size(); ++j)
+  {
+    bool is_desired_parent = (j == desired_parent);
+    for (auto &child : nodes[j].children)
+    {
+      bool is_this_node = child == i;
+
+      if (is_this_node)
+      {
+        if (found_the_valid_child_node)
+        { // this is the valid parent but it has two of us
+          ASSERT(0);
+        }
+
+        if (is_desired_parent)
+          found_the_valid_child_node = true;
+
+        if (!is_desired_parent)
+        { // this parent should not have this child - unless this behavior is intended - it is useful
+          ASSERT(0);
+        }
+      }
+    }
+  }
 }
 
-std::vector<Render_Entity> Flat_Scene_Graph::visit_nodes_client_start()
+std::vector<Render_Entity> Flat_Scene_Graph::visit_nodes_start()
 {
   accumulator.clear();
   for (uint32 i = 0; i < nodes.size(); ++i)
@@ -1227,21 +1519,6 @@ std::vector<Render_Entity> Flat_Scene_Graph::visit_nodes_client_start()
     }
   }
   return accumulator;
-}
-std::vector<World_Object> Flat_Scene_Graph::visit_nodes_server_start()
-{
-  accumulator1.clear();
-  for (uint32 i = 0; i < nodes.size(); ++i)
-  {
-    Flat_Scene_Graph_Node *node = &nodes[i];
-    if (!node->exists)
-      continue;
-    if (node->parent == NODE_NULL) // there isnt an index for the 'root' node
-    {
-      visit_nodes(i, mat4(1), accumulator1);
-    }
-  }
-  return accumulator1;
 }
 
 glm::mat4 Flat_Scene_Graph::__build_transformation(Node_Index node_index)
@@ -1257,8 +1534,9 @@ glm::mat4 Flat_Scene_Graph::__build_transformation(Node_Index node_index)
   const mat4 S_prop = scale(node->scale);
   const mat4 S_non = scale(node->scale_vertex);
   const mat4 R = toMat4(node->orientation);
-  const mat4 B = node->import_basis;
-  const mat4 STACK = M * T * R * S_prop * B;
+  // const mat4 B = node->import_basis;
+  const mat4 STACK = M * T * R * S_prop;
+
   return STACK;
 }
 
@@ -1275,9 +1553,10 @@ glm::mat4 Flat_Scene_Graph::build_transformation(Node_Index node_index, bool use
   const mat4 S_prop = scale(node->scale);
   const mat4 S_non = scale(node->scale_vertex);
   const mat4 R = toMat4(node->orientation);
-  const mat4 B = node->import_basis;
+  // const mat4 B = node->import_basis;
   // this node specifically
-  mat4 BASIS = M * T * R * S_prop * B;
+  mat4 BASIS = M * T * R * S_prop;
+
   if (use_vertex_scale)
   {
     BASIS = BASIS * S_non;
@@ -1287,16 +1566,91 @@ glm::mat4 Flat_Scene_Graph::build_transformation(Node_Index node_index, bool use
 std::string Flat_Scene_Graph::serialize() const
 {
   std::string result;
-  const uint32 bytes = sizeof(nodes);
-  result.resize(bytes);
-  memcpy(&result[0], &nodes[0], bytes);
+
   return result;
 }
-void Flat_Scene_Graph::deserialize(std::string src)
+void Flat_Scene_Graph::deserialize(std::string src) {}
+
+void Flat_Scene_Graph::initialize_lighting(std::string radiance, std::string irradiance, bool generate_light_spheres)
 {
-  const uint32 bytes = sizeof(nodes);
-  ASSERT(src.size() == bytes);
-  memcpy(&nodes[0], &src[0], bytes);
+  if (generate_light_spheres)
+  {
+    Node_Index root_for_lights = new_node();
+    Flat_Scene_Graph_Node *node_ptr = &nodes[root_for_lights];
+    node_ptr->exists = true;
+    node_ptr->name = "Root for lights";
+
+    for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+    {
+      Material_Descriptor material;
+      material.casts_shadows = false;
+      material.albedo.mod = vec4(0, 0, 0, 1);
+      material.roughness.mod = vec4(1);
+      Material_Index mi = resource_manager->push_custom_material(&material);
+
+      Node_Index temp = add_aiscene("sphere-2.fbx", s("Light", i));
+      Node_Index actual_model = nodes[temp].children[0];
+      set_parent(actual_model, root_for_lights);
+      delete_node(temp);
+      lights.light_spheres[i] = actual_model;
+      nodes[actual_model].model[0].second = mi;
+    }
+  }
+  lights.environment.radiance = radiance;
+  lights.environment.irradiance = irradiance;
+}
+
+void Flat_Scene_Graph::set_lights_for_renderer(Renderer *r)
+{
+  // make a button that calculates the shadow settings using the distance to point and the angle
+
+  for (uint32 i = 0; i < MAX_LIGHTS; ++i)
+  {
+    Light *light = &lights.lights[i];
+    Node_Index node = lights.light_spheres[i];
+    glm::clamp(light->color, vec3(0.0), vec3(1.0));
+    if (node == NODE_NULL)
+      continue;
+
+    Flat_Scene_Graph_Node *node_ptr = &nodes[node];
+    node_ptr->position = light->position;
+    node_ptr->scale = vec3(light->radius);
+    if (!(i < lights.light_count))
+    {
+      node_ptr->visible = false;
+    }
+    else
+    {
+      node_ptr->visible = true;
+    }
+
+    Material_Descriptor *md = get_modifiable_material_pointer_for(node, 0);
+    vec3 c = light->brightness * light->color;
+    float mod = 0.03f;
+    md->emissive.mod = vec4(mod * c, 0);
+  }
+  r->lights = lights;
+
+  if (r->environment.m.radiance != lights.environment.radiance ||
+      r->environment.m.irradiance != lights.environment.irradiance)
+  {
+    r->environment = lights.environment;
+    r->environment.load();
+  }
+}
+
+void Flat_Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
+{
+  for (auto &emitter : particle_emitters)
+  {
+    emitter.init();
+    if (emitter.prepare_instance(&r->render_instances))
+    {
+      Render_Instance *i = &r->render_instances.back();
+      i->mesh = &resource_manager->mesh_pool[emitter.mesh_index];
+      i->material = &resource_manager->material_pool[emitter.material_index];
+    }
+  }
 }
 
 void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<Render_Entity> &accumulator)
@@ -1314,63 +1668,32 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
   const mat4 S_prop = scale(entity->scale);
   const mat4 S_non = scale(entity->scale_vertex);
   const mat4 R = toMat4(entity->orientation);
-  const mat4 B = entity->import_basis;
+  // const mat4 B = entity->import_basis;
+
+  const mat4 RTM = M * T * R;
 
   // what the nodes below inherit
-  const mat4 STACK = M * T * R * S_prop * B;
+  const mat4 STACK = RTM * S_prop;
 
   // this node specifically
-  mat4 BASIS = M * T * R * S_prop * S_non * B;
-
-  // mat4 STACK = mat4(1);
-
-  // if (entity->propagate_scale)
-  //  STACK = Spre;
-  // if (entity->propagate_rotation)
-  //  STACK = R * STACK;
-  // if (entity->propagate_scale)
-  //  STACK = Spost;
-  // if (entity->propagate_translation)
-  //  STACK = T * STACK;
-  // STACK = M * STACK;
+  mat4 BASIS = RTM * S_prop * S_non;
 
   const uint32 num_meshes = entity->model.size();
   for (uint32 i = 0; i < num_meshes; ++i)
   {
     Mesh_Index mesh_index = entity->model[i].first;
     Material_Index material_index = entity->model[i].second;
-    if (mesh_index.i == NODE_NULL)
+    if (mesh_index == NODE_NULL)
       continue;
     Mesh *mesh_ptr = nullptr;
     Material *material_ptr = nullptr;
     string assimp_filename = s(entity->filename_of_import);
 
-    // opengl calls no longer allowed in state.update()
-    ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+    mesh_ptr = &resource_manager->mesh_pool[mesh_index];
+    material_ptr = &resource_manager->material_pool[material_index];
 
-    // mesh:
-    if (mesh_index.use_mesh_index_for_mesh_pool)
-    { // all non-assimp meshes
-      mesh_ptr = resource_manager->retrieve_pool_mesh(mesh_index);
-    }
-    else
-    { // assimp defined
-      resource_manager->request_valid_resource(assimp_filename);
-      mesh_ptr = resource_manager->retrieve_assimp_mesh_resource(assimp_filename, mesh_index);
-    }
-
-    // material:
-    if (material_index.use_material_index_for_material_pool)
-    { // all non-assimp meshes
-      material_ptr = resource_manager->retrieve_pool_material(material_index);
-    }
-    else
-    { // assimp defined
-      resource_manager->request_valid_resource(assimp_filename);
-      material_ptr = resource_manager->retrieve_assimp_material_resource(assimp_filename, material_index);
-    }
     if (entity->visible)
-      accumulator.emplace_back(entity->name, mesh_ptr, material_ptr, BASIS);
+      accumulator.emplace_back(entity->name, mesh_ptr, material_ptr, BASIS, node_index);
   }
   for (uint32 i = 0; i < entity->children.size(); ++i)
   {
@@ -1394,92 +1717,6 @@ void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
   }
   ASSERT(0); // invalid parent pointer - you changed this parents children but not the children's parent
              // ptr - call delete_node() to recursively delete
-}
-
-void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<World_Object> &accumulator)
-{
-  if (node_index == NODE_NULL)
-    return;
-  Flat_Scene_Graph_Node *entity = &nodes[node_index];
-  if (!entity->exists)
-    return;
-
-  assert_valid_parent_ptr(node_index);
-
-  // const mat4 T = translate(entity->position);
-  // const mat4 Spre = scale(entity->scale);
-  // const mat4 Spost = scale(entity->scale_vertex);
-  // const mat4 R = toMat4(entity->orientation);
-  const mat4 B = entity->import_basis;
-
-  // const mat4 WORLD_SCALE = SCALE_STACK * Spre;
-  // const mat4 BASIS = M * T * R * Spre * B;
-
-  const mat4 T = translate(entity->position);
-  const mat4 S = scale(entity->scale);
-  const mat4 R = toMat4(entity->orientation);
-  // const mat4 B = entity->basis;
-  const mat4 STACK = M * T * R * S * B;
-  const mat4 FINAL = STACK;
-
-  // mat4 STACK = mat4(1);
-
-  // if (entity->propagate_scale)
-  //  STACK = Spre;
-  // if (entity->propagate_rotation)
-  //  STACK = R * STACK;
-  // if (entity->propagate_scale)
-  //  STACK = Spost;
-  // if (entity->propagate_translation)
-  //  STACK = T * STACK;
-  // STACK = M * STACK;
-
-  const uint32 num_meshes = entity->model.size();
-  for (uint32 i = 0; i < num_meshes; ++i)
-  {
-    Mesh_Index mesh_index = entity->model[i].first;
-    Material_Index material_index = entity->model[i].second;
-    if (mesh_index.i == NODE_NULL)
-      continue;
-    if (material_index.i == NODE_NULL)
-      continue;
-
-    string assimp_filename = s(entity->filename_of_import);
-
-    World_Object object;
-
-    // ASSERT(resource_manager->opengl_disabled);
-    // mesh:
-    if (mesh_index.use_mesh_index_for_mesh_pool)
-    { // all non-assimp meshes
-      object.mesh_descriptor = resource_manager->retrieve_pool_mesh_descriptor(mesh_index);
-    }
-    else
-    { // assimp defined
-      resource_manager->request_valid_resource(assimp_filename);
-      object.mesh_descriptor = resource_manager->retrieve_assimp_mesh_descriptor(assimp_filename, mesh_index);
-    }
-
-    // material:
-    if (material_index.use_material_index_for_material_pool)
-    { // all non-assimp meshes
-      object.material_descriptor = resource_manager->retrieve_pool_material_descriptor(material_index);
-    }
-    else
-    { // assimp defined
-      resource_manager->request_valid_resource(assimp_filename);
-      object.material_descriptor =
-          resource_manager->retrieve_assimp_material_descriptor(assimp_filename, material_index);
-    }
-    object.transformation = FINAL;
-    object.name = entity->name;
-    accumulator.push_back(object);
-  }
-  for (uint32 i = 0; i < entity->children.size(); ++i)
-  {
-    Node_Index child = entity->children[i];
-    visit_nodes(child, STACK, accumulator);
-  }
 }
 
 std::unique_ptr<Imported_Scene_Data> Resource_Manager::import_aiscene_async(std::string path, uint32 assimp_flags)
@@ -1516,11 +1753,8 @@ Imported_Scene_Node Resource_Manager::_import_aiscene_node(
   {
     uint32 mesh_index = ainode->mMeshes[i];
     const aiMesh *aimesh = scene->mMeshes[mesh_index];
-    uint32 material_index = aimesh->mMaterialIndex;
-    Mesh_Index mesh_result{mesh_index, mesh_index, false};
-    Material_Index material_result = {material_index, material_index, false};
+    Mesh_Index mesh_result{mesh_index};
     node.mesh_indices.push_back(mesh_result);
-    node.material_indices.push_back(material_result);
   }
   node.transform = copy(ainode->mTransformation);
 
@@ -1542,74 +1776,59 @@ std::string name_from_ai_type(aiMaterial *ai_material, aiTextureType type)
   return fix_filename(copy(&name));
 }
 
-void gather_all_assimp_materials(aiMaterial *mat)
+/*
+Algorithm: recurse depth first and work back up
+if the node is empty but has children, the node concatenates the matrices and
+sends the children to the parent's temp buffer and the parent appends them, causing the node to have no children
+if the node is empty with no children, the parent deletes it
+*/
+void Resource_Manager::propagate_transformations_of_empty_nodes(
+    Imported_Scene_Node *this_node, std::vector<Imported_Scene_Node> *temp)
 {
-  // all ai supported types
-  string diffuse = name_from_ai_type(mat, aiTextureType_DIFFUSE);
-  string emissive = name_from_ai_type(mat, aiTextureType_EMISSIVE);
-  string normals = name_from_ai_type(mat, aiTextureType_NORMALS);
-  string shininess = name_from_ai_type(mat, aiTextureType_SHININESS);
-  string specular = name_from_ai_type(mat, aiTextureType_SPECULAR);
-  string ambient = name_from_ai_type(mat, aiTextureType_AMBIENT);
-  string height = name_from_ai_type(mat, aiTextureType_HEIGHT);
-  string opacity = name_from_ai_type(mat, aiTextureType_OPACITY);
-  string displacement = name_from_ai_type(mat, aiTextureType_DISPLACEMENT);
-  string lightmap = name_from_ai_type(mat, aiTextureType_LIGHTMAP);
-  string reflection = name_from_ai_type(mat, aiTextureType_REFLECTION);
-  const uint32 count = mat->GetTextureCount(aiTextureType_UNKNOWN);
-  vector<string> unknowns;
-  for (uint32 i = 0; i < count; ++i)
-  {
-    unknowns.push_back("");
-    aiString name;
-    mat->GetTexture(aiTextureType_UNKNOWN, 0, &name);
-    unknowns.back() = copy(&name);
-  }
-}
+  // if parent is empty
+  // this child can apply the parent's transform to itself
+  // and then move itself into the parent
 
-Material_Descriptor build_material_descriptor(const aiScene *scene, uint32 i, std::string path)
-{
-  Material_Descriptor d;
-  // find the file extension
-  size_t slice = path.find_last_of("/\\");
-  string dir = path.substr(0, slice) + '/';
-  slice = path.find_last_of(".");
-  string extension = path.substr(slice, path.size() - slice);
-
-  aiMaterial *mat = scene->mMaterials[i];
-  gather_all_assimp_materials(mat);
-  if (extension == ".FBX" || extension == ".fbx")
+  const bool this_node_has_no_meshes = this_node->mesh_indices.size() == 0;
+  std::vector<Imported_Scene_Node> temp_new_children;
+  for (uint32 i = 0; i < this_node->children.size(); ++i)
   {
-    d.albedo = dir + name_from_ai_type(mat, aiTextureType_DIFFUSE);
-    d.emissive = dir + name_from_ai_type(mat, aiTextureType_EMISSIVE);
-    d.normal = dir + name_from_ai_type(mat, aiTextureType_NORMALS);
-    d.roughness = dir + name_from_ai_type(mat, aiTextureType_SHININESS);
-    d.metalness = dir + name_from_ai_type(mat, aiTextureType_SPECULAR);
-    d.ambient_occlusion = dir + name_from_ai_type(mat, aiTextureType_REFLECTION);
-  }
-  else
-  {
-    ASSERT(0);
-    // only .fbx supported for now
-    // helper function for material assignments:
-    // void gather_all_assimp_materials(aiMaterial* m);
-  }
+    Imported_Scene_Node *child = &this_node->children[i];
+    propagate_transformations_of_empty_nodes(child, &temp_new_children);
 
-  Material_Descriptor defaults;
-  // assimp may set 0 length strings, so reset them to default
-  if (d.albedo.name == dir)
-    d.albedo = defaults.albedo;
-  if (d.emissive.name == dir)
-    d.emissive = defaults.emissive;
-  if (d.normal.name == dir)
-    d.normal = defaults.normal;
-  if (d.roughness.name == dir)
-    d.roughness = defaults.roughness;
-  if (d.metalness.name == dir)
-    d.metalness = defaults.metalness;
-  if (d.ambient_occlusion.name == dir)
-    d.ambient_occlusion = defaults.ambient_occlusion;
-  return d;
+    // now this child should be in one of 3 states:
+    // meshes and children
+    // meshes and no children
+    // no meshes and no childrn
+
+    // deleting a node in the middle of a loop over them: 0 1 X 3 4 -> 0 1 4 3
+    // if this child has no meshes and no children theres no reason to keep it
+    if (child->mesh_indices.size() == 0)
+    {
+      ASSERT(child->children.size() == 0);
+      uint32 last_i = this_node->children.size() - 1;
+      bool last = (i == last_i);
+      if (!last)
+        this_node->children[i] = std::move(this_node->children[last]);
+      this_node->children.pop_back();
+      i -= 1;
+    }
+  }
+  // all of the children have returned, we can now append any new children we've recieved
+  std::move(std::begin(temp_new_children), std::end(temp_new_children), std::back_inserter(this_node->children));
+
+  if (this_node_has_no_meshes)
+  { // concatenate transformations and move all children into parent's children
+    for (uint32 i = 0; i < this_node->children.size(); ++i)
+    {
+      Imported_Scene_Node *child = &this_node->children[i];
+      child->transform = child->transform * this_node->transform;
+      temp->push_back(std::move(*child));
+    }
+    this_node->children.clear();
+    // this node should now have both no meshes and no children and will
+    // get deleted by the higher level recursion
+  }
 }
 
 Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 assimp_flags)
@@ -1620,104 +1839,78 @@ Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 as
     set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
     ASSERT(0);
   }
-
   Imported_Scene_Data dst;
   dst.assimp_filename = path;
+
+  scene->mMetaData->Get("UnitScaleFactor", dst.scale_factor);
   for (uint32 i = 0; i < scene->mNumMeshes; ++i)
   {
     dst.meshes.emplace_back(build_mesh_descriptor(scene, i, path));
   }
-  for (uint32 i = 0; i < scene->mNumMaterials; ++i)
-  {
-    dst.materials.emplace_back(build_material_descriptor(scene, i, path));
-  }
+  // should not be meshes in root, but if there ever is we can add support for it
+  ASSERT(scene->mRootNode);
+  ASSERT(scene->mRootNode->mNumMeshes == 0);
 
-  // root node always has nothing.. right?
-  const aiNode *root = scene->mRootNode;
-  ASSERT(root->mNumMeshes == 0);
-  const uint32 number_of_children = scene->mRootNode->mNumChildren;
+  int32 number_of_children = scene->mRootNode->mNumChildren;
   for (uint32 i = 0; i < number_of_children; ++i)
   {
     const aiNode *node = scene->mRootNode->mChildren[i];
     Imported_Scene_Node child = _import_aiscene_node(path, scene, node);
     dst.children.push_back(child);
   }
+
+  // dst is now imported just as it was given in assimp
+  // but now we process it and remove nodes that don't have any meshes in them
+  // we don't do this on import because maybe we need them later for something - not sure
+
+  // since root here is almost guaranteed to be empty, all of the children of the entire import
+  // are going to end up in this vector
+  std::vector<Imported_Scene_Node> temp_new_children;
+
+  for (int32 i = 0; i < number_of_children; ++i)
+  {
+    Imported_Scene_Node *child = &dst.children[i];
+    propagate_transformations_of_empty_nodes(child, &temp_new_children);
+
+    // delete this child if its empty
+    if (child->mesh_indices.size() == 0)
+    {
+      ASSERT(child->children.size() == 0);
+      int32 last_i = number_of_children - 1;
+      bool last = (i == last_i);
+      if (!last)
+        dst.children[i] = std::move(dst.children[last_i]);
+      dst.children.pop_back();
+      i -= 1;
+      number_of_children -= 1;
+    }
+  }
+  // put the children back in to the import root
+  std::move(std::begin(temp_new_children), std::end(temp_new_children), std::back_inserter(dst.children));
+
   dst.valid = true;
   return dst;
 }
 
-void Resource_Manager::init()
-{
-  // opengl calls no longer allowed in state.update()
-  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  null_material_descriptor = std::make_unique<Material_Descriptor>();
-}
-
-std::string Resource_Manager::serialize_mesh_descriptor_pool()
-{
-  json j;
-  for (Mesh_Descriptor &mesh : mesh_descriptor_pool)
-  {
-    json m = mesh;
-    j.push_back(m);
-  }
-  return pretty_dump(j);
-}
-
-std::string Resource_Manager::serialize_material__descriptor_pool()
-{
-  json j;
-  for (Material_Descriptor &material : material_descriptor_pool)
-  {
-    json m = material;
-    j.push_back(m);
-  }
-  return pretty_dump(j);
-}
-
-// invalidates all pool material_descriptor pointers
 Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
 {
-  // careful, if ptr d points back into the pool, we will read garbage data if pushback reallocates
   ASSERT(d);
-  material_descriptor_pool.push_back(*d);
   Material_Index result;
-  result.i = material_descriptor_pool.size() - 1;
-  result.use_material_index_for_material_pool = true;
-  ASSERT(result.i < MAX_POOL_SIZE);
+  result = current_material_pool_size;
+  current_material_pool_size += 1;
+  ASSERT(result < MAX_POOL_SIZE);
+  material_pool[result] = *d;
   return result;
 }
 
-// invalidates all pool mesh_descriptor pointers
 Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
 {
-  ASSERT(d);
-  mesh_descriptor_pool.push_back(*d);
   Mesh_Index result;
-  result.i = mesh_descriptor_pool.size() - 1;
-  result.use_mesh_index_for_mesh_pool = true;
-  ASSERT(result.i < MAX_POOL_SIZE);
+  result = current_mesh_pool_size;
+  current_mesh_pool_size += 1;
+  ASSERT(result < MAX_POOL_SIZE);
+  mesh_pool[result] = *d;
   return result;
-}
-
-void Resource_Manager::deserialize_mesh_descriptor_pool(json data)
-{
-  mesh_descriptor_pool.clear();
-  for (uint32 i = 0; i < data.size(); ++i)
-  {
-    Mesh_Descriptor update = data[i];
-    mesh_descriptor_pool.push_back(update);
-  }
-}
-
-void Resource_Manager::deserialize_material_descriptor_pool(json data)
-{
-  material_descriptor_pool.clear();
-  for (uint32 i = 0; i < data.size(); ++i)
-  {
-    Material_Descriptor update = data[i];
-    material_descriptor_pool.push_back(update);
-  }
 }
 
 Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, bool wait_for_valid)
@@ -1761,452 +1954,8 @@ Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, 
   }
   return import;
 }
-Material_Descriptor *Resource_Manager::retrieve_assimp_material_descriptor(std::string assimp_path, Material_Index i)
-{
-  Imported_Scene_Data *import = &import_data[assimp_path];
-  if (!import->valid)
-    return nullptr;
-  return &import->materials[i.i];
-}
 
-Mesh_Descriptor *Resource_Manager::retrieve_assimp_mesh_descriptor(std::string assimp_path, Mesh_Index i)
-{
-  Imported_Scene_Data *import = &import_data[assimp_path];
-  if (!import->valid)
-    return nullptr;
-  return &import->meshes[i.i];
-}
-
-Mesh *Resource_Manager::retrieve_assimp_mesh_resource(std::string assimp_path, Mesh_Index i)
-{
-  // opengl calls no longer allowed in state.update()
-  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  Imported_Scene_Data *import = &import_data[assimp_path];
-  if (!import->valid)
-    return nullptr;
-
-  ASSERT(!i.use_mesh_index_for_mesh_pool);
-  if (!import->allocated)
-  {
-    import->allocate_resources();
-  }
-  ASSERT(i.i < import->allocated_meshes.size());
-  return &import->allocated_meshes[i.i];
-}
-
-Material *Resource_Manager::retrieve_assimp_material_resource(std::string assimp_path, Material_Index i)
-{
-  // opengl calls no longer allowed in state.update()
-  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  Imported_Scene_Data *import = &import_data[assimp_path];
-  if (!import->valid)
-    return nullptr;
-  ASSERT(!i.use_material_index_for_material_pool);
-  if (!import->allocated)
-  {
-    import->allocate_resources();
-  }
-  ASSERT(i.i < import->allocated_materials.size());
-  return &import->allocated_materials[i.i];
-}
-Mesh *Resource_Manager::retrieve_pool_mesh(Mesh_Index i)
-{
-  // opengl calls no longer allowed in state.update()
-  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  ASSERT(i.use_mesh_index_for_mesh_pool);
-  ASSERT(i.i < MAX_POOL_SIZE);
-  Mesh temp = mesh_pool[i.i];
-  mesh_pool[i.i] = mesh_descriptor_pool[i.i];
-  return &mesh_pool[i.i];
-}
-Material *Resource_Manager::retrieve_pool_material(Material_Index i)
-{
-  ASSERT(i.use_material_index_for_material_pool);
-  if (i.i == NODE_NULL)
-  {
-    if (!null_material)
-      null_material = std::make_unique<Material>(*null_material_descriptor.get());
-    return null_material.get();
-  }
-  ASSERT(i.i < material_descriptor_pool.size());
-  ASSERT(i.i < MAX_POOL_SIZE);
-  Material temp = material_pool[i.i];
-  material_pool[i.i] = material_descriptor_pool[i.i];
-  return &material_pool[i.i];
-}
-Material_Descriptor *Resource_Manager::retrieve_pool_material_descriptor(Material_Index i)
-{
-  ASSERT(i.i < material_descriptor_pool.size());
-  ASSERT(i.use_material_index_for_material_pool);
-  ASSERT(i.i < MAX_POOL_SIZE);
-  return &material_descriptor_pool[i.i];
-}
-Mesh_Descriptor *Resource_Manager::retrieve_pool_mesh_descriptor(Mesh_Index i)
-{
-  ASSERT(i.i < mesh_descriptor_pool.size());
-  ASSERT(i.use_mesh_index_for_mesh_pool);
-  ASSERT(i.i < MAX_POOL_SIZE);
-  return &mesh_descriptor_pool[i.i];
-}
-
-void Imported_Scene_Data::allocate_resources()
-{
-  ASSERT(!allocated);
-  ASSERT(allocated_meshes.size() == 0);
-  ASSERT(allocated_materials.size() == 0);
-  for (Mesh_Descriptor &d : meshes)
-  {
-    allocated_meshes.emplace_back(Mesh(d));
-  }
-  for (Material_Descriptor &d : materials)
-  {
-    allocated_materials.emplace_back(Material(d));
-  }
-  allocated = true;
-}
-
-//
-///*
-// OLD SCENE GRAPH:
-//*/
-//
-// Scene_Graph_Node::Scene_Graph_Node(string name, const aiNode *node, const mat4 *import_basis_, const aiScene *scene,
-//  string scene_file_path, Uint32 *mesh_num, Material_Descriptor *material_override)
-//{
-//  ASSERT(node);
-//  ASSERT(scene);
-//  this->name = name;
-//  basis = copy(node->mTransformation);
-//  if (import_basis_)
-//    import_basis = *import_basis_;
-//
-//  for (uint32 i = 0; i < node->mNumMeshes; ++i)
-//  {
-//    auto ai_i = node->mMeshes[i];
-//    const aiMesh *aimesh = scene->mMeshes[ai_i];
-//    (*mesh_num) += 1;
-//    string unique_id = scene_file_path + to_string(*mesh_num);
-//    Mesh mesh(aimesh, name, unique_id, scene);
-//    aiMaterial *ptr = scene->mMaterials[aimesh->mMaterialIndex];
-//    Material material(ptr, scene_file_path, material_override);
-//    model.push_back({ mesh, material });
-//  }
-//  owned_children.reserve(node->mNumChildren);
-//}
-//
-// Scene_Graph::Scene_Graph()
-//{
-//  Node_Ptr ptr = make_shared<Scene_Graph_Node>();
-//  ptr->name = "SCENE_GRAPH_ROOT";
-//  root = ptr;
-//}
-//
-// void Scene_Graph::add_graph_node(const aiNode *node, weak_ptr<Scene_Graph_Node> parent, const mat4 *import_basis,
-//  const aiScene *aiscene, string scene_file_path, Uint32 *mesh_num, Material_Descriptor *material_override)
-//{
-//  ASSERT(node);
-//  ASSERT(aiscene);
-//  string name = copy(&node->mName);
-//  //// construct just this node in the main node array
-//  // auto thing = Scene_Graph_Node(name, node, import_basis, aiscene,
-//  //    scene_file_path, mesh_num, material_override);
-//
-//  shared_ptr<Scene_Graph_Node> new_node =
-//    make_shared<Scene_Graph_Node>(name, node, import_basis, aiscene, scene_file_path, mesh_num, material_override);
-//
-//  set_parent(new_node, parent, true);
-//
-//  // construct all the new node's children, because its constructor doesn't
-//  for (uint32 i = 0; i < node->mNumChildren; ++i)
-//  {
-//    const aiNode *child = node->mChildren[i];
-//    add_graph_node(child, new_node, import_basis, aiscene, scene_file_path, mesh_num, material_override);
-//  }
-//}
-//
-// shared_ptr<Scene_Graph_Node> Scene_Graph::add_mesh(
-//  Mesh_Data m, Material_Descriptor md, string name, const mat4 *import_basis)
-//{
-//  Node_Ptr new_node = make_shared<Scene_Graph_Node>();
-//
-//  new_node->name = name;
-//  if (import_basis)
-//    new_node->import_basis = *import_basis;
-//
-//  Mesh mesh(m, name);
-//  Material material(md);
-//  new_node->model.push_back({ mesh, material });
-//  set_parent(new_node, root, false);
-//  return new_node;
-//}
-// void Scene_Graph::set_parent(weak_ptr<Scene_Graph_Node> p, weak_ptr<Scene_Graph_Node> desired_parent, bool
-// parent_owned)
-//{
-//  shared_ptr<Scene_Graph_Node> child = p.lock();
-//  shared_ptr<Scene_Graph_Node> current_parent_ptr = child->parent.lock();
-//
-//  if (current_parent_ptr)
-//  {
-//    for (auto i = current_parent_ptr->owned_children.begin(); i != current_parent_ptr->owned_children.end(); ++i)
-//    {
-//      if (*i == p.lock())
-//      {
-//        current_parent_ptr->owned_children.erase(i);
-//        break;
-//      }
-//    }
-//    for (auto i = current_parent_ptr->unowned_children.begin(); i != current_parent_ptr->unowned_children.end(); ++i)
-//    {
-//      if (i->lock() == p.lock())
-//      {
-//        current_parent_ptr->unowned_children.erase(i);
-//        break;
-//      }
-//    }
-//  }
-//
-//  shared_ptr<Scene_Graph_Node> desired_parent_ptr = desired_parent.lock();
-//  if (desired_parent_ptr)
-//  {
-//    child->parent = desired_parent;
-//    if (parent_owned)
-//    {
-//      desired_parent_ptr->owned_children.push_back(Node_Ptr(p));
-//    }
-//    else
-//    {
-//      desired_parent_ptr->unowned_children.push_back(Node_Ptr(p));
-//    }
-//  }
-//  else
-//  {
-//    set_message("ERROR: set_parent parent doesnt exist.");
-//    ASSERT(0);
-//  }
-//}
-//
-// shared_ptr<Scene_Graph_Node> Scene_Graph::add_aiscene(
-//  string scene_file_path, const mat4 *import_basis, Material_Descriptor *material_override)
-//{
-//  return add_aiscene(load_aiscene(scene_file_path), scene_file_path, import_basis, material_override);
-//}
-//
-// shared_ptr<Scene_Graph_Node> Scene_Graph::add_aiscene(string scene_file_path, Material_Descriptor *material_override)
-//{
-//  return add_aiscene(load_aiscene(scene_file_path), scene_file_path, nullptr, material_override);
-//}
-//
-// shared_ptr<Scene_Graph_Node> Scene_Graph::add_aiscene(
-//  const aiScene *scene, string scene_file_path, const mat4 *import_basis, Material_Descriptor *material_override)
-//{
-//
-//  // accumulates as meshes are imported, used along with the scene file path
-//  // to create a unique_id for the mesh
-//  Uint32 mesh_num = 0;
-//  const aiNode *root = scene->mRootNode;
-//
-//  // create the root node for this scene
-//  string name = copy(&root->mName);
-//  shared_ptr<Scene_Graph_Node> new_node = make_shared<Scene_Graph_Node>(
-//    name, root, import_basis, scene, BASE_MODEL_PATH + scene_file_path, &mesh_num, material_override);
-//  set_parent(new_node, this->root, false);
-//  new_node->filename_of_import = scene_file_path;
-//  new_node->is_root_of_import = true;
-//
-//  // add every aiscene child to the new node
-//  const uint32 num_children = scene->mRootNode->mNumChildren;
-//  for (uint32 i = 0; i < num_children; ++i)
-//  {
-//    const aiNode *node = scene->mRootNode->mChildren[i];
-//    add_graph_node(
-//      node, new_node, import_basis, scene, BASE_MODEL_PATH + scene_file_path, &mesh_num, material_override);
-//  }
-//  return new_node;
-//}
-// void Scene_Graph::visit_nodes(
-//  const weak_ptr<Scene_Graph_Node> node_ptr, const mat4 &M, vector<Render_Entity> &accumulator)
-//{
-//  shared_ptr<Scene_Graph_Node> entity = node_ptr.lock();
-//  ASSERT(entity);
-//  if ((!entity->visible) && entity->propagate_visibility)
-//    return;
-//
-//  const mat4 T = translate(entity->position);
-//  const mat4 S = scale(entity->scale);
-//  const mat4 R = toMat4(entity->orientation);
-//  const mat4 B = entity->basis;
-//  const mat4 I = entity->import_basis;
-//
-//  mat4 STACK = mat4(1);
-//
-//  if (entity->propagate_scale)
-//  {
-//    STACK = S;
-//  }
-//  if (entity->propagate_rotation)
-//  {
-//    STACK = R * STACK;
-//  }
-//  if (entity->propagate_translation)
-//  {
-//    STACK = T * STACK;
-//  }
-//  STACK = M * B * STACK;
-//
-//  const mat4 final_transformation = M * T * R * S * B * I;
-//
-//  const uint32 num_meshes = entity->model.size();
-//  for (uint32 i = 0; i < num_meshes; ++i)
-//  {
-//    Mesh *mesh_ptr = &entity->model[i].first;
-//    Material *material_ptr = &entity->model[i].second;
-//
-//    if (entity->visible)
-//      accumulator.emplace_back(mesh_ptr, material_ptr, final_transformation);
-//  }
-//  for (auto i = entity->unowned_children.begin(); i != entity->unowned_children.end();)
-//  {
-//    weak_ptr<Scene_Graph_Node> child = *i;
-//    if (!child.lock())
-//    {
-//      i = entity->unowned_children.erase(i);
-//    }
-//    else
-//    {
-//      visit_nodes(child, STACK, accumulator);
-//      ++i;
-//    }
-//  }
-//  for (auto i = entity->owned_children.begin(); i != entity->owned_children.end(); ++i)
-//  {
-//    weak_ptr<Scene_Graph_Node> child = *i;
-//    visit_nodes(child, STACK, accumulator);
-//  }
-//}
-// void Scene_Graph::visit_nodes_locked_accumulator(
-//  weak_ptr<Scene_Graph_Node> node_ptr, const mat4 &M, vector<Render_Entity> *accumulator, atomic_flag *lock)
-//{
-//  shared_ptr<Scene_Graph_Node> entity = node_ptr.lock();
-//  if ((!entity->visible) && entity->propagate_visibility)
-//    return;
-//  const mat4 T = translate(entity->position);
-//  const mat4 S = scale(entity->scale);
-//  const mat4 R = toMat4(entity->orientation);
-//  const mat4 B = entity->basis;
-//  const mat4 STACK = M * B * T * R * S;
-//  const mat4 I = entity->import_basis;
-//  const mat4 BASIS = STACK * I;
-//
-//  const int num_meshes = entity->model.size();
-//  for (int i = 0; i < num_meshes; ++i)
-//  {
-//    Mesh *mesh_ptr = &entity->model[i].first;
-//    Material *material_ptr = &entity->model[i].second;
-//    while (lock->test_and_set())
-//    { /*spin*/
-//    }
-//    if (entity->visible)
-//      accumulator->emplace_back(mesh_ptr, material_ptr, BASIS);
-//
-//    lock->clear();
-//  }
-//
-//  for (auto i = entity->unowned_children.begin(); i != entity->unowned_children.end();)
-//  {
-//    weak_ptr<Scene_Graph_Node> child = *i;
-//    if (!child.lock())
-//    {
-//      i = entity->unowned_children.erase(i);
-//    }
-//    else
-//    {
-//      visit_nodes_locked_accumulator(child, STACK, accumulator, lock);
-//      ++i;
-//    }
-//  }
-//  for (auto i = entity->owned_children.begin(); i != entity->owned_children.end(); ++i)
-//  {
-//    weak_ptr<Scene_Graph_Node> child = *i;
-//    visit_nodes_locked_accumulator(child, STACK, accumulator, lock);
-//  }
-//}
-//
-// void Scene_Graph::visit_root_node_base_index(
-//  uint32 node_index, uint32 count, vector<Render_Entity> *accumulator, atomic_flag *lock)
-//{
-//  const Scene_Graph_Node *const entity = root.get();
-//  ASSERT(entity->name == "SCENE_GRAPH_ROOT");
-//  ASSERT(entity->position == vec3(0));
-//  ASSERT(entity->orientation == quat());
-//  ASSERT(entity->import_basis == mat4(1));
-//  ASSERT(entity->unowned_children.size() == 0);
-//  for (uint32 i = node_index; i < node_index + count; ++i)
-//  {
-//    weak_ptr<Scene_Graph_Node> child = entity->owned_children[i];
-//    visit_nodes_locked_accumulator(child, mat4(1), accumulator, lock);
-//  }
-//}
-//
-// vector<Render_Entity> Scene_Graph::visit_nodes_async_start()
-//{
-//  vector<Render_Entity> accumulator;
-//  accumulator.reserve(uint32(last_accumulator_size * 1.5));
-//
-//  const uint32 root_children_count = root->owned_children.size();
-//  const uint32 thread_count = 4;
-//  const uint32 nodes_per_thread = root_children_count / thread_count;
-//  const uint32 leftover_nodes = root_children_count % thread_count;
-//
-//  PERF_TIMER.start();
-//  // todo the refactoring into class member function(or regression to W7 from
-//  // W10)
-//  // or other change killed the performance here
-//  thread threads[thread_count];
-//  atomic_flag lock = ATOMIC_FLAG_INIT;
-//  for (uint32 i = 0; i < thread_count; ++i)
-//  {
-//    const uint32 base_index = i * nodes_per_thread;
-//    auto fp = [this, base_index, nodes_per_thread, &accumulator, &lock] {
-//      this->visit_root_node_base_index(base_index, nodes_per_thread, &accumulator, &lock);
-//    };
-//    threads[i] = thread(fp);
-//  }
-//  PERF_TIMER.stop();
-//  uint32 leftover_index = (thread_count * nodes_per_thread);
-//  ASSERT(leftover_index + leftover_nodes == root_children_count);
-//  visit_root_node_base_index(leftover_index, leftover_nodes, &accumulator, &lock);
-//  for (int i = 0; i < thread_count; ++i)
-//  {
-//    threads[i].join();
-//  }
-//
-//  last_accumulator_size = accumulator.size();
-//  return accumulator;
-//}
-// vector<Render_Entity> Scene_Graph::visit_nodes_st_start()
-//{
-//  vector<Render_Entity> accumulator;
-//  accumulator.reserve(uint32(last_accumulator_size * 1.5));
-//  visit_nodes(root, mat4(1), accumulator);
-//  last_accumulator_size = accumulator.size();
-//  return accumulator;
-//}
-//
-// shared_ptr<Scene_Graph_Node> Scene_Graph::add_primitive_mesh(
-//  Mesh_Primitive p, string name, Material_Descriptor m, const mat4 *import_basis)
-//{
-//  shared_ptr<Scene_Graph_Node> new_node = make_shared<Scene_Graph_Node>();
-//  new_node->name = name;
-//  if (import_basis)
-//    new_node->import_basis = *import_basis;
-//  Mesh mesh(p, name);
-//  Material material(m);
-//  new_node->model.push_back({ mesh, material });
-//  set_parent(new_node, root, false);
-//  return new_node;
-//}
-
-inline Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()
+Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()
 {
   for (uint32 i = 0; i < children.size(); ++i)
   {
@@ -2214,6 +1963,777 @@ inline Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()
   }
   for (uint32 i = 0; i < model.size(); ++i)
   {
-    model[i] = {{NODE_NULL, false}, {NODE_NULL, false}};
+    model[i] = {{NODE_NULL}, {NODE_NULL}};
   }
+}
+
+Material_Descriptor *Flat_Scene_Graph::get_modifiable_material_pointer_for(Node_Index node, Model_Index model)
+{
+  Material_Index mi = nodes[node].model[model].second;
+
+  return resource_manager->material_pool[mi].get_modifiable_descriptor();
+}
+
+// assuming world basis for now
+
+inline Octree::Octree()
+{
+  root = &nodes[0];
+  root->size = 100.f;
+  root->halfsize = 50.f;
+  root->minimum = vec3(-41, -39, -41);
+  root->center = root->minimum + vec3(root->halfsize);
+  free_node = 1;
+  root->exists = true;
+  root->owner = this;
+  root->depth = 0;
+}
+
+void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
+{
+  ASSERT(root == &nodes[0]);
+  Mesh_Data *data = &mesh->mesh_data;
+  std::vector<Triangle_Normal> colliders;
+
+  bool all_worked = true;
+
+  for (size_t i = 0; i < data->indices.size(); i += 3)
+  {
+    uint32 a, b, c;
+    a = data->indices[i];
+    b = data->indices[i + 1];
+    c = data->indices[i + 2];
+    Triangle_Normal t;
+    if (velocity)
+      t.v = *velocity;
+
+    if (transform)
+    {
+      t.a = (*transform) * vec4(data->positions[a], 1);
+      t.c = (*transform) * vec4(data->positions[b], 1);
+      t.b = (*transform) * vec4(data->positions[c], 1);
+    }
+    else
+    {
+      t.a = data->positions[a];
+      t.c = data->positions[b];
+      t.b = data->positions[c];
+    }
+    vec3 atob = t.b - t.a;
+    vec3 atoc = t.c - t.a;
+    t.n = normalize(cross(atob, atoc));
+
+    all_worked = all_worked && root->push(t, 0);
+  }
+
+  if (!all_worked)
+  {
+    // ASSERT(0);
+  }
+}
+
+const Triangle_Normal *Octree::test(const AABB &probe, uint32 *counter) const
+{
+  return root->test(probe, 0, counter);
+}
+
+inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
+{
+  if (!(free_node < nodes.size()))
+  {
+    return nullptr;
+  }
+  Octree_Node *ptr = &nodes[free_node];
+  free_node += 1;
+  ptr->minimum = p;
+  ptr->size = size;
+  ptr->halfsize = 0.5f * size;
+  ptr->center = p + vec3(ptr->halfsize);
+  ptr->owner = this;
+  ptr->depth = depth + 1;
+  return ptr;
+}
+
+void Octree::clear()
+{
+  root->clear();
+  root = &nodes[0];
+  root->size = 100.f;
+  root->halfsize = 50.f;
+  root->minimum = vec3(-41, -39, -41);
+  root->center = root->minimum + vec3(root->halfsize);
+
+  root->exists = true;
+  root->owner = this;
+  free_node = 1;
+}
+
+std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
+{
+  if (mat1 == NODE_NULL)
+  {
+
+    Mesh_Descriptor md;
+    md.mesh_data = load_mesh_plane();
+    md.name = "octree_mesh_depth_1";
+    mesh_depth_1 = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_depth_2";
+    mesh_depth_2 = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_depth_3";
+    mesh_depth_3 = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_triangles";
+    mesh_triangles = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_normals";
+    mesh_normals = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_velocities";
+    mesh_velocities = scene->resource_manager->push_custom_mesh(&md);
+
+    Material_Descriptor material;
+    material.frag_shader = "emission.frag";
+    material.wireframe = true;
+    material.backface_culling = false;
+    material.uses_transparency = true;
+    material.blending = true;
+
+    material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
+    mat1 = scene->resource_manager->push_custom_material(&material);
+    material.emissive.mod = vec4(0.0f, .10f, 0.0f, .10f);
+    mat2 = scene->resource_manager->push_custom_material(&material);
+    material.emissive.mod = vec4(0.0f, 0.0f, .10f, .10f);
+    mat3 = scene->resource_manager->push_custom_material(&material);
+    
+    material.uses_transparency = false;
+    material.blending = false;
+    material.frag_shader = "";
+    material.emissive.mod = vec4(2.0f, 0.0f, 0.0f, 1.0f);
+    mat_triangles = scene->resource_manager->push_custom_material(&material);
+
+    material.emissive.mod = vec4(0.0f, 2.0f, 2.0f, 1.0f);
+    mat_normals = scene->resource_manager->push_custom_material(&material);
+
+    material.emissive.mod = vec4(2.0f, 0.0f, 2.0f, 1.0f);
+    mat_velocities = scene->resource_manager->push_custom_material(&material);
+  }
+
+  float32 time = get_real_time();
+  Mesh_Descriptor md1, md2, md3, mtriangles, mnormals, mvelocities;
+
+  for (uint32 i = 0; i < free_node; ++i)
+  {
+    Octree_Node *node = &nodes[i];
+    if (depth_to_render != -1)
+    {
+      if (node->depth != depth_to_render)
+        continue;
+    }
+    Mesh_Descriptor *dst = nullptr;
+    if ((node->depth % 3) == 0)
+      dst = &md1;
+    if ((node->depth % 3) == 1)
+      dst = &md2;
+    if ((node->depth % 3) == 2)
+      dst = &md3;
+    ASSERT(dst);
+
+    add_aabb(node->minimum, node->minimum + node->size, dst->mesh_data);
+
+    if (include_triangles)
+    {
+      for (uint32 j = 0; j < node->free_triangle_index; ++j)
+      {
+        const Triangle_Normal &tri = node->occupying_triangles[j];
+        add_triangle(tri.a, tri.b, tri.c, mtriangles.mesh_data);
+
+        if (include_normals)
+        {
+          vec3 center = vec3(0.333f) * (tri.a + tri.b + tri.c);
+          vec3 tip = center + tri.n;
+          float32 base_width = 0.1f;
+          vec3 offsettoa = base_width * (tri.a - center);
+          vec3 offsettob = base_width * (tri.b - center);
+          vec3 offsettoc = base_width * (tri.c - center);
+
+          add_triangle(center, tip, center+offsettoa, mnormals.mesh_data);
+          add_triangle(center, tip, center+offsettob, mnormals.mesh_data);
+          add_triangle(center, tip, center+offsettoc, mnormals.mesh_data);
+        }
+        if (include_velocity)
+        {
+          vec3 center = vec3(0.33333f) * (tri.a + tri.b + tri.c);
+          vec3 tip = center + 10.f*tri.v;
+          float32 base_width = 0.1f;
+          vec3 offsettoa = base_width * (tri.a - center);
+          vec3 offsettob = base_width * (tri.b - center);
+          vec3 offsettoc = base_width * (tri.c - center);
+
+          add_triangle(center, tip, center+offsettoa, mvelocities.mesh_data);
+          add_triangle(center, tip, center+offsettob, mvelocities.mesh_data);
+          add_triangle(center, tip, center+offsettoc, mvelocities.mesh_data);
+        }
+      }
+    }
+  }
+  std::vector<Render_Entity> entities;
+  scene->resource_manager->mesh_pool[mesh_depth_1] = md1;
+  scene->resource_manager->mesh_pool[mesh_depth_2] = md2;
+  scene->resource_manager->mesh_pool[mesh_depth_3] = md3;
+  Mesh *m1 = &scene->resource_manager->mesh_pool[mesh_depth_1];
+  Mesh *m2 = &scene->resource_manager->mesh_pool[mesh_depth_2];
+  Mesh *m3 = &scene->resource_manager->mesh_pool[mesh_depth_3];
+  Render_Entity e1("OctreeDepth1", m1, &scene->resource_manager->material_pool[mat1], mat4(1), Node_Index(NODE_NULL));
+  Render_Entity e2("OctreeDepth2", m2, &scene->resource_manager->material_pool[mat2], mat4(1), Node_Index(NODE_NULL));
+  Render_Entity e3("OctreeDepth3", m3, &scene->resource_manager->material_pool[mat3], mat4(1), Node_Index(NODE_NULL));
+  entities.push_back(e1);
+  entities.push_back(e2);
+  entities.push_back(e3);
+  if (include_triangles)
+  {
+    scene->resource_manager->mesh_pool[mesh_triangles] = mtriangles;
+    Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_triangles];
+    Render_Entity e(Array_String("OctreeTriangles"), ptr, &scene->resource_manager->material_pool[mat_triangles],
+        mat4(1), Node_Index(NODE_NULL));
+    entities.push_back(e);
+
+    if (include_normals)
+    {
+      scene->resource_manager->mesh_pool[mesh_normals] = mnormals;
+      Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_normals];
+      Render_Entity e(Array_String("OctreeNormals"), ptr, &scene->resource_manager->material_pool[mat_normals],
+          mat4(1), Node_Index(NODE_NULL));
+      entities.push_back(e);
+    }
+    if (include_velocity)
+    {
+      scene->resource_manager->mesh_pool[mesh_velocities] = mvelocities;
+      Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_velocities];
+      Render_Entity e(Array_String("OctreeVelocities"), ptr, &scene->resource_manager->material_pool[mat_velocities],
+          mat4(1), Node_Index(NODE_NULL));
+      entities.push_back(e);
+    }
+  }
+
+  return entities;
+}
+
+inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
+{
+  if (free_triangle_index == TRIANGLES_PER_NODE)
+  {
+    return false;
+  }
+  occupying_triangles[free_triangle_index] = tri;
+  free_triangle_index += 1;
+  return true;
+}
+
+enum
+{
+  forwardupleft,
+  forwardupright,
+  forwarddownright,
+  forwarddownleft,
+  backupleft,
+  backupright,
+  backdownright,
+  backdownleft
+};
+
+inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth) noexcept
+{
+  if (depth == MAX_OCTREE_DEPTH)
+    return insert_triangle(triangle);
+  const bool left = triangle.a.x < center.x;
+  const bool back = triangle.a.y < center.y;
+  const bool down = triangle.a.z < center.z;
+  vec3 child_minimum = minimum + halfsize * vec3(float32(!left), float32(!back), float32(!down));
+  if (left)
+  {
+    if (back)
+    {
+      if (down)
+      { // left back down
+        if (!(triangle.b.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z < center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z < center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[backdownleft];
+        if (!node)
+          node = children[backdownleft] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+      else
+      { // left back up
+        if (!(triangle.b.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z > center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z > center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[backupleft];
+        if (!node)
+          node = children[backupleft] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+    }
+    else // forward
+    {
+      if (down)
+      { // left forward down
+        if (!(triangle.b.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z < center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z < center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[forwarddownleft];
+        if (!node)
+          node = children[forwarddownleft] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+      else
+      { // left forward up
+        if (!(triangle.b.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z > center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x < center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z > center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[forwardupleft];
+        if (!node)
+          node = children[forwardupleft] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+    }
+  }
+  else // right
+  {
+    if (back)
+    {
+      if (down) // right back down
+      {
+        if (!(triangle.b.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z < center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z < center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[backdownright];
+        if (!node)
+          node = children[backdownright] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+      else // right back up
+      {
+        if (!(triangle.b.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z > center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y < center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z > center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[backupright];
+        if (!node)
+          node = children[backupright] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+    }
+    else // forward
+    {
+      if (down) // right forward down
+      {
+        if (!(triangle.b.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z < center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z < center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[forwarddownright];
+        if (!node)
+          node = children[forwarddownright] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+      else // right forward up
+      {
+        if (!(triangle.b.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.b.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.b.z > center.z))
+          return insert_triangle(triangle);
+        if (!(triangle.c.x > center.x))
+          return insert_triangle(triangle);
+        if (!(triangle.c.y > center.y))
+          return insert_triangle(triangle);
+        if (!(triangle.c.z > center.z))
+          return insert_triangle(triangle);
+        Octree_Node *node = children[forwardupright];
+        if (!node)
+          node = children[forwardupright] = owner->new_node(child_minimum, halfsize, depth);
+        depth += 1;
+        if (!node)
+          return false;
+        return node->push(triangle, depth);
+      }
+    }
+  }
+  return false;
+}
+
+inline const Triangle_Normal *Octree_Node::test_this(
+    const AABB &probe, uint32 *test_count, std::vector<Triangle_Normal> *accumulator) const
+{
+  for (uint32 i = 0; i < free_triangle_index; ++i)
+  {
+    const Triangle_Normal *triangle = &occupying_triangles[i];
+    *test_count += 1;
+    if (aabb_triangle_intersection(probe, *triangle))
+    {
+      if (accumulator)
+      {
+        accumulator->push_back(*triangle);
+        continue;
+      }
+      return triangle;
+    }
+  }
+  return nullptr;
+}
+
+inline const Triangle_Normal *Octree_Node::test(const AABB &probe, uint8 depth, uint32 *counter) const
+{
+  const Triangle_Normal *r = test_this(probe, counter, nullptr);
+  if (r)
+  {
+    return r;
+  }
+
+  for (uint32 i = 0; i < 8; ++i)
+  {
+    Octree_Node *child = children[i];
+    if (!child)
+      continue;
+
+    bool intersects_this_child =
+        aabb_intersection(probe.min, probe.max, child->minimum, child->minimum + vec3(child->size));
+    if (intersects_this_child)
+    {
+      depth += 1;
+      const Triangle_Normal *r = child->test(probe, depth, counter);
+      if (r)
+        return r;
+    }
+  }
+  return nullptr;
+}
+
+void Octree_Node::testall(
+    const AABB &probe, uint8 depth, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const
+{
+  test_this(probe, counter, accumulator);
+  for (uint32 i = 0; i < 8; ++i)
+  {
+    Octree_Node *child = children[i];
+    if (!child)
+      continue;
+
+    bool intersects_this_child =
+        aabb_intersection(probe.min, probe.max, child->minimum, child->minimum + vec3(child->size));
+    if (intersects_this_child)
+    {
+      depth += 1;
+      child->testall(probe, depth, counter, accumulator);
+    }
+  }
+}
+
+inline void Octree_Node::clear()
+{
+  for (uint32 i = 0; i < 8; ++i)
+  {
+    Octree_Node *node = children[i];
+    if (node)
+    {
+      node->clear();
+    }
+    free_triangle_index = 0;
+    children[i] = nullptr;
+    exists = false;
+  }
+}
+//
+// void Octree_Node::get_render_entities(std::vector<std::tuple<AABB,uint32,std::vector<Triangle_Normal>>> *accumulator,
+// float32 time, uint32 depth)
+//{
+//  mat4 M(1);
+//  mat4 S = glm::scale(vec3(size));
+//  mat4 T = glm::translate(center);
+//  M = T * S;
+//
+//  AABB me;
+//  me.min = minimum;
+//  me.max = minimum+size;
+//  std::vector<Triangle_Normal> tris;
+//  tris.reserve(free_triangle_index);
+//  for (uint32 i = 0; i < free_triangle_index; ++i)
+//  {
+//    tris.push_back(occupying_triangles[i]);
+//  }
+//  accumulator->push_back({me, depth, tris});
+//
+//  for (uint32 i = 0; i < 8; ++i)
+//  {
+//    Octree_Node *node = children[i];
+//    if (node)
+//    {
+//      node->get_render_entities(accumulator, time, depth + 1);
+//    }
+//  }
+//}
+
+// ccw
+Plane_nd compute_plane(vec3 a, vec3 b, vec3 c)
+{
+  Plane_nd p;
+  p.n = normalize(cross(b - a, c - a));
+  p.d = dot(p.n, a);
+  return p;
+}
+
+float32 TriArea2D(float32 x1, float32 y1, float32 x2, float32 y2, float32 x3, float32 y3)
+{
+  return (x1 - x2) * (y2 - y3) - (x2 - x3) * (y1 - y2);
+}
+
+// compute barycentric coordinates uvw for
+// point p in triangle abc
+vec3 barycentric(vec3 a, vec3 b, vec3 c, vec3 p)
+{
+  // Unnormalized triangle normal
+  vec3 m = cross(b - a, c - a);
+  // Nominators and one-over-denominator for u and v ratios
+  float32 nu, nv, ood;
+  // Absolute components for determining projection plane
+  float32 x = abs(m.x), y = abs(m.y), z = abs(m.z);
+  // Compute areas in plane of largest projection
+  if (x >= y && x >= z)
+  {
+    // x is largest, project to the yz plane
+    nu = TriArea2D(p.y, p.z, b.y, b.z, c.y, c.z); // Area of PBC in yz plane
+    nv = TriArea2D(p.y, p.z, c.y, c.z, a.y, a.z); // Area of PCA in yz plane
+    ood = 1.0f / m.x;                             // 1/(2*area of ABC in yz plane)
+  }
+  else if (y >= x && y >= z)
+  {
+    // y is largest, project to the xz plane
+    nu = TriArea2D(p.x, p.z, b.x, b.z, c.x, c.z);
+    nv = TriArea2D(p.x, p.z, c.x, c.z, a.x, a.z);
+    ood = 1.0f / -m.y;
+  }
+  else
+  {
+    // z is largest, project to the xy plane
+    nu = TriArea2D(p.x, p.y, b.x, b.y, c.x, c.y);
+    nv = TriArea2D(p.x, p.y, c.x, c.y, a.x, a.y);
+    ood = 1.0f / m.z;
+  }
+  vec3 result;
+  result.x = nu * ood;
+  result.y = nv * ood;
+  result.z = 1.0f - result.x - result.y;
+  return result;
+}
+
+bool point_within_square(vec3 p, vec3 ps, float32 size)
+{
+  return (p.x > ps.x) && (p.x < ps.x + size) && (p.y > ps.y) && (p.y < ps.y + size) && (p.z > ps.z) &&
+         (p.z < ps.z + size);
+}
+
+bool aabb_intersection(const vec3 &mina, const vec3 &maxa, const vec3 &minb, const vec3 &maxb)
+{
+  if (maxa.x < minb.x)
+    return false;
+  if (mina.x > maxb.x)
+    return false;
+
+  if (maxa.y < minb.y)
+    return false;
+  if (mina.y > maxb.y)
+    return false;
+
+  if (maxa.z < minb.z)
+    return false;
+  if (mina.z > maxb.z)
+    return false;
+
+  return true;
+}
+
+bool aabb_intersection(const AABB &a, const AABB &b)
+{
+  return aabb_intersection(a.min, a.max, b.min, b.max);
+}
+
+bool aabb_plane_intersection(AABB b, vec3 n, float32 d)
+{
+  vec3 c = (b.max + b.min) * 0.5f;
+  vec3 e = b.max - c;
+  float32 r = e[0] * abs(n[0]) + e[1] * abs(n[1]) + e[2] * abs(n[2]);
+  float32 s = dot(n, c) - d;
+  return abs(s) <= r;
+}
+
+void push_aabb(AABB &aabb, const vec3 &p)
+{
+  if (p.x < aabb.min.x)
+  {
+    aabb.min.x = p.x;
+  }
+  if (p.x > aabb.max.x)
+  {
+    aabb.max.x = p.x;
+  }
+
+  if (p.y < aabb.min.y)
+  {
+    aabb.min.y = p.y;
+  }
+  if (p.y > aabb.max.y)
+  {
+    aabb.max.y = p.y;
+  }
+
+  if (p.z < aabb.min.z)
+  {
+    aabb.min.z = p.z;
+  }
+  if (p.z > aabb.max.z)
+  {
+    aabb.max.z = p.z;
+  }
+}
+
+bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
+{
+
+  AABB tri_aabb;
+  tri_aabb.min = triangle.a;
+  tri_aabb.max = triangle.a;
+  push_aabb(tri_aabb, triangle.b);
+  push_aabb(tri_aabb, triangle.c);
+
+  // early out aabb
+  bool intersects_aabb = aabb_intersection(aabb, tri_aabb);
+  if (!intersects_aabb)
+    return false;
+
+  // early out plane
+  float32 d = dot(triangle.n, triangle.a);
+  bool intersects_plane = aabb_plane_intersection(aabb, triangle.n, d);
+  if (!intersects_plane)
+    return false;
+
+  // centering the aabb on origin
+  const vec3 aabb_center = 0.5f * (aabb.min + aabb.max);
+  const vec3 aabb_radius = 0.5f * (aabb.max - aabb.min);
+  vec3 v0 = triangle.a - aabb_center;
+  vec3 v1 = triangle.b - aabb_center;
+  vec3 v2 = triangle.c - aabb_center;
+  mat3 basis = mat3(1);
+
+  for (uint32 i = 0; i < 3; ++i)
+  {
+    for (uint32 j = 0; j < 3; ++j)
+    {
+      vec3 f;
+      if (j == 0)
+        f = v1 - v0;
+      if (j == 1)
+        f = v2 - v1;
+      if (j == 3)
+        f = v0 - v2;
+
+      vec3 &e = basis[i];
+      vec3 a = cross(e, f);
+
+      float32 p0 = dot(a, v0);
+      // float32 p1 = dot(a, v1); p0 == p1
+      float32 p2 = dot(a, v2);
+
+      float32 minp = glm::min(p0, p2);
+      float32 maxp = glm::max(p0, p2);
+
+      float32 r = aabb_radius.x * abs(a.x) + aabb_radius.y * abs(a.y) + aabb_radius.z * abs(a.z);
+
+      if (glm::min(p0, p2) > r || glm::max(p0, p2) < -r)
+      {
+        return false;
+      }
+    }
+  }
+  return true;
 }

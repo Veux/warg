@@ -1,6 +1,8 @@
 #version 330 core
 uniform sampler2D texture0;
 
+uniform bool gamma_encoded;
+
 in vec3 direction;
 
 layout(location = 0) out vec4 out0;
@@ -14,9 +16,21 @@ vec2 polar_to_uv(vec2 polar)
   return (polar*scale) + 0.5f;
 }
 
+
+
+
 void main()
 {
   vec2 polar = direction_to_polar(normalize(-direction));
   vec2 uv = polar_to_uv(polar);
-  out0 = 1.f*pow(vec4(texture2D(texture0, uv).rgb, 1.0),vec4(1.0f));
+
+  vec4 result = texture2D(texture0, uv);
+  if(gamma_encoded)
+  {
+    result = pow(result,vec4(2.2));
+    result = 1.3*result;
+    //result = Tonemap_ACES(result);
+  }
+  out0 = result;
+  
 }

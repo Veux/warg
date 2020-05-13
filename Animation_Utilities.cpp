@@ -1,5 +1,7 @@
 #pragma once
+#include "stdafx.h"
 #include "Animation_Utilities.h"
+#include "Warg_Common.h"
 
 template <typename V, typename T> V lerp(V &v1, V &v2, T &t)
 {
@@ -42,54 +44,89 @@ float lerp(float v1, float v2, float t)
 //  std::vector<glm::vec4> remainder;
 //};
 
-void fire_emitter(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size)
+void fire_emitter(Renderer *renderer, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size)
 {
   Particle_Emitter_Descriptor *ped = &pe->descriptor;
-  const float32 time = get_real_time();
-  static bool first = true;
-  static Mesh_Index mesh_index;
-  static Material_Index material_index;
+  const float32 time = (float32)get_real_time();
 
-  if (first)
-  {
-    Material_Descriptor material;
-    material.vertex_shader = "instance.vert";
-    material.frag_shader = "emission.frag";
-    material.emissive = "color(1,1,1,1)";
-    material.emissive.mod = vec4(15.f, 3.3f, .7f, 1.f);
-    Node_Index particle_node = scene->add_mesh(cube, "fire particle", &material);
-    mesh_index = scene->nodes[particle_node].model[0].first;
-    material_index = scene->nodes[particle_node].model[0].second;
-    scene->nodes[particle_node].visible = false;
-    first = false;
-  }
   l->color = vec3(1.0f, .1f, .1f);
   l->position.z = 1.0f;
   l->ambient = 0.002f;
   l->attenuation.z = 0.06f;
 
   const float32 area = size.x * size.y;
-  pe->mesh_index = mesh_index;
-  pe->material_index = material_index;
   pe->descriptor.position = pos;
   ped->emission_descriptor.initial_position_variance = vec3(size, .1f);
-  ped->emission_descriptor.initial_scale = vec3(0.025f);
-  ped->emission_descriptor.initial_scale_variance = vec3(0.01f);
-  ped->emission_descriptor.initial_velocity = vec3(0, 0, 5);
-  ped->emission_descriptor.particles_per_second = area * 5500.f;
-  ped->emission_descriptor.time_to_live = .25f;
-  ped->emission_descriptor.time_to_live_variance = 1.05f;
+  ped->emission_descriptor.initial_scale = vec3(0.035f);
+  ped->emission_descriptor.initial_extra_scale_variance = vec3(0.021f);
+  ped->emission_descriptor.initial_velocity = vec3(0, 0, 6);
+  ped->emission_descriptor.particles_per_second = area * 3500.f;
+  ped->emission_descriptor.minimum_time_to_live = .315f;
+  ped->emission_descriptor.extra_time_to_live_variance = .3215f;
   ped->physics_descriptor.type = wind;
 
   ped->emission_descriptor.initial_velocity_variance =
-      vec3(abs(3.5f * sin(2 * time)), abs(3.5f * cos(1.5 * time)), abs(1.f + sin(time) * 2.f));
-  ped->physics_descriptor.intensity = random_between(11.f, 35.f);
-  static vec3 dir;
-  if (fract(sin(time)) > .5)
-    dir = vec3(.75, .75, .25) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+      vec3(abs(2.15f * sin(2 * time)), abs(2.15f * cos(1.5 * time)), abs((1.3f + sin(time)) * 1.15f));
 
-  ped->physics_descriptor.direction = dir;
+  ped->emission_descriptor.initial_velocity_variance = vec3(2, 2, 2);
+
+  ped->physics_descriptor.intensity = random_between(11.f, 25.f);
+  static vec3 wind_dir;
+  if (fract(sin(time)) > .5)
+    wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+
+  ped->physics_descriptor.direction = wind_dir;
   l->brightness = area * random_between(13.f, 16.f);
   l->position = pos;
   pe->update(renderer->projection, renderer->camera, dt);
+}
+
+void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size)
+{
+  Particle_Emitter_Descriptor *ped = &pe->descriptor;
+  const float32 time = (float32)get_real_time();
+
+  //l->color = vec3(1.0f, .1f, .1f);
+  //l->position.z = 1.0f;
+  //l->ambient = 0.002f;
+  //l->attenuation.z = 0.06f;
+
+  const float32 area = size.x * size.y;
+  pe->descriptor.position = pos;
+  //ped->emission_descriptor.initial_position_variance = vec3(0);
+  // vec3(size, .1f);
+  ped->emission_descriptor.initial_scale = vec3(.750612835f);
+  //ped->emission_descriptor.initial_extra_scale_variance = vec3(.005121315151f);
+  ped->emission_descriptor.initial_velocity = vec3(0, 0, 7);
+  ped->emission_descriptor.particles_per_second = 125.f;
+  ped->emission_descriptor.minimum_time_to_live = 35.315f;
+  //ped->emission_descriptor.extra_time_to_live_variance = 03; // 0.053215f;
+  ped->emission_descriptor.randomized_orientation_angle_variance = 0;
+  ped->physics_descriptor.type = wind;
+
+  // ped->emission_descriptor.initial_velocity_variance =
+  //    vec3(abs(5.15f * sin(2 * time)), abs(5.15f * cos(1.5 * time)), abs((1.3f + sin(time)) * 5.15f));
+
+  ped->emission_descriptor.initial_velocity_variance = vec3(1, 1, 00.1);
+
+  ped->physics_descriptor.intensity = random_between(21.f, 55.f);
+  static vec3 wind_dir;
+  if (fract(sin(time)) > .5)
+    wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+
+  if (fract(sin(time)) > .5)
+    wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+
+  
+  //wind_dir = vec3(0);
+  ped->physics_descriptor.direction = wind_dir;
+  l->brightness = area * random_between(13.f, 16.f);
+  l->position = pos;
+
+  pe->descriptor.physics_descriptor.octree = &scene->collision_octree;
+
+  pe->update(renderer->projection, renderer->camera, dt);
+
+  Material_Descriptor *md = scene->resource_manager->material_pool[pe->material_index].get_modifiable_descriptor();
+  md->uniform_set.vec3_uniforms["emitter_location"] = pos;
 }

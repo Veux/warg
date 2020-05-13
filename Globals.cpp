@@ -2,7 +2,7 @@
 #include "Globals.h"
 #include "Scene_Graph.h"
 
-const float32 dt = 1.0f / 60.0f;
+const float32 dt = 1.0f / 95.0f;
 const float32 MOVE_SPEED = 4.f;
 const float32 STEP_SIZE = MOVE_SPEED / 3.f;
 const float32 MOUSE_X_SENS = .0041f;
@@ -29,3 +29,4 @@ std::thread::id MAIN_THREAD_ID;
 SDL_Imgui_State IMGUI;
 std::mutex IMGUI_MUTEX;
 std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
+std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_CACHE;

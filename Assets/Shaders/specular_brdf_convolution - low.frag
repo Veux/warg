@@ -53,7 +53,7 @@ void main()
   vec3 r = n;
   vec3 v = r;
 
-  const uint SAMPLE_COUNT = 1000u;
+  const uint SAMPLE_COUNT = 50u;
   float weight = 0.0;
   vec3 result = vec3(0.0);
   for (uint i = 0u; i < SAMPLE_COUNT; ++i)

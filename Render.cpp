@@ -8,6 +8,7 @@
 #include "SDL_Imgui_State.h"
 #include "Shader.h"
 #include "Timer.h"
+#include "Scene_Graph.h"
 #include "UI.h"
 using glm::ivec2;
 using glm::lookAt;
@@ -29,7 +30,6 @@ using std::string;
 using std::unordered_map;
 using std::vector;
 using std::weak_ptr;
-using namespace gl33core;
 
 #define DIFFUSE_TARGET GL_COLOR_ATTACHMENT0
 #define DEPTH_TARGET GL_COLOR_ATTACHMENT1
@@ -45,6 +45,18 @@ const vec4 Conductor_Reflectivity::silver = vec4(0.95, 0.93, 0.88, 1.0f);
 static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
+extern std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
+
+const std::string WHITE = "color(1,1,1,1)";
+const vec4 MISSING_TEXTURE_MOD = vec4(-1.12345);
+const vec4 DEFAULT_ALBEDO = vec4(1);
+const vec4 DEFAULT_NORMAL = vec4(0.5, 0.5, 1.0, 0.0);
+const vec4 DEFAULT_ROUGHNESS = vec4(0.3);
+const vec4 DEFAULT_METALNESS = vec4(0);
+const vec4 DEFAULT_EMISSIVE = vec4(0);
+const vec4 DEFAULT_AMBIENT_OCCLUSION = vec4(1);
+const std::string DEFAULT_VERTEX_SHADER = "vertex_shader.vert";
+const std::string DEFAULT_FRAG_SHADER = "fragment_shader.frag";
 
 void check_FBO_status();
 uint32 mip_levels_for_resolution(ivec2 resolution)
@@ -377,7 +389,7 @@ void Texture::load()
   if (t.name == "")
     return;
 
-  const bool is_a_color = t.name.substr(0, 6) == "color(";
+  const bool is_a_color = t.name.substr(0, 6) == "color(" || t.name.substr(0, 6) == "Color(";
 
   if (is_a_color)
   {
@@ -406,6 +418,8 @@ void Texture::load()
 
     glBindTexture(GL_TEXTURE_2D, texture->texture);
     glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, GL_FLOAT, 0);
+
+    glObjectLabel(GL_TEXTURE, texture->texture, -1, t.name.c_str());
     texture->size = t.size;
     texture->format = t.format;
     initialized = true;
@@ -444,7 +458,7 @@ void Texture::load()
   }
 
   // todo: other software procedural texture generators here?
-  if (t.name.substr(0, 6) == "color(")
+  if (is_a_color)
   {
     vec4 color = string_to_float4_color(t.name);
     if (color != vec4(0))
@@ -535,7 +549,7 @@ void Texture::load()
       "", 3.f);
   glBindTexture(GL_TEXTURE_2D, texture->texture);
   glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, data_format, data);
-  glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
+  // glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, MAX_ANISOTROPY);
 
   glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
   check_set_parameters();
@@ -587,7 +601,7 @@ void Texture::check_set_parameters()
   if (t.anisotropic_filtering != texture->anisotropic_filtering)
   {
     texture->anisotropic_filtering = t.anisotropic_filtering;
-    glTexParameterf(GL_TEXTURE_2D, gl::GL_TEXTURE_MAX_ANISOTROPY_EXT, MAX_ANISOTROPY);
+    // glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, MAX_ANISOTROPY);
   }
 }
 
@@ -643,30 +657,38 @@ Mesh::Mesh(const Mesh_Descriptor &d) : Mesh(&d) {}
 Mesh::Mesh(const Mesh_Descriptor *d)
 {
   name = d->name;
-  std::string unique_identifier = d->build_unique_identifier();
+
+  static uint64 count = 0;
+  count += d->mesh_data.positions.size();
+  set_message("Mesh(Mesh_Descriptor) ASSERT perf warning - hashing data", s(name, " ", count), 1.0f);
+  std::string unique_identifier = d->mesh_data.build_unique_identifier();
+
   shared_ptr<Mesh_Handle> ptr = MESH_CACHE[unique_identifier].lock();
   if (ptr)
   {
     mesh = ptr;
     return;
   }
-  ptr = std::make_shared<Mesh_Handle>();
-  ptr->descriptor = *d;
+  mesh = make_shared<Mesh_Handle>();
+  mesh->descriptor = *d;
+  mesh->descriptor.unique_identifier = unique_identifier;
+  MESH_CACHE[unique_identifier] = mesh;
+}
 
-  if (ptr->descriptor.primitive != null)
+void Mesh::load()
+{
+  if (!mesh->vao)
   {
-    ASSERT(ptr->descriptor.mesh_data.positions.size() == 0); // a primitive set and custom mesh data??
-    ptr->descriptor.mesh_data = load_mesh(ptr->descriptor.primitive);
+    mesh->upload_data();
   }
-  MESH_CACHE[unique_identifier] = mesh = upload_data(ptr->descriptor.mesh_data);
-  mesh->enable_assign_attributes();
 }
 
 void Mesh::draw()
 {
+  load();
   mesh->enable_assign_attributes(); // also binds vao
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, get_indices_buffer_size(), GL_UNSIGNED_INT, nullptr);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indices_buffer);
+  glDrawElements(GL_TRIANGLES, mesh->indices_buffer_size, GL_UNSIGNED_INT, nullptr);
 }
 
 void Mesh_Handle::enable_assign_attributes()
@@ -710,13 +732,11 @@ void Mesh_Handle::enable_assign_attributes()
   }
 }
 
-shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
+void Mesh_Handle::upload_data()
 {
-  // opengl calls no longer allowed in state.update()
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-
-  shared_ptr<Mesh_Handle> mesh = make_shared<Mesh_Handle>();
-  mesh->descriptor.mesh_data = mesh_data;
+  ASSERT(vao == 0);
+  Mesh_Data &mesh_data = descriptor.mesh_data;
 
   if (sizeof(decltype(mesh_data.indices)::value_type) != sizeof(uint32))
   {
@@ -724,16 +744,16 @@ shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
     ASSERT(0);
   }
 
-  mesh->indices_buffer_size = mesh_data.indices.size();
-  glGenVertexArrays(1, &mesh->vao);
-  glBindVertexArray(mesh->vao);
-  set_message("uploading mesh data...", s("created vao: ", mesh->vao), 1);
-  glGenBuffers(1, &mesh->position_buffer);
-  glGenBuffers(1, &mesh->normal_buffer);
-  glGenBuffers(1, &mesh->indices_buffer);
-  glGenBuffers(1, &mesh->uv_buffer);
-  glGenBuffers(1, &mesh->tangents_buffer);
-  glGenBuffers(1, &mesh->bitangents_buffer);
+  indices_buffer_size = mesh_data.indices.size();
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+  set_message("uploading mesh data...", s("created vao: ", vao), 1);
+  glGenBuffers(1, &position_buffer);
+  glGenBuffers(1, &normal_buffer);
+  glGenBuffers(1, &indices_buffer);
+  glGenBuffers(1, &uv_buffer);
+  glGenBuffers(1, &tangents_buffer);
+  glGenBuffers(1, &bitangents_buffer);
 
   uint32 positions_buffer_size = mesh_data.positions.size();
   uint32 normal_buffer_size = mesh_data.normals.size();
@@ -746,51 +766,49 @@ shared_ptr<Mesh_Handle> Mesh::upload_data(const Mesh_Data &mesh_data)
 
   // positions
   uint32 buffer_size = mesh_data.positions.size() * sizeof(decltype(mesh_data.positions)::value_type);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->position_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.positions[0], GL_STATIC_DRAW);
 
   // normals
   buffer_size = mesh_data.normals.size() * sizeof(decltype(mesh_data.normals)::value_type);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->normal_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.normals[0], GL_STATIC_DRAW);
 
   // texture_coordinates
   buffer_size = mesh_data.texture_coordinates.size() * sizeof(decltype(mesh_data.texture_coordinates)::value_type);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->uv_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.texture_coordinates[0], GL_STATIC_DRAW);
 
   // indices
   buffer_size = mesh_data.indices.size() * sizeof(decltype(mesh_data.indices)::value_type);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indices_buffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_buffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer_size, &mesh_data.indices[0], GL_STATIC_DRAW);
 
   // tangents
   buffer_size = mesh_data.tangents.size() * sizeof(decltype(mesh_data.tangents)::value_type);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->tangents_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.tangents[0], GL_STATIC_DRAW);
 
   // bitangents
   buffer_size = mesh_data.bitangents.size() * sizeof(decltype(mesh_data.bitangents)::value_type);
-  glBindBuffer(GL_ARRAY_BUFFER, mesh->bitangents_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0], GL_STATIC_DRAW);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
-  return mesh;
 }
 
 Material::Material() {}
 Material::Material(Material_Descriptor &m)
 {
-  load(m);
+  descriptor = m;
+  reload_from_descriptor = true;
 }
 
-void Material::load(Material_Descriptor &mat)
+void Material::load()
 {
   // the formats set here may be overriden in the texture constructor
   // based on if its a generated color or not
-
-  descriptor = mat;
 
   descriptor.albedo.format = GL_SRGB8_ALPHA8;
   albedo = Texture(descriptor.albedo);
@@ -810,33 +828,70 @@ void Material::load(Material_Descriptor &mat)
   descriptor.ambient_occlusion.format = GL_R8;
   ambient_occlusion = Texture(descriptor.ambient_occlusion);
 
-  shader = Shader(descriptor.vertex_shader, descriptor.frag_shader);
+  const std::string *vert = &descriptor.vertex_shader;
+  const std::string *frag = &descriptor.frag_shader;
+  if (descriptor.vertex_shader == "")
+    vert = &DEFAULT_VERTEX_SHADER;
+  if (descriptor.frag_shader == "")
+    frag = &DEFAULT_FRAG_SHADER;
+
+  shader = Shader(*vert, *frag);
+  reload_from_descriptor = false;
 }
-void Material::bind(Shader *shader)
+void Material::bind()
 {
+  if (reload_from_descriptor)
+    load();
+
   if (descriptor.backface_culling)
     glEnable(GL_CULL_FACE);
   else
     glDisable(GL_CULL_FACE);
 
-  shader->set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
+  shader.use();
 
-  albedo.bind(Texture_Location::albedo);
-  shader->set_uniform("texture0_mod", descriptor.albedo.mod);
+  shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
-  emissive.bind(Texture_Location::emissive);
-  shader->set_uniform("texture1_mod", descriptor.emissive.mod);
+  bind_texture_or_set_default(albedo, "texture0_mod", DEFAULT_ALBEDO, Texture_Location::albedo);
+  bind_texture_or_set_default(emissive, "texture1_mod", DEFAULT_EMISSIVE, Texture_Location::emissive);
+  bind_texture_or_set_default(roughness, "texture2_mod", DEFAULT_ROUGHNESS, Texture_Location::roughness);
+  bind_texture_or_set_default(normal, "texture3_mod", DEFAULT_NORMAL, Texture_Location::normal);
+  bind_texture_or_set_default(metalness, "texture4_mod", DEFAULT_METALNESS, Texture_Location::metalness);
+  bind_texture_or_set_default(
+      ambient_occlusion, "texture5_mod", DEFAULT_AMBIENT_OCCLUSION, Texture_Location::ambient_occlusion);
 
-  roughness.bind(Texture_Location::roughness);
-  shader->set_uniform("texture2_mod", descriptor.roughness.mod);
-
-  normal.bind(Texture_Location::normal);
-
-  metalness.bind(Texture_Location::metalness);
-  shader->set_uniform("texture4_mod", descriptor.metalness.mod);
-
-  ambient_occlusion.bind(Texture_Location::ambient_occlusion);
-  shader->set_uniform("texture5_mod", descriptor.ambient_occlusion.mod);
+  for (auto &uniform : descriptor.uniform_set.float32_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.int32_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.uint32_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.bool_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.vec2_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.vec3_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.vec4_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
+  for (auto &uniform : descriptor.uniform_set.mat4_uniforms)
+  {
+    shader.set_uniform(uniform.first.c_str(), uniform.second);
+  }
 }
 void Material::unbind_textures()
 {
@@ -850,6 +905,29 @@ void Material::unbind_textures()
   glBindTexture(GL_TEXTURE_2D, 0);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::ambient_occlusion);
   glBindTexture(GL_TEXTURE_2D, 0);
+}
+void Material::bind_texture_or_set_default(
+    Texture &t, const char *uniform, const glm::vec4 &default_mod, Texture_Location loc)
+{
+  static Texture white = WHITE;
+  t.bind(loc);
+  if (t.texture != nullptr)
+  {
+    if (t.t.mod == MISSING_TEXTURE_MOD)
+      shader.set_uniform(uniform, vec4(1));
+    else
+      shader.set_uniform(uniform, t.t.mod);
+    return;
+  }
+  if (t.texture == nullptr)
+  {
+    white.bind(loc);
+    if (t.t.mod == MISSING_TEXTURE_MOD)
+      shader.set_uniform(uniform, default_mod);
+    else
+      shader.set_uniform(uniform, t.t.mod);
+    return;
+  }
 }
 //
 // bool Light::operator==(const Light &rhs) const
@@ -879,8 +957,8 @@ void Material::unbind_textures()
 //  }
 //  return true;
 //}
-Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat4 world_to_model)
-    : mesh(mesh), material(material), transformation(world_to_model), name(n)
+Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index)
+    : mesh(mesh), material(material), transformation(world_to_model), name(n), node(node_index)
 {
   ASSERT(mesh);
   ASSERT(material);
@@ -902,8 +980,10 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 
   glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
   set_message("Initializing renderer...");
+  Mesh_Descriptor md(plane, "RENDERER's PLANE");
+  quad = Mesh(md);
 
-  quad = Mesh(Mesh_Descriptor(plane, "RENDERER's PLANE"));
+  cube = Mesh({Mesh_Primitive::cube, "RENDERER's SKYBOX"});
 
   Texture_Descriptor uvtd;
   uvtd.name = "uvgrid.png";
@@ -993,6 +1073,26 @@ void Renderer::draw_imgui()
     {
       show_bloom = !show_bloom;
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Reload Shaders"))
+    {
+      for (std::pair<const std::string, std::weak_ptr<Shader_Handle>> &handle : SHADER_CACHE)
+      {
+        std::string key = handle.first;
+        auto ptr = SHADER_CACHE[key].lock();
+        if (!ptr)
+          continue;
+        GLuint program = load_shader(ptr->vs, ptr->fs);
+
+        if (!program)
+          continue;
+        Shader_Handle blank(0);
+        *ptr = blank;
+        ptr->program = program;
+        glUseProgram(program);
+        ptr->set_location_cache();
+      }
+    }
     if (ImGui::CollapsingHeader("GPU Textures"))
     { // todo improve texture names for generated textures
 
@@ -1022,6 +1122,11 @@ void Renderer::draw_imgui()
       }
       sort(imgui_texture_array.begin(), imgui_texture_array.end(),
           [](Imgui_Texture_Descriptor a, Imgui_Texture_Descriptor b) {
+            if (a.ptr->peek_filename() == b.ptr->peek_filename())
+            {
+              return a.ptr->texture < b.ptr->texture;
+            }
+
             return a.ptr->peek_filename().compare(b.ptr->peek_filename()) < 0;
           });
       for (uint32 i = 0; i < imgui_texture_array.size(); ++i)
@@ -1139,13 +1244,10 @@ void Renderer::build_shadow_maps()
     {
       if (entity.material->descriptor.casts_shadows)
       {
-        ASSERT(entity.mesh);
-        int vao = entity.mesh->get_vao();
-        glBindVertexArray(vao);
         variance_shadow_map.use();
         variance_shadow_map.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
-        glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, nullptr);
+        ASSERT(entity.mesh);
+        entity.mesh->draw();
       }
     }
 
@@ -1180,9 +1282,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   ASSERT(shader);
   ASSERT(shader->vs == "passthrough.vert");
 
-  Mesh_Descriptor d;
-  d.primitive = plane;
-  d.name = "run_pixel_shader_quad";
+  static Mesh_Descriptor d(plane, "run_pixel_shader_quad");
   static Mesh quad = Mesh(d);
 
   if (dst)
@@ -1227,9 +1327,12 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
 
 void Renderer::opaque_pass(float32 time)
 {
+  brdf_integration_lut.bind(brdf_ibl_lut);
+
   // set_message("opaque_pass()");
   glViewport(0, 0, size.x, size.y);
   draw_target.bind();
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
 
   glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1244,21 +1347,19 @@ void Renderer::opaque_pass(float32 time)
   // set_message("opaque_pass projection:", s(projection), 1.0f);
   // set_message("opaque_pass camera:", s(camera), 1.0f);
 
-#if SHOW_UV_TEST_GRID
-  uv_map_grid.bind(uv_grid);
-#endif
-  brdf_integration_lut.bind(brdf_ibl_lut);
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
   for (Render_Entity &entity : render_entities)
   {
     ASSERT(entity.mesh);
-    int vao = entity.mesh->get_vao();
-    // set_message(s("drawing entity with name:", entity.name));
-    // set_message(s("binding vao:", vao));
-    glBindVertexArray(vao);
-    Shader &shader = CONFIG.render_simple ? simple : entity.material->shader;
-    shader.use();
-    entity.material->bind(&shader);
+    entity.material->bind();
+    if (entity.material->descriptor.wireframe)
+    {
+      // glDisable(GL_CULL_FACE);
+      // glDisable(GL_DEPTH_TEST);
+      // glDepthMask(GL_TRUE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    Shader &shader = entity.material->shader;
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
@@ -1272,7 +1373,15 @@ void Renderer::opaque_pass(float32 time)
 #endif
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance);
     entity.mesh->draw();
+    if (entity.material->descriptor.wireframe)
+    {
+      // glEnable(GL_CULL_FACE);
+      // glEnable(GL_DEPTH_TEST);
+      // glDepthMask(GL_TRUE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
     entity.material->unbind_textures();
   }
   glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
@@ -1283,21 +1392,23 @@ void Renderer::opaque_pass(float32 time)
 
 void Renderer::instance_pass(float32 time)
 {
-  for (auto &entity : render_instances)
+  glDepthMask(GL_FALSE);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ONE);
+
+  for (Render_Instance &entity : render_instances)
   {
+    entity.material->bind();
     ASSERT(entity.mesh);
-    int vao = entity.mesh->get_vao();
-    glBindVertexArray(vao);
     Shader &shader = entity.material->shader;
     ASSERT(shader.vs == "instance.vert");
-    shader.use();
-    entity.material->bind(&shader);
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     lights.bind(shader);
-
+    entity.mesh->load();
+    glBindVertexArray(entity.mesh->get_vao());
     ASSERT(glGetAttribLocation(shader.program->program, "instanced_MVP") == 5);
     glEnableVertexAttribArray(5);
     glEnableVertexAttribArray(6);
@@ -1361,7 +1472,6 @@ void Renderer::instance_pass(float32 time)
       glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
       glVertexAttribDivisor(15, 1);
     }
-
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(
         GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
@@ -1379,6 +1489,9 @@ void Renderer::instance_pass(float32 time)
     glDisableVertexAttribArray(14);
     glDisableVertexAttribArray(15);
   }
+
+  glDepthMask(GL_TRUE);
+  glDisable(GL_BLEND);
 }
 
 void Renderer::translucent_pass(float32 time)
@@ -1416,47 +1529,105 @@ void Renderer::translucent_pass(float32 time)
   // store
   // sample accumulated roughness for each
 
-  // glDisable(GL_DEPTH_TEST);
-  glDepthMask(GL_FALSE);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  brdf_integration_lut.bind(brdf_ibl_lut);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
 
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);
   glCullFace(GL_BACK);
-  brdf_integration_lut.bind(brdf_ibl_lut);
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+
+  vec3 forward_v = normalize(camera_gaze - camera_position);
+  vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
+  vec3 up_v = -normalize(cross(forward_v, right_v));
+
+  // if txaa isnt being used, then we need to copy the frame into its buffer
+  // because itll be blank
+  // if txaa is used we can just sample from the last frame, the lag doesnt really matter
+  if (!use_txaa)
+  {
+    previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
+    previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
+    previous_draw_target.color_attachments[0].bind(0); // will set the wraps
+    previous_draw_target.bind();
+    glViewport(0, 0, size.x, size.y);
+    passthrough.use();
+    draw_target.color_attachments[0].bind(0);
+    passthrough.set_uniform("transform", ortho_projection(window_size));
+    quad.draw();
+    // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    draw_target.bind();
+  }
+
+  // we can do two passes!
+  // for each object, render the backfaces only and depth test for furthest
+  // so a sphere renders to a bowl
+  // 2nd pass renders the front only, and then we can use the depth difference between them
+  // to absorb light based on thiccness
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
+  glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
   for (Render_Entity &entity : translucent_entities)
   {
+    if (CONFIG.render_simple)
+    { // not implemented here
+      ASSERT(0);
+    }
     ASSERT(entity.mesh);
-    int vao = entity.mesh->get_vao();
-    glBindVertexArray(vao);
-    Shader &shader = CONFIG.render_simple ? simple : entity.material->shader;
-    shader.use();
-    entity.material->bind(&shader);
-    shader.set_uniform("time", time);
-    shader.set_uniform("txaa_jitter", txaa_jitter);
-    shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
-    shader.set_uniform("MVP", projection * camera * entity.transformation);
-    shader.set_uniform("Model", entity.transformation);
-    shader.set_uniform("discard_on_alpha", false);
-    shader.set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
+    entity.material->bind();
+    if (entity.material->descriptor.wireframe)
+    {
+      glDisable(GL_DEPTH_TEST);
+      glDepthMask(GL_FALSE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    Shader *shader = &entity.material->shader;
+    shader->set_uniform("camera_forward", forward_v);
+    shader->set_uniform("camera_right", right_v);
+    shader->set_uniform("camera_up", up_v);
+    shader->set_uniform("time", time);
+    shader->set_uniform("txaa_jitter", txaa_jitter);
+    shader->set_uniform("camera_position", camera_position);
+    shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+    shader->set_uniform("MVP", projection * camera * entity.transformation);
+    shader->set_uniform("Model", entity.transformation);
+    shader->set_uniform("discard_on_alpha", false);
+    shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+    shader->set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
+    shader->set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
+    shader->set_uniform("viewport_size", vec2(size));
+    shader->set_uniform("aspect_ratio", size.x / size.y);
 
-#if SHOW_UV_TEST_GRID
-    uv_map_grid.bind(10);
-    shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
-#endif
+    // bool is_default = shader->fs == "fragment_shader.frag";
+    if (entity.material->descriptor.blending)
+    {
+      // glDisable(GL_DEPTH_TEST);
+      // glDisable(GL_CULL_FACE);
+      glDepthMask(GL_FALSE);
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    lights.bind(*shader);
+    set_uniform_shadowmaps(*shader);
 
-    lights.bind(shader);
-    set_uniform_shadowmaps(shader);
-
-    glDisable(GL_CULL_FACE);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, nullptr);
-
+    // glDisable(GL_CULL_FACE);
+    entity.mesh->draw();
+    if (entity.material->descriptor.blending)
+    {
+      glDepthMask(GL_TRUE);
+      glDisable(GL_BLEND);
+    }
+    if (entity.material->descriptor.wireframe)
+    {
+      glEnable(GL_DEPTH_TEST);
+      glDepthMask(GL_TRUE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
     entity.material->unbind_textures();
   }
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
+  glBindTexture(GL_TEXTURE_2D, 0);
   glEnable(GL_CULL_FACE);
   glDisable(GL_BLEND);
   glDepthMask(GL_TRUE);
@@ -1577,7 +1748,6 @@ void Renderer::postprocess_pass(float32 time)
   {
     Texture_Descriptor td;
     td.name = name + "'s bloom_result";
-    // td.name = "color(0.15,0,0,1)";
     td.size = size / 1;
     td.format = GL_RGB16F;
     td.minification_filter = GL_LINEAR;
@@ -1610,48 +1780,37 @@ void Renderer::postprocess_pass(float32 time)
   glDisable(GL_BLEND);
 }
 
-void Renderer::render(float64 state_time)
+void Renderer::skybox_pass(float32 time)
 {
-  check_gl_error();
-// set_message("sin(time) [-1,1]:", s(sin(state_time)), 1.0f);
-// set_message("sin(time) [ 0,1]:", s(0.5f + 0.5f * sin(state_time)), 1.0f);
-#if DYNAMIC_FRAMERATE_TARGET
-  dynamic_framerate_target();
-#endif
-#if DYNAMIC_TEXTURE_RELOADING
-  check_and_clear_expired_textures();
-#endif
-#if SHOW_UV_TEST_GRID
-  uv_map_grid.t.mod = vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
-#endif
-  if (imgui_this_tick)
-  {
-    draw_imgui();
-  }
 
-  float32 time = (float32)get_real_time();
-  float64 t = (time - state_time) / dt;
+  vec3 scalev = vec3(4000);
+  mat4 T = translate(camera_position);
+  mat4 S = scale(scalev);
+  mat4 transformation = T * S;
 
-  // set_message("FRAME_START", "");
-  // set_message("BUILDING SHADOW MAPS START", "");
-  if (!CONFIG.render_simple)
-  {
-    build_shadow_maps();
-  }
-  // set_message("OPAQUE PASS START", "");
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+  glBindVertexArray(cube.get_vao());
+  skybox.use();
+  skybox.set_uniform("time", time);
+  skybox.set_uniform("txaa_jitter", txaa_jitter);
+  skybox.set_uniform("camera_position", camera_position);
+  skybox.set_uniform("MVP", projection * camera * transformation);
+  skybox.set_uniform("Model", transformation);
 
-  opaque_pass(time);
+  glCullFace(GL_FRONT);
+  // glDisable(GL_CULL_FACE);
+  cube.draw();
+  // glEnable(GL_CULL_FACE);
+  glCullFace(GL_BACK);
 
-  instance_pass(time);
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::irradiance);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+}
 
-  translucent_pass(time);
-
-#if POSTPROCESSING
-  postprocess_pass(time);
-#else
-
-#endif
-
+void Renderer::copy_to_primary_framebuffer_and_txaa(float32 time)
+{
   glDisable(GL_DEPTH_TEST);
   if (previous_camera != camera)
   {
@@ -1713,8 +1872,8 @@ void Renderer::render(float64 state_time)
     draw_target_srgb8.bind();
     glEnable(GL_FRAMEBUFFER_SRGB); // draw_target_srgb8 will do its own gamma
                                    // encoding
-    passthrough.use();
-    passthrough.set_uniform("transform", ortho_projection(size));
+    tonemapping.use();
+    tonemapping.set_uniform("transform", ortho_projection(size));
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
@@ -1724,6 +1883,126 @@ void Renderer::render(float64 state_time)
 
   if (use_fxaa)
     previous_camera = camera;
+}
+
+void Renderer::render(float64 state_time)
+{
+  ASSERT(name != "Unnamed Renderer");
+// set_message("sin(time) [-1,1]:", s(sin(state_time)), 1.0f);
+// set_message("sin(time) [ 0,1]:", s(0.5f + 0.5f * sin(state_time)), 1.0f);
+#if DYNAMIC_FRAMERATE_TARGET
+  dynamic_framerate_target();
+#endif
+#if DYNAMIC_TEXTURE_RELOADING
+  check_and_clear_expired_textures();
+#endif
+#if SHOW_UV_TEST_GRID
+  uv_map_grid.t.mod = vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
+#endif
+  if (imgui_this_tick)
+  {
+    draw_imgui();
+  }
+
+  float32 time = (float32)get_real_time();
+  float64 t = (time - state_time) / dt;
+
+  // set_message("FRAME_START", "");
+  // set_message("BUILDING SHADOW MAPS START", "");
+  if (!CONFIG.render_simple)
+  {
+    build_shadow_maps();
+  }
+  // set_message("OPAQUE PASS START", "");
+
+  opaque_pass(time);
+
+  skybox_pass(time);
+
+  instance_pass(time);
+
+  translucent_pass(time);
+
+#if POSTPROCESSING
+  postprocess_pass(time);
+#else
+
+#endif
+
+  // glDisable(GL_DEPTH_TEST);
+  // if (previous_camera != camera)
+  //{
+  //  previous_color_target_missing = true;
+  //}
+
+  // if (use_txaa && previous_camera == camera)
+  //{
+  //  txaa_jitter = get_next_TXAA_sample();
+  //  // TODO: implement motion vector vertex attribute
+
+  //  // 1: blend draw_target with previous_draw_target, store in
+  //  // draw_target_srgb8  2: copy draw_target to previous_draw_target  3: run
+  //  // fxaa on draw_target_srgb8, drawing to screen
+
+  //  glBindVertexArray(quad.get_vao());
+  //  draw_target_srgb8.bind();
+  //  glViewport(0, 0, size.x, size.y);
+  //  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  //  temporalaa.use();
+
+  //  // blend draw_target with previous_draw_target, store in draw_target_srgb8
+  //  if (previous_color_target_missing)
+  //  {
+  //    draw_target.color_attachments[0].bind(0);
+  //    draw_target.color_attachments[0].bind(1);
+  //  }
+  //  else
+  //  {
+  //    draw_target.color_attachments[0].bind(0);
+  //    previous_draw_target.color_attachments[0].bind(1);
+  //  }
+
+  //  temporalaa.set_uniform("transform", ortho_projection(window_size));
+  //  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  //  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  //  glActiveTexture(GL_TEXTURE0);
+  //  glBindTexture(GL_TEXTURE_2D, 0);
+  //  glActiveTexture(GL_TEXTURE1);
+  //  glBindTexture(GL_TEXTURE_2D, 0);
+
+  //  // copy draw_target to previous_draw_target
+  //  previous_draw_target.bind();
+  //  glViewport(0, 0, size.x, size.y);
+  //  passthrough.use();
+  //  draw_target.color_attachments[0].bind(0);
+  //  passthrough.set_uniform("transform", ortho_projection(window_size));
+  //  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  //  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+  //  previous_color_target_missing = false;
+  //  glBindTexture(GL_TEXTURE_2D, 0);
+  //}
+  // else
+  //{
+  //  // draw to srgb8 framebuffer
+  //  glViewport(0, 0, size.x, size.y);
+  //  glBindVertexArray(quad.get_vao());
+  //  draw_target_srgb8.bind();
+  //  glEnable(GL_FRAMEBUFFER_SRGB); // draw_target_srgb8 will do its own gamma
+  //                                 // encoding
+  //  passthrough.use();
+  //  passthrough.set_uniform("transform", ortho_projection(size));
+  //  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  //  draw_target.color_attachments[0].bind(0);
+  //  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+  //  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  //  glBindTexture(GL_TEXTURE_2D, 0);
+  //}
+
+  // if (use_fxaa)
+  //  previous_camera = camera;
+
+  copy_to_primary_framebuffer_and_txaa(time);
 
   // do fxaa or passthrough if disabled
   draw_target_fxaa.bind();
@@ -1793,33 +2072,7 @@ void Renderer::render(float64 state_time)
   frame_count += 1;
 }
 
-vec3 Renderer::ray_from_screen_pixel(ivec2 pixel)
-{
-  const vec3 origin = camera_position;
-  set_message("origin", s(origin.x, " ", origin.y, " ", origin.z), 5);
-  const vec3 camera_direction = camera_gaze - origin;
-  set_message("camera_direction", s(camera_direction.x, " ", camera_direction.y, " ", camera_direction.z), 5);
-  const vec3 origin_to_center = origin + (znear * normalize(camera_direction));
-  set_message("origin_to_center", s(origin_to_center.x, " ", origin_to_center.y, " ", origin_to_center.z), 5);
-  const vec2 pixel_normalized = vec2(pixel) / vec2(window_size);
-  set_message("pixel_normalized", s(pixel_normalized.x, " ", pixel_normalized.y), 5);
-  const vec3 screen_ndc = vec3(2.0f * (pixel_normalized - vec2(0.5f)), 0);
-  set_message("screen_ndc", s(screen_ndc.x, " ", screen_ndc.y, " ", screen_ndc.z), 5);
-  const vec3 x_axis = camera[0];
-  set_message("x_axis", s(x_axis.x, " ", x_axis.y, " ", x_axis.z), 5);
-  const vec3 y_axis = camera[1];
-  set_message("y_axis", s(y_axis.x, " ", y_axis.y, " ", y_axis.z), 5);
-  const vec3 z_axis = camera[2];
-  set_message("z_axis", s(z_axis.x, " ", z_axis.y, " ", z_axis.z), 5);
-  const vec3 center_to_p = (screen_ndc.x * x_axis) + (screen_ndc.y * y_axis);
-  set_message("center_to_p", s(center_to_p.x, " ", center_to_p.y, " ", center_to_p.z), 5);
-  const vec3 origin_to_p = origin_to_center + center_to_p;
-  set_message("origin_to_p", s(origin_to_p.x, " ", origin_to_p.y, " ", origin_to_p.z), 5);
-  const vec3 returnval = vec3(0) - normalize(origin_to_p);
-  set_message("returnval", s(returnval.x, " ", returnval.y, " ", returnval.z), 5);
 
-  return returnval;
-}
 
 void Renderer::resize_window(ivec2 window_size)
 {
@@ -1845,22 +2098,20 @@ void Renderer::set_render_scale(float32 scale)
 void Renderer::set_camera(vec3 pos, vec3 camera_gaze_dir)
 {
   vec3 p = pos + camera_gaze_dir;
-  camera_gaze = p;
   camera_position = pos;
+  camera_gaze = p;
   camera = lookAt(pos, p, {0, 0, 1});
 }
 void Renderer::set_camera_gaze(vec3 pos, vec3 p)
 {
-  camera_gaze = p;
   camera_position = pos;
+  camera_gaze = p;
   camera = lookAt(pos, p, {0, 0, 1});
 }
 
 void Renderer::set_vfov(float32 vfov)
 {
-  const float32 aspect = (float32)window_size.x / (float32)window_size.y;
-  const float32 znear = 0.1f;
-  const float32 zfar = 10000;
+  aspect = (float32)window_size.x / (float32)window_size.y;
   projection = perspective(radians(vfov), aspect, znear, zfar);
   this->znear = znear;
 }
@@ -1909,11 +2160,22 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
   }
 }
 
-void Renderer::set_lights(Light_Array new_lights)
-{
-  lights = new_lights;
-  environment = lights.environment;
-}
+/*Light diameter guideline for deferred rendering (not yet used)
+Distance 	Constant 	Linear 	Quadratic
+7 	1.0 	0.7 	1.8
+13 	1.0 	0.35 	0.44
+20 	1.0 	0.22 	0.20
+32 	1.0 	0.14 	0.07
+50 	1.0 	0.09 	0.032
+65 	1.0 	0.07 	0.017
+100 	1.0 	0.045 	0.0075
+160 	1.0 	0.027 	0.0028
+200 	1.0 	0.022 	0.0019
+325 	1.0 	0.014 	0.0007
+600 	1.0 	0.007 	0.0002
+3250 	1.0 	0.0014 	0.000007
+
+*/
 
 void check_FBO_status()
 {
@@ -2167,117 +2429,41 @@ Cubemap::Cubemap() {}
 
 void Cubemap::bind(GLuint texture_unit)
 {
-  if (handle)
+  if (!handle)
   {
-    glActiveTexture(GL_TEXTURE0 + texture_unit);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
-  }
-}
-
-struct Image
-{
-  Image() {}
-  Image(string filename)
-  {
-    float *d = stbi_loadf(filename.c_str(), &width, &height, &n, 4);
-    n = 4;
-    if (d)
+    if (is_equirectangular)
     {
-      this->filename = filename;
-      data.resize(width * height * 4);
-
-      for (int32 i = 0; i < width * height * 4; ++i)
+      if (source.is_initialized())
       {
-        float src = d[i];
-        data[i] = src;
+        produce_cubemap_from_equirectangular_source();
       }
-      stbi_image_free(d);
+      else
+      {
+        source.load();
+        return;
+      }
     }
     else
     {
-      set_message("Warning: Missing Texture:", filename, 5.0f);
+      produce_cubemap_from_texture_array();
+      return;
     }
   }
-  void rotate90()
-  {
-    const int floats_per_pixel = 4;
-    int32 size = width * height * floats_per_pixel;
-    Image result;
-    result.data.resize(size);
-
-    for (int32 y = 0; y < height; ++y)
-    {
-      for (int32 x = 0; x < width; ++x)
-      {
-        int32 src = floats_per_pixel * (y * width + x);
-
-        int32 dst_x = (height - 1) - y;
-        int32 dst_y = x;
-
-        int32 dst = floats_per_pixel * (width * dst_y + dst_x);
-
-        for (int32 i = 0; i < floats_per_pixel; ++i)
-        {
-          int32 src_index = src + i;
-          int32 dst_index = dst + i;
-          ASSERT(dst_index < size);
-          result.data[dst_index] = data[src_index];
-        }
-      }
-    }
-    data = result.data;
-  }
-  string filename = "NULL";
-  vector<float> data;
-  int32 width = 0, height = 0, n = 0;
-};
-
-// opengl z-forward space is ordered: right left top bottom back front
-// our coordinate space is +Z up, +X right, +Y forward
-vector<Image> load_cubemap_faces(array<string, 6> filenames)
-{
-  Image right = filenames[0];
-  Image left = filenames[1];
-  Image top = filenames[2];
-  Image bottom = filenames[3];
-  Image back = filenames[4];
-  Image front = filenames[5];
-
-  right.rotate90();
-  right.rotate90();
-  right.rotate90();
-  left.rotate90();
-  bottom.rotate90();
-  bottom.rotate90();
-  front.rotate90();
-  front.rotate90();
-
-  vector<Image> result;
-  result.resize(6);
-  result[0] = left;
-  result[1] = right;
-  result[2] = back;
-  result[3] = front;
-  result[4] = bottom;
-  result[5] = top;
-  return result;
+  glActiveTexture(GL_TEXTURE0 + texture_unit);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
 }
 
-Cubemap::Cubemap(string equirectangular_filename)
+void Cubemap::produce_cubemap_from_equirectangular_source()
 {
+  handle = make_shared<Texture_Handle>();
+  std::string &filename = source.t.name;
+  std::string label = filename + "cubemap";
+  TEXTURECUBEMAP_CACHE[label] = handle;
+  handle->filename = label;
+  handle->is_cubemap = true;
   static Shader equi_to_cube("equi_to_cube.vert", "equi_to_cube.frag");
   static Mesh cube(Mesh_Descriptor(cube, "Cubemap(string equirectangular_filename)'s cube"));
 
-  handle = TEXTURECUBEMAP_CACHE[equirectangular_filename].lock();
-  if (handle)
-  {
-    size = handle->size;
-    return;
-  }
-  handle = make_shared<Texture_Handle>();
-  TEXTURECUBEMAP_CACHE[equirectangular_filename] = handle;
-  handle->filename = equirectangular_filename;
-  handle->is_cubemap = true;
   mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
   vec3 origin = vec3(0);
   vec3 posx = vec3(1.0f, 0.0f, 0.0f);
@@ -2306,6 +2492,7 @@ Cubemap::Cubemap(string equirectangular_filename)
   glGenTextures(1, &handle->texture);
   glActiveTexture(GL_TEXTURE0 + 6);
   glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
+  glObjectLabel(GL_TEXTURE, handle->texture, -1, "some_cubemap");
   for (uint32 i = 0; i < 6; ++i)
   {
     glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size.x, size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
@@ -2319,23 +2506,16 @@ Cubemap::Cubemap(string equirectangular_filename)
   equi_to_cube.use();
   equi_to_cube.set_uniform("projection", projection);
   equi_to_cube.set_uniform("rotation", rot);
-
-  check_gl_error();
-  // load source texture
-  Texture_Descriptor d;
-  d.name = equirectangular_filename;
-  d.format = GL_RGBA16F;
-  Texture source(d);
-  while (!source.is_initialized())
-  { // stall for resource
-    source.load();
-  }
-
-  check_gl_error();
+  equi_to_cube.set_uniform("gamma_encoded", is_gamma_encoded);
+  ASSERT(source.is_initialized());
   source.bind(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CW);
   glCullFace(GL_FRONT);
+  glClearColor(0.0, 1.0, 1.0, 1.0);
+
+  glDisable(GL_DEPTH_TEST);
+
   // draw to cubemap target
   for (uint32 i = 0; i < 6; ++i)
   {
@@ -2346,7 +2526,6 @@ Cubemap::Cubemap(string equirectangular_filename)
     cube.draw();
   }
   glCullFace(GL_BACK);
-
   glActiveTexture(GL_TEXTURE0 + 6);
   glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -2367,39 +2546,25 @@ Cubemap::Cubemap(string equirectangular_filename)
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDeleteRenderbuffers(1, &rbo);
   glDeleteFramebuffers(1, &fbo);
-  check_gl_error();
+
+  glClearColor(1.0, 0.0, 0.0, 1.0);
+  glEnable(GL_DEPTH_TEST);
 }
 
-Cubemap::Cubemap(array<string, 6> filenames)
+void Cubemap::produce_cubemap_from_texture_array()
 {
-  string key = filenames[0] + filenames[1] + filenames[2] + filenames[3] + filenames[4] + filenames[5];
-  handle = TEXTURECUBEMAP_CACHE[key].lock();
-  if (handle)
-  {
-    return;
-  }
+  string key = sources[0].filename + sources[1].filename + sources[2].filename + sources[3].filename +
+               sources[4].filename + sources[5].filename;
   handle = make_shared<Texture_Handle>();
   TEXTURECUBEMAP_CACHE[key] = handle;
   handle->is_cubemap = true;
 
-  set_message("Cubemap load cache miss. Textures from disk: ", key, 1.0);
-  vector<Image> faces = load_cubemap_faces(filenames);
-
-  for (uint32 i = 0; i < 6; ++i)
-  {
-    Image &face = faces[i];
-    if (face.filename == "NULL")
-    {
-      handle = nullptr;
-      return;
-    }
-  }
-  size = ivec2(faces[0].width, faces[0].height);
+  size = ivec2(source.texture->size.x, source.texture->size.y);
   glGenTextures(1, &handle->texture);
   glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   for (uint32 i = 0; i < 6; ++i)
   {
-    Image &face = faces[i];
+    Image &face = sources[i];
     glTexImage2D(
         GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, face.width, face.height, 0, GL_RGBA, GL_FLOAT, &face.data[0]);
     ASSERT(face.width == size.x && face.height == size.y); // generate_ibl_mipmaps() assumes all sizes are equal
@@ -2414,8 +2579,69 @@ Cubemap::Cubemap(array<string, 6> filenames)
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
+// opengl z-forward space is ordered: right left top bottom back front
+// our coordinate space is +Z up, +X right, +Y forward
+std::array<Image, 6> load_cubemap_faces(array<string, 6> filenames)
+{
+  Image right = filenames[0];
+  Image left = filenames[1];
+  Image top = filenames[2];
+  Image bottom = filenames[3];
+  Image back = filenames[4];
+  Image front = filenames[5];
+
+  right.rotate90();
+  right.rotate90();
+  right.rotate90();
+  left.rotate90();
+  bottom.rotate90();
+  bottom.rotate90();
+  front.rotate90();
+  front.rotate90();
+
+  array<Image, 6> result;
+  result[0] = left;
+  result[1] = right;
+  result[2] = back;
+  result[3] = front;
+  result[4] = bottom;
+  result[5] = top;
+  return result;
+}
+
+Cubemap::Cubemap(string equirectangular_filename, bool gamma_encoded)
+{
+  is_equirectangular = true;
+  std::shared_ptr<Texture_Handle> ptr = TEXTURECUBEMAP_CACHE[equirectangular_filename + "cubemap"].lock();
+  if (ptr)
+  {
+    size = ptr->size;
+    handle = ptr;
+    return;
+  }
+  Texture_Descriptor d;
+  d.name = equirectangular_filename;
+  d.format = GL_RGBA16F;
+  source = d;
+  is_gamma_encoded = gamma_encoded;
+}
+
+Cubemap::Cubemap(array<string, 6> filenames)
+{
+  string key = filenames[0] + filenames[1] + filenames[2] + filenames[3] + filenames[4] + filenames[5];
+  std::shared_ptr<Texture_Handle> ptr = TEXTURECUBEMAP_CACHE[key].lock();
+  if (ptr)
+  {
+    handle = ptr;
+    return;
+  }
+
+  sources = load_cubemap_faces(filenames);
+}
+
 void Environment_Map::generate_ibl_mipmaps()
 {
+  ASSERT(!radiance.handle->ibl_mipmaps_generated);
   static bool loaded = false;
   static Shader specular_filter;
   if (!loaded)
@@ -2431,46 +2657,36 @@ void Environment_Map::generate_ibl_mipmaps()
     }
   }
   static Mesh cube(Mesh_Descriptor(cube, "generate_ibl_mipmaps()'s cube"));
+  ibl_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 
   const uint32 mip_levels = 6;
 
-  mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
-  vec3 origin = vec3(0);
-  vec3 posx = vec3(1.0f, 0.0f, 0.0f);
-  vec3 negx = vec3(-1.0f, 0.0f, 0.0f);
-  vec3 posy = vec3(0.0f, 1.0f, 0.0f);
-  vec3 negy = vec3(0.0f, -1.0f, 0.0f);
-  vec3 posz = vec3(0.0f, 0.0f, 1.0f);
-  vec3 negz = vec3(0.0f, 0.0f, -1.0f);
-  mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
+  const mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
+  const vec3 origin = vec3(0);
+  const vec3 posx = vec3(1.0f, 0.0f, 0.0f);
+  const vec3 negx = vec3(-1.0f, 0.0f, 0.0f);
+  const vec3 posy = vec3(0.0f, 1.0f, 0.0f);
+  const vec3 negy = vec3(0.0f, -1.0f, 0.0f);
+  const vec3 posz = vec3(0.0f, 0.0f, 1.0f);
+  const vec3 negz = vec3(0.0f, 0.0f, -1.0f);
+  const mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
       lookAt(origin, negy, negz), lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
 
-  // replace cached texture with a new one that has the filtered mipmaps
-  Cubemap source = radiance;
-  radiance.handle = make_shared<Texture_Handle>();
-  TEXTURECUBEMAP_CACHE[source.handle->filename] = radiance.handle;
-  radiance.handle->is_cubemap = true;
-  radiance.handle->filename = source.handle->filename;
-  glGenTextures(1, &radiance.handle->texture);
+  string label = radiance.handle->filename + "ibl mipmapped";
+  glGenTextures(1, &ibl_texture_target);
   glActiveTexture(GL_TEXTURE6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, radiance.handle->texture);
-  ASSERT(radiance.size != ivec2(0));
+  glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_texture_target);
+  glObjectLabel(GL_TEXTURE, ibl_texture_target, -1, label.c_str());
   for (uint32 i = 0; i < 6; ++i)
   {
     glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, radiance.size.x, radiance.size.y, 0, GL_RGBA,
         GL_FLOAT, nullptr);
   }
-  radiance.handle->size = radiance.size;
-  ASSERT(radiance.handle->size != ivec2(0));
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  radiance.handle->magnification_filter = GL_LINEAR;
-  radiance.handle->minification_filter = GL_LINEAR_MIPMAP_LINEAR;
-  radiance.handle->wrap_s = GL_CLAMP_TO_EDGE;
-  radiance.handle->wrap_t = GL_CLAMP_TO_EDGE;
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
   glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mip_levels);
   glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
@@ -2482,12 +2698,13 @@ void Environment_Map::generate_ibl_mipmaps()
   glGenRenderbuffers(1, &rbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, source.size.x, source.size.y);
+  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, radiance.size.x, radiance.size.y);
   glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
   specular_filter.use();
   glActiveTexture(GL_TEXTURE6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, source.handle->texture);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, radiance.handle->texture);
+  ASSERT(radiance.handle->texture);
 
   float angle = radians(0.f);
   mat4 rot = toMat4(quat(1, 0, 0, angle));
@@ -2495,8 +2712,11 @@ void Environment_Map::generate_ibl_mipmaps()
   specular_filter.set_uniform("rotation", rot);
 
   glEnable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+  glDepthMask(GL_TRUE);
   glFrontFace(GL_CW);
   glCullFace(GL_FRONT);
+  glDepthFunc(GL_LESS);
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
   {
     uint32 width = (uint32)floor(radiance.size.x * pow(0.5, mip_level));
@@ -2507,8 +2727,8 @@ void Environment_Map::generate_ibl_mipmaps()
     for (unsigned int i = 0; i < 6; ++i)
     {
       specular_filter.set_uniform("camera", cameras[i]);
-      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-          radiance.handle->texture, mip_level);
+      glFramebufferTexture2D(
+          GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl_texture_target, mip_level);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       cube.draw();
     }
@@ -2521,7 +2741,8 @@ void Environment_Map::generate_ibl_mipmaps()
   glDeleteFramebuffers(1, &fbo);
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   glActiveTexture(GL_TEXTURE0);
-  radiance.handle->ibl_mipmaps_generated = true;
+  radiance.handle->ibl_mipmaps_started = true;
+  filename_of_ibl_source = radiance.handle->filename;
 }
 
 Environment_Map::Environment_Map(std::string environment, std::string irradiance, bool equirectangular)
@@ -2541,10 +2762,9 @@ Environment_Map::Environment_Map(Environment_Map_Descriptor d)
 }
 void Environment_Map::load()
 {
-  check_gl_error();
   if (m.source_is_equirectangular)
   {
-    radiance = Cubemap(m.radiance);
+    radiance = Cubemap(m.radiance, radiance_is_gamma_encoded);
     irradiance = Cubemap(m.irradiance);
   }
   else
@@ -2552,28 +2772,62 @@ void Environment_Map::load()
     radiance = Cubemap(m.environment_faces);
     irradiance = Cubemap(m.irradiance_faces);
   }
+
   bool irradiance_exists = irradiance.handle.get();
   if (!irradiance_exists)
   {
-    irradiance_convolution();
+    // irradiance_convolution();
   }
-  if (!radiance.handle->ibl_mipmaps_generated)
-    generate_ibl_mipmaps();
 }
 
 void Environment_Map::bind(GLuint radiance_texture_unit, GLuint irradiance_texture_unit)
 {
-  bool irradiance_exists = irradiance.handle.get();
-  if (!irradiance_exists)
+  irradiance.bind(irradiance_texture_unit);
+  radiance.bind(radiance_texture_unit);
+
+  if (!radiance.handle)
   {
-    irradiance_convolution();
+    return;
   }
 
-  irradiance_exists = irradiance.handle.get();
-  ASSERT(irradiance_exists);
+  // havent started ibl mipmaps yet, do that and bind source as we wait
+  if (!(radiance.handle->ibl_mipmaps_started))
+  {
+    generate_ibl_mipmaps();
+    radiance.bind(radiance_texture_unit);
+    return;
+  }
+
+  if (filename_of_ibl_source == "")
+  { // this Environment_Map wasnt the one that started the ibl generation, so just bind
+    radiance.bind(radiance_texture_unit);
+    return;
+  }
+
+  if (radiance.handle->ibl_mipmaps_generated)
+  {
+    radiance.bind(radiance_texture_unit);
+    return;
+  }
+
+  ASSERT(radiance.handle->ibl_mipmaps_started);
+  ASSERT(!radiance.handle->ibl_mipmaps_generated);
+
+  // started but not seen as finished yet - lets check if its finished so we can swap the texture
+  GLint ready = 0;
+  glGetSynciv(ibl_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+
+  if (ready == GL_SIGNALED)
+  {
+    radiance.handle->ibl_mipmaps_generated = true;
+    glDeleteTextures(1, &radiance.handle->texture);
+    radiance.handle->texture = ibl_texture_target;
+    glDeleteSync(ibl_sync);
+    filename_of_ibl_source = "";
+    ibl_texture_target = 0;
+  }
 
   radiance.bind(radiance_texture_unit);
-  irradiance.bind(irradiance_texture_unit);
 }
 
 void Environment_Map::irradiance_convolution()
@@ -2682,6 +2936,8 @@ void Material_Descriptor::mod_by(const Material_Descriptor *override)
     casts_shadows = override->casts_shadows;
     albedo_alpha_override = override->albedo_alpha_override;
     discard_on_alpha = override->discard_on_alpha;
+
+    uniform_set = override->uniform_set;
   }
 }
 
@@ -2842,7 +3098,7 @@ bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulato
   ASSERT(shared_data);
   ASSERT(accumulator);
   spin_until_up_to_date();
-  if (mesh_index.i != NODE_NULL && material_index.i != NODE_NULL)
+  if (mesh_index != NODE_NULL && material_index != NODE_NULL)
   {
     return shared_data->particles.prepare_instance(accumulator);
   }
@@ -2901,12 +3157,136 @@ void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Metho
 {
   ASSERT(p);
   ASSERT(d);
-  for (auto &particle : p->particles)
+
+  float32 rand = 0.75;
+  if (p->particles.size() > 0)
+  {
+    rand = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
+    rand = lerp(d->bounce_min, d->bounce_max, rand);
+  }
+  // rand = random_between(0.65f, 0.75f);
+  // rand = 1.0f;
+  for (Particle &particle : p->particles)
   {
     vec3 wind = d->intensity * d->direction;
-
     particle.velocity += dt * (d->gravity + wind);
-    particle.position += dt * particle.velocity;
+    if (length(particle.velocity) < 0.1)
+    {
+      particle.velocity = vec3(0);
+      continue;
+    }
+
+    // vec3 ray = dt * particle.velocity;
+    // AABB probe;
+    // vec3 new_pos = particle.position + ray;
+    // vec3 probesize = 1.0f * particle.scale;
+    // probe.min = new_pos - 0.5f*probesize;
+    // probe.max = new_pos + 0.5f*probesize;
+
+    vec3 ray = dt * particle.velocity;
+    AABB probe;
+    probe.min = particle.position - 0.5f * particle.scale;
+    probe.max = particle.position + 0.5f * particle.scale;
+
+    vec3 min = probe.min;
+    vec3 max = probe.max;
+    push_aabb(probe, min + ray);
+    push_aabb(probe, max + ray);
+
+    uint32 counter = 0;
+    std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
+
+    if (colliders.size() == 0)
+    {
+      particle.position = particle.position + ray;
+      continue;
+    }
+
+    // float32 t = 0.5f; //% of dt we collide at
+    // float32 tt = 0.25f;
+    // bool high = true;
+    // AABB probe2;
+    // for (uint32 i = 0; i < 0; ++i)
+    //{
+    //  vec3 new_pos = particle.position + t * ray;
+    //  probe2.min = new_pos - 0.5f * particle.scale;
+    //  probe2.max = new_pos + 0.5f * particle.scale;
+    //  high = aabb_triangle_intersection(probe2, *collider);
+
+    //  if (high)
+    //  {
+    //    t = t - tt;
+    //  }
+    //  else
+    //  {
+    //    t = t + tt;
+    //  }
+    //  tt = 0.5f * tt;
+
+    //}
+    // if (high)
+    //  t = t - (2.f*tt);
+
+    // vec3 new_pos = particle.position + t * ray;
+    // probe2.min = new_pos - 0.5f * particle.scale;
+    // probe2.max = new_pos + 0.5f * particle.scale;
+    // high = aabb_triangle_intersection(probe2, *collider);
+
+    // bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
+
+    vec3 reflection_normal = vec3(0);
+    vec3 collider_velocity = vec3(0);
+
+    // jank way to 'identify' different objects instead of using an id
+    std::vector<vec3> velocities_found;
+    for (uint32 i = 0; i < colliders.size(); ++i)
+    {
+      bool found = false;
+      for (uint32 j = 0; j < velocities_found.size(); ++j)
+      {
+        if (velocities_found[j] == colliders[i].v)
+        {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+      {
+        velocities_found.push_back(colliders[i].v);
+        reflection_normal = reflection_normal + colliders[i].n;
+        collider_velocity = collider_velocity + colliders[i].v;
+      }
+    }
+
+    if (reflection_normal == vec3(0))
+    {
+      reflection_normal = vec3(0, 0, 1);
+    }
+    reflection_normal = normalize(reflection_normal);
+
+    float32 t = 0.5f;
+    particle.position = particle.position + (t * ray);
+    particle.velocity = reflect(particle.velocity, reflection_normal);
+    particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
+    particle.velocity = rand * particle.velocity + collider_velocity;
+
+    particle.position += 0.002f * reflection_normal;
+    bool colliding = true;
+
+    for (uint32 i = 0; i < 5; ++i)
+    {
+      probe.min = particle.position - 0.5f * particle.scale;
+      probe.max = particle.position + 0.5f * particle.scale;
+      std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
+
+      if (colliders.size() == 0)
+        break;
+
+      for (Triangle_Normal &collider : colliders)
+      {
+        particle.position += 0.01f * collider.n;
+      }
+    }
   }
 }
 
@@ -2970,13 +3350,10 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
     quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
     new_particle.orientation = o * second_orientation * first_orientation;
 
-    vec3 scale_variance = random_within(d->initial_scale_variance);
-    scale_variance = scale_variance - 0.5f * d->initial_scale_variance;
-    new_particle.scale = d->initial_scale + scale_variance;
+    new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
 
-    float32 time_to_live_varaince = random_between(0.f, d->time_to_live_variance);
-    time_to_live_varaince = time_to_live_varaince - 0.5f * d->time_to_live_variance;
-    new_particle.time_to_live = d->time_to_live + time_to_live_varaince;
+    new_particle.time_to_live = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
+
     new_particle.time_left_to_live = new_particle.time_to_live;
     p->particles.push_back(new_particle);
   }
@@ -3090,4 +3467,56 @@ Particle_Array &Particle_Array::operator=(Particle_Array &rhs)
 {
   // todo: particle_array copy
   return *this;
+}
+
+Image::Image(string filename)
+{
+  float *d = stbi_loadf(filename.c_str(), &width, &height, &n, 4);
+  n = 4;
+  if (d)
+  {
+    this->filename = filename;
+    data.resize(width * height * 4);
+
+    for (int32 i = 0; i < width * height * 4; ++i)
+    {
+      float src = d[i];
+      data[i] = src;
+    }
+    stbi_image_free(d);
+  }
+  else
+  {
+    set_message("Warning: Missing Texture:", filename, 5.0f);
+  }
+}
+
+void Image::rotate90()
+{
+  const int floats_per_pixel = 4;
+  int32 size = width * height * floats_per_pixel;
+  Image result;
+  result.data.resize(size);
+
+  for (int32 y = 0; y < height; ++y)
+  {
+    for (int32 x = 0; x < width; ++x)
+    {
+      int32 src = floats_per_pixel * (y * width + x);
+
+      int32 dst_x = (height - 1) - y;
+      int32 dst_y = x;
+
+      int32 dst = floats_per_pixel * (width * dst_y + dst_x);
+
+      for (int32 i = 0; i < floats_per_pixel; ++i)
+      {
+        int32 src_index = src + i;
+        int32 dst_index = dst + i;
+        ASSERT(dst_index < size);
+        result.data[dst_index] = data[src_index];
+      }
+    }
+  }
+  data = result.data;
 }

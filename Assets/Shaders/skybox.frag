@@ -1,15 +1,14 @@
 #version 330
 uniform samplerCube texture6; //environment
 
-uniform float time;
-uniform mat4 transform;
-in vec2 frag_uv;
+uniform vec3 camera_position;
+uniform mat4 Model;
+//uniform float time;
 in vec4 frag_world_position;
 
 layout(location = 0) out vec4 out0;
 void main()
 {
-  vec3 v = -(frag_world_position.xyz);
-  v = v + transform[2].xyz;
-  out0 = vec4(textureLod(texture6, v,0).rgb,1);;
+  vec3 v = -(frag_world_position.xyz-(Model[3].xyz));
+  out0 = textureLod(texture6,v,0);
 }
