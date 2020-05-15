@@ -6,7 +6,7 @@
 #include "State.h"
 #include "Animation_Utilities.h"
 using namespace glm;
-void test_spheres(Flat_Scene_Graph &scene);
+void spawn_test_spheres(Flat_Scene_Graph &scene);
 
 void world_water_settings(Uniform_Set_Descriptor *dst)
 {
@@ -69,165 +69,218 @@ void small_object_refraction_settings(Uniform_Set_Descriptor *dst)
   dst->float32_uniforms["refraction_offset_factor"] = 0.201;
 }
 
-Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
-    : State(name, window, window_size)
+void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 {
-  free_cam = true;
-
-  scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
-      "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-
   Material_Descriptor material;
-  test_spheres(scene);
-
-  gun = scene.add_aiscene("Cerberus/cerberus-warg.FBX", "gun");
-  scene.nodes[gun].position = vec3(4.0f, -3.0f, 2.0f);
-  scene.nodes[gun].scale = vec3(1);
-
-  // ground
-  material.albedo = "grass_albedo.png";
-  // material.emissive = "";
-  material.normal = "ground1_normal.png";
-  material.roughness.mod = vec4(.7);
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
-  material.uv_scale = vec2(12);
-  material.casts_shadows = true;
-  material.backface_culling = false;
-  ground = scene.add_mesh(cube, "world_cube", &material);
-  scene.nodes[ground].position = {0.0f, 0.0f, -150.f};
-  scene.nodes[ground].scale = {35.0f, 35.0f, 300.f};
-  material.uv_scale = vec2(312);
-  material.albedo.mod = vec4(2);
-  underwater = scene.add_mesh(cube, "underwater", &material);
-  scene.nodes[underwater].position = {0.0f, 0.0f, -30.5f};
-  scene.nodes[underwater].scale = {6500.0f, 6500.0f, 1.f};
-  material.albedo.mod = vec4(1);
-
-  // sphere
-  material.casts_shadows = true;
-  material.uv_scale = vec2(4);
-  material.normal = "steel_normal.png";
-  material.roughness = "steel_roughness.png";
-  material.roughness.mod = vec4(.02);
-  sphere = scene.add_aiscene("smoothsphere.fbx", "sphere");
-  Material_Index mi = scene.resource_manager->push_custom_material(&material);
-  scene.nodes[scene.nodes[sphere].children[0]].model[0].second = mi;
-  scene.nodes[sphere].position = vec3(-4, -2, 3.5);
-  scene.nodes[sphere].scale = vec3(1, 1, 1);
-
-  // water
   material.emissive.mod = vec4(0, 0, 0.005, 1);
-  material.albedo.mod = vec4(.036, .125, .3, .995);
+  material.albedo.mod = vec4(.054, .135, .159, .998);
   material.uses_transparency = true;
   material.uv_scale = vec2(1);
   material.roughness.mod = vec4(0.25);
   material.metalness.mod = vec4(0.84);
   material.frag_shader = "water.frag";
   world_water_settings(&material.uniform_set);
-  memewater = scene.add_mesh(cube, "memewater", &material);
-  scene.nodes[memewater].scale = vec3(6000, 6000, 3);
-  scene.nodes[memewater].position = vec3(0, 0, -1.5);
+  Node_Index memewater = scene->add_mesh(cube, "water", &material);
+  scene->nodes[memewater].scale = scale;
+  scene->nodes[memewater].position = pos;
+}
 
-  material.uses_transparency = false;
-  material.roughness.mod = vec4(1);
-  material.uniform_set.clear();
+void spawn_ground(Flat_Scene_Graph *scene)
+{
+  Material_Descriptor material;
+  material.albedo = "grass_albedo.png";
+  material.normal = "ground1_normal.png";
+  material.roughness.mod = vec4(.7);
+  material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
+  material.uv_scale = vec2(32);
+  material.casts_shadows = true;
+  material.backface_culling = false;
+  Node_Index ground = scene->add_mesh(cube, "world_cube", &material);
+  scene->nodes[ground].position = {0.0f, 0.0f, -150.f};
+  scene->nodes[ground].scale = {135.0f, 135.0f, 300.f};
+  material.uv_scale = vec2(312);
+  material.albedo.mod = vec4(2);
+  Node_Index underwater = scene->add_mesh(cube, "underwater", &material);
+  scene->nodes[underwater].position = {0.0f, 0.0f, -30.5f};
+  scene->nodes[underwater].scale = {6500.0f, 6500.0f, 1.f};
+  material.albedo.mod = vec4(1);
+}
 
-  // sphere_raycast_test
-  material.emissive.mod = vec4(10, .5, .5, 1);
-  sphere_raycast_test = scene.add_aiscene("smoothsphere.fbx", "sphere_raycast_test");
-  Material_Index mi2 = scene.resource_manager->push_custom_material(&material);
-  scene.nodes[scene.nodes[sphere_raycast_test].children[0]].model[0].second = mi2;
+void spawn_gun(Flat_Scene_Graph *scene, vec3 position)
+{
+  Node_Index gun = scene->add_aiscene("Cerberus/cerberus-warg.FBX", "gun");
+  scene->nodes[gun].position = position;
+  scene->nodes[gun].scale = vec3(1);
+}
 
-  scene.nodes[sphere_raycast_test].scale = vec3(0.005);
-  material.emissive.mod = MISSING_TEXTURE_MOD;
+void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
+{
+  Material_Descriptor material_star;
 
-  // testobjects = scene.add_aiscene("testobjects.fbx", nullptr, &material);
-  // testobjects->position = vec3(-5, 5, 1);
+  material_star.albedo.mod = vec4(0, 0, 0, 1);
+  material_star.emissive.mod = vec4(2.f, 2.f, .3f, 0.f);
+  material_star.frag_shader = "water.frag";
+  small_object_water_settings(&material_star.uniform_set);
 
-  //// crates:
-  // material.albedo = "crate_albedo.png";
-  // material.emissive = "test_emissive.png";
-  // material.normal = "color(0.5,.5,1,0)";
-  // material.roughness = "crate_roughness.png";
-  // material.metalness = "crate_metalness.png";
-  // material.vertex_shader = "vertex_shader.vert";
-  // material.frag_shader = "fragment_shader.frag";
-  // material.uv_scale = vec2(1);
-  // material.uses_transparency = false;
-  // material.casts_shadows = true;
+  Node_Index star = scene->add_aiscene("smoothsphere.fbx", "star");
+  Node_Index spheremodel = scene->nodes[star].children[0];
+  Material_Descriptor *mdp = scene->get_modifiable_material_pointer_for(spheremodel, 0);
+  *mdp = material_star;
 
-  // cubes
-  material.albedo = s(Conductor_Reflectivity::gold);
-  grabbycube = scene.add_mesh(cube, "grabbycube", &material);
-  cube_planet = scene.add_mesh(cube, "planet", &material);
-  scene.set_parent(cube_planet, grabbycube);
-  cube_moon = scene.add_mesh(cube, "moon", &material);
-  scene.set_parent(cube_moon, cube_planet);
-  shoulder_joint = scene.new_node();
-  arm_test = scene.add_mesh(cube, "world_cube", &material);
+  Material_Descriptor planet;
+  Node_Index cube_planet = scene->add_mesh(cube, "planet", &planet);
+  Material_Descriptor moon;
+  Node_Index cube_moon = scene->add_mesh(cube, "moon", &moon);
+  scene->set_parent(cube_moon, cube_planet);
+  scene->set_parent(cube_planet, star);
+  scene->nodes[star].position = pos;
+  scene->nodes[star].orientation = angleAxis(0.3f, vec3(1, 0, 0));
 
-  scene.set_parent(shoulder_joint, grabbycube);
-  scene.set_parent(arm_test, shoulder_joint);
+  const float32 star_scale = 1.0f;
+  const float32 planet_scale = 0.35;
+  const float32 moon_scale = 0.25;
+  scene->nodes[star].scale = vec3(star_scale);
+  scene->nodes[cube_planet].scale = vec3(planet_scale);
+  scene->nodes[cube_moon].scale = vec3(moon_scale);
+}
 
-  // camera spawn
+void spawn_grabbyarm(Flat_Scene_Graph *scene, vec3 position)
+{
+  Material_Descriptor material;
+  Node_Index grabbycube = scene->add_mesh(cube, "grabbycube", &material);
+  Node_Index arm_test = scene->add_mesh(cube, "grabbyarm", &material);
+  Node_Index shoulder_joint = scene->new_node("grabbyarm shoulder");
+  scene->set_parent(shoulder_joint, grabbycube);
+  scene->set_parent(arm_test, shoulder_joint);
+
+  Node_Index tiger = scene->add_aiscene("tiger/tiger.fbx", "grabbytiger");
+}
+
+void spawn_compass(Flat_Scene_Graph *scene)
+{
+  Node_Index root = scene->new_node("compass");
+  Material_Descriptor material;
+  material.frag_shader = "emission.frag";
+  material.emissive.mod = vec4(0);
+  material.emissive.mod.r = 2.0f;
+  Node_Index xaxis = scene->add_mesh(cube, "xaxis", &material);
+  material.emissive.mod.r = .0f;
+  material.emissive.mod.g = 2.0f;
+  Node_Index yaxis = scene->add_mesh(cube, "yaxis", &material);
+  material.emissive.mod.g = 0.0f;
+  material.emissive.mod.b = 2.0f;
+  Node_Index zaxis = scene->add_mesh(cube, "zaxis", &material);
+  scene->set_parent(xaxis, root);
+  scene->set_parent(yaxis, root);
+  scene->set_parent(zaxis, root);
+
+  scene->nodes[xaxis].scale = vec3(1, 0.025, 0.025);
+  scene->nodes[xaxis].position = vec3(0.5, 0.0125, 0.0125);
+
+  scene->nodes[yaxis].scale = vec3(0.025, 1, 0.025);
+  scene->nodes[yaxis].position = vec3(0.0125, 0.5, 0.0125);
+
+  scene->nodes[zaxis].scale = vec3(0.025, 0.025, 1);
+  scene->nodes[zaxis].position = vec3(0.0125, 0.0125, 0.5);
+}
+
+void spawn_map(Flat_Scene_Graph *scene)
+{
+  Blades_Edge map(*scene);
+}
+
+void spawn_test_triangle(Flat_Scene_Graph *scene)
+{
+
+  Material_Descriptor material;
+  material.frag_shader = "emission.frag";
+  material.emissive.mod = vec4(0);
+  material.emissive.mod.r = 2.0f;
+
+  Mesh_Descriptor md;
+  Node_Index a = scene->add_mesh(cube, "a", &material);
+  material.emissive.mod.r = .0f;
+  material.emissive.mod.g = 2.0f;
+  Node_Index b = scene->add_mesh(cube, "b", &material);
+  material.emissive.mod.g = 0.0f;
+  material.emissive.mod.b = 2.0f;
+  Node_Index c = scene->add_mesh(cube, "c", &material);
+
+  scene->nodes[a].scale = vec3(0.025);
+  scene->nodes[b].scale = vec3(0.025);
+  scene->nodes[c].scale = vec3(0.025);
+
+  scene->nodes[a].position = random_3D_unit_vector();
+  scene->nodes[b].position = random_3D_unit_vector();
+  scene->nodes[c].position = random_3D_unit_vector();
+
+  Material_Descriptor material2;
+  material2.albedo.mod = vec4(.2, .2, .2, .2);
+  material.emissive.mod = vec4(0);
+  material2.uses_transparency = true;
+  material2.blending = true;
+  material2.backface_culling = false;
+  Node_Index triangle = scene->add_mesh("triangle", &md, &material2);
+
+  material2.albedo.mod = vec4(.3, .3, .3, .3);
+  material2.emissive.mod = vec4(0);
+
+  Node_Index cb = scene->add_mesh(cube, "aabb", &material2);
+}
+Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
+    : State(name, window, window_size)
+{
+
+  scene.initialize_lighting("Assets/Textures/Environment_Maps/Frozen_Waterfall/irradiance.hdr",
+      "Assets/Textures/Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+
   camera.phi = .25;
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  // tigers
-  Material_Descriptor tiger_mat;
-  tiger_mat.backface_culling = true;
-  tiger_mat.discard_on_alpha = true;
-  tiger = scene.add_aiscene("tiger/tiger.fbx", "tiger");
-  Material_Descriptor *tigermat = scene.get_modifiable_material_pointer_for(scene.nodes[tiger].children[0], 0);
-  tigermat->normal_uv_scale = vec2(22);
-  scene.nodes[tiger].position = vec3(-6, -3, 0.0);
-  scene.nodes[tiger].scale = vec3(1.0);
+  // spawn_test_spheres(scene);
+  // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
+  // spawn_ground(&scene);
+  // spawn_gun(&scene, vec3(0));
+  spawn_planets(&scene,vec3(12,6,3));
+  // spawn_grabbyarm(&scene,vec3(0,0,1));
+  spawn_test_triangle(&scene);
+  spawn_compass(&scene);
+  //spawn_map(&scene);
 
-  tiger1 = scene.add_aiscene("tiger/tiger.fbx", "tiger1");
-  tigermat = scene.get_modifiable_material_pointer_for(scene.nodes[tiger1].children[0], 0);
-  tigermat->normal_uv_scale = vec2(22);
-  scene.set_parent(tiger1, grabbycube);
-
-  tiger2 = scene.add_aiscene("tiger/tiger.fbx", "tiger2");
-  tigermat = scene.get_modifiable_material_pointer_for(scene.nodes[tiger2].children[0], 0);
-  tigermat->normal_uv_scale = vec2(22);
-  scene.set_parent(tiger2, grabbycube);
-
-  // Node_Index tiger3 = scene.add_aiscene("tiger3", "tiger/tiger.fbx", &tiger_mat);
-  // scene.nodes[tiger3].position = vec3(0, 0, 0.5);
-  // scene.nodes[tiger3].scale = vec3(0.45f);
-  // scene.set_parent(tiger3, cube_moon);
-
-  // light spheres
-  material.casts_shadows = false;
-  material.albedo = "color(0,0,0,1)";
-  material.emissive = "color(11,11,11,1)";
-  material.roughness = "color(1,1,1,1)";
-  material.metalness = "color(0,0,0,0)";
-
-  scene.particle_emitters.push_back(Particle_Emitter());
+  scene.particle_emitters.push_back({});
+  scene.particle_emitters.push_back({});
+  scene.particle_emitters.push_back({});
+  scene.particle_emitters.push_back({});
+  Material_Descriptor material;
   Particle_Emitter *pe = &scene.particle_emitters.back();
   material.vertex_shader = "instance.vert";
-  material.frag_shader = "fireparticle.frag";
-  material.backface_culling = false;
-  // material.emissive = "color(1,1,1,1)";
-  // material.emissive.mod = vec4(15.f, 3.3f, .7f, 1.f);
-  fire_particle = scene.add_mesh(plane, "firep particle", &material);
-  pe->mesh_index = scene.nodes[fire_particle].model[0].first;
-  pe->material_index = scene.nodes[fire_particle].model[0].second;
-  scene.nodes[fire_particle].visible = false;
+  material.frag_shader = "emission.frag";
+  material.emissive = "color(1,1,1,1)";
+  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  small_object_water_settings(&material.uniform_set);
+  Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
+  Mesh_Index mesh_index = scene.nodes[particle_node].model[0].first;
+  Material_Index material_index = scene.nodes[particle_node].model[0].second;
+  scene.nodes[particle_node].visible = false;
+  scene.particle_emitters[0].mesh_index = mesh_index;
+  scene.particle_emitters[0].material_index = material_index;
+  scene.particle_emitters[1].mesh_index = mesh_index;
+  scene.particle_emitters[1].material_index = material_index;
+  scene.particle_emitters[2].mesh_index = mesh_index;
+  scene.particle_emitters[2].material_index = material_index;
+  scene.particle_emitters[3].mesh_index = mesh_index;
+  scene.particle_emitters[3].material_index = material_index;
 
   auto &lights = scene.lights.lights;
+  scene.lights.light_count = 2;
 
-  scene.lights.light_count = 3;
   Light *light0 = &scene.lights.lights[0];
   light0->position = vec3(804.00000, -414.00000, 401.00000);
   light0->direction = vec3(0.00000, 0.00000, 0.00000);
-  light0->brightness = 2500.00000;
-  light0->color = vec3(1.00000, 0.95000, 1.00000);
+  light0->brightness = 500.00000;
+  light0->color = vec3(1.00);
   light0->attenuation = vec3(1.00000, 0.22000, 0.00000);
   light0->ambient = 0.00001;
   light0->radius = 22.00000;
@@ -242,25 +295,24 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   light0->shadow_fov = 0.06230;
   light0->shadow_map_resolution = ivec2(2048, 2048);
 
-  lights[1].type = Light_Type::spot;
-  lights[1].direction = vec3(0);
-  lights[1].color = vec3(1.0, 1.00, 1.0);
-  lights[1].brightness = 150.f;
-  lights[1].cone_angle = 0.151; //+ 0.14*sin(current_time);
-  lights[1].ambient = 0.0000;
-  lights[1].casts_shadows = true;
-  lights[1].max_variance = 0.0000002;
-  lights[1].shadow_near_plane = .5f;
-  lights[1].shadow_far_plane = 200.f;
-  lights[1].shadow_fov = radians(90.f);
-  lights[1].shadow_blur_iterations = 4;
-  lights[1].shadow_blur_radius = 2.12;
-
-  lights[2].color = vec3(1, 0.05, 1.05);
-  lights[2].brightness = 111.f;
-  lights[2].type = Light_Type::omnidirectional;
-  lights[2].attenuation = vec3(1.0, 1.7, 2.4);
-  lights[2].ambient = 0.0000f;
+  Light *light1 = &scene.lights.lights[1];
+  light1->position = vec3(-2.68201, 4.21981, 2.00000);
+  light1->direction = vec3(0.00000, 0.00000, 0.00000);
+  light1->brightness = 51.50000;
+  light1->color = vec3(1.00000, 1.00000, 1.00000);
+  light1->attenuation = vec3(1.00000, 0.22000, 0.00000);
+  light1->ambient = 0.00000;
+  light1->radius = 0.10000;
+  light1->cone_angle = 0.15100;
+  light1->type = Light_Type::spot;
+  light1->casts_shadows = 1;
+  light1->shadow_blur_iterations = 4;
+  light1->shadow_blur_radius = 2.12000;
+  light1->shadow_near_plane = 0.50000;
+  light1->shadow_far_plane = 200.00000;
+  light1->max_variance = 0.00000;
+  light1->shadow_fov = 1.57080;
+  light1->shadow_map_resolution = ivec2(1024, 1024);
 }
 
 void Render_Test_State::handle_input_events()
@@ -403,7 +455,7 @@ void Render_Test_State::handle_input_events()
     const float32 upper = half_pi<float32>() - 100 * epsilon<float32>();
     if (camera.phi > upper)
       camera.phi = upper;
-    const float32 lower = 100 * epsilon<float32>();
+    const float32 lower = -half_pi<float32>() + 100 * epsilon<float32>();
     if (camera.phi < lower)
       camera.phi = lower;
 
@@ -460,56 +512,28 @@ void Render_Test_State::handle_input_events()
   previous_mouse_state = mouse_state;
 }
 
-void Render_Test_State::update()
+void update_grabbyarm(Flat_Scene_Graph *scene, float64 current_time)
 {
-
-  const float32 height = 1.25;
-
-  const float32 planet_scale = 0.35;
-  const float32 planet_distance = 4;
-  const float32 planet_year = 5;
-  const float32 planet_day = 1;
-  scene.nodes[cube_planet].scale = vec3(planet_scale);
-  scene.nodes[cube_planet].position =
-      planet_distance * vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
-  const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
-  scene.nodes[cube_planet].orientation = angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
-  scene.nodes[cube_planet].visible = sin(current_time * 6) > 0;
-  scene.nodes[cube_planet].propagate_visibility = false;
-
-  const float32 moon_scale = 0.25;
-  const float32 moon_distance = 1.5;
-  const float32 moon_year = .75;
-  const float32 moon_day = .1;
-  scene.nodes[cube_moon].scale = vec3(moon_scale);
-  scene.nodes[cube_moon].position =
-      moon_distance * vec3(cos(current_time / moon_year), sin(current_time / moon_year), 0);
-  scene.nodes[cube_moon].orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
-
-  auto &lights = scene.lights.lights;
-
-  lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-  lights[2].position = vec3(3 * cos(current_time * .12), 3 * sin(.03 * current_time), 0.5);
-
-  // scene.nodes[gun].orientation = angleAxis((float32)(.02f * current_time), vec3(0.f, 0.f, 1.f));
-  scene.nodes[tiger].orientation = angleAxis((float32)(.03f * current_time), vec3(0.f, 0.f, 1.f));
-  scene.nodes[tiger2].position = vec3(.35 * cos(3 * current_time), .35 * sin(3 * current_time), 1);
-  scene.nodes[tiger2].scale = vec3(.25);
-
   // build_transformation transfer child test
   static float32 last = (float32)current_time;
   static float32 time_of_reset = 0.f;
   static bool is_world = false;
-  static bool first1 = true;
+  Node_Index grabbycube = scene->find_by_name(NODE_NULL, "grabbycube");
+  Node_Index shoulder_joint = scene->find_by_name(grabbycube, "grabbyarm shoulder");
+  Node_Index arm_test = scene->find_by_name(shoulder_joint, "grabbyarm");
+  Node_Index grabbytiger = scene->find_by_name(NODE_NULL, "grabbytiger");
+  if (grabbytiger == NODE_NULL)
+  {
+    grabbytiger = scene->find_by_name(arm_test, "grabbytiger");
+  }
 
   if (last < current_time - 3)
   {
-    Material_Descriptor *md = scene.get_modifiable_material_pointer_for(arm_test, 0);
+    Material_Descriptor *md = scene->get_modifiable_material_pointer_for(arm_test, 0);
     if (!is_world)
     {
-      scene.set_parent(tiger2, grabbycube);
 
-      scene.drop(tiger1);
+      scene->drop(grabbytiger);
       md->albedo.mod = vec4(1, 0, 0, 1);
 
       last = (float32)current_time;
@@ -517,22 +541,17 @@ void Render_Test_State::update()
       if (time_of_reset < current_time - 15)
       {
         set_message(s("resetting tiger to origin"), "", 3.f);
-        scene.nodes[tiger1].position = vec3(0);
-        scene.nodes[tiger1].scale = vec3(1);
-        scene.nodes[tiger1].orientation = {};
-        //scene.nodes[tiger1].import_basis = mat4(1);
+        scene->nodes[grabbytiger].position = vec3(0);
+        scene->nodes[grabbytiger].scale = vec3(1);
+        scene->nodes[grabbytiger].orientation = {};
+        // scene.nodes[tiger1].import_basis = mat4(1);
         time_of_reset = (float32)current_time;
       }
     }
     else
     {
       md->albedo.mod = vec4(0, 1, 0, 1);
-
-      set_message(s("arm_test GRAB"), "", 1.5f);
-      scene.grab(arm_test, tiger1);
-
-      scene.set_parent(tiger2, sphere);
-
+      scene->grab(arm_test, grabbytiger);
       is_world = false;
       last = (float32)current_time;
     }
@@ -541,52 +560,179 @@ void Render_Test_State::update()
   const float32 theta = (float32)sin(current_time / 12.f);
   float cube_diameter = 1;
 
-  scene.nodes[grabbycube].scale_vertex = vec3(1, 1, 2); // the size of the cube - affects *only* this object
-  scene.nodes[grabbycube].scale = vec3(cube_diameter);  // the scale of the node - affects all children
-  scene.nodes[grabbycube].position = vec3(0, 0, height + 3.f * (0.5 + 0.5 * (sin(current_time))));
-  scene.nodes[grabbycube].orientation = angleAxis(theta, vec3(cos(.25f * current_time), sin(.25f * current_time), 0));
+  const float32 height = 1.25;
+  scene->nodes[grabbycube].scale_vertex = vec3(1, 1, 2); // the size of the cube - affects *only* this object
+  scene->nodes[grabbycube].scale = vec3(cube_diameter);  // the scale of the node - affects all children
+  scene->nodes[grabbycube].position = vec3(0, 0, height + 3.f * (0.5 + 0.5 * (sin(current_time))));
+  scene->nodes[grabbycube].orientation = angleAxis(theta, vec3(cos(.25f * current_time), sin(.25f * current_time), 0));
 
-  scene.nodes[shoulder_joint].position = {0.50f * cube_diameter, 0.0f, cube_diameter};
-  scene.nodes[shoulder_joint].orientation = angleAxis(20.f * (float32)sin(current_time / 20.f), vec3(1, 0, 0));
+  scene->nodes[shoulder_joint].position = {0.50f * cube_diameter, 0.0f, cube_diameter};
+  scene->nodes[shoulder_joint].orientation = angleAxis(20.f * (float32)sin(current_time / 20.f), vec3(1, 0, 0));
 
   const float32 arm_radius = 0.25f;
-  scene.nodes[arm_test].scale_vertex = {arm_radius, arm_radius, 1.5f};
-  scene.nodes[arm_test].position = {0.5f * arm_radius, 0.0f, -0.75f};
-
-  renderer.set_camera(camera.pos, camera.dir);
-
-  vec3 real_camera_pos = camera.pos;
-  vec3 world_ray_dir = renderer.ray_from_screen_pixel(cursor_position);
-
-  vec3 world_pos;
-  // Node_Index node_for_icosphere = 2;
-  // Node_Index hit = scene.ray_intersects_node(real_camera_pos, world_ray_dir, node_for_icosphere, world_pos);
-
-  scene.nodes[sphere_raycast_test].position = world_pos;
-  scene.nodes[sphere_raycast_test].scale = vec3(0.123);
-
-  scene.nodes[memewater].position = vec4(vec2(10. * sin(0.01 * current_time)), -2., 0);
-
-  // Material_Descriptor *watermat = get_material_pointer_for(&scene, memewater, 0);
-  // watermat->uv_scale = vec2(1000);
-
-  // pe->descriptor.position = vec3(5.f * sin(current_time), 5.f * cos(current_time), 1.0f);
-
-  glm::mat4 m = scene.build_transformation(arm_test);
-  quat orientation;
-  vec3 translation;
-  decompose(m, vec3(), orientation, translation, vec3(), vec4());
-  orientation = conjugate(orientation);
-  // pe->descriptor.physics_descriptor.gravity = vec3(0);
-  // pe->descriptor.orientation = orientation;
-  //// pe->descriptor.position = translation;
-
-  // fire_emitter2(&renderer,&scene, &scene.particle_emitters[0], &scene.lights.lights[4], vec3(0), vec2(2, 2));
-
-  // IMGUI_LOCK lock(this);
+  scene->nodes[arm_test].scale_vertex = {arm_radius, arm_radius, 1.5f};
+  scene->nodes[arm_test].position = {0.5f * arm_radius, 0.0f, -0.75f};
 }
 
-void test_spheres(Flat_Scene_Graph &scene)
+void update_planets(Flat_Scene_Graph *scene, float64 current_time)
+{
+  Node_Index cube_star = scene->find_by_name(NODE_NULL, "star");
+  Node_Index cube_planet = scene->find_by_name(cube_star, "planet");
+  Node_Index cube_moon = scene->find_by_name(cube_planet, "moon");
+
+  const float32 planet_distance = 4;
+  const float32 planet_year = 5;
+  const float32 planet_day = 1;
+  scene->nodes[cube_planet].position =
+      planet_distance * vec3(cos(current_time / planet_year), sin(current_time / planet_year), 0);
+  const float32 angle = wrap_to_range((float32)current_time, 0.0f, 2.0f * pi<float32>());
+  scene->nodes[cube_planet].orientation = angleAxis((float32)current_time / planet_day, vec3(0, 0, 1));
+
+  const float32 moon_distance = 1.5;
+  const float32 moon_year = .75;
+  const float32 moon_day = .1;
+  scene->nodes[cube_moon].position =
+      moon_distance * vec3(cos(current_time / moon_year), sin(current_time / moon_year), 0);
+  scene->nodes[cube_moon].orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
+}
+
+
+
+
+
+void update_test_triangle(Flat_Scene_Graph *scene)
+{
+  Node_Index triangle = scene->find_by_name(NODE_NULL, "triangle");
+  ASSERT(triangle != NODE_NULL);
+
+  Mesh_Descriptor md;
+
+  Node_Index na = scene->find_by_name(NODE_NULL, "a");
+  Node_Index nb = scene->find_by_name(NODE_NULL, "b");
+  Node_Index nc = scene->find_by_name(NODE_NULL, "c");
+
+  vec3 a = scene->nodes[na].position;
+  vec3 b = scene->nodes[nb].position;
+  vec3 c = scene->nodes[nc].position;
+
+  add_triangle(a, b, c, md.mesh_data);
+
+  Mesh_Index meshi = scene->nodes[triangle].model[0].first;
+  Material_Index mati = scene->nodes[triangle].model[0].second;
+
+  scene->resource_manager->mesh_pool[meshi] = md;
+  Material_Descriptor *material = scene->get_modifiable_material_pointer_for(triangle, 0);
+
+  material->albedo.mod = vec4(.3, .3, .3, .3);
+  material->uses_transparency = true;
+  material->blending = true;
+  material->backface_culling = false;
+
+  scene->collision_octree.clear();
+  scene->collision_octree.push(&md);
+
+  Node_Index cuber = scene->find_by_name(NODE_NULL, "aabb");
+  ASSERT(cuber != NODE_NULL);
+  AABB aabb;
+  aabb.min = scene->nodes[cuber].position;
+  push_aabb(aabb, scene->nodes[cuber].position + 0.5f * scene->nodes[cuber].scale);
+  push_aabb(aabb, scene->nodes[cuber].position - 0.5f * scene->nodes[cuber].scale);
+
+  set_message("min", vtos(aabb.min), 1.0f);
+  set_message("max", vtos(aabb.max), 1.0f);
+
+  Triangle_Normal t;
+  t.a = a;
+  t.b = b;
+  t.c = c;
+
+  vec3 atob = t.b - t.a;
+  vec3 atoc = t.c - t.a;
+  t.n = normalize(cross(atob, atoc));
+  bool hit = aabb_triangle_intersection(aabb, t);
+
+  material->emissive.mod = vec4(0);
+  if (hit)
+  {
+    material->emissive.mod = vec4(1.3, .3, .3, .3);
+  }
+}
+void Render_Test_State::update()
+{
+  // update_grabbyarm(&scene, current_time);
+   update_planets(&scene, current_time);
+  scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
+    renderer.set_camera(camera.pos, camera.dir);
+
+
+    update_test_triangle(&scene);
+
+
+
+
+  //static vec3 wind_dir;
+  //if (fract(sin(current_time)) > .5)
+  //  wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+
+ 
+  //scene.particle_emitters[1].descriptor.position = vec3(0, 0, 25);
+  //scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  //scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 255;
+  //scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  //scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  //// scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  //scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
+  //scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
+  //scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  //scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  //scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.02;
+  //scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.15;
+
+  //scene.particle_emitters[2].descriptor.position = vec3(1, 0, 25);
+  //scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  //scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 255;
+  //scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  //scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  //// scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  //scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
+  //scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
+  //scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  //scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  //scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.02;
+  //scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.15;
+
+  //scene.particle_emitters[3].descriptor.position = vec3(0, 1, 25);
+  //scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  //scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 255;
+  //scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  //scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  //// scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  //scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
+  //scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
+  //scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  //scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  //scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.02;
+  //scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.15;
+
+  //scene.particle_emitters[0].descriptor.position = vec3(.5, .5, 25);
+  //scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  //scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 255;
+  //scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  //scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  //// scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  //scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
+  //scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
+  //scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  //scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  //scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.02;
+  //scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
+}
+
+void spawn_test_spheres(Flat_Scene_Graph &scene)
 {
   Material_Descriptor material;
   material.albedo = "color(1,1,1,1)";

@@ -49,8 +49,8 @@ void Warg_Server::update(float32 dt)
   }
 
 
-
-  PERF_TIMER.start();
+//
+  //PERF_TIMER.start();
   for (size_t i = 0; i < game_state.character_count; i++)
   {
     auto &cid = game_state.characters[i].id;
@@ -85,7 +85,7 @@ void Warg_Server::update(float32 dt)
       ch.physics.orientation = angleAxis(-half_pi<float32>(), vec3(1.f, 0.f, 0.f));
     }
   }
-  PERF_TIMER.stop();
+  //PERF_TIMER.stop();
 
   for (auto &p : peers)
   {

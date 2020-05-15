@@ -67,7 +67,7 @@ bool File_Picker::run()
 {
   bool clicked = false;
   display = true;
-  ImGui::Begin("File Picker", &display, ImVec2(586, 488), 1, ImGuiWindowFlags_NoScrollbar);
+  ImGui::Begin("File Picker", &display,  ImGuiWindowFlags_NoScrollbar);
 
   auto winsize = ImGui::GetWindowSize();
 

@@ -557,5 +557,6 @@ void main()
    //result = Ks;
   }
   //result = refraction_src.rgb;
+
   out0 = vec4(result, premultiply_alpha);
 }

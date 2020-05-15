@@ -3,6 +3,7 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform mat4 txaa_jitter;
+uniform vec2 normal_uv_scale;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -18,6 +19,7 @@ layout(location = 15) in vec4 attribute2;
 out vec3 frag_world_position;
 out mat3 frag_TBN;
 out vec2 frag_uv;
+out vec2 frag_normal_uv;
 void main()
 {
   vec3 t = normalize(instanced_model * vec4(tangent, 0)).xyz;
@@ -26,7 +28,7 @@ void main()
   frag_TBN = mat3(t, b, n);
   frag_world_position = (instanced_model * vec4(position, 1)).xyz;
   frag_uv = uv_scale * vec2(uv.x, uv.y);
-
+  frag_normal_uv = normal_uv_scale * frag_uv;
   float s = sin(time);
   gl_Position = txaa_jitter*instanced_MVP * vec4(position, 1);
   //gl_Position = instanced_MVP * vec4(position, 1);

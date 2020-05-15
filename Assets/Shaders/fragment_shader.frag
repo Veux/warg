@@ -479,6 +479,5 @@ void main()
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
   
-  
   out0 = vec4(result, premultiply_alpha);
 }

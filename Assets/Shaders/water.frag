@@ -155,49 +155,8 @@ void gather_shadow_moments()
       texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
 }
 
-/*
-useful links:
 
 
-http://c0de517e.blogspot.com/2014/06/oh-envmap-lighting-how-do-we-get-you.html
-
-
-notes:
-  radiant flux: total amount of energy, watts: Φ
-  solid angle: area of the shape of an object projected onto unit sphere: ω
-  radiant intensity: flux per solid angle: I
-
-  radiance: radiant intensity scaled by surface angle: L
-            the amount of light a point on a surface gets from a certain source
-direction
-
-irradiance: sum of all radiance from every direction onto the point
-
-Rendering equation:
-  Lo(p,ωo)= ∫Ω fr(p,ωi,ωo)Li(p,ωi)n⋅ωi dωi
-
-  ωo is a light output direction
-  p is the point on a surface
-
-  Lo(p,ωo) is light from point p to w, the solid angle of a camera's pixel
-  Li(p,ωi) is irradiance from the scene onto point p
-  n⋅ωi is surface incident angle correction
-  fr(p,ωi,ωo) is the BRDF, how much of the specific input light ray in question
-contributes to the output
-
-
-    we require a shader that is able to compute an irradiance map from a
-radiance(environment) map this is very slow required for rough surfaces because
-the subpixel roughness at p can reflect varying amounts of light from many
-different incoming directions
-
-
-  smith's method separates the G term into two pieces, G(l)G(v), G being the
-same function for both light and view vectors
-
-
-
-*/
 // vec3 F_cook-torrance()
 //{
 //  η=1+F0−−√1−F0−−√
@@ -346,101 +305,231 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 
 
 
-
-float random(float x) {
- 
-    return fract(sin(x) * 10000.);
-          
-}
-
-float noise(vec2 p) {
-
-    return random(p.x + p.y * 10000.);
-            
-}
-
-vec2 sw(vec2 p) { return vec2(floor(p.x), floor(p.y)); }
-vec2 se(vec2 p) { return vec2(ceil(p.x), floor(p.y)); }
-vec2 nw(vec2 p) { return vec2(floor(p.x), ceil(p.y)); }
-vec2 ne(vec2 p) { return vec2(ceil(p.x), ceil(p.y)); }
-
-float smoothNoise(vec2 p) {
-
-    vec2 interp = smoothstep(0., 1., fract(p));
-    float s = mix(noise(sw(p)), noise(se(p)), interp.x);
-    float n = mix(noise(nw(p)), noise(ne(p)), interp.x);
-    return mix(s, n, interp.y);
-        
-}
-
-float fractalNoise(vec2 p) {
-
-    float x = 0.;
-    x += smoothNoise(p      );
-    x += smoothNoise(p * 2. ) / 2.;
-    x += smoothNoise(p * 4. ) / 4.;
-    x += smoothNoise(p * 8. ) / 8.;
-    x += smoothNoise(p * 16.) / 16.;
-    x /= 1. + 1./2. + 1./4. + 1./8. + 1./16.;
-    return x;
-            
-}
-
-float movingNoise(vec2 p,float time) {
- 
-    float x = fractalNoise(p + time);
-    float y = fractalNoise(p - time);
-    return fractalNoise(p + vec2(x, y));   
-    
-}
-
-// call this for water noise function
-float nestedNoise(vec2 p,float time) 
-{
-  //float result;
-  float x = movingNoise(p,time);
-    
-//  if(do_extra_water)
-//  {
+//
+//float random(float x) {
+// 
+//    return fract(sin(x) * 10000.);
+//          
+//}
+//
+//float noise(vec2 p) {
+//
+//    return random(p.x + p.y * 10000.);
+//            
+//}
+//
+//vec2 sw(vec2 p) { return vec2(floor(p.x), floor(p.y)); }
+//vec2 se(vec2 p) { return vec2(ceil(p.x), floor(p.y)); }
+//vec2 nw(vec2 p) { return vec2(floor(p.x), ceil(p.y)); }
+//vec2 ne(vec2 p) { return vec2(ceil(p.x), ceil(p.y)); }
+//
+//float smoothNoise(vec2 p) {
+//
+//    vec2 interp = smoothstep(0., 1., fract(p));
+//    float s = mix(noise(sw(p)), noise(se(p)), interp.x);
+//    float n = mix(noise(nw(p)), noise(ne(p)), interp.x);
+//    return mix(s, n, interp.y);
+//        
+//}
+//
+//float fractalNoise(vec2 p) {
+//
+//    float x = 0.;
+//    x += smoothNoise(p      );
+//    x += smoothNoise(p * 2. ) / 2.;
+//    x += smoothNoise(p * 4. ) / 4.;
+//    x += smoothNoise(p * 8. ) / 8.;
+//    x += smoothNoise(p * 16.) / 16.;
+//    x += smoothNoise(p * 32.) / 32.;
+//    x += smoothNoise(p * 64.) / 64.;
+//    x += smoothNoise(p * 128.) / 128.;
+//    x += smoothNoise(p * 256.) / 256.;
+//    x /= 1. + 1./2. + 1./4. + 1./8. + 1./16.+ 1./32.+ 1./64.+ 1./128.+ 1./256.;
+//    //x /= 1. + 1./2.;
+//    return x;
+//            
+//}
+//
+//float movingNoise(vec2 p,float time) {
+// 
+//    float x = fractalNoise(p + time);
+//    float y = fractalNoise(p - time);
+//    return fractalNoise(p + vec2(x, y));   
+//    
+//}
+//
+//// call this for water noise function
+//float nestedNoise(vec2 p,float time) 
+//{
+//  float result;
+//  float x = movingNoise(p,time);
+//    
+//  
+//
 //    float y = movingNoise(p + 100.,time);
 //    result = movingNoise(p + vec2(x, y),time);
-//  }
-//  else
-//  {
-//    result = x;
-//  }
-  return x;
+// 
+//  return result;
+//}
+
+float random ( vec2 st) {
+    return fract(sin(dot(st.xy,
+                         vec2(12.9898,78.233)))*
+        43758.5453123);
 }
 
 
 
+float noise (vec2 st) {
+    vec2 i = floor(st);
+    vec2 f = fract(st);
 
+    // Four corners in 2D of a tile
+    float a = random(i);
+    float b = random(i + vec2(1.0, 0.0));
+    float c = random(i + vec2(0.0, 1.0));
+    float d = random(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    return mix(a, b, u.x) +
+            (c - a)* u.y * (1.0 - u.x) +
+            (d - b) * u.x * u.y;
+}
+
+#define NUM_OCTAVES 4
+float fbm (vec2 uv) {
+    float v = 0.0;
+    float a = 0.5;
+    vec2 shift = vec2(100.0);
+    // Rotate to reduce axial bias
+    mat2 rot = mat2(cos(0.5), sin(0.5),
+                    -sin(0.5), cos(0.50));
+    for (int i = 0; i < NUM_OCTAVES; ++i) {
+        v += a * noise(uv);
+        uv = rot * uv * 2.0 + shift;
+        a *= 0.5;
+    }
+    return v;
+
+
+}
+
+#define NUM_OCTAVES2 3
+float fbm2 (vec2 uv) {
+    float v = 0.0;
+    float a = 0.5;
+    vec2 shift = vec2(100.0);
+    // Rotate to reduce axial bias
+    mat2 rot = mat2(cos(0.5), sin(0.5),
+                    -sin(0.5), cos(0.50));
+    for (int i = 0; i < NUM_OCTAVES2; ++i) {
+        v += a * noise(uv);
+        uv = rot * uv * 2.0 + shift;
+        a *= 0.5;
+    }
+    return v;
+
+
+}
+
+float fbm3 (vec2 uv) {
+    float value = 0.0;
+    float amplitude = .5;
+    float frequency = 0.;
+    for (int i = 0; i < NUM_OCTAVES; i++) {
+        value += amplitude * noise(uv);
+        uv *= 2.;
+        amplitude *= .5;
+    }
+    return value;
+}
+
+float waterheight(vec2 uv, float time)
+{
+  vec2 q = vec2(0.);
+  q.x = fbm( uv + .00*time);
+  q.y = fbm( uv + vec2(1.0));
+
+  vec2 r = vec2(0.);
+  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+ 0.15*time );
+  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+ 0.126*time);
+  float f = fbm(uv+r);
+
+
+  
+  //vec3 partial_d = dFdx(frag_world_position);
+  vec3 partial_d = dFdy(frag_world_position);
+  float lenpd = length(partial_d);
+  
+  float divisor =  65.1f*lenpd;
+
+  divisor = max(1,divisor);
+  f = f/divisor;
+  //f = 0.2*f;
+
+  float scale = 0.051f;
+  uv = scale*uv;
+  q.x = fbm( uv + .00*time);
+  q.y = fbm( uv + vec2(1.0));
+  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+  scale*1.515*time );
+  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+  scale*1.5126*time);
+  f = f + 3.f*fbm2(uv+r);
+ 
+
+  return f;
+}
+
+float waterheightms(vec2 uv,float time)
+{
+     // vec3 partial_d = dFdx(frag_world_position);
+   vec3 partial_d = dFdy(frag_world_position);
+  float lenpd = length(partial_d);
+
+  float offset = 0.25f*lenpd;
+
+    float f0 = waterheight(uv,time);
+    vec2 o1 = vec2(0,offset);
+    vec2 o2 = vec2(offset,0);
+    vec2 o3 = vec2(0,-offset);
+    vec2 o4 = vec2(-offset,0);
+
+  // float f1 = waterheight(uv+o1,time);
+//    float f2 = waterheight(uv-o2,time);
+   //float f3 = waterheight(uv+o3,time);
+//    float f4 = waterheight(uv+o4,time);
+
+    
+    
+    //float f = f0+f1+f2+f3+f4;
+    //f = f/5;
+   
+    
+    return f0;
+}
 
 vec3 water(vec2 uv, float wave_scale, float height_scale, float water_time)
 {
-  float eps = water_eps;
-
+  
+  float eps = 0.01f;
   vec2 waterp = wave_scale*uv; 
-  //scale*vec2(sin(speed*time));
-  float h = height_scale*nestedNoise(waterp,water_time);
+  float h = waterheightms(waterp,water_time);
 
   vec2 dx_sample = vec2(waterp.x+eps,waterp.y);
-  float hdx = height_scale*nestedNoise(dx_sample,water_time);
-  vec3 vdx = vec3(dx_sample,hdx);
+  float hdx = waterheightms(dx_sample,water_time);
+  vec3 pdx = vec3(dx_sample,hdx);
   
   vec2 dy_sample = vec2(waterp.x,waterp.y+eps);
-  float hdy = height_scale*nestedNoise(dy_sample,water_time);
-  vec3 vdy = vec3(dy_sample,hdy);
+  float hdy = waterheightms(dy_sample,water_time);
+  vec3 pdy = vec3(dy_sample,hdy);
   
   vec3 wave_p = vec3(waterp,h);
-  vec3 right = normalize(vdx - wave_p);
-  vec3 forward = normalize(vdy - wave_p);
+  vec3 right = normalize(pdx - wave_p);
+  vec3 forward = normalize(pdy - wave_p);
   vec3 normal = cross(right,forward);
   
   return normalize(normal);
 }
-
-
 
 
 
@@ -464,30 +553,7 @@ void main()
 
   Material m;
 
-  /*
-    alpha is defined as the percentage of light that is absorbed by the Material and converted to heat
-    when passing through it
-    technically, some light would bounce around inside and obey fresnels law and may exit elsewhere
-    but we will just use a single float to describe the absorption
-
-    the alpha value multiplies the framebuffer color behind it to 'block' that light from view
-    alpha value also scales the albedo here before we compute lighting to keep conservation of energy
-    at low alpha values, we want low diffuse values because this translucent object is being 'added' to the dst buffer
-
-    a low diffuse value won't affect the specularity at all on nonconductors, and transparent conductors
-    don't exist irl
-
-    so the diffuse component can be thought of as 'the amount of the (non-specular) light that is reflected back out to see' 
-    and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or reflected back out
-
-    if we want to do refraction, we do not use opengls blending
-
-    we make a new texture target, copy the opaque pass into it and bind it as an input for refraction
-    then we sample the opaque pass to gather our refraction sample
-    and we overwrite the dst pixel - no opengl blending - if an object refracts and the ray is straight through, then
-    the object will look traditionally transparent
-
-  */
+  
   float premultiply_alpha = albedo_tex.a;
   if (alpha_albedo_override != -1.0f)
   {
@@ -541,14 +607,18 @@ void main()
   {
     wateruv = frag_world_position.xy;
   }
+ 
 
-  vec3 waternormal = water(wateruv,  water_scale,  height_scale1f,  water_time1f);
-  vec3 waternormal2 = water(wateruv,  water_scale2,  height_scale2f,  water_time2f);
+
+  //vec3 waternormal = water(wateruv,  water_scale,  height_scale1f,  water_time1f);
+  //vec3 waternormal2 = water(wateruv,  water_scale2,  height_scale2f,  water_time2f);
   
   vec3 partial_d = dFdx(frag_world_position);
   float lenpd = length(partial_d);
-  vec3 vertical_scale_normal = vec3(0,0,0.1) + vec3(0,0,730.5*lenpd);
-  waternormal = normalize(waternormal+waternormal2+vertical_scale_normal);
+  //vec3 vertical_scale_normal = vec3(0,0,0.1) + vec3(0,0,730.5*lenpd);
+  vec3 vertical_scale_normal = vec3(0,0,3.1) ;//+ vec3(0,0,1.5*lenpd);
+ //waternormal = normalize(waternormal+waternormal2+vertical_scale_normal);
+ vec3 waternormal = normalize(vertical_scale_normal+water(wateruv,  water_scale,  1.f,  water_time1f));
 
   //float dy = nestedNoise(scale*vec2(waterp.x,waterp.y+eps));
 
@@ -563,7 +633,6 @@ void main()
 
   m.normal = TBN*waternormal;
    
-  m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = 0.03;
 
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
@@ -574,6 +643,9 @@ void main()
   vec3 F0 = vec3(0.02); //0.02 F0 for water
   F0 =  vec3(0.12);
   float ndotv = clamp(dot(m.normal, v),0,1);
+  
+  m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
+  
   vec3 direct_ambient = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -628,6 +700,7 @@ void main()
     // float G = G_smith_GGX_denom(a,ndotv,ndotl);
     // specular brdf
     vec3 F = F_schlick(F0, ndoth);
+    F = F_schlick(F0, 0.5f);
     if(dot(m.normal, l) <0.0)
     {
        // F = 0.1 + (F*0.9);
@@ -668,18 +741,21 @@ void main()
   // ambient specular
 
   
-  m.roughness = 0.0951;
-
-  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  m.roughness = 0.131051;
+  m.metalness = 0.f;
   
+  //vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  vec3 Ks = fresnelSchlickRoughness(1.f, F0, m.roughness);
+  //Ks = vec3(0.);
  // Ks = vec3(0);
   //vec3 Ks = F_schlick(F0, ndotv);
   //Ks = vec3(0.1);
   const float MAX_REFLECTION_LOD = 5.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
-  vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
 
+  vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
+  ambient_specular = mix(ambient_specular,m.albedo*ambient_specular,0.25f);
   // ambient diffuse
 
   //as with direct diffuse, we want to let it bleed through
@@ -687,6 +763,7 @@ void main()
   //lets sample both sides of the normal into the cubemap
   //and average them
   vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
+  //Kd = vec3(1.0f);
   vec3 irradiance = texture(texture7, -m.normal).rgb;
   //vec3 irradiance2 = texture(texture7, m.normal).rgb;
  // vec3 irradiance = 0.5f*(irradiance1 + irradiance2); 
@@ -730,9 +807,9 @@ void main()
    // result = vec3(1,0,0);
   }
   //float thet = 1.0-dot(waternormal,vec3(0,0,1));
-// result = ambient_specular;
+ //result = ambient_specular;
 
-  //result = vec3(nestedNoise(frag_world_position.xy));
- // result = vec3(waternormal);
+ // result = vec3(waterheight(wateruv,  water_time1f));
+ 
   out0 = vec4(result, premultiply_alpha);
 }

@@ -8,8 +8,8 @@ vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_
 
 Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
 {
-  spawn_pos[0] = { 0, 0, 15 };
-  spawn_pos[1] = { 45, 45, 5 };
+  spawn_pos[0] = { 0, 0, 11115 };
+  spawn_pos[1] = { 45, 45, 11115 };
   spawn_orientation[0] = angleAxis(0.f, vec3(0, 1, 0));
   spawn_orientation[1] = angleAxis(0.f, vec3(0, -1, 0));
 
@@ -19,7 +19,7 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   if (CONFIG.render_simple)
     material.albedo.mod = vec4(0.4f);
 
-  node = scene.add_aiscene("Blades_Edge/bea2.fbx","Blades Edge");
+  node = scene.add_aiscene("Blades_Edge/bea2r.fbx","Blades Edge");
 
 }
 
@@ -217,11 +217,12 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
   AABB box;
   box.min = colpkt.pos_r3;
   box.max = colpkt.pos_r3;
-  push_aabb(box, colpkt.pos_r3 - (2.f*colpkt.e_radius)-colpkt.vel_r3);
-  push_aabb(box, colpkt.pos_r3 + (2.f*colpkt.e_radius)+colpkt.vel_r3);
+  push_aabb(box, colpkt.pos_r3 - (15.f*colpkt.e_radius)-colpkt.vel_r3);
+  push_aabb(box, colpkt.pos_r3 + (15.f*colpkt.e_radius)+colpkt.vel_r3);
   uint32 counter = 0;
   std::vector<Triangle_Normal> colliders = scene->collision_octree.test_all(box, &counter);
   
+  set_message("trianglecounter:", s(counter), 1.0f);
 
 
   for (auto &surface : colliders)

@@ -1082,13 +1082,18 @@ void Renderer::draw_imgui()
         auto ptr = SHADER_CACHE[key].lock();
         if (!ptr)
           continue;
-        GLuint program = load_shader(ptr->vs, ptr->fs);
+
+        std::string vs = ptr->vs;
+        std::string fs = ptr->fs;
+        GLuint program = load_shader(vs, fs);
 
         if (!program)
           continue;
         Shader_Handle blank(0);
         *ptr = blank;
         ptr->program = program;
+        ptr->vs = vs;
+        ptr->fs = fs;
         glUseProgram(program);
         ptr->set_location_cache();
       }
@@ -1392,9 +1397,30 @@ void Renderer::opaque_pass(float32 time)
 
 void Renderer::instance_pass(float32 time)
 {
-  glDepthMask(GL_FALSE);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_ONE, GL_ONE);
+  glDisable(GL_BLEND);
+  vec3 forward_v = normalize(camera_gaze - camera_position);
+  vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
+  vec3 up_v = -normalize(cross(forward_v, right_v));
+
+    if (!use_txaa)
+  {
+    previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
+    previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
+    previous_draw_target.color_attachments[0].bind(0); // will set the wraps
+    previous_draw_target.bind();
+    glViewport(0, 0, size.x, size.y);
+    passthrough.use();
+    draw_target.color_attachments[0].bind(0);
+    passthrough.set_uniform("transform", ortho_projection(window_size));
+    quad.draw();
+    // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    draw_target.bind();
+  }
+  glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
+  glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
+
 
   for (Render_Instance &entity : render_instances)
   {
@@ -1402,12 +1428,45 @@ void Renderer::instance_pass(float32 time)
     ASSERT(entity.mesh);
     Shader &shader = entity.material->shader;
     ASSERT(shader.vs == "instance.vert");
+
+    if (entity.material->descriptor.wireframe)
+    {
+      glDisable(GL_DEPTH_TEST);
+      glDepthMask(GL_FALSE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+    shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
+    shader.set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
+    shader.set_uniform("viewport_size", vec2(size));
+    shader.set_uniform("aspect_ratio", size.x / size.y);
+    shader.set_uniform("camera_forward", forward_v);
+    shader.set_uniform("camera_right", right_v);
+    shader.set_uniform("camera_up", up_v);
+
     lights.bind(shader);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance);
     entity.mesh->load();
+
+    if (entity.material->descriptor.uses_transparency)
+    {
+      glEnable(GL_BLEND);
+      glDepthMask(GL_FALSE);
+      if (entity.material->descriptor.blending)
+      {
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      }
+      else
+      {
+        glBlendFunc(GL_ONE, GL_ONE);
+      }
+    }
+
     glBindVertexArray(entity.mesh->get_vao());
     ASSERT(glGetAttribLocation(shader.program->program, "instanced_MVP") == 5);
     glEnableVertexAttribArray(5);
@@ -1475,6 +1534,14 @@ void Renderer::instance_pass(float32 time)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(
         GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
+
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+
+    if (entity.material->descriptor.wireframe)
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
 
     entity.material->unbind_textures();
 
@@ -2071,8 +2138,6 @@ void Renderer::render(float64 state_time)
 
   frame_count += 1;
 }
-
-
 
 void Renderer::resize_window(ivec2 window_size)
 {

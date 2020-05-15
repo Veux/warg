@@ -63,31 +63,9 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
-#define MAX_OCTREE_DEPTH 10
-#define TRIANGLES_PER_NODE 256
+#define MAX_OCTREE_DEPTH 7
+#define TRIANGLES_PER_NODE 4
 
-// this seems to be a bit of a struggle
-// we can only store about 1k triangles?
-// do we go higher depth?
-// 256 triangles per node means a particle might have to test 256 triangles...
-// since a particle can be a point, a particle will be nearly infinitely subdivisible
-// so we could just increase the depth
-// however how do we actually do a collision test
-// the particle can early out of the child it fits into has no allocated children
-// the particle can have a set minimum width
-// when it reaches that width, it can traverse the leaf nodes that are non-null below it to find triangles to test
-// this width must be tested against the axis
-// if an axis cuts it, it must test the current node
-// i guess this particle should traverse the partition as a aabb
-// in fact, all objects can do that as an easy way for dynamic collision detection as well
-
-// now how about adding the other better colliders in a dynamic system
-// what about object ids?
-// periodically updating the partition?
-// splitting dynamic vs static colliders
-// triangles for static, and aabb or other bounding hulls
-// a way to 'pop' triangles out of the partition would be to keep an id int with them, and then just traverse all the
-// used nodes in the actual spatial partition data array
 
 ////the d00 d01 d11 terms can be computed once for multiple points p since they dont depend on p
 // vec3 barycentric(vec3 a, vec3 b, vec3 c, vec3 p)
@@ -108,7 +86,7 @@ bool point_within_square(vec3 p, vec3 ps, float32 size);
 
 struct AABB
 {
-  vec3 min; // minimum corner
+  vec3 min;
   vec3 max;
 };
 
@@ -121,22 +99,38 @@ void push_aabb(AABB &aabb, const vec3 &p);
 
 bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle);
 
+AABB aabb_from_octree_child_index(uint8 i, vec3 minimum, float32 halfsize, float32 size);
+enum Octree_Child_Index
+{
+  forwardupleft,
+  forwardupright,
+  forwarddownright,
+  forwarddownleft,
+  backupleft,
+  backupright,
+  backdownright,
+  backdownleft
+};
+
+#define OCTREE_SPLIT_STYLE
+#define OCTREE_VECTOR_STYLE
 struct Octree_Node
 {
   bool insert_triangle(const Triangle_Normal &tri) noexcept;
   bool push(const Triangle_Normal &triangle, uint8 depth) noexcept;
   const Triangle_Normal *test_this(const AABB &probe, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const;
-
   const Triangle_Normal *test(const AABB &probe, uint8 depth, uint32 *counter) const;
-
   void testall(const AABB &probe, uint8 depth, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const;
   void clear();
-  // void get_render_entities(
-  //    std::vector<std::tuple<AABB, uint32, std::vector<Triangle_Normal>>> *accumulator, float32 time, uint32 depth);
 
-  std::array<Triangle_Normal, 256> occupying_triangles;
-  // std::array<AABB, 256> occupying_aabbs;
+  #ifdef OCTREE_VECTOR_STYLE
+  std::vector<Triangle_Normal>occupying_triangles;
+  #elif
+  std::array<Triangle_Normal, TRIANGLES_PER_NODE> occupying_triangles;
   uint32 free_triangle_index = 0;
+  #endif
+
+  // std::array<AABB, 256> occupying_aabbs;
   std::array<Octree_Node *, 8> children = {nullptr};
   vec3 minimum;
   vec3 center;
@@ -145,33 +139,14 @@ struct Octree_Node
   bool exists = false;
   // warning about some reallocating owning object...
   Octree *owner = nullptr;
-  uint8 depth;
+  uint8 mydepth;
 };
-
-// so, some things:
-// the octree doesnt double store triangles anywhere and maybe it should
-// it could pass the intersecting triangle down into all intersecting children instead of staying in the parent
-// an advantage would be that it moves more triangles further down into the tree rather than keeping so many of them in
-// higher nodes passing the triangles into all intersecting nodes would be more expensive to add an object, but less
-// expensive to test in edge cases it would be more consistent but it would be significantly more space expensive, and
-// it would reduce cache coherency perhaps we could have a relatively small max number of triangles per node and if it
-// is full, we pass the excess down
-
-// right now the tree assumes that all of the triangles are in world basis when pushed
-//
-
-// bigger problems
-// i think we should use a pointer and count for the child nodes so all triangles can be stored in one array
-// this gives us a huge memory savings when each node isnt fully populated (many will have nothing but still have this
-// array in them however... we are inserting the triangles one by one in random order so they will not be contiguous
-// each node really does need its own personal array to append to if we use a vector thats only one indirection away for
-// each node we test
-//
 
 struct Octree
 {
   Octree();
   void push(Mesh_Descriptor *mesh, mat4 *transform = nullptr, vec3 *velocity = nullptr);
+
   const Triangle_Normal *test(const AABB &probe, uint32 *counter) const;
   std::vector<Triangle_Normal> test_all(const AABB &probe, uint32 *counter) const
   {
@@ -180,13 +155,14 @@ struct Octree
     return colliders;
   }
   Octree_Node *root;
-  std::array<Octree_Node, 4096> nodes;
+  //std::array<Octree_Node, 65536> nodes;
+  std::array<Octree_Node, 65536> nodes;
   Octree_Node *new_node(vec3 p, float32 size, uint8 parent_depth) noexcept;
   void clear();
   std::vector<Render_Entity> get_render_entities(Flat_Scene_Graph *owner);
   uint32 free_node = 0;
 
-  int8 depth_to_render = -1; //-1 for all
+  int32 depth_to_render = MAX_OCTREE_DEPTH; //-1 for all
   bool include_triangles = false;
   bool include_normals = false;
   bool include_velocity = false;
@@ -215,7 +191,6 @@ struct Imported_Scene_Node
   std::string name;
   std::vector<Imported_Scene_Node> children;
   std::vector<Mesh_Index> mesh_indices;
-  // std::vector<Material_Index> material_indices;
   glm::mat4 transform;
 };
 
@@ -227,93 +202,18 @@ struct Imported_Scene_Data
   bool valid = false;
   bool thread_working_on_import = false;
   float64 scale_factor = 1.;
-  // std::vector<Material_Descriptor> materials;
 };
 
-/*
-Usage:
-There are two ways to add and retrieve resources:
 
-  1: Custom/generated meshes using the pools:
-     items in the pool are shared by many objects
-
-
-    Add:
-    push_custom_material (sync)
-    push_custom_mesh (sync)
-
-    Retrieve:
-    retrieve_mesh_descriptor_from_pool (sync)
-    retrieve_material_descriptor_from_pool (sync)
-
-    retrieve_pool_mesh (gl)(sync)
-    retrieve_pool_material (gl)(sync)(textures async)
-
-  -----------------------------------------
-  2: Assimp imports:
-    Add:
-    request_valid_resource(sync or async)
-
-    Retrieve:
-    retrieve_assimp_mesh_descriptor (sync or async)
-    retrieve_assimp_material_descriptor (sync or async)
-
-    retrieve_assimp_mesh_resource (gl)(sync or async)
-    retrieve_assimp_material_resource (gl)(sync or sync)(textures async)
-
-
-
-Serialization:
-
-  serialize_mesh_descriptor_pool
-  serialize_material__descriptor_pool
-  deserialize_mesh_descriptor_pool
-  deserialize_material_descriptor_pool
-
-
-
-Notes:
-// todo: separate thread for assimp importing
-
-// problem: how do you refcount and free unused meshes?
-// on graph traversal, ping the resource manager with +1 to the mesh count of each object that will be drawn
-// resource manager itself could decide when to free
-// freeing isnt necessary at all until a memory limit is nearing max anyway
-// could keep track of allocated memory and then do a garbage collection pass if it gets high
-*/
 struct Resource_Manager
 {
-  // std::string serialize_mesh_descriptor_pool();
-  // std::string serialize_material_descriptor_pool();
-
-  // state thread
   Material_Index push_custom_material(Material_Descriptor *d);
   Mesh_Index push_custom_mesh(Mesh_Descriptor *d);
 
-  // immediately overwrites mesh_descriptor_pool
-  // async loads assimp imports (but the assimp load will only be applied if this function is called again sometime
-  // is enabled and the import is available
-  // state thread
-  // void deserialize_mesh_descriptor_pool(json data);
 
-  // immediately overwrites material_descriptor_pool
-  // state thread
-  // void deserialize_material_descriptor_pool(json data);
-
-  // Mesh_Index and Material_Index point into these arrays where the actual data is kept
-  // the meshes are not necessarily each individually allocated in here
-  // the mesh class will hash and cache them itself and only upload one instance of the model
-  // these arrays hold almost all of the gpu resource handles for the entire program, however
-  // some may still be held for a short time by imgui or explicit Texture or Mesh objects inside
-  // renderer or state objects
-  // if you manually
 #define MAX_POOL_SIZE 5000
   std::array<Mesh, MAX_POOL_SIZE> mesh_pool;
   std::array<Material, MAX_POOL_SIZE> material_pool;
-
-  // only used to iterate the pools for things like the gui
-  // and to figure out where we can put new indices
-  // incrememted by push_custom*
   uint32 current_mesh_pool_size = 0;
   uint32 current_material_pool_size = 0;
 
@@ -351,17 +251,12 @@ struct Flat_Scene_Graph_Node
 {
   Flat_Scene_Graph_Node();
 
-  // todo: generate aabb for everything on import
   // todo: billboarding in visit_nodes
-  // todo: bounding volumes for culling
-  // todo: occlusion culling
   // todo: frustrum culling
   Array_String name;
   vec3 position = {0, 0, 0};
   quat orientation = glm::angleAxis(0.f, glm::vec3(0, 0, 1));
   vec3 scale = {1, 1, 1};
-  // a gotcha: be sure youre setting this to the node that has the mesh you want to scale in vertex space, and not an
-  // intermediate empty node
   vec3 scale_vertex = {1, 1, 1};
   vec3 velocity = {0, 0, 0};
   // mat4 import_basis = mat4(1);
@@ -369,16 +264,16 @@ struct Flat_Scene_Graph_Node
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
   Node_Index collider = NODE_NULL;
-  Array_String filename_of_import; // is blank for non-assimp imports
   bool exists = false;
-  bool visible = true;              // only controls rendering
-  bool propagate_visibility = true; // only controls rendering
+  bool visible = true;
+  bool propagate_visibility = true; 
   bool wait_on_resource = true;
 
   // require the mesh and materials to be available immediately
   bool interpolate_this_node_with_last = false; // if set to true, prepare_renderer can interpolate the last two
                                                 // positions (when implemented) - set to false if the object is new or
                                                 // moved a node index
+  Array_String filename_of_import;
 };
 
 struct Flat_Scene_Graph
@@ -421,7 +316,7 @@ struct Flat_Scene_Graph
     return true;
   }
 
-  Node_Index find_child_by_name(Node_Index parent, const char *name);
+  Node_Index find_by_name(Node_Index parent, const char *name);
   // grab doesnt require any particular parent/child relation before calling, it can even be a child of another parent
   void grab(Node_Index grabber, Node_Index grabee);
   // brings the node to world basis and world parent
@@ -464,17 +359,16 @@ struct Flat_Scene_Graph
   Resource_Manager *resource_manager;
   Material_Index collider_material_index = NODE_NULL;
 
-  // todo: pull the imgui out
   void draw_imgui(std::string name);
   bool file_browsing = false;
   bool file_type = false; // true for radiance, false for irradiance
 
 private:
+  uint32 highest_allocated_node = 0;
   std::vector<Render_Entity> accumulator;
   std::vector<World_Object> accumulator1;
   void visit_nodes(Node_Index Node_Index, const mat4 &M, std::vector<Render_Entity> &accumulator);
   glm::mat4 __build_transformation(Node_Index node_index);
-  // void visit_nodes(Node_Index Node_Index, const mat4 &M, std::vector<World_Object> &accumulator);
   void assert_valid_parent_ptr(Node_Index child);
   Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node, std::string assimp_filename,
       std::unordered_map<std::string, std::pair<Mesh_Index, Material_Index>> *indices);
