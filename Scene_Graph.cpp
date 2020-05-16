@@ -2920,75 +2920,59 @@ int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
   //if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
   //  return 0; // Axis is a separating axis
 
-    vec3 a00 = cross(vec3(1, 0, 0), f0); // optimized: (0,?f1z ,f1y )
-  p0 = dot(v0, a00);
-  p1 = dot(v1,a00);//
-  p2 = dot(v2, a00);
-  r = e0 * abs(dot(vec3(1, 0, 0), a00)) + e1 * abs(dot(vec3(0, 1, 0), a00)) + e2 * abs(dot(vec3(0, 0, 1), a00));
+  p0 = v0.z * f0.y - v0.y * f0.z;
+  p2 = v2.z * f0.y - v2.y * f0.z;
+  r = e1 * abs(f0.z) + e2 * abs(f0.y);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a01 = cross(vec3(1, 0, 0), f1); // optimized: (0,?f1z ,f1y )
-  p0 = dot(v0, a01);
-  p1 = dot(v1,a01);//
-  p2 = dot(v2, a01);
-  r = e0 * abs(dot(vec3(1, 0, 0), a01)) + e1 * abs(dot(vec3(0, 1, 0), a01)) + e2 * abs(dot(vec3(0, 0, 1), a01));
+  p0 = v0.z * f1.y - v0.y * f1.z;
+  p2 = v2.z * f1.y - v2.y * f1.z;
+  r = e1 * abs(f1.z) + e2 * abs(f1.y);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a02 = cross(vec3(1, 0, 0), f2);
-  p0 = dot(v0, a02);
-  p1 = dot(v1,a02);
-  p2 = dot(v2, a02);//
-  r = e0 * abs(dot(vec3(1, 0, 0), a02)) + e1 * abs(dot(vec3(0, 1, 0), a02)) + e2 * abs(dot(vec3(0, 0, 1), a02));
+  p0 = v0.z * f2.y - v0.y * f2.z;
+  p1 = v1.z * f2.y - v1.y * f2.z;
+  r = e1 * abs(f2.z) + e2 * abs(f2.y);
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
 
-  vec3 a10 = cross(vec3(0, 1, 0), f0);
-  p0 = dot(v0, a10);
-  p1 = dot(v1,a10);//
-  p2 = dot(v2, a10);
-  r = e0 * abs(dot(vec3(1, 0, 0), a10)) + e1 * abs(dot(vec3(0, 1, 0), a10)) + e2 * abs(dot(vec3(0, 0, 1), a10));
+  p0 = v0.x * f0.z - v0.z * f0.x;
+  p2 = v2.x * f0.z - v2.z * f0.x;
+  r = e0 * abs(f0.z) + e2 * abs(f0.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a11 = cross(vec3(0, 1, 0), f1);
-  p0 = dot(v0, a11);
-  p1 = dot(v1,a11);//
-  p2 = dot(v2, a11);
-  r = e0 * abs(dot(vec3(1, 0, 0), a11)) + e1 * abs(dot(vec3(0, 1, 0), a11)) + e2 * abs(dot(vec3(0, 0, 1), a11));
+  p0 = v0.x * f1.z - v0.z * f1.x;
+  p2 = v2.x * f1.z - v0.z * f1.x;
+  r = e0 * abs(f1.z) + e2 * abs(f1.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a12 = cross(vec3(0, 1, 0), f2);
-  p0 = dot(v0, a12);
-  p1 = dot(v1,a12);
-  p2 = dot(v2, a12);//
-  r = e0 * abs(dot(vec3(1, 0, 0), a12)) + e1 * abs(dot(vec3(0, 1, 0), a12)) + e2 * abs(dot(vec3(0, 0, 1), a12));
+  p0 = v0.x * f2.z - v0.z * f2.x;
+  p1 = v1.x * f2.z - v1.z * f2.x;
+  r = e0 * abs(f2.z) + e2 * abs(f2.x);
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
 
-  vec3 a20 = cross(vec3(0, 0, 1), f0);
-  p0 = dot(v0, a20);
-  p1 = dot(v1,a20);//
-  p2 = dot(v2, a20);
-  r = e0 * abs(dot(vec3(1, 0, 0), a20)) + e1 * abs(dot(vec3(0, 1, 0), a20)) + e2 * abs(dot(vec3(0, 0, 1), a20));
+  p0 = v0.y * f0.x - v0.x * f0.y;
+  p2 = v2.y * f0.x - v2.x * f0.y;
+  r = e0 * abs(f0.y) + e1 * abs(f0.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a21 = cross(vec3(0, 0, 1), f1);
-  p0 = dot(v0, a21);
-  p1 = dot(v1,a21);//
-  p2 = dot(v2, a21);
-  r = e0 * abs(dot(vec3(1, 0, 0), a21)) + e1 * abs(dot(vec3(0, 1, 0), a21)) + e2 * abs(dot(vec3(0, 0, 1), a21));
+  vec3 a21 = vec3(-f1.y, f1.x, 0);
+  p0 = v0.y * f1.x - v0.x * f1.y;
+  p2 = v2.y * f1.x - v2.x * f1.y;
+  r = e0 * abs(f1.y) + e1 * abs(f1.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a22 = cross(vec3(0, 0, 1), f2);
-  p0 = dot(v0, a22);
-  p1 = dot(v1,a22);
-  p2 = dot(v2, a22);//
-  r = e0 * abs(dot(vec3(1, 0, 0), a22)) + e1 * abs(dot(vec3(0, 1, 0), a22)) + e2 * abs(dot(vec3(0, 0, 1), a22));
+  vec3 a22 = vec3(-f2.y, f2.x, 0);
+  p0 = v0.y * f2.x - v0.x * f2.y;
+  p1 = v1.y * f2.x - f1.x * f2.y;
+  r = e0 * abs(f2.y) + e1 * abs(f2.x);
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
 
