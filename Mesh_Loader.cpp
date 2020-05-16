@@ -8,10 +8,10 @@ void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data &mesh)
   std::vector<vec3> pos = {a, b, c};
   vec3 atob = b - a;
   vec3 atoc = c - a;
-  vec3 normal = cross(atoc, atob);
-  std::vector<vec2> uvs = {{0, 0}, {0, 1}, {1, 1}};
-  vec2 atob_uv = vec2(0, 1) - vec2(0, 0);
-  vec2 atoc_uv = vec2(1, 1) - vec2(0, 0);
+  vec3 normal = cross(atob, atoc);
+  std::vector<vec2> uvs = {{0, 0}, {1, 1}, {0, 1}};
+  vec2 atob_uv = vec2(1, 1) ;
+  vec2 atoc_uv = vec2(0, 1);
   float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
   vec3 tangent = {t * (atoc_uv.y * atob.x - atob_uv.y * atoc.x), t * (atoc_uv.y * atob.y - atob_uv.y * atoc.y),
       t * (atoc_uv.y * atob.z - atob_uv.y * atoc.z)};
@@ -39,10 +39,10 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, Mesh_Data &mesh)
   std::vector<vec3> pos = {a, b, c, a, c, d};
   vec3 atob = b - a;
   vec3 atoc = c - a;
-  vec3 normal = cross(atoc, atob);
-  std::vector<vec2> uvs = {{0, 0}, {0, 1}, {1, 1}, {0, 0}, {1, 1}, {1, 0}};
-  vec2 atob_uv = vec2(0, 1) - vec2(0, 0);
-  vec2 atoc_uv = vec2(1, 1) - vec2(0, 0);
+  vec3 normal = cross(atob, atoc);
+  std::vector<vec2> uvs = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
+  vec2 atob_uv = vec2(1, 0);
+  vec2 atoc_uv = vec2(1, 1);
   float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
   vec3 tangent = {t * (atoc_uv.y * atob.x - atob_uv.y * atoc.x), t * (atoc_uv.y * atob.y - atob_uv.y * atoc.y),
       t * (atoc_uv.y * atob.z - atob_uv.y * atoc.z)};
@@ -80,44 +80,44 @@ Mesh_Data load_mesh_cube()
 
   // top
   a = {-0.5, -0.5, 0.5};
-  b = {-0.5, 0.5, 0.5};
+  b = {0.5, -0.5, 0.5};
   c = {0.5, 0.5, 0.5};
-  d = {0.5, -0.5, 0.5};
+  d = {-0.5, 0.5, 0.5};
   add_quad(a, b, c, d, cube);
 
   // bottom
   a = {-0.5, -0.5, -0.5};
-  b = {0.5, -0.5, -0.5};
+  b = {-0.5, 0.5, -0.5};
   c = {0.5, 0.5, -0.5};
-  d = {-0.5, 0.5, -0.5};
+  d = {0.5, -0.5, -0.5};
   add_quad(a, b, c, d, cube);
 
   // left
   a = {-0.5, 0.5, -0.5};
-  b = {-0.5, 0.5, 0.5};
+  b = {-0.5, -0.5, -0.5};
   c = {-0.5, -0.5, 0.5};
-  d = {-0.5, -0.5, -0.5};
+  d = {-0.5, 0.5, 0.5};
   add_quad(a, b, c, d, cube);
 
   // right
   a = {0.5, -0.5, -0.5};
-  b = {0.5, -0.5, 0.5};
+  b = {0.5, 0.5, -0.5};
   c = {0.5, 0.5, 0.5};
-  d = {0.5, 0.5, -0.5};
+  d = {0.5, -0.5, 0.5};
   add_quad(a, b, c, d, cube);
 
   // front
   a = {-0.5, -0.5, -0.5};
-  b = {-0.5, -0.5, 0.5};
+  b = {0.5, -0.5, -0.5};
   c = {0.5, -0.5, 0.5};
-  d = {0.5, -0.5, -0.5};
+  d = {-0.5, -0.5, 0.5};
   add_quad(a, b, c, d, cube);
 
   // back
   a = {0.5, 0.5, -0.5};
-  b = {0.5, 0.5, 0.5};
+  b = {-0.5, 0.5, -0.5};
   c = {-0.5, 0.5, 0.5};
-  d = {-0.5, 0.5, -0.5};
+  d = {0.5, 0.5, 0.5};
   add_quad(a, b, c, d, cube);
 
   return cube;
@@ -173,8 +173,8 @@ void add_aabb(vec3 min, vec3 max, Mesh_Data &mesh) {
 Mesh_Data load_mesh_plane()
 {
   Mesh_Data mesh;
-  mesh.positions = {{-0.5, -0.5, 0}, {-0.5, 0.5, 0}, {0.5, 0.5, 0}, {-0.5, -0.5, 0}, {0.5, 0.5, 0}, {0.5, -0.5, 0}};
-  mesh.texture_coordinates = {{0, 0}, {0, 1}, {1, 1}, {0, 0}, {1, 1}, {1, 0}};
+  mesh.positions = {{-0.5, -0.5, 0}, {0.5, -0.5, 0}, {0.5, 0.5, 0}, {-0.5, -0.5, 0}, {0.5, 0.5, 0}, {-0.5, 0.5, 0}};
+  mesh.texture_coordinates = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
   mesh.indices = {0, 1, 2, 3, 4, 5};
   mesh.normals = {{0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}};
   mesh.tangents = {{1, 0, 0}, {1, 0, 0}, {1, 0, 0}, {1, 0, 0}, {1, 0, 0}, {1, 0, 0}};

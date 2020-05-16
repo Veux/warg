@@ -772,8 +772,7 @@ void Warg_State::update()
 
   // set_message("Warg update. Time:", s(current_time), 1.0f);
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
-  camera.pos = vec3(0);
-  camera.dir = vec3(0, 1, 0);
+
   process_messages();
   update_stats_bar();
   current_game_state = last_recieved_server_state;
@@ -789,8 +788,7 @@ void Warg_State::update()
   // update_animation_objects();
 
   // camera must be set before render entities, or they get a 1 frame lag
-  if (!free_cam)
-   camera.pos = vec3(0,0,10);
+
   renderer.set_camera(camera.pos, camera.dir);
 
   //scene.collision_octree.clear();
@@ -811,7 +809,7 @@ void Warg_State::update()
     return;
   Mesh_Descriptor mesh(cube, "spawnedcube");
   mat4 transform = scene.build_transformation(character_nodes[player_character_id]);
-  AABB probe;
+  AABB probe(me->physics.position);
   vec3 size = me->radius;
 
   float32 epsilon = 0.05;
@@ -866,8 +864,7 @@ void Warg_State::update()
   {
     mat4 M = scene.build_transformation(node);
     //scene.collision_octree.push(&mesh, &M);
-    AABB prober;
-    prober.min = scene.nodes[node].position;
+    AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
     uint32 counter;
@@ -928,7 +925,7 @@ void Warg_State::update()
 
   scene.particle_emitters[1].descriptor.position = vec3(0, 0, 25);
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 55;
+  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 0;
   scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
   //scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -942,7 +939,7 @@ void Warg_State::update()
 
   scene.particle_emitters[2].descriptor.position = vec3(1, 0, 25);
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 55;
+  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 0;
   scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
   //scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -956,7 +953,7 @@ void Warg_State::update()
 
   scene.particle_emitters[3].descriptor.position = vec3(0, 1, 25);
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 55;
+  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 0;
   scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
   //scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -970,7 +967,7 @@ void Warg_State::update()
 
   scene.particle_emitters[0].descriptor.position = vec3(.5, .5, 25);
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 55;
+  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 0;
   scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
   //scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);

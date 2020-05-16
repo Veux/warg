@@ -1233,7 +1233,7 @@ void Renderer::build_shadow_maps()
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
     // glEnable(GL_CULL_FACE);
     glDisable(GL_CULL_FACE);
-    glFrontFace(GL_CW);
+    glFrontFace(GL_CCW);
     glCullFace(GL_FRONT);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -1343,7 +1343,7 @@ void Renderer::opaque_pass(float32 time)
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   glEnable(GL_CULL_FACE);
-  glFrontFace(GL_CW);
+  glFrontFace(GL_CCW);
   glCullFace(GL_BACK);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
@@ -1600,7 +1600,7 @@ void Renderer::translucent_pass(float32 time)
   environment.bind(Texture_Location::environment, Texture_Location::irradiance);
 
   glEnable(GL_CULL_FACE);
-  glFrontFace(GL_CW);
+  glFrontFace(GL_CCW);
   glCullFace(GL_BACK);
 
   vec3 forward_v = normalize(camera_gaze - camera_position);
@@ -1753,7 +1753,7 @@ void Renderer::postprocess_pass(float32 time)
     }
   }
   glEnable(GL_CULL_FACE);
-  glFrontFace(GL_CW);
+  glFrontFace(GL_CCW);
   glCullFace(GL_BACK);
   glDisable(GL_DEPTH_TEST);
 
@@ -2575,7 +2575,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   ASSERT(source.is_initialized());
   source.bind(0);
   glEnable(GL_CULL_FACE);
-  glFrontFace(GL_CW);
+  glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glClearColor(0.0, 1.0, 1.0, 1.0);
 
@@ -2779,7 +2779,7 @@ void Environment_Map::generate_ibl_mipmaps()
   glEnable(GL_CULL_FACE);
   glDisable(GL_BLEND);
   glDepthMask(GL_TRUE);
-  glFrontFace(GL_CW);
+  glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glDepthFunc(GL_LESS);
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
@@ -3249,7 +3249,7 @@ void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Metho
     // probe.max = new_pos + 0.5f*probesize;
 
     vec3 ray = dt * particle.velocity;
-    AABB probe;
+    AABB probe(vec3(0));
     probe.min = particle.position - 0.5f * particle.scale;
     probe.max = particle.position + 0.5f * particle.scale;
 

@@ -633,10 +633,9 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 
   Node_Index cuber = scene->find_by_name(NODE_NULL, "aabb");
   ASSERT(cuber != NODE_NULL);
-  AABB aabb;
-  aabb.min = scene->nodes[cuber].position;
-  push_aabb(aabb, scene->nodes[cuber].position + 0.5f * scene->nodes[cuber].scale);
-  push_aabb(aabb, scene->nodes[cuber].position - 0.5f * scene->nodes[cuber].scale);
+  AABB aabb(scene->nodes[cuber].position);
+  push_aabb(aabb, scene->nodes[cuber].position + (0.5f * scene->nodes[cuber].scale));
+  push_aabb(aabb, scene->nodes[cuber].position - (0.5f * scene->nodes[cuber].scale));
 
   set_message("min", vtos(aabb.min), 1.0f);
   set_message("max", vtos(aabb.max), 1.0f);
@@ -650,9 +649,11 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   vec3 atoc = t.c - t.a;
   t.n = normalize(cross(atob, atoc));
   bool hit = aabb_triangle_intersection(aabb, t);
+  uint32 counter = 0;
+  std::vector<Triangle_Normal> touching = scene->collision_octree.test_all(aabb, &counter);
 
   material->emissive.mod = vec4(0);
-  if (hit)
+  if (touching.size())
   {
     material->emissive.mod = vec4(1.3, .3, .3, .3);
   }

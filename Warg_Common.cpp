@@ -1,15 +1,13 @@
 #include "stdafx.h"
 #include "Warg_Common.h"
 
-//std::vector<Triangle> collect_colliders(const Flat_Scene_Graph &scene);
-void check_collision(Collision_Packet &colpkt, const std::vector<Triangle> &colliders);
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
 
 Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
 {
-  spawn_pos[0] = { 0, 0, 11115 };
-  spawn_pos[1] = { 45, 45, 11115 };
+  spawn_pos[0] = { 0, 0, 15 };
+  spawn_pos[1] = { 45, 45, 5 };
   spawn_orientation[0] = angleAxis(0.f, vec3(0, 1, 0));
   spawn_orientation[1] = angleAxis(0.f, vec3(0, -1, 0));
 
@@ -176,6 +174,10 @@ void move_char(Character &character, Input command, Flat_Scene_Graph* scene)
   if (grounded)
     vel.z = 0;
 
+  vel.z = 0;
+  pos.z = 0;
+ 
+
   collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, scene);
 }
 
@@ -214,11 +216,9 @@ void move_char(Character &character, Input command, Flat_Scene_Graph* scene)
 void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
 {
 
-  AABB box;
-  box.min = colpkt.pos_r3;
-  box.max = colpkt.pos_r3;
-  push_aabb(box, colpkt.pos_r3 - (15.f*colpkt.e_radius)-colpkt.vel_r3);
-  push_aabb(box, colpkt.pos_r3 + (15.f*colpkt.e_radius)+colpkt.vel_r3);
+  AABB box(colpkt.pos_r3);
+  push_aabb(box, colpkt.pos_r3 - (2.5f*colpkt.e_radius)-(1.f*colpkt.vel_r3));
+  push_aabb(box, colpkt.pos_r3 + (2.5f*colpkt.e_radius)+(1.f*colpkt.vel_r3));
   uint32 counter = 0;
   std::vector<Triangle_Normal> colliders = scene->collision_octree.test_all(box, &counter);
   
@@ -227,9 +227,10 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
 
   for (auto &surface : colliders)
   {
+    
     Triangle t;
     t.a = surface.a / colpkt.e_radius;
-    t.b = surface.b / colpkt.e_radius;
+    t.b = surface.b / colpkt.e_radius;//intentionally reversed, winding order mismatch somewhere, not sure
     t.c = surface.c / colpkt.e_radius;
     check_triangle(&colpkt, t);
   }

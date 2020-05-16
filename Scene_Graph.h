@@ -27,7 +27,7 @@ enum imgui_pane
   end
 };
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
-const uint32 default_assimp_flags = aiProcess_FlipWindingOrder |
+const uint32 default_assimp_flags = //aiProcess_FlipWindingOrder |
                                     // aiProcess_Triangulate |
                                     // aiProcess_FlipUVs |
                                     aiProcess_CalcTangentSpace |
@@ -63,7 +63,7 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
-#define MAX_OCTREE_DEPTH 7
+#define MAX_OCTREE_DEPTH 0
 #define TRIANGLES_PER_NODE 4
 
 
@@ -86,6 +86,10 @@ bool point_within_square(vec3 p, vec3 ps, float32 size);
 
 struct AABB
 {
+  AABB(vec3 center) {
+    min = center;
+    max = center;
+  }
   vec3 min;
   vec3 max;
 };
