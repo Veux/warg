@@ -58,24 +58,70 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   Material_Descriptor material;
 
-  Particle_Emitter *pe = &scene.particle_emitters.back();
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
   material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
   small_object_water_settings(&material.uniform_set);
-  Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
-  Mesh_Index mesh_index = scene.nodes[particle_node].model[0].first;
-  Material_Index material_index = scene.nodes[particle_node].model[0].second;
+  Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
+  Mesh_Index mesh_index0 = scene.nodes[particle_node].model[0].first;
+  Material_Index material_index0 = scene.nodes[particle_node].model[0].second;
+
+  
+  material.vertex_shader = "instance.vert";
+  material.frag_shader = "emission.frag";
+  material.emissive = "color(1,1,1,1)";
+  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  Node_Index particle_node1 = scene.add_mesh(cube, "particle1", &material);
+  Mesh_Index mesh_index1 = scene.nodes[particle_node1].model[0].first;
+  Material_Index material_index1 = scene.nodes[particle_node1].model[0].second;
+
+  
+  material.vertex_shader = "instance.vert";
+  material.frag_shader = "emission.frag";
+  material.emissive = "color(1,1,1,1)";
+  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  Node_Index particle_node2 = scene.add_mesh(cube, "particle2", &material);
+  Mesh_Index mesh_index2 = scene.nodes[particle_node2].model[0].first;
+  Material_Index material_index2 = scene.nodes[particle_node2].model[0].second;
+
+  
+  material.vertex_shader = "instance.vert";
+  material.frag_shader = "emission.frag";
+  material.emissive = "color(1,1,1,1)";
+  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
+  Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
+  Material_Index material_index3 = scene.nodes[particle_node3].model[0].second;
   scene.nodes[particle_node].visible = false;
-  scene.particle_emitters[0].mesh_index = mesh_index;
-  scene.particle_emitters[0].material_index = material_index;
-  scene.particle_emitters[1].mesh_index = mesh_index;
-  scene.particle_emitters[1].material_index = material_index;
-  scene.particle_emitters[2].mesh_index = mesh_index;
-  scene.particle_emitters[2].material_index = material_index;
-  scene.particle_emitters[3].mesh_index = mesh_index;
-  scene.particle_emitters[3].material_index = material_index;
+    scene.nodes[particle_node1].visible = false;
+    scene.nodes[particle_node2].visible = false;
+    scene.nodes[particle_node3].visible = false;
+  
+  scene.nodes[particle_node].scale = vec3(0.05);
+  scene.nodes[particle_node1].scale = vec3(0.05);
+  scene.nodes[particle_node2].scale = vec3(0.05);
+  scene.nodes[particle_node3].scale = vec3(0.05);
+  scene.nodes[particle_node].position = vec3(0,0,10.f);
+  scene.nodes[particle_node1].position = vec3(0,0,10.f);
+  scene.nodes[particle_node2].position = vec3(0,0,10.f);
+  scene.nodes[particle_node3].position = vec3(0,0,10.f);
+  
+  scene.particle_emitters[0].mesh_index = mesh_index0;
+  scene.particle_emitters[0].material_index = material_index0;
+  scene.particle_emitters[1].mesh_index = mesh_index0;
+  scene.particle_emitters[1].material_index = material_index0;
+  scene.particle_emitters[2].mesh_index = mesh_index0;
+  scene.particle_emitters[2].material_index = material_index0;
+  scene.particle_emitters[3].mesh_index = mesh_index0;
+  scene.particle_emitters[3].material_index = material_index0;
+
+  //scene.particle_emitters[1].mesh_index = mesh_index1;
+  //scene.particle_emitters[1].material_index = material_index1;
+  //scene.particle_emitters[2].mesh_index = mesh_index2;
+  //scene.particle_emitters[2].material_index = material_index2;
+  //scene.particle_emitters[3].mesh_index = mesh_index3;
+  //scene.particle_emitters[3].material_index = material_index3;
 
   scene.lights.light_count = 5;
 
@@ -567,7 +613,7 @@ bool prediction_correct(UID player_character_id, Game_State &server_state, Game_
 void Warg_State::predict_state()
 {
   // game_state = server_state;
-  // return;
+  return;
   if (!get_character(&last_recieved_server_state, player_character_id))
     return;
 
@@ -922,73 +968,69 @@ void Warg_State::update()
 
   if (fract(sin(current_time)) > .5)
     wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+  
+  Node_Index p0 = scene.find_by_name(NODE_NULL,"particle0");
+  Node_Index p1 = scene.find_by_name(NODE_NULL,"particle1");
+  Node_Index p2 = scene.find_by_name(NODE_NULL,"particle2");
+  Node_Index p3 = scene.find_by_name(NODE_NULL,"particle3");
 
-  scene.particle_emitters[1].descriptor.position = vec3(0, 0, 25);
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 0;
+
+  scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
+  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 115;
   scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
+  scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
   //scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.02;
-  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.15;
+  scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
+  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[2].descriptor.position = vec3(1, 0, 25);
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 0;
+  scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
+  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 115;
   scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
+  scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
   //scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.02;
-  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.15;
+  scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
+  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[3].descriptor.position = vec3(0, 1, 25);
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 0;
+  scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
+  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 115;
   scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
+  scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
   //scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.02;
-  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.15;
+  scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
+  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[0].descriptor.position = vec3(.5, .5, 25);
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 0;
-  scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = vec3(.15f,.15f,.14f);
+  scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
+  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 85;
+  scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
+  scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
   //scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.02;
-  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
+  scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
+  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  Light jank;
-
-  // fire_emitter2(&renderer, &scene, &scene.particle_emitters[3], &jank,
-  //    me->physics.position + vec3(0, 0, me->radius.z + .25), vec2(.5));
-  // scene.particle_emitters[3].descriptor.orientation =
-  //    me->physics.orientation * angleAxis(-0.5f * pi<float32>(), vec3(1, 0, 0));
-
-  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_velocity_variance = vec3(0);
-
-  scene.lights.lights[3].position = jank.position;
 
   uint32 i = sizeof(Octree);
 }

@@ -3082,6 +3082,7 @@ void Particle_Emitter::spin_until_up_to_date() const
     while (shared_data->requested_tick != shared_data->completed_update)
     {
       // spin
+      //Sleep(1);
     }
   }
   return;
@@ -3471,13 +3472,14 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 camera)
   attributes2.clear();
   // set_message("compute_attributes projection:", s(projection), 1.0f);
   // set_message("compute_attributes camera:", s(camera), 1.0f);
+  mat4 PC = projection * camera;
   for (auto &i : particles)
   {
     const mat4 R = toMat4(i.orientation);
     const mat4 S = scale(i.scale);
     const mat4 T = translate(i.position);
     const mat4 model = T * R * S;
-    const mat4 MVP = projection * camera * model;
+    const mat4 MVP = PC * model;
     MVP_Matrices.push_back(MVP);
     Model_Matrices.push_back(model);
     attributes0.push_back(i.attribute0);

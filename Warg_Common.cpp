@@ -17,7 +17,7 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   if (CONFIG.render_simple)
     material.albedo.mod = vec4(0.4f);
 
-  node = scene.add_aiscene("Blades_Edge/bea2r.fbx","Blades Edge");
+  node = scene.add_aiscene("Blades_Edge/bea2.fbx","Blades Edge");
 
 }
 
@@ -174,8 +174,8 @@ void move_char(Character &character, Input command, Flat_Scene_Graph* scene)
   if (grounded)
     vel.z = 0;
 
-  vel.z = 0;
-  pos.z = 0;
+  //vel.z = 0;
+  //pos.z = 0;
  
 
   collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, scene);
@@ -217,12 +217,12 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
 {
 
   AABB box(colpkt.pos_r3);
-  push_aabb(box, colpkt.pos_r3 - (2.5f*colpkt.e_radius)-(1.f*colpkt.vel_r3));
-  push_aabb(box, colpkt.pos_r3 + (2.5f*colpkt.e_radius)+(1.f*colpkt.vel_r3));
+  push_aabb(box, colpkt.pos_r3 - (1.51f*colpkt.e_radius)-(1.f*colpkt.vel_r3));
+  push_aabb(box, colpkt.pos_r3 + (1.51f*colpkt.e_radius)+(1.f*colpkt.vel_r3));
   uint32 counter = 0;
   std::vector<Triangle_Normal> colliders = scene->collision_octree.test_all(box, &counter);
   
-  set_message("trianglecounter:", s(counter), 1.0f);
+  //set_message("trianglecounter:", s(counter), 1.0f);
 
 
   for (auto &surface : colliders)

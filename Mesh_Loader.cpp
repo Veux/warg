@@ -10,14 +10,19 @@ void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data &mesh)
   vec3 atoc = c - a;
   vec3 normal = cross(atob, atoc);
   std::vector<vec2> uvs = {{0, 0}, {1, 1}, {0, 1}};
-  vec2 atob_uv = vec2(1, 1) ;
+  vec2 atob_uv = vec2(1, 1);
   vec2 atoc_uv = vec2(0, 1);
-  float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
-  vec3 tangent = {t * (atoc_uv.y * atob.x - atob_uv.y * atoc.x), t * (atoc_uv.y * atob.y - atob_uv.y * atoc.y),
-      t * (atoc_uv.y * atob.z - atob_uv.y * atoc.z)};
+  // float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
+  // vec3 tangent = {t * (atoc_uv.y * atob.x - atob_uv.y * atoc.x), t * (atoc_uv.y * atob.y - atob_uv.y * atoc.y),
+  //    t * (atoc_uv.y * atob.z - atob_uv.y * atoc.z)};
+
+  float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atob_uv.y * atoc_uv.x);
+  glm::vec3 tangent = t * (atob * atoc_uv.y - atoc * atob_uv.y);
+  glm::vec3 bitangent = t * (atoc * atob_uv.x - atob * atoc_uv.x);
+
   tangent = normalize(tangent);
-  vec3 bitangent = {t * (-atoc_uv.x * atob.x + atob_uv.x * atoc.x), t * (-atoc_uv.x * atob.y + atob_uv.x * atoc.y),
-      t * (-atoc_uv.x * atob.z + atob_uv.x * atoc.z)};
+  // vec3 bitangent = {t * (-atoc_uv.x * atob.x + atob_uv.x * atoc.x), t * (-atoc_uv.x * atob.y + atob_uv.x * atoc.y),
+  //    t * (-atoc_uv.x * atob.z + atob_uv.x * atoc.z)};
   bitangent = normalize(bitangent);
   std::vector<vec3> tan = {tangent, tangent, tangent};
   std::vector<vec3> bitan = {bitangent, bitangent, bitangent};
@@ -43,12 +48,17 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, Mesh_Data &mesh)
   std::vector<vec2> uvs = {{0, 0}, {1, 0}, {1, 1}, {0, 0}, {1, 1}, {0, 1}};
   vec2 atob_uv = vec2(1, 0);
   vec2 atoc_uv = vec2(1, 1);
-  float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
-  vec3 tangent = {t * (atoc_uv.y * atob.x - atob_uv.y * atoc.x), t * (atoc_uv.y * atob.y - atob_uv.y * atoc.y),
-      t * (atoc_uv.y * atob.z - atob_uv.y * atoc.z)};
+
+  float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atob_uv.y * atoc_uv.x);
+  glm::vec3 tangent = t * (atob * atoc_uv.y - atoc * atob_uv.y);
+  glm::vec3 bitangent = t * (atoc * atob_uv.x - atob * atoc_uv.x);
+
+  // float32 t = 1.0f / (atob_uv.x * atoc_uv.y - atoc_uv.x - atob_uv.y);
+  // vec3 tangent = {t * (atoc_uv.y * atob.x - atob_uv.y * atoc.x), t * (atoc_uv.y * atob.y - atob_uv.y * atoc.y),
+  //    t * (atoc_uv.y * atob.z - atob_uv.y * atoc.z)};
   tangent = normalize(tangent);
-  vec3 bitangent = {t * (-atoc_uv.x * atob.x + atob_uv.x * atoc.x), t * (-atoc_uv.x * atob.y + atob_uv.x * atoc.y),
-      t * (-atoc_uv.x * atob.z + atob_uv.x * atoc.z)};
+  // vec3 bitangent = {t * (-atoc_uv.x * atob.x + atob_uv.x * atoc.x), t * (-atoc_uv.x * atob.y + atob_uv.x * atoc.y),
+  //    t * (-atoc_uv.x * atob.z + atob_uv.x * atoc.z)};
   bitangent = normalize(bitangent);
   std::vector<vec3> tan = {tangent, tangent, tangent, tangent, tangent, tangent};
   std::vector<vec3> bitan = {
@@ -60,8 +70,7 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, Mesh_Data &mesh)
       bitangent,
   };
   int32 end = (int32)mesh.positions.size();
-  std::vector<int32> ind = {
-      end + 0, end + 1, end + 2, end + 3, end + 4, end + 5};
+  std::vector<int32> ind = {end + 0, end + 1, end + 2, end + 3, end + 4, end + 5};
   mesh.tangents.insert(mesh.tangents.end(), tan.begin(), tan.end());
   mesh.bitangents.insert(mesh.bitangents.end(), bitan.begin(), bitan.end());
   mesh.positions.insert(mesh.positions.end(), pos.begin(), pos.end());
@@ -123,7 +132,8 @@ Mesh_Data load_mesh_cube()
   return cube;
 }
 
-void add_aabb(vec3 min, vec3 max, Mesh_Data &mesh) {
+void add_aabb(vec3 min, vec3 max, Mesh_Data &mesh)
+{
 
   vec3 a, b, c, d;
 
@@ -279,16 +289,15 @@ Mesh_Descriptor build_mesh_descriptor(const aiScene *scene, uint32 i, std::strin
   d.name = copy(&aimesh->mName);
 
   const int32 num_vertices = aimesh->mNumVertices;
-  //const float32 cm_to_meters = 0.01;
+  // const float32 cm_to_meters = 0.01;
   d.mesh_data.positions.reserve(num_vertices);
   for (uint32 i = 0; i < num_vertices; ++i)
   {
-    d.mesh_data.positions.push_back(
-         vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
-    //d.mesh_data.positions.push_back(
-     //   cm_to_meters * vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
+    d.mesh_data.positions.push_back(vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
+    // d.mesh_data.positions.push_back(
+    //   cm_to_meters * vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
   }
-  
+
   copy_mesh_data(d.mesh_data.normals, aimesh->mNormals, num_vertices);
   copy_mesh_data(d.mesh_data.tangents, aimesh->mTangents, num_vertices);
   copy_mesh_data(d.mesh_data.bitangents, aimesh->mBitangents, num_vertices);

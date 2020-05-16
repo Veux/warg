@@ -2013,8 +2013,6 @@ inline Octree::Octree()
   root->minimum = vec3(-41, -39, -41);
   root->center = root->minimum + vec3(root->halfsize);
   free_node = 1;
-  root->exists = true;
-  root->owner = this;
   root->mydepth = 0;
 }
 
@@ -2052,7 +2050,7 @@ void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
     vec3 atoc = t.c - t.a;
     t.n = normalize(cross(atob, atoc));
 
-    all_worked = all_worked && root->push(t, 0);
+    all_worked = all_worked && root->push(t, 0,this);
     // return;//sponge
   }
 
@@ -2080,7 +2078,6 @@ inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
   ptr->size = size;
   ptr->halfsize = 0.5f * size;
   ptr->center = p + vec3(ptr->halfsize);
-  ptr->owner = this;
   ptr->mydepth = depth + 1;
   return ptr;
 }
@@ -2094,8 +2091,6 @@ void Octree::clear()
   root->minimum = vec3(-41, -39, -41);
   root->center = root->minimum + vec3(root->halfsize);
 
-  root->exists = true;
-  root->owner = this;
   free_node = 1;
 }
 
@@ -2177,7 +2172,7 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
       {
 #ifdef OCTREE_VECTOR_STYLE
         for (uint32 j = 0; j < node->occupying_triangles.size(); ++j)
-#elif
+#else
         for (uint32 j = 0; j < node->free_triangle_index; ++j)
 #endif
         {
@@ -2267,7 +2262,7 @@ inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
 {
 #ifdef OCTREE_VECTOR_STYLE
   occupying_triangles.push_back(tri);
-#elif
+#else
   if (free_triangle_index == TRIANGLES_PER_NODE)
   {
     return false;
@@ -2278,7 +2273,7 @@ inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
   return true;
 }
 
-inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth) noexcept
+inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth,Octree* owner) noexcept
 {
 #ifdef OCTREE_SPLIT_STYLE
   if (depth == MAX_OCTREE_DEPTH)
@@ -2302,14 +2297,10 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth) noex
         ASSERT(child);
       }
 
-      if (child - &owner->nodes[0] == 31782)
-      {
-        int a = 3;
-      }
 
       bool retest = aabb_triangle_intersection(box, triangle);
 
-      bool success = child->push(triangle, depth + 1);
+      bool success = child->push(triangle, depth + 1,owner);
       if (!success)
       {
         requires_self = true;
@@ -2533,12 +2524,8 @@ inline const Triangle_Normal *Octree_Node::test_this(
     const AABB &probe, uint32 *test_count, std::vector<Triangle_Normal> *accumulator) const
 {
 #ifdef OCTREE_VECTOR_STYLE
-  if (occupying_triangles.size() == 0)
-  {
-    int ab = 123;
-  }
   for (uint32 i = 0; i < occupying_triangles.size(); ++i)
-#elif
+#else
   for (uint32 i = 0; i < free_triangle_index; ++i)
 #endif
   {
@@ -2712,11 +2699,10 @@ inline void Octree_Node::clear()
     }
 #ifdef OCTREE_VECTOR_STYLE
     occupying_triangles.clear();
-#elif
+#else
     free_triangle_index = 0;
 #endif
     children[i] = nullptr;
-    exists = false;
   }
 }
 //
@@ -2896,8 +2882,10 @@ int TestAABBPlane(AABB b, Plane_nd p)
   return abs(s) <= r;
 }
 
+
 int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
 {
+  vec3(1.3);
   float p0, p1, p2, r;
   // Compute box center and extents (if not already given in that format)
   vec3 c = (b.min + b.max) * 0.5f;
@@ -2967,7 +2955,7 @@ int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
   r = e0 * abs(dot(vec3(1, 0, 0), a12)) + e1 * abs(dot(vec3(0, 1, 0), a12)) + e2 * abs(dot(vec3(0, 0, 1), a12));
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
-
+  
   vec3 a20 = cross(vec3(0, 0, 1), f0);
   p0 = dot(v0, a20);
   p1 = dot(v1,a20);//

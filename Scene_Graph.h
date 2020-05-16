@@ -63,8 +63,8 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
-#define MAX_OCTREE_DEPTH 0
-#define TRIANGLES_PER_NODE 4
+#define MAX_OCTREE_DEPTH 6
+#define TRIANGLES_PER_NODE 8
 
 
 ////the d00 d01 d11 terms can be computed once for multiple points p since they dont depend on p
@@ -117,32 +117,31 @@ enum Octree_Child_Index
 };
 
 #define OCTREE_SPLIT_STYLE
-#define OCTREE_VECTOR_STYLE
+//#define OCTREE_VECTOR_STYLE
 struct Octree_Node
 {
   bool insert_triangle(const Triangle_Normal &tri) noexcept;
-  bool push(const Triangle_Normal &triangle, uint8 depth) noexcept;
+  bool push(const Triangle_Normal &triangle, uint8 depth,Octree* owner) noexcept;
   const Triangle_Normal *test_this(const AABB &probe, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const;
   const Triangle_Normal *test(const AABB &probe, uint8 depth, uint32 *counter) const;
   void testall(const AABB &probe, uint8 depth, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const;
   void clear();
-
+  
+  std::array<Octree_Node *, 8> children = {nullptr};
   #ifdef OCTREE_VECTOR_STYLE
   std::vector<Triangle_Normal>occupying_triangles;
-  #elif
+  #else
   std::array<Triangle_Normal, TRIANGLES_PER_NODE> occupying_triangles;
   uint32 free_triangle_index = 0;
   #endif
 
   // std::array<AABB, 256> occupying_aabbs;
-  std::array<Octree_Node *, 8> children = {nullptr};
   vec3 minimum;
   vec3 center;
   float32 size;
   float32 halfsize;
-  bool exists = false;
   // warning about some reallocating owning object...
-  Octree *owner = nullptr;
+  //Octree *owner = nullptr;
   uint8 mydepth;
 };
 

@@ -340,16 +340,16 @@ int main(int argc, char *argv[])
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
 
-  //Local_Session warg_session = Local_Session();
+ Local_Session warg_session = Local_Session();
 
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
 
   std::vector<State *> states;
-  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
+  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
-  //states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
   //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
