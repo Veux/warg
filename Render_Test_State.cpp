@@ -215,9 +215,9 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   scene->nodes[b].position = random_3D_unit_vector();
   scene->nodes[c].position = random_3D_unit_vector();
 
-  // broken with unit cube:
-  scene->nodes[a].position = vec3(0, -1, 0);
-  scene->nodes[b].position = vec3(-1, 0, 0);
+  // broken:
+  scene->nodes[a].position = vec3(0, -1, -1.5);
+  scene->nodes[b].position = vec3(-1, 0, 1.55);
   scene->nodes[c].position = vec3(1, -.5, 0);
 
   Material_Descriptor material2;
@@ -232,6 +232,10 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   material2.emissive.mod = vec4(0);
 
   Node_Index cb = scene->add_mesh(cube, "aabb", &material2);
+
+    // broken:
+  scene->nodes[cb].position = vec3(.37, -.85, .38);
+
 }
 Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
