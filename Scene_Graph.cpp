@@ -823,39 +823,39 @@ const char *imgui_pane_to_string(imgui_pane p)
 {
   if (p == node_tree)
   {
-    return "node_tree";
+    return "Nodes";
   }
   if (p == resource_man)
   {
-    return "resource_man";
+    return "Resource Manager";
   }
   if (p == light_array)
   {
-    return "light_array";
+    return "Light Array";
   }
   if (p == selected_node)
   {
-    return "selected_node";
+    return "Selected Node";
   }
   if (p == selected_mes)
   {
-    return "selected_mes";
+    return "Selected Mesh";
   }
   if (p == selected_mat)
   {
-    return "selected_mat";
+    return "Selected Material";
   }
   if (p == particle_emit)
   {
-    return "particle_emit";
+    return "Particle Emitter";
   }
   if (p == octree)
   {
-    return "octree";
+    return "Octree";
   }
   if (p == blank)
   {
-    return "blank";
+    return "Blank";
   }
   return "Unknown";
 }
