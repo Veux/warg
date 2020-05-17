@@ -232,18 +232,20 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
     : State(name, window, window_size)
 {
 
-  scene.initialize_lighting("Assets/Textures/Environment_Maps/Frozen_Waterfall/irradiance.hdr",
+  scene.initialize_lighting("Assets/Textures/Environment_Maps/Frozen_Waterfall/Frozen_Waterfall_HiRes_TMap.jpg",
       "Assets/Textures/Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+    //scene.initialize_lighting("Assets/Textures/black.png",
+    //  "Assets/Textures/black.png");
 
   camera.phi = .25;
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  // spawn_test_spheres(scene);
+  spawn_test_spheres(scene);
   // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  spawn_planets(&scene, vec3(12, 6, 3));
+  //spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   spawn_test_triangle(&scene);
   spawn_compass(&scene);
@@ -645,7 +647,7 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 void Render_Test_State::update()
 {
   // update_grabbyarm(&scene, current_time);
-  update_planets(&scene, current_time);
+  //update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
 
@@ -769,7 +771,7 @@ void spawn_test_spheres(Flat_Scene_Graph &scene)
           material.frag_shader = "water.frag";
         }
 
-        Node_Index index = scene.add_aiscene("sphere-2.fbx", "Spherearray");
+        Node_Index index = scene.add_aiscene("smoothsphere.fbx", "Spherearray");
         Material_Index mi = scene.resource_manager->push_custom_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
 

@@ -1335,9 +1335,8 @@ void Renderer::opaque_pass(float32 time)
   brdf_integration_lut.bind(brdf_ibl_lut);
 
   // set_message("opaque_pass()");
-  glViewport(0, 0, size.x, size.y);
   draw_target.bind();
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
 
   glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1378,7 +1377,8 @@ void Renderer::opaque_pass(float32 time)
 #endif
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+    glViewport(0, 0, size.x, size.y);
     entity.mesh->draw();
     if (entity.material->descriptor.wireframe)
     {
@@ -1402,7 +1402,7 @@ void Renderer::instance_pass(float32 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
-    if (!use_txaa)
+  if (!use_txaa)
   {
     previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
@@ -1420,7 +1420,6 @@ void Renderer::instance_pass(float32 time)
   }
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
-
 
   for (Render_Instance &entity : render_instances)
   {
@@ -1450,7 +1449,7 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("camera_up", up_v);
 
     lights.bind(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
     entity.mesh->load();
 
     if (entity.material->descriptor.uses_transparency)
@@ -1597,7 +1596,7 @@ void Renderer::translucent_pass(float32 time)
   // sample accumulated roughness for each
 
   brdf_integration_lut.bind(brdf_ibl_lut);
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
 
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
@@ -1852,10 +1851,12 @@ void Renderer::skybox_pass(float32 time)
 
   vec3 scalev = vec3(4000);
   mat4 T = translate(camera_position);
+  T = mat4(1);
   mat4 S = scale(scalev);
   mat4 transformation = T * S;
 
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+  glViewport(0, 0, size.x, size.y);
   glBindVertexArray(cube.get_vao());
   skybox.use();
   skybox.set_uniform("time", time);
@@ -1954,6 +1955,7 @@ void Renderer::copy_to_primary_framebuffer_and_txaa(float32 time)
 
 void Renderer::render(float64 state_time)
 {
+
   ASSERT(name != "Unnamed Renderer");
 // set_message("sin(time) [-1,1]:", s(sin(state_time)), 1.0f);
 // set_message("sin(time) [ 0,1]:", s(0.5f + 0.5f * sin(state_time)), 1.0f);
@@ -2543,6 +2545,8 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   size = CONFIG.use_low_quality_specular ? ivec2(1024, 1024) : ivec2(2048, 2048);
   handle->size = size;
 
+  GLint current_fbo;
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
   // initialize targets and result cubemap
   GLuint fbo;
   GLuint rbo;
@@ -2612,6 +2616,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   glDeleteRenderbuffers(1, &rbo);
   glDeleteFramebuffers(1, &fbo);
 
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
   glClearColor(1.0, 0.0, 0.0, 1.0);
   glEnable(GL_DEPTH_TEST);
 }
@@ -2706,6 +2711,7 @@ Cubemap::Cubemap(array<string, 6> filenames)
 
 void Environment_Map::generate_ibl_mipmaps()
 {
+
   ASSERT(!radiance.handle->ibl_mipmaps_generated);
   static bool loaded = false;
   static Shader specular_filter;
@@ -2722,7 +2728,6 @@ void Environment_Map::generate_ibl_mipmaps()
     }
   }
   static Mesh cube(Mesh_Descriptor(cube, "generate_ibl_mipmaps()'s cube"));
-  ibl_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 
   const uint32 mip_levels = 6;
 
@@ -2737,39 +2742,47 @@ void Environment_Map::generate_ibl_mipmaps()
   const mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
       lookAt(origin, negy, negz), lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
 
-  string label = radiance.handle->filename + "ibl mipmapped";
-  glGenTextures(1, &ibl_texture_target);
-  glActiveTexture(GL_TEXTURE6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_texture_target);
-  glObjectLabel(GL_TEXTURE, ibl_texture_target, -1, label.c_str());
-  for (uint32 i = 0; i < 6; ++i)
+  if (tiley == 0 && tilex == 0)
   {
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, radiance.size.x, radiance.size.y, 0, GL_RGBA,
-        GL_FLOAT, nullptr);
+
+    string label = radiance.handle->filename + "ibl mipmapped";
+    glGenTextures(1, &ibl_texture_target);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_texture_target);
+    for (uint32 i = 0; i < 6; ++i)
+    {
+      glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, radiance.size.x, radiance.size.y, 0, GL_RGBA,
+          GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mip_levels);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+    glGenFramebuffers(1, &ibl_fbo);
+    glGenRenderbuffers(1, &ibl_rbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, ibl_fbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, ibl_rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, radiance.size.x, radiance.size.y);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, ibl_rbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, ibl_rbo);
+
+    ibl_source = radiance.handle->texture;
+    radiance.handle->ibl_mipmaps_started = true;
+    radiance.handle->texture = ibl_texture_target;
   }
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mip_levels);
-  glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+  GLint current_fbo;
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
 
-  // framebuffer for rendering filtering result to new cubemap mipmaps
-  GLuint fbo;
-  GLuint rbo;
-  glGenFramebuffers(1, &fbo);
-  glGenRenderbuffers(1, &rbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-  glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, radiance.size.x, radiance.size.y);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
-
+  glBindFramebuffer(GL_FRAMEBUFFER, ibl_fbo);
   specular_filter.use();
   glActiveTexture(GL_TEXTURE6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, radiance.handle->texture);
-  ASSERT(radiance.handle->texture);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_source);
+  ASSERT(ibl_source);
 
   float angle = radians(0.f);
   mat4 rot = toMat4(quat(1, 0, 0, angle));
@@ -2782,13 +2795,30 @@ void Environment_Map::generate_ibl_mipmaps()
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glDepthFunc(GL_LESS);
+
+  glEnable(GL_SCISSOR_TEST);
+
   for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
   {
     uint32 width = (uint32)floor(radiance.size.x * pow(0.5, mip_level));
     uint32 height = (uint32)floor(radiance.size.y * pow(0.5, mip_level));
+    uint32 xf = floor(width / ibl_tile_max);
+    uint32 x = tilex * xf;
+    uint32 draw_width = ceil(float32(width ) / ibl_tile_max);
+
+    uint32 yf = floor(height / ibl_tile_max);
+    uint32 y = tiley * yf;
+    uint32 draw_height = ceil(float32(height ) / ibl_tile_max);
+
     glViewport(0, 0, width, height);
+
+    //jank af, without these magic numbers its calculated exact
+    //but its not pixel perfect at lower mip levels...
+    //even with a scissor size the same as the viewport
+    glScissor(x-15, y-15, draw_width+33, draw_height+33);
     float roughness = (float)mip_level / (float)(mip_levels - 1);
     specular_filter.set_uniform("roughness", roughness);
+    set_message(s("Generate mip:", s(mip_level)), "", 5.0f);
     for (unsigned int i = 0; i < 6; ++i)
     {
       specular_filter.set_uniform("camera", cameras[i]);
@@ -2798,16 +2828,22 @@ void Environment_Map::generate_ibl_mipmaps()
       cube.draw();
     }
   }
-  glCullFace(GL_BACK);
 
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindRenderbuffer(GL_RENDERBUFFER, 0);
-  glDeleteRenderbuffers(1, &rbo);
-  glDeleteFramebuffers(1, &fbo);
+  glDisable(GL_SCISSOR_TEST);
+  glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CCW);
+  glCullFace(GL_BACK);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
+  glViewport(0, 0, size.x, size.y);
+  glScissor(0, 0, size.x, size.y);
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
   glActiveTexture(GL_TEXTURE0);
-  radiance.handle->ibl_mipmaps_started = true;
-  filename_of_ibl_source = radiance.handle->filename;
+  // glBindRenderbuffer(GL_RENDERBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
+
+  // glUseProgram(0);
 }
 
 Environment_Map::Environment_Map(std::string environment, std::string irradiance, bool equirectangular)
@@ -2845,53 +2881,98 @@ void Environment_Map::load()
   }
 }
 
-void Environment_Map::bind(GLuint radiance_texture_unit, GLuint irradiance_texture_unit)
+void Environment_Map::bind(GLuint radiance_texture_unit, GLuint irradiance_texture_unit, float32 time, vec2 size)
 {
   irradiance.bind(irradiance_texture_unit);
   radiance.bind(radiance_texture_unit);
 
-  if (!radiance.handle)
+  if (!radiance.handle || radiance.handle->ibl_mipmaps_generated)
+    return;
+
+  bool started = radiance.handle->ibl_mipmaps_started;
+  if (started && !working_on_ibl)
+  {
+    return;
+  }
+  if (!started && !working_on_ibl)
+  {
+    radiance.handle->ibl_mipmaps_started = true;
+    working_on_ibl = true;
+  }
+  if (!(time > (this->time + dt)))
+  {
+    return;
+  }
+  if (time < 5)
   {
     return;
   }
 
-  // havent started ibl mipmaps yet, do that and bind source as we wait
-  if (!(radiance.handle->ibl_mipmaps_started))
+  this->time = time;
+  // if (ibl_tile_index == ibl_tile_max)
+  //{
+  //  GLint ready = 0;
+  //  glGetSynciv(ibl_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+  //  if (ready == GL_SIGNALED)
+  //  {
+  //    radiance.handle->ibl_mipmaps_generated = true; // sponge
+  //    glDeleteTextures(1, &ibl_source);
+  //    // radiance.handle->texture = ibl_texture_target;
+  //    glDeleteSync(ibl_sync);
+  //    glDeleteRenderbuffers(1, &ibl_rbo);
+  //    glDeleteFramebuffers(1, &ibl_fbo);
+  //    // ibl_texture_target = 0;
+  //    working_on_ibl = false;
+  //    return;
+  //  }
+  //  return;
+  //}
+
+  generate_ibl_mipmaps();
+  
+  bool x_at_end = (tilex == ibl_tile_max );
+  bool y_at_end = (tiley == ibl_tile_max );
+  if (x_at_end)
   {
-    generate_ibl_mipmaps();
-    radiance.bind(radiance_texture_unit);
+    tiley = tiley + 1;
+    tilex = 0;
+  }
+  else
+  {
+    tilex += 1;
+  }
+
+  if (x_at_end && y_at_end)
+  {
+    working_on_ibl = false;
     return;
   }
 
-  if (filename_of_ibl_source == "")
-  { // this Environment_Map wasnt the one that started the ibl generation, so just bind
-    radiance.bind(radiance_texture_unit);
-    return;
-  }
+  // irradiance.bind(irradiance_texture_unit);
+  // radiance.bind(radiance_texture_unit);
 
-  if (radiance.handle->ibl_mipmaps_generated)
-  {
-    radiance.bind(radiance_texture_unit);
-    return;
-  }
+  // if (ibl_sync != 0)
+  //{
+  //  GLint ready = 0;
+  //  glGetSynciv(ibl_sync, GL_SYNC_STATUS, 1, NULL, &ready);
 
-  ASSERT(radiance.handle->ibl_mipmaps_started);
-  ASSERT(!radiance.handle->ibl_mipmaps_generated);
+  //  if (ready == GL_SIGNALED)
+  //  {
+  //    glDeleteSync(ibl_sync);
 
-  // started but not seen as finished yet - lets check if its finished so we can swap the texture
-  GLint ready = 0;
-  glGetSynciv(ibl_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+  //    generate_ibl_mipmaps();
+  //    ibl_tile_index += 1;
+  //    ibl_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  //  }
+  //}
+  // else
+  //{
+  //  generate_ibl_mipmaps();
+  //  ibl_tile_index += 1;
+  //  ibl_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  //}
 
-  if (ready == GL_SIGNALED)
-  {
-    radiance.handle->ibl_mipmaps_generated = true;
-    glDeleteTextures(1, &radiance.handle->texture);
-    radiance.handle->texture = ibl_texture_target;
-    glDeleteSync(ibl_sync);
-    filename_of_ibl_source = "";
-    ibl_texture_target = 0;
-  }
-
+  irradiance.bind(irradiance_texture_unit);
   radiance.bind(radiance_texture_unit);
 }
 
@@ -3082,7 +3163,7 @@ void Particle_Emitter::spin_until_up_to_date() const
     while (shared_data->requested_tick != shared_data->completed_update)
     {
       // spin
-      //Sleep(1);
+      // Sleep(1);
     }
   }
   return;
@@ -3236,11 +3317,11 @@ void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Metho
   {
     vec3 wind = d->intensity * d->direction;
     particle.velocity += dt * (d->gravity + wind);
-    if (length(particle.velocity) < 0.1)
-    {
-      particle.velocity = vec3(0);
-      continue;
-    }
+    // if (length(particle.velocity) < 0.1)
+    //{
+    //  particle.velocity = vec3(0);
+    //  continue;
+    //}
 
     // vec3 ray = dt * particle.velocity;
     // AABB probe;

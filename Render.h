@@ -231,7 +231,7 @@ struct Environment_Map
   bool radiance_is_gamma_encoded = true;
 
   void load();
-  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit);
+  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit,float32 time,vec2 size);
 
   Environment_Map_Descriptor m;
 
@@ -243,9 +243,18 @@ struct Environment_Map
   void probe_world(glm::vec3 p, glm::vec2 resolution);
 
 private:
+  //std::shared_ptr<Texture_Handle> ibl_source;
+  GLuint ibl_source = 0;
   GLuint ibl_texture_target = 0;
-  GLsync ibl_sync;
-  std::string filename_of_ibl_source = "";
+  GLsync ibl_sync= 0;
+  GLuint ibl_fbo = 0;
+  GLuint ibl_rbo = 0;
+  uint32 ibl_tile_max = 15;
+  int32 tilex = 0;
+  int32 tiley = 0;
+  bool working_on_ibl = false;
+  float32 time = 0;
+  vec2 size = vec2(0);
 };
 
 struct Mesh_Handle

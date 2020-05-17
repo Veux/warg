@@ -1,7 +1,6 @@
 #version 330
 uniform samplerCube texture6; //environment
 
-uniform vec3 camera_position;
 uniform mat4 Model;
 //uniform float time;
 in vec4 frag_world_position;

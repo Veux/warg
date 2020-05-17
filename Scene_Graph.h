@@ -63,9 +63,10 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
-#define MAX_OCTREE_DEPTH 6
-#define TRIANGLES_PER_NODE 8
-
+#define MAX_OCTREE_DEPTH 4
+#define TRIANGLES_PER_NODE 4096
+#define OCTREE_SPLIT_STYLE
+#define OCTREE_VECTOR_STYLE
 
 ////the d00 d01 d11 terms can be computed once for multiple points p since they dont depend on p
 // vec3 barycentric(vec3 a, vec3 b, vec3 c, vec3 p)
@@ -116,8 +117,6 @@ enum Octree_Child_Index
   backdownleft
 };
 
-#define OCTREE_SPLIT_STYLE
-//#define OCTREE_VECTOR_STYLE
 struct Octree_Node
 {
   bool insert_triangle(const Triangle_Normal &tri) noexcept;

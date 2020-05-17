@@ -53,7 +53,7 @@ void main()
   vec3 r = n;
   vec3 v = r;
 
-  const uint SAMPLE_COUNT = 50u;
+  const uint SAMPLE_COUNT = 555u;
   float weight = 0.0;
   vec3 result = vec3(0.0);
   for (uint i = 0u; i < SAMPLE_COUNT; ++i)
@@ -67,7 +67,7 @@ void main()
     float D = D_ggx(roughness, ndoth);
     float hdotv = dot(h, v);
     float pdf = (D * ndoth / (4.0 * hdotv)) + 0.0001;
-    float resolution = 1024.0; // resolution of source cubemap
+    float resolution = 2048.0; // resolution of source cubemap
     float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
     float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 

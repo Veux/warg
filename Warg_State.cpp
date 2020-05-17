@@ -962,7 +962,7 @@ void Warg_State::update()
 
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 415;
+  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 5;
   scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
   // scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -976,7 +976,7 @@ void Warg_State::update()
 
   scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 415;
+  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 5;
   scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
   // scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -990,7 +990,7 @@ void Warg_State::update()
 
   scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 415;
+  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 5;
   scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
   // scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -1004,7 +1004,7 @@ void Warg_State::update()
 
   scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 185;
+  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 5;
   scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
   // scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);

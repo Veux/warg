@@ -2079,6 +2079,9 @@ inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
   ptr->halfsize = 0.5f * size;
   ptr->center = p + vec3(ptr->halfsize);
   ptr->mydepth = depth + 1;
+  #ifdef OCTREE_VECTOR_STYLE
+    ptr->occupying_triangles.reserve(16);
+  #endif 
   return ptr;
 }
 
