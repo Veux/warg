@@ -2969,6 +2969,7 @@ int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
+  //this one is incorrect for this example:
   vec3 a22 = vec3(-f2.y, f2.x, 0);
   p0 = v0.y * f2.x - v0.x * f2.y;
   p1 = v1.y * f2.x - f1.x * f2.y;

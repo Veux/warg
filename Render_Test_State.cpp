@@ -215,6 +215,11 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   scene->nodes[b].position = random_3D_unit_vector();
   scene->nodes[c].position = random_3D_unit_vector();
 
+  //broken with unit cube:
+  scene->nodes[a].position = vec3(0,-1,0);
+  scene->nodes[b].position = vec3(-1,0,0);
+  scene->nodes[c].position = vec3(1,-.5,0);
+
   Material_Descriptor material2;
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
@@ -610,6 +615,9 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   Node_Index na = scene->find_by_name(NODE_NULL, "a");
   Node_Index nb = scene->find_by_name(NODE_NULL, "b");
   Node_Index nc = scene->find_by_name(NODE_NULL, "c");
+
+
+
 
   vec3 a = scene->nodes[na].position;
   vec3 b = scene->nodes[nb].position;
