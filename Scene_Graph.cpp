@@ -2705,35 +2705,7 @@ inline void Octree_Node::clear()
     children[i] = nullptr;
   }
 }
-//
-// void Octree_Node::get_render_entities(std::vector<std::tuple<AABB,uint32,std::vector<Triangle_Normal>>>
-// *accumulator, float32 time, uint32 depth)
-//{
-//  mat4 M(1);
-//  mat4 S = glm::scale(vec3(size));
-//  mat4 T = glm::translate(center);
-//  M = T * S;
-//
-//  AABB me;
-//  me.min = minimum;
-//  me.max = minimum+size;
-//  std::vector<Triangle_Normal> tris;
-//  tris.reserve(free_triangle_index);
-//  for (uint32 i = 0; i < free_triangle_index; ++i)
-//  {
-//    tris.push_back(occupying_triangles[i]);
-//  }
-//  accumulator->push_back({me, depth, tris});
-//
-//  for (uint32 i = 0; i < 8; ++i)
-//  {
-//    Octree_Node *node = children[i];
-//    if (node)
-//    {
-//      node->get_render_entities(accumulator, time, depth + 1);
-//    }
-//  }
-//}
+
 
 // ccw
 Plane_nd compute_plane(vec3 a, vec3 b, vec3 c)
@@ -2819,7 +2791,7 @@ bool aabb_intersection(const AABB &a, const AABB &b)
   return aabb_intersection(a.min, a.max, b.min, b.max);
 }
 
-bool aabb_plane_intersection(AABB b, vec3 n, float32 d)
+bool aabb_plane_intersection(const AABB &b, const vec3 &n, float32 d)
 {
   vec3 c = (b.max + b.min) * 0.5f;
   vec3 e = b.max - c;
@@ -2868,357 +2840,81 @@ float32 min(float32 a, float32 b, float32 c)
   return glm::min(glm::min(a, b), c);
 }
 
-// Test if AABB b intersects plane p
-int TestAABBPlane(AABB b, Plane_nd p)
+bool aabb_triangle_intersection(const AABB &b, const Triangle_Normal &triangle)
 {
-  // These two lines not necessary with a (center, extents) AABB representation
-  vec3 c = (b.max + b.min) * 0.5f; // Compute AABB center
-  vec3 e = b.max - c;              // Compute positive extents
-  // Compute the projection interval radius of b onto L(t) = b.c + t * p.n
-  float r = e[0] * abs(p.n[0]) + e[1] * abs(p.n[1]) + e[2] * abs(p.n[2]);
-  // Compute distance of box center from plane
-  float s = dot(p.n, c) - p.d;
-  // Intersection occurs when distance s falls within [-r,+r] interval
-  return abs(s) <= r;
-}
-
-
-int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
-{
-  vec3(1.3);
   float p0, p1, p2, r;
-  // Compute box center and extents (if not already given in that format)
   vec3 c = (b.min + b.max) * 0.5f;
   float e0 = (b.max.x - b.min.x) * 0.5f;
   float e1 = (b.max.y - b.min.y) * 0.5f;
   float e2 = (b.max.z - b.min.z) * 0.5f;
-  // Translate triangle as conceptually moving AABB to origin
-  v0 = v0 - c;
-  v1 = v1 - c;
-  v2 = v2 - c;
-  // Compute edge vectors for triangle
+  vec3 v0 = v0 - c;
+  vec3 v1 = v1 - c;
+  vec3 v2 = v2 - c;
   vec3 f0 = v1 - v0, f1 = v2 - v1, f2 = v0 - v2;
 
-
-  // the p0 and p2 are taking the a vector and dotting it with v0, v1, v2
-  //p0 = v0.z * v1.y - v0.y * v1.z;
-  //p2 = v2.z * (v1.y - v0.y) - v2.z * (v1.z - v0.z);
-
-  //r = e1 * abs(f0.z) + e2 * abs(f0.y);
-  //if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
-  //  return 0; // Axis is a separating axis
-
-    vec3 a00 = cross(vec3(1, 0, 0), f0); // optimized: (0,?f1z ,f1y )
-  p0 = dot(v0, a00);
-  p1 = dot(v1,a00);//
-  p2 = dot(v2, a00);
-  r = e0 * abs(dot(vec3(1, 0, 0), a00)) + e1 * abs(dot(vec3(0, 1, 0), a00)) + e2 * abs(dot(vec3(0, 0, 1), a00));
+  p0 = v0.z * f0.y - v0.y * f0.z;
+  p2 = v2.z * f0.y - v2.y * f0.z;
+  r = e1 * abs(f0.z) + e2 * abs(f0.y);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a01 = cross(vec3(1, 0, 0), f1); // optimized: (0,?f1z ,f1y )
-  p0 = dot(v0, a01);
-  p1 = dot(v1,a01);//
-  p2 = dot(v2, a01);
-  r = e0 * abs(dot(vec3(1, 0, 0), a01)) + e1 * abs(dot(vec3(0, 1, 0), a01)) + e2 * abs(dot(vec3(0, 0, 1), a01));
+  p0 = v0.z * f1.y - v0.y * f1.z;
+  p2 = v2.z * f1.y - v2.y * f1.z;
+  r = e1 * abs(f1.z) + e2 * abs(f1.y);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a02 = cross(vec3(1, 0, 0), f2);
-  p0 = dot(v0, a02);
-  p1 = dot(v1,a02);
-  p2 = dot(v2, a02);//
-  r = e0 * abs(dot(vec3(1, 0, 0), a02)) + e1 * abs(dot(vec3(0, 1, 0), a02)) + e2 * abs(dot(vec3(0, 0, 1), a02));
+  p0 = v0.z * f2.y - v0.y * f2.z;
+  p1 = v1.z * f2.y - v1.y * f2.z;
+  r = e1 * abs(f2.z) + e2 * abs(f2.y);
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
 
-  vec3 a10 = cross(vec3(0, 1, 0), f0);
-  p0 = dot(v0, a10);
-  p1 = dot(v1,a10);//
-  p2 = dot(v2, a10);
-  r = e0 * abs(dot(vec3(1, 0, 0), a10)) + e1 * abs(dot(vec3(0, 1, 0), a10)) + e2 * abs(dot(vec3(0, 0, 1), a10));
+  p0 = v0.x * f0.z - v0.z * f0.x;
+  p2 = v2.x * f0.z - v2.z * f0.x;
+  r = e0 * abs(f0.z) + e2 * abs(f0.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a11 = cross(vec3(0, 1, 0), f1);
-  p0 = dot(v0, a11);
-  p1 = dot(v1,a11);//
-  p2 = dot(v2, a11);
-  r = e0 * abs(dot(vec3(1, 0, 0), a11)) + e1 * abs(dot(vec3(0, 1, 0), a11)) + e2 * abs(dot(vec3(0, 0, 1), a11));
+  p0 = v0.x * f1.z - v0.z * f1.x;
+  p2 = v2.x * f1.z - v2.z * f1.x;
+  r = e0 * abs(f1.z) + e2 * abs(f1.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  vec3 a12 = cross(vec3(0, 1, 0), f2);
-  p0 = dot(v0, a12);
-  p1 = dot(v1,a12);
-  p2 = dot(v2, a12);//
-  r = e0 * abs(dot(vec3(1, 0, 0), a12)) + e1 * abs(dot(vec3(0, 1, 0), a12)) + e2 * abs(dot(vec3(0, 0, 1), a12));
-  if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
-    return 0;
-  
-  vec3 a20 = cross(vec3(0, 0, 1), f0);
-  p0 = dot(v0, a20);
-  p1 = dot(v1,a20);//
-  p2 = dot(v2, a20);
-  r = e0 * abs(dot(vec3(1, 0, 0), a20)) + e1 * abs(dot(vec3(0, 1, 0), a20)) + e2 * abs(dot(vec3(0, 0, 1), a20));
-  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
-    return 0;
-
-  vec3 a21 = cross(vec3(0, 0, 1), f1);
-  p0 = dot(v0, a21);
-  p1 = dot(v1,a21);//
-  p2 = dot(v2, a21);
-  r = e0 * abs(dot(vec3(1, 0, 0), a21)) + e1 * abs(dot(vec3(0, 1, 0), a21)) + e2 * abs(dot(vec3(0, 0, 1), a21));
-  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
-    return 0;
-
-  vec3 a22 = cross(vec3(0, 0, 1), f2);
-  p0 = dot(v0, a22);
-  p1 = dot(v1,a22);
-  p2 = dot(v2, a22);//
-  r = e0 * abs(dot(vec3(1, 0, 0), a22)) + e1 * abs(dot(vec3(0, 1, 0), a22)) + e2 * abs(dot(vec3(0, 0, 1), a22));
+  p0 = v0.x * f2.z - v0.z * f2.x;
+  p1 = v1.x * f2.z - v1.z * f2.x;
+  r = e0 * abs(f2.z) + e2 * abs(f2.x);
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
 
-  //
-  //  // Repeat similar tests for remaining axes a01..a22
-  //// a00 = u0 × f0 = (1,0,0) × f0 = (0,?f0z ,f0y )
-  //// a01 = u0 × f1 = (1,0,0) × f1 = (0,?f1z ,f1y )
-  //// a02 = u0 × f2 = (1,0,0) × f2 = (0,?f2z ,f2y )
-  //// a10 = u1 × f0 = (0,1,0) × f0 = (f0z ,0,?f0x )
-  // a11 = u1 × f1 = (0,1,0) × f1 = (f1z ,0,?f1x )
-  // a12 = u1 × f2 = (0,1,0) × f2 = (f2z ,0,?f2x )
-  // a20 = u2 × f0 = (0,0,1) × f0 = (?f0y ,f0x ,0)
-  // a21 = u2 × f1 = (0,0,1) × f1 = (?f1y ,f1x ,0)
-  // a22 = u2 × f2  = (0,0,1) × f2 = (?f2y ,f2x ,0)
-  //
-  //
+  p0 = v0.y * f0.x - v0.x * f0.y;
+  p2 = v2.y * f0.x - v2.x * f0.y;
+  r = e0 * abs(f0.y) + e1 * abs(f0.x);
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
 
-  // Test the three axes corresponding to the face normals of AABB b (category 1).
-  // Exit if...
-  // ... [-e0, e0] and [min(v0.x,v1.x,v2.x), max(v0.x,v1.x,v2.x)] do not overlap
+  p0 = v0.y * f1.x - v0.x * f1.y;
+  p2 = v2.y * f1.x - v2.x * f1.y;
+  r = e0 * abs(f1.y) + e1 * abs(f1.x);
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  p0 = v0.y * f2.x - v0.x * f2.y;
+  p1 = v1.y * f2.x - v1.x * f2.y;
+  r = e0 * abs(f2.y) + e1 * abs(f2.x);
+  if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
+    return 0;
+
   if (max(v0.x, v1.x, v2.x) < -e0 || min(v0.x, v1.x, v2.x) > e0)
     return 0;
-  // ... [-e1, e1] and [min(v0.y,v1.y,v2.y), max(v0.y,v1.y,v2.y)] do not overlap
   if (max(v0.y, v1.y, v2.y) < -e1 || min(v0.y, v1.y, v2.y) > e1)
     return 0;
-  // ... [-e2, e2] and [min(v0.z,v1.z,v2.z), max(v0.z,v1.z,v2.z)] do not overlap
   if (max(v0.z, v1.z, v2.z) < -e2 || min(v0.z, v1.z, v2.z) > e2)
     return 0;
-  // Test separating axis corresponding to triangle face normal (category 2)
-  Plane_nd p;
-  p.n = cross(f0, f1);
-  p.d = dot(p.n, v0+c);//+c to get rid of the triangle translation we did above
-
-  bool intersects_plane = aabb_plane_intersection(b, p.n, p.d);
-  return intersects_plane;
-  return TestAABBPlane(b, p);
-}
-
-#define BROKEN_VERSION1
-//#define BROKEN_VERSION2
-bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
-{
-#ifdef BROKEN_VERSION1
-  return TestTriangleAABB(triangle.a, triangle.b, triangle.c, aabb);
-#else
-#ifdef BROKEN_VERSION2
-  AABB tri_aabb(triangle.a);
-  push_aabb(tri_aabb, triangle.b);
-  push_aabb(tri_aabb, triangle.c);
-
-  // early out aabb
-  bool intersects_aabb = aabb_intersection(aabb, tri_aabb);
-  if (!intersects_aabb)
-    return false;
-
-  // early out plane
-  float32 d = dot(triangle.n, triangle.a);
-  bool intersects_plane = aabb_plane_intersection(aabb, triangle.n, d);
-  if (!intersects_plane)
-    return false;
-#endif
-#ifndef BROKEN_VERSION2
-  return TriangleAABB(triangle, aabb);
-#endif
-#endif
-
-#ifdef BROKEN_VERSION2
-
-  // centering the aabb on origin
-  const vec3 aabb_center = (aabb.min + 0.5f * (aabb.max - aabb.min));
-
-  // const vec3 aabb_center = 0.5f * (aabb.min + aabb.max);
-  const vec3 aabb_radius = 0.5f * (aabb.max - aabb.min);
-  vec3 v0 = triangle.a - aabb_center;
-  vec3 v1 = triangle.b - aabb_center;
-  vec3 v2 = triangle.c - aabb_center;
-
-  mat3 basis = mat3(1);
-
-  for (uint32 i = 0; i < 3; ++i)
-  {
-    for (uint32 j = 0; j < 3; ++j)
-    {
-      vec3 f;
-      if (j == 0)
-        f = v1 - v0;
-      if (j == 1)
-        f = v2 - v1;
-      if (j == 2)
-        f = v0 - v2;
-
-      vec3 &e = basis[i];
-      vec3 a = cross(e, f);
-
-      float32 p0 = dot(a, v0);
-      // float32 p1 = dot(a, v1); //p0 == p1
-      float32 p2 = dot(a, v2);
-
-      float32 minp = glm::min(p0, p2);
-      float32 maxp = glm::max(p0, p2);
-
-      float32 r = aabb_radius.x * abs(a.x) + aabb_radius.y * abs(a.y) + aabb_radius.z * abs(a.z);
-
-      if ((minp > r) || (maxp < -r))
-      {
-        return false;
-      }
-    }
-  }
-  return true;
-#endif
-}
-
-struct Interval
-{
-  float32 min;
-  float32 max;
-};
-struct AABBb
-{
-  vec3 position;
-  vec3 size;
-
-  inline AABBb() : size(1, 1, 1) {}
-  inline AABBb(vec3 &p, vec3 &s) : position(p), size(s) {}
-};
-
-vec3 GetMin(AABBb &aabb)
-{
-  vec3 p1 = aabb.position + aabb.size;
-  vec3 p2 = aabb.position - aabb.size;
-
-  return vec3(fminf(p1.x, p2.x), fminf(p1.y, p2.y), fminf(p1.z, p2.z));
-}
-vec3 GetMax(AABBb &aabb)
-{
-  vec3 p1 = aabb.position + aabb.size;
-  vec3 p2 = aabb.position - aabb.size;
-
-  return vec3(fmaxf(p1.x, p2.x), fmaxf(p1.y, p2.y), fmaxf(p1.z, p2.z));
-}
-Interval GetInterval(AABBb &aabb, vec3 &axis)
-{
-  vec3 i = GetMin(aabb);
-  vec3 a = GetMax(aabb);
-
-  vec3 vertex[8] = {vec3(i.x, a.y, a.z), vec3(i.x, a.y, i.z), vec3(i.x, i.y, a.z), vec3(i.x, i.y, i.z),
-      vec3(a.x, a.y, a.z), vec3(a.x, a.y, i.z), vec3(a.x, i.y, a.z), vec3(a.x, i.y, i.z)};
-
-  Interval result;
-  result.min = result.max = dot(axis, vertex[0]);
-
-  for (int i = 1; i < 8; ++i)
-  {
-    float32 projection = dot(axis, vertex[i]);
-    result.min = (projection < result.min) ? projection : result.min;
-    result.max = (projection > result.max) ? projection : result.max;
-  }
-
-  return result;
-}
-
-struct Triangleb
-{
-  union {
-    struct
-    {
-      vec3 a;
-      vec3 b;
-      vec3 c;
-    };
-    struct
-    {
-      vec3 p1;
-      vec3 p2;
-      vec3 p3;
-    };
-
-    vec3 points[3];
-    float values[9];
-  };
-
-  inline Triangleb() {}
-  inline Triangleb(vec3 &_p1, vec3 &_p2, vec3 &_p3) : a(_p1), b(_p2), c(_p3) {}
-};
-
-Interval GetInterval(Triangleb &triangle, vec3 &axis)
-{
-  Interval result;
-
-  result.min = dot(axis, triangle.points[0]);
-  result.max = result.min;
-  for (int i = 1; i < 3; ++i)
-  {
-    float value = dot(axis, triangle.points[i]);
-    result.min = fminf(result.min, value);
-    result.max = fmaxf(result.max, value);
-  }
-
-  return result;
-}
-bool OverlapOnAxis(AABBb &aabb, Triangleb &triangle, vec3 &axis)
-{
-  Interval a = GetInterval(aabb, axis);
-  Interval b = GetInterval(triangle, axis);
-  return ((b.min <= a.max) && (a.min <= b.max));
-}
-
-bool TriangleAABB(const Triangle_Normal &triangle, const AABB &aabb)
-{
-  Triangleb t;
-  t.a = triangle.a;
-  t.b = triangle.b;
-  t.c = triangle.c;
-  AABBb a;
-  a.size = 0.5f * (aabb.max - aabb.min);
-  a.position = aabb.min + a.size;
-
-  vec3 f0 = t.b - t.a;
-  vec3 f1 = t.c - t.b;
-  vec3 f2 = t.a - t.c;
-
-  vec3 u0(1.0f, 0.0f, 0.0f);
-  vec3 u1(0.0f, 1.0f, 0.0f);
-  vec3 u2(0.0f, 0.0f, 1.0f);
-
-  vec3 test[13] = {// 3 Normals of AABB
-      u0,          // AABB Axis 1
-      u1,          // AABB Axis 2
-      u2,          // AABB Axis 3
-
-      cross(f0, f1), cross(u0, f0), cross(u0, f1), cross(u0, f2), cross(u1, f0), cross(u1, f1), cross(u1, f2),
-      cross(u2, f0), cross(u2, f1), cross(u2, f2)};
-
-  for (int i = 0; i < 13; ++i)
-  {
-    if (!OverlapOnAxis(a, t, test[i]))
-    {
-      return false; // Seperating axis found
-    }
-  }
-  return true; // Seperating axis not found
+  vec3 n = cross(f0, f1);
+  float32 d = dot(n, v0 + c);
+  return aabb_plane_intersection(b, n, d);
 }
 
 AABB aabb_from_octree_child_index(uint8 i, vec3 minimum, float32 halfsize, float32 size)

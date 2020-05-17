@@ -97,7 +97,7 @@ struct AABB
 bool aabb_intersection(const vec3 &mina, const vec3 &maxa, const vec3 &minb, const vec3 &maxb);
 bool aabb_intersection(const AABB &a, const AABB &b);
 
-bool aabb_plane_intersection(AABB b, vec3 n, float32 d);
+bool aabb_plane_intersection(const AABB& b, const vec3& n, float32 d);
 
 void push_aabb(AABB &aabb, const vec3 &p);
 
