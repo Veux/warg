@@ -102,10 +102,6 @@ bool aabb_plane_intersection(const AABB& b, const vec3& n, float32 d);
 void push_aabb(AABB &aabb, const vec3 &p);
 
 bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle);
-bool testboxpdf(const AABB &aabb, const Triangle_Normal &triangle);
-int TestTriangleAABBopt(vec3 v0, vec3 v1, vec3 v2, const AABB &b);
-int TestTriangleAABBorig(vec3 v0, vec3 v1, vec3 v2, AABB b);
-bool TriangleAABB(const Triangle_Normal &triangle, const AABB &aabb);
 
 AABB aabb_from_octree_child_index(uint8 i, vec3 minimum, float32 halfsize, float32 size);
 enum Octree_Child_Index

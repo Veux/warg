@@ -215,11 +215,6 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   scene->nodes[b].position = random_3D_unit_vector();
   scene->nodes[c].position = random_3D_unit_vector();
 
-  // broken:
-  scene->nodes[a].position = vec3(0, -1, -1.5);
-  scene->nodes[b].position = vec3(-1, 0, 1.55);
-  scene->nodes[c].position = vec3(1, -.5, 0);
-
   Material_Descriptor material2;
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
@@ -232,10 +227,6 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   material2.emissive.mod = vec4(0);
 
   Node_Index cb = scene->add_mesh(cube, "aabb", &material2);
-
-    // broken:
-  scene->nodes[cb].position = vec3(.37, -.85, .38);
-
 }
 Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2 window_size)
     : State(name, window, window_size)
@@ -641,83 +632,6 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   AABB aabb(scene->nodes[cuber].position);
   push_aabb(aabb, scene->nodes[cuber].position + (0.5f * scene->nodes[cuber].scale));
   push_aabb(aabb, scene->nodes[cuber].position - (0.5f * scene->nodes[cuber].scale));
-
-  Triangle_Normal t;
-  t.a = a;
-  t.b = b;
-  t.c = c;
-
-  vec3 atob = t.b - t.a;
-  vec3 atoc = t.c - t.a;
-  t.n = normalize(cross(atob, atoc));
-  static std::vector<Triangle_Normal> tris;
-  uint32 test_size = 2000;
-  uint32 hitcount = 0;
-  if (tris.size() == 0)
-  {
-    for (uint32 i = 0; i < test_size; ++i)
-    {
-      Triangle_Normal tri;
-      tri.a = a;
-      tri.a = random_3D_unit_vector();
-      tri.b = random_3D_unit_vector();
-      tri.c = random_3D_unit_vector();
-      tris.push_back(tri);
-    }
-  }
-  if (tris.size() != 0)
-  {
-    uint32 i = random_between(0, test_size - 1);
-    Triangle_Normal tri;
-    tri.a = a;
-    tri.a = random_3D_unit_vector();
-    tri.b = random_3D_unit_vector();
-    tri.c = random_3D_unit_vector();
-    tris[i] = tri;
-  }
-
-  static Timer timer0(1000);
-  static Timer timer1(1000);
-  static Timer timer2(1000);
-  static Timer timer3(1000);
-
-  timer0.start();
-  for (uint32 i = 0; i < test_size; ++i)
-  {
-    Triangle_Normal &t = tris[i];
-    hitcount += bool(TriangleAABB(t, aabb));
-  }
-  timer0.stop();
-  set_message("Cookbook version:", timer0.string_report(), 1.0f);
-
-  timer1.start();
-  for (uint32 i = 0; i < test_size; ++i)
-  {
-    Triangle_Normal &t = tris[i];
-    hitcount += bool(TestTriangleAABBorig(t.a, t.b, t.c, aabb));
-  }
-  timer1.stop();
-  set_message("Realtime collision detection orig:", timer1.string_report(), 1.0f);
-
-  timer2.start();
-  for (uint32 i = 0; i < test_size; ++i)
-  {
-    Triangle_Normal &t = tris[i];
-    hitcount += bool(TestTriangleAABBopt(t.a, t.b, t.c, aabb));
-  }
-  timer2.stop();
-  set_message("Realtime collision detection optimized:", timer2.string_report(), 1.0f);
-
-  timer3.start();
-  for (uint32 i = 0; i < test_size; ++i)
-  {
-    Triangle_Normal &t = tris[i];
-    hitcount += bool(testboxpdf(aabb, t));
-  }
-  timer3.stop();
-  set_message("Testbox.pdf:", timer3.string_report(), 1.0f);
-
-  set_message("hitcount:", s(hitcount), 1.0f);
 
   uint32 counter = 0;
   std::vector<Triangle_Normal> touching = scene->collision_octree.test_all(aabb, &counter);
