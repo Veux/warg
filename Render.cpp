@@ -3502,7 +3502,6 @@ bool Particle_Array::prepare_instance(std::vector<Render_Instance> *accumulator)
     return false;
 
   ASSERT(num_instances <= MAX_INSTANCE_COUNT);
-  set_message("Particle count:", s(num_instances), 1.0f);
 
   glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
   glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);

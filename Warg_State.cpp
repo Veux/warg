@@ -40,8 +40,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   session = session_;
 
   map = new Blades_Edge(scene);
-  spell_db = Spell_Database();/*
-  map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
+  spell_db = Spell_Database(); /*
+   map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
   // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
   // collider_cache = collect_colliders(scene);
 
@@ -61,67 +61,58 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
   material.emissive = "color(1,1,1,1)";
-  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
   small_object_water_settings(&material.uniform_set);
   Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
   Mesh_Index mesh_index0 = scene.nodes[particle_node].model[0].first;
   Material_Index material_index0 = scene.nodes[particle_node].model[0].second;
 
-  
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
   material.emissive = "color(1,1,1,1)";
-  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  material.emissive.mod = vec4(1.25f, .0f, .35f, 1.f);
   Node_Index particle_node1 = scene.add_mesh(cube, "particle1", &material);
   Mesh_Index mesh_index1 = scene.nodes[particle_node1].model[0].first;
   Material_Index material_index1 = scene.nodes[particle_node1].model[0].second;
 
-  
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
   material.emissive = "color(1,1,1,1)";
-  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  material.emissive.mod = vec4(1.05f, .0f, 2.15f, 1.f);
   Node_Index particle_node2 = scene.add_mesh(cube, "particle2", &material);
   Mesh_Index mesh_index2 = scene.nodes[particle_node2].model[0].first;
   Material_Index material_index2 = scene.nodes[particle_node2].model[0].second;
 
-  
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
   material.emissive = "color(1,1,1,1)";
-  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
   Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
   Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
   Material_Index material_index3 = scene.nodes[particle_node3].model[0].second;
   scene.nodes[particle_node].visible = false;
-    scene.nodes[particle_node1].visible = false;
-    scene.nodes[particle_node2].visible = false;
-    scene.nodes[particle_node3].visible = false;
-  
+  scene.nodes[particle_node1].visible = false;
+  scene.nodes[particle_node2].visible = false;
+  scene.nodes[particle_node3].visible = false;
+
   scene.nodes[particle_node].scale = vec3(0.05);
   scene.nodes[particle_node1].scale = vec3(0.05);
   scene.nodes[particle_node2].scale = vec3(0.05);
   scene.nodes[particle_node3].scale = vec3(0.05);
-  scene.nodes[particle_node].position = vec3(0,0,10.f);
-  scene.nodes[particle_node1].position = vec3(0,0,10.f);
-  scene.nodes[particle_node2].position = vec3(0,0,10.f);
-  scene.nodes[particle_node3].position = vec3(0,0,10.f);
-  
+  scene.nodes[particle_node].position = vec3(0, 0, 10.f);
+  scene.nodes[particle_node1].position = vec3(0, 0, 10.f);
+  scene.nodes[particle_node2].position = vec3(0, 0, 10.f);
+  scene.nodes[particle_node3].position = vec3(0, 0, 10.f);
+
   scene.particle_emitters[0].mesh_index = mesh_index0;
   scene.particle_emitters[0].material_index = material_index0;
-  scene.particle_emitters[1].mesh_index = mesh_index0;
-  scene.particle_emitters[1].material_index = material_index0;
-  scene.particle_emitters[2].mesh_index = mesh_index0;
-  scene.particle_emitters[2].material_index = material_index0;
-  scene.particle_emitters[3].mesh_index = mesh_index0;
-  scene.particle_emitters[3].material_index = material_index0;
 
-  //scene.particle_emitters[1].mesh_index = mesh_index1;
-  //scene.particle_emitters[1].material_index = material_index1;
-  //scene.particle_emitters[2].mesh_index = mesh_index2;
-  //scene.particle_emitters[2].material_index = material_index2;
-  //scene.particle_emitters[3].mesh_index = mesh_index3;
-  //scene.particle_emitters[3].material_index = material_index3;
+   scene.particle_emitters[1].mesh_index = mesh_index1;
+   scene.particle_emitters[1].material_index = material_index1;
+   scene.particle_emitters[2].mesh_index = mesh_index2;
+   scene.particle_emitters[2].material_index = material_index2;
+   scene.particle_emitters[3].mesh_index = mesh_index3;
+   scene.particle_emitters[3].material_index = material_index3;
 
   scene.lights.light_count = 5;
 
@@ -429,7 +420,7 @@ void Warg_State::process_messages()
 
 void Warg_State::set_camera_geometry()
 {
-  //set_message(s("set_camera_geometry()",s(" time:", current_time), 1.0f);
+  // set_message(s("set_camera_geometry()",s(" time:", current_time), 1.0f);
   Character *player_character = get_character(&current_game_state, player_character_id);
   if (!player_character)
     return;
@@ -570,10 +561,11 @@ void Warg_State::update_stats_bar()
   bool show_stats_bar = true;
   ImVec2 stats_bar_pos = {resolution.x - 50, resolution.y - 30};
   ImGui::SetNextWindowPos(stats_bar_pos);
-  //ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
-  //    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+  // ImGui::Begin("stats_bar", &show_stats_bar, ImVec2(10, 10), 0.5f,
+  //    ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar
+  //    |
   //        ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::Begin("stats_bar", &show_stats_bar, 
+  ImGui::Begin("stats_bar", &show_stats_bar,
       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
           ImGuiWindowFlags_AlwaysAutoResize);
   ImGui::Text("Ping: %dms", latency_tracker.get_latency());
@@ -627,9 +619,10 @@ void Warg_State::predict_state()
   size_t prediction_start = 0;
 
   bool prediction_correct_result = false;
-  if (state_buffer.size()>0)
+  if (state_buffer.size() > 0)
   {
-    prediction_correct_result = prediction_correct(player_character_id, last_recieved_server_state, state_buffer.front());
+    prediction_correct_result =
+        prediction_correct(player_character_id, last_recieved_server_state, state_buffer.front());
   }
   set_message("predict_state(): prediction_correct_result:", s(prediction_correct_result));
   if (prediction_correct_result)
@@ -837,7 +830,7 @@ void Warg_State::update()
 
   renderer.set_camera(camera.pos, camera.dir);
 
-  //scene.collision_octree.clear();
+  // scene.collision_octree.clear();
 
   Node_Index arena = scene.nodes[map->node].children[0];
   Node_Index arena_collider = scene.nodes[arena].collider;
@@ -846,7 +839,7 @@ void Warg_State::update()
   Mesh_Descriptor *md = &meshptr->mesh->descriptor;
   static Timer beatimer(100);
   beatimer.start();
-  //scene.collision_octree.push(md);
+  // scene.collision_octree.push(md);
   beatimer.stop();
   // set_message("octree timer:", beatimer.string_report(), 1.0f);
 
@@ -871,7 +864,7 @@ void Warg_State::update()
   static vec3 last_position = me->physics.position;
   vec3 velocity = me->physics.position - last_position;
   last_position = me->physics.position;
-  
+
   static std::vector<Node_Index> spawned_nodes;
   static std::vector<Node_Index> spawned_server_nodes;
 
@@ -885,9 +878,9 @@ void Warg_State::update()
     mat.metalness.mod.x = 0.f;
 
     Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
-    Local_Session *ptr = (Local_Session*)this->session;
+    Local_Session *ptr = (Local_Session *)this->session;
     Node_Index servernode = ptr->server->scene.add_mesh(cube, "spawned box", &mat);
-    
+
     spawned_nodes.push_back(newnode);
     spawned_server_nodes.push_back(servernode);
     vec3 dir = normalize(camera.dir);
@@ -897,30 +890,29 @@ void Warg_State::update()
     scene.nodes[newnode].scale = vec3(2);
     scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
 
-    
     ptr->server->scene.nodes[servernode].position = camera.pos + 12.f * dir;
     ptr->server->scene.nodes[servernode].scale = vec3(2);
     ptr->server->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
   }
-      Local_Session *ptr = (Local_Session*)this->session;
-     // ptr->server->scene.collision_octree.clear();
-      
-  //ptr->server->scene.collision_octree.push(md);
+  Local_Session *ptr = (Local_Session *)this->session;
+  // ptr->server->scene.collision_octree.clear();
+
+  // ptr->server->scene.collision_octree.push(md);
   for (Node_Index node : spawned_nodes)
   {
     mat4 M = scene.build_transformation(node);
-    //scene.collision_octree.push(&mesh, &M);
+    // scene.collision_octree.push(&mesh, &M);
     AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
     uint32 counter;
     scene.collision_octree.test(prober, &counter);
   }
-    for (Node_Index node : spawned_server_nodes)
+  for (Node_Index node : spawned_server_nodes)
   {
-    Local_Session *ptr = (Local_Session*)this->session;
+    Local_Session *ptr = (Local_Session *)this->session;
     mat4 M = ptr->server->scene.build_transformation(node);
-   // ptr->server->scene.collision_octree.push(&mesh, &M);
+    // ptr->server->scene.collision_octree.push(&mesh, &M);
   }
 
   if (WANT_CLEAR_OCTREE)
@@ -934,26 +926,20 @@ void Warg_State::update()
 
     for (Node_Index servernode : spawned_server_nodes)
     {
-      Local_Session *ptr = (Local_Session*)this->session;
+      Local_Session *ptr = (Local_Session *)this->session;
       ptr->server->scene.delete_node(servernode);
     }
     spawned_server_nodes.clear();
-
-   
   }
-   velocity = 300.f * (velocity+vec3(0.,0.,.02));
-  //scene.collision_octree.push(&mesh, &transform, &velocity);
+  velocity = 300.f * (velocity + vec3(0., 0., .02));
+  // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   Material_Descriptor material;
   static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
-
   scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
   transform = scene.build_transformation(dynamic_collider_node);
-  //scene.collision_octree.push(&mesh, &transform, &velocity);
-
-
-
+  // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   // fire_emitter2(
   //   &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
@@ -968,19 +954,18 @@ void Warg_State::update()
 
   if (fract(sin(current_time)) > .5)
     wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
-  
-  Node_Index p0 = scene.find_by_name(NODE_NULL,"particle0");
-  Node_Index p1 = scene.find_by_name(NODE_NULL,"particle1");
-  Node_Index p2 = scene.find_by_name(NODE_NULL,"particle2");
-  Node_Index p3 = scene.find_by_name(NODE_NULL,"particle3");
 
+  Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
+  Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
+  Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
+  Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 115;
+  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 415;
   scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
-  //scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
@@ -990,11 +975,11 @@ void Warg_State::update()
   scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
 
   scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 115;
+  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 415;
   scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
-  //scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
@@ -1004,11 +989,11 @@ void Warg_State::update()
   scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
 
   scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 115;
+  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 415;
   scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
-  //scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
@@ -1018,11 +1003,11 @@ void Warg_State::update()
   scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
 
   scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 85;
+  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 185;
   scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
-  //scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
@@ -1031,7 +1016,11 @@ void Warg_State::update()
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 
-
+  uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
+  particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
+  particle_count += scene.particle_emitters[2].shared_data->particles.MVP_Matrices.size();
+  particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
+  set_message("Total Particle count:", s(particle_count), 1.0f);
   uint32 i = sizeof(Octree);
 }
 

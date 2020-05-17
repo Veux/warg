@@ -828,7 +828,7 @@ struct Particle_Emitter
   Material_Index material_index;
   Particle_Emitter_Descriptor descriptor;
 
-private:
+//private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 

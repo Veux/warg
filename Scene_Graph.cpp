@@ -2847,9 +2847,9 @@ bool aabb_triangle_intersection(const AABB &b, const Triangle_Normal &triangle)
   float e0 = (b.max.x - b.min.x) * 0.5f;
   float e1 = (b.max.y - b.min.y) * 0.5f;
   float e2 = (b.max.z - b.min.z) * 0.5f;
-  vec3 v0 = v0 - c;
-  vec3 v1 = v1 - c;
-  vec3 v2 = v2 - c;
+  vec3 v0 = triangle.a - c;
+  vec3 v1 = triangle.b - c;
+  vec3 v2 = triangle.c - c;
   vec3 f0 = v1 - v0, f1 = v2 - v1, f2 = v0 - v2;
 
   p0 = v0.z * f0.y - v0.y * f0.z;
