@@ -2893,6 +2893,7 @@ int TestTriangleAABBopt(vec3 v0, vec3 v1, vec3 v2, const AABB &b)
   v1 = v1 - c;
   v2 = v2 - c;
   vec3 f0 = v1 - v0, f1 = v2 - v1, f2 = v0 - v2;
+
   p0 = v0.z * f0.y - v0.y * f0.z;
   p2 = v2.z * f0.y - v2.y * f0.z;
   r = e1 * abs(f0.z) + e2 * abs(f0.y);
@@ -2918,7 +2919,7 @@ int TestTriangleAABBopt(vec3 v0, vec3 v1, vec3 v2, const AABB &b)
     return 0;
 
   p0 = v0.x * f1.z - v0.z * f1.x;
-  p2 = v2.x * f1.z - v0.z * f1.x;
+  p2 = v2.x * f1.z - v2.z * f1.x;
   r = e0 * abs(f1.z) + e2 * abs(f1.x);
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
