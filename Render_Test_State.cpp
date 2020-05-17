@@ -215,10 +215,10 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   scene->nodes[b].position = random_3D_unit_vector();
   scene->nodes[c].position = random_3D_unit_vector();
 
-  //broken with unit cube:
-  scene->nodes[a].position = vec3(0,-1,0);
-  scene->nodes[b].position = vec3(-1,0,0);
-  scene->nodes[c].position = vec3(1,-.5,0);
+  // broken with unit cube:
+  scene->nodes[a].position = vec3(0, -1, 0);
+  scene->nodes[b].position = vec3(-1, 0, 0);
+  scene->nodes[c].position = vec3(1, -.5, 0);
 
   Material_Descriptor material2;
   material2.albedo.mod = vec4(.2, .2, .2, .2);
@@ -248,11 +248,11 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  spawn_planets(&scene,vec3(12,6,3));
+  spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   spawn_test_triangle(&scene);
   spawn_compass(&scene);
-  //spawn_map(&scene);
+  // spawn_map(&scene);
 
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
@@ -601,10 +601,6 @@ void update_planets(Flat_Scene_Graph *scene, float64 current_time)
   scene->nodes[cube_moon].orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
 }
 
-
-
-
-
 void update_test_triangle(Flat_Scene_Graph *scene)
 {
   Node_Index triangle = scene->find_by_name(NODE_NULL, "triangle");
@@ -615,9 +611,6 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   Node_Index na = scene->find_by_name(NODE_NULL, "a");
   Node_Index nb = scene->find_by_name(NODE_NULL, "b");
   Node_Index nc = scene->find_by_name(NODE_NULL, "c");
-
-
-
 
   vec3 a = scene->nodes[na].position;
   vec3 b = scene->nodes[nb].position;
@@ -645,9 +638,6 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   push_aabb(aabb, scene->nodes[cuber].position + (0.5f * scene->nodes[cuber].scale));
   push_aabb(aabb, scene->nodes[cuber].position - (0.5f * scene->nodes[cuber].scale));
 
-  set_message("min", vtos(aabb.min), 1.0f);
-  set_message("max", vtos(aabb.max), 1.0f);
-
   Triangle_Normal t;
   t.a = a;
   t.b = b;
@@ -656,7 +646,75 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   vec3 atob = t.b - t.a;
   vec3 atoc = t.c - t.a;
   t.n = normalize(cross(atob, atoc));
-  bool hit = aabb_triangle_intersection(aabb, t);
+  static std::vector<Triangle_Normal> tris;
+  uint32 test_size = 2000;
+  uint32 hitcount = 0;
+  if (tris.size() == 0)
+  {
+    for (uint32 i = 0; i < test_size; ++i)
+    {
+      Triangle_Normal tri;
+      tri.a = a;
+      tri.a = random_3D_unit_vector();
+      tri.b = random_3D_unit_vector();
+      tri.c = random_3D_unit_vector();
+      tris.push_back(tri);
+    }
+  }
+  if (tris.size() != 0)
+  {
+    uint32 i = random_between(0, test_size - 1);
+    Triangle_Normal tri;
+    tri.a = a;
+    tri.a = random_3D_unit_vector();
+    tri.b = random_3D_unit_vector();
+    tri.c = random_3D_unit_vector();
+    tris[i] = tri;
+  }
+
+  static Timer timer0(1000);
+  static Timer timer1(1000);
+  static Timer timer2(1000);
+  static Timer timer3(1000);
+
+  timer0.start();
+  for (uint32 i = 0; i < test_size; ++i)
+  {
+    Triangle_Normal &t = tris[i];
+    hitcount += bool(TriangleAABB(t, aabb));
+  }
+  timer0.stop();
+  set_message("Cookbook version:", timer0.string_report(), 1.0f);
+
+  timer1.start();
+  for (uint32 i = 0; i < test_size; ++i)
+  {
+    Triangle_Normal &t = tris[i];
+    hitcount += bool(TestTriangleAABBorig(t.a, t.b, t.c, aabb));
+  }
+  timer1.stop();
+  set_message("Realtime collision detection orig:", timer1.string_report(), 1.0f);
+
+  timer2.start();
+  for (uint32 i = 0; i < test_size; ++i)
+  {
+    Triangle_Normal &t = tris[i];
+    hitcount += bool(TestTriangleAABBopt(t.a, t.b, t.c, aabb));
+  }
+  timer2.stop();
+  set_message("Realtime collision detection optimized:", timer2.string_report(), 1.0f);
+
+  timer3.start();
+  for (uint32 i = 0; i < test_size; ++i)
+  {
+    Triangle_Normal &t = tris[i];
+    hitcount += bool(testboxpdf(aabb, t));
+  }
+  timer3.stop();
+  set_message("Testbox.pdf:", timer3.string_report(), 1.0f);
+
+  set_message("hitcount:", s(hitcount), 1.0f);
+
   uint32 counter = 0;
   std::vector<Triangle_Normal> touching = scene->collision_octree.test_all(aabb, &counter);
 
@@ -669,76 +727,71 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 void Render_Test_State::update()
 {
   // update_grabbyarm(&scene, current_time);
-   update_planets(&scene, current_time);
+  update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
-    renderer.set_camera(camera.pos, camera.dir);
+  renderer.set_camera(camera.pos, camera.dir);
 
+  update_test_triangle(&scene);
 
-    update_test_triangle(&scene);
-
-
-
-
-  //static vec3 wind_dir;
-  //if (fract(sin(current_time)) > .5)
+  // static vec3 wind_dir;
+  // if (fract(sin(current_time)) > .5)
   //  wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
- 
-  //scene.particle_emitters[1].descriptor.position = vec3(0, 0, 25);
-  //scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  //scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 255;
-  //scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  //scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  // scene.particle_emitters[1].descriptor.position = vec3(0, 0, 25);
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  // scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 255;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
   //// scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  //scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
-  //scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
-  //scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  //scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
-  //scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  //scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.02;
-  //scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.15;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.02;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.15;
 
-  //scene.particle_emitters[2].descriptor.position = vec3(1, 0, 25);
-  //scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  //scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 255;
-  //scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  //scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  // scene.particle_emitters[2].descriptor.position = vec3(1, 0, 25);
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  // scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 255;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
   //// scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  //scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
-  //scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
-  //scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  //scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
-  //scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  //scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.02;
-  //scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.15;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.02;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.15;
 
-  //scene.particle_emitters[3].descriptor.position = vec3(0, 1, 25);
-  //scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  //scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 255;
-  //scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  //scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  // scene.particle_emitters[3].descriptor.position = vec3(0, 1, 25);
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  // scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 255;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
   //// scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  //scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
-  //scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
-  //scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  //scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
-  //scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  //scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.02;
-  //scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.15;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.02;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.15;
 
-  //scene.particle_emitters[0].descriptor.position = vec3(.5, .5, 25);
-  //scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  //scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 255;
-  //scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  //scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
+  // scene.particle_emitters[0].descriptor.position = vec3(.5, .5, 25);
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
+  // scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 255;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
   //// scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  //scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
-  //scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
-  //scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  //scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
-  //scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  //scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.02;
-  //scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.02;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
 }
 
 void spawn_test_spheres(Flat_Scene_Graph &scene)

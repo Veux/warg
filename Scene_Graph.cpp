@@ -2833,7 +2833,7 @@ bool aabb_intersection(const AABB &a, const AABB &b)
   return aabb_intersection(a.min, a.max, b.min, b.max);
 }
 
-bool aabb_plane_intersection(AABB b, vec3 n, float32 d)
+bool aabb_plane_intersection(const AABB &b, const vec3 &n, float32 d)
 {
   vec3 c = (b.max + b.min) * 0.5f;
   vec3 e = b.max - c;
@@ -2882,44 +2882,17 @@ float32 min(float32 a, float32 b, float32 c)
   return glm::min(glm::min(a, b), c);
 }
 
-// Test if AABB b intersects plane p
-int TestAABBPlane(AABB b, Plane_nd p)
-{
-  // These two lines not necessary with a (center, extents) AABB representation
-  vec3 c = (b.max + b.min) * 0.5f; // Compute AABB center
-  vec3 e = b.max - c;              // Compute positive extents
-  // Compute the projection interval radius of b onto L(t) = b.c + t * p.n
-  float r = e[0] * abs(p.n[0]) + e[1] * abs(p.n[1]) + e[2] * abs(p.n[2]);
-  // Compute distance of box center from plane
-  float s = dot(p.n, c) - p.d;
-  // Intersection occurs when distance s falls within [-r,+r] interval
-  return abs(s) <= r;
-}
-
-int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
+int TestTriangleAABBopt(vec3 v0, vec3 v1, vec3 v2, const AABB &b)
 {
   float p0, p1, p2, r;
-  // Compute box center and extents (if not already given in that format)
   vec3 c = (b.min + b.max) * 0.5f;
   float e0 = (b.max.x - b.min.x) * 0.5f;
   float e1 = (b.max.y - b.min.y) * 0.5f;
   float e2 = (b.max.z - b.min.z) * 0.5f;
-  // Translate triangle as conceptually moving AABB to origin
   v0 = v0 - c;
   v1 = v1 - c;
   v2 = v2 - c;
-  // Compute edge vectors for triangle
   vec3 f0 = v1 - v0, f1 = v2 - v1, f2 = v0 - v2;
-
-
-  // the p0 and p2 are taking the a vector and dotting it with v0, v1, v2
-  //p0 = v0.z * v1.y - v0.y * v1.z;
-  //p2 = v2.z * (v1.y - v0.y) - v2.z * (v1.z - v0.z);
-
-  //r = e1 * abs(f0.z) + e2 * abs(f0.y);
-  //if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
-  //  return 0; // Axis is a separating axis
-
   p0 = v0.z * f0.y - v0.y * f0.z;
   p2 = v2.z * f0.y - v2.y * f0.z;
   r = e1 * abs(f0.z) + e2 * abs(f0.y);
@@ -2969,7 +2942,7 @@ int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
   if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
     return 0;
 
-  //this one is incorrect for this example:
+  // this one is incorrect for this example:
   vec3 a22 = vec3(-f2.y, f2.x, 0);
   p0 = v0.y * f2.x - v0.x * f2.y;
   p1 = v1.y * f2.x - f1.x * f2.y;
@@ -2977,49 +2950,116 @@ int TestTriangleAABB(vec3 v0, vec3 v1, vec3 v2, AABB b)
   if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
     return 0;
 
-  //
-  //  // Repeat similar tests for remaining axes a01..a22
-  //// a00 = u0 × f0 = (1,0,0) × f0 = (0,?f0z ,f0y )
-  //// a01 = u0 × f1 = (1,0,0) × f1 = (0,?f1z ,f1y )
-  //// a02 = u0 × f2 = (1,0,0) × f2 = (0,?f2z ,f2y )
-  //// a10 = u1 × f0 = (0,1,0) × f0 = (f0z ,0,?f0x )
-  // a11 = u1 × f1 = (0,1,0) × f1 = (f1z ,0,?f1x )
-  // a12 = u1 × f2 = (0,1,0) × f2 = (f2z ,0,?f2x )
-  // a20 = u2 × f0 = (0,0,1) × f0 = (?f0y ,f0x ,0)
-  // a21 = u2 × f1 = (0,0,1) × f1 = (?f1y ,f1x ,0)
-  // a22 = u2 × f2  = (0,0,1) × f2 = (?f2y ,f2x ,0)
-  //
-  //
-
-  // Test the three axes corresponding to the face normals of AABB b (category 1).
-  // Exit if...
-  // ... [-e0, e0] and [min(v0.x,v1.x,v2.x), max(v0.x,v1.x,v2.x)] do not overlap
   if (max(v0.x, v1.x, v2.x) < -e0 || min(v0.x, v1.x, v2.x) > e0)
     return 0;
-  // ... [-e1, e1] and [min(v0.y,v1.y,v2.y), max(v0.y,v1.y,v2.y)] do not overlap
   if (max(v0.y, v1.y, v2.y) < -e1 || min(v0.y, v1.y, v2.y) > e1)
     return 0;
-  // ... [-e2, e2] and [min(v0.z,v1.z,v2.z), max(v0.z,v1.z,v2.z)] do not overlap
   if (max(v0.z, v1.z, v2.z) < -e2 || min(v0.z, v1.z, v2.z) > e2)
     return 0;
-  // Test separating axis corresponding to triangle face normal (category 2)
-  Plane_nd p;
-  p.n = cross(f0, f1);
-  p.d = dot(p.n, v0+c);//+c to get rid of the triangle translation we did above
-
-  bool intersects_plane = aabb_plane_intersection(b, p.n, p.d);
-  return intersects_plane;
-  return TestAABBPlane(b, p);
+  vec3 n = cross(f0, f1);
+  float32 d = dot(n, v0 + c);
+  return aabb_plane_intersection(b, n, d);
 }
 
-#define BROKEN_VERSION1
-//#define BROKEN_VERSION2
-bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
+int TestTriangleAABBorig(vec3 v0, vec3 v1, vec3 v2, AABB b)
 {
-#ifdef BROKEN_VERSION1
-  return TestTriangleAABB(triangle.a, triangle.b, triangle.c, aabb);
-#else
-#ifdef BROKEN_VERSION2
+  float p0, p1, p2, r;
+  vec3 c = (b.min + b.max) * 0.5f;
+  float e0 = (b.max.x - b.min.x) * 0.5f;
+  float e1 = (b.max.y - b.min.y) * 0.5f;
+  float e2 = (b.max.z - b.min.z) * 0.5f;
+  v0 = v0 - c;
+  v1 = v1 - c;
+  v2 = v2 - c;
+  vec3 f0 = v1 - v0, f1 = v2 - v1, f2 = v0 - v2;
+
+  vec3 a00 = cross(vec3(1, 0, 0), f0);
+  p0 = dot(v0, a00);
+  p1 = dot(v1, a00); //
+  p2 = dot(v2, a00);
+  r = e0 * abs(dot(vec3(1, 0, 0), a00)) + e1 * abs(dot(vec3(0, 1, 0), a00)) + e2 * abs(dot(vec3(0, 0, 1), a00));
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  vec3 a01 = cross(vec3(1, 0, 0), f1);
+  p0 = dot(v0, a01);
+  p1 = dot(v1, a01); //
+  p2 = dot(v2, a01);
+  r = e0 * abs(dot(vec3(1, 0, 0), a01)) + e1 * abs(dot(vec3(0, 1, 0), a01)) + e2 * abs(dot(vec3(0, 0, 1), a01));
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  vec3 a02 = cross(vec3(1, 0, 0), f2);
+  p0 = dot(v0, a02);
+  p1 = dot(v1, a02);
+  p2 = dot(v2, a02); //
+  r = e0 * abs(dot(vec3(1, 0, 0), a02)) + e1 * abs(dot(vec3(0, 1, 0), a02)) + e2 * abs(dot(vec3(0, 0, 1), a02));
+  if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
+    return 0;
+
+  vec3 a10 = cross(vec3(0, 1, 0), f0);
+  p0 = dot(v0, a10);
+  p1 = dot(v1, a10); //
+  p2 = dot(v2, a10);
+  r = e0 * abs(dot(vec3(1, 0, 0), a10)) + e1 * abs(dot(vec3(0, 1, 0), a10)) + e2 * abs(dot(vec3(0, 0, 1), a10));
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  vec3 a11 = cross(vec3(0, 1, 0), f1);
+  p0 = dot(v0, a11);
+  p1 = dot(v1, a11); //
+  p2 = dot(v2, a11);
+  r = e0 * abs(dot(vec3(1, 0, 0), a11)) + e1 * abs(dot(vec3(0, 1, 0), a11)) + e2 * abs(dot(vec3(0, 0, 1), a11));
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  vec3 a12 = cross(vec3(0, 1, 0), f2);
+  p0 = dot(v0, a12);
+  p1 = dot(v1, a12);
+  p2 = dot(v2, a12); //
+  r = e0 * abs(dot(vec3(1, 0, 0), a12)) + e1 * abs(dot(vec3(0, 1, 0), a12)) + e2 * abs(dot(vec3(0, 0, 1), a12));
+  if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
+    return 0;
+
+  vec3 a20 = cross(vec3(0, 0, 1), f0);
+  p0 = dot(v0, a20);
+  p1 = dot(v1, a20); //
+  p2 = dot(v2, a20);
+  r = e0 * abs(dot(vec3(1, 0, 0), a20)) + e1 * abs(dot(vec3(0, 1, 0), a20)) + e2 * abs(dot(vec3(0, 0, 1), a20));
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  vec3 a21 = cross(vec3(0, 0, 1), f1);
+  p0 = dot(v0, a21);
+  p1 = dot(v1, a21); //
+  p2 = dot(v2, a21);
+  r = e0 * abs(dot(vec3(1, 0, 0), a21)) + e1 * abs(dot(vec3(0, 1, 0), a21)) + e2 * abs(dot(vec3(0, 0, 1), a21));
+  if (glm::max(-glm::max(p0, p2), glm::min(p0, p2)) > r)
+    return 0;
+
+  vec3 a22 = cross(vec3(0, 0, 1), f2);
+  p0 = dot(v0, a22);
+  p1 = dot(v1, a22);
+  p2 = dot(v2, a22); //
+  r = e0 * abs(dot(vec3(1, 0, 0), a22)) + e1 * abs(dot(vec3(0, 1, 0), a22)) + e2 * abs(dot(vec3(0, 0, 1), a22));
+  if (glm::max(-glm::max(p0, p1), glm::min(p0, p1)) > r)
+    return 0;
+
+  if (max(v0.x, v1.x, v2.x) < -e0 || min(v0.x, v1.x, v2.x) > e0)
+    return 0;
+  if (max(v0.y, v1.y, v2.y) < -e1 || min(v0.y, v1.y, v2.y) > e1)
+    return 0;
+  if (max(v0.z, v1.z, v2.z) < -e2 || min(v0.z, v1.z, v2.z) > e2)
+    return 0;
+
+  vec3 n = cross(f0, f1);
+  float32 d = dot(n, v0 + c);
+
+  return aabb_plane_intersection(b, n, d);
+}
+
+bool testboxpdf(const AABB &aabb, const Triangle_Normal &triangle)
+{
   AABB tri_aabb(triangle.a);
   push_aabb(tri_aabb, triangle.b);
   push_aabb(tri_aabb, triangle.c);
@@ -3034,13 +3074,6 @@ bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangl
   bool intersects_plane = aabb_plane_intersection(aabb, triangle.n, d);
   if (!intersects_plane)
     return false;
-#endif
-#ifndef BROKEN_VERSION2
-  return TriangleAABB(triangle, aabb);
-#endif
-#endif
-
-#ifdef BROKEN_VERSION2
 
   // centering the aabb on origin
   const vec3 aabb_center = (aabb.min + 0.5f * (aabb.max - aabb.min));
@@ -3057,20 +3090,31 @@ bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangl
   {
     for (uint32 j = 0; j < 3; ++j)
     {
-      vec3 f;
-      if (j == 0)
-        f = v1 - v0;
-      if (j == 1)
-        f = v2 - v1;
-      if (j == 2)
-        f = v0 - v2;
-
       vec3 &e = basis[i];
-      vec3 a = cross(e, f);
+      vec3 f, a;
+      float32 p0, p2;
+      if (j == 0)
+      {
+        f = v1 - v0;
+        a = cross(e, f);
+        p0 = dot(a, v0);
+        p2 = dot(a, v2);
+      }
 
-      float32 p0 = dot(a, v0);
-      // float32 p1 = dot(a, v1); //p0 == p1
-      float32 p2 = dot(a, v2);
+      if (j == 1)
+      {
+        f = v2 - v1;
+        a = cross(e, f);
+        p0 = dot(a, v0);
+        p2 = dot(a, v2);
+      }
+      if (j == 2)
+      {
+        f = v0 - v2;
+        a = cross(e, f);
+        p0 = dot(a, v0);
+        p2 = dot(a, v1); // i think
+      }
 
       float32 minp = glm::min(p0, p2);
       float32 maxp = glm::max(p0, p2);
@@ -3084,6 +3128,26 @@ bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangl
     }
   }
   return true;
+  }
+
+
+#define VERSION0_OPTIMIZED
+//#define VERSION1_ORIG
+//#define VERSION2_COOKBOOK
+//#define VERSION3_TESTBOXPDF
+bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
+{
+#ifdef VERSION2_COOKBOOK
+  return TriangleAABB(triangle, aabb);
+#endif
+#ifdef VERSION1_ORIG
+  return TestTriangleAABBorig(triangle.a, triangle.b, triangle.c, aabb);
+#endif
+#ifdef VERSION0_OPTIMIZED
+  return TestTriangleAABBopt(triangle.a, triangle.b, triangle.c, aabb);
+#endif
+#ifdef VERSION3_TESTBOXPDF
+  return testboxpdf(aabb,triangle);
 #endif
 }
 
