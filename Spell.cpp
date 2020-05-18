@@ -105,10 +105,15 @@ void shadow_word_pain_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game
   game_state->damage_character(nullptr, character, 5);
 }
 
-void shadow_word_pain_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void shadow_word_pain_release(
+    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
-  Character *target = game_state->get_character(caster->cast_target);
+
+  auto t = std::find_if(game_state->character_targets.begin(), game_state->character_targets.end(),
+      [&](auto &t) { return t.c == caster->id; });
+  ASSERT(t != game_state->character_targets.end());
+  Character *target = game_state->get_character(t->t);
   ASSERT(target);
 
   target->remove_debuff(Spell_ID::Shadow_Word_Pain);
@@ -127,10 +132,13 @@ void corruption_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state
   game_state->damage_character(nullptr, character, 5);
 }
 
-void corruption_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void corruption_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
-  Character *target = game_state->get_character(caster->cast_target);
+  auto t = std::find_if(game_state->character_targets.begin(), game_state->character_targets.end(),
+      [&](auto &t) { return t.c == caster->id; });
+  ASSERT(t != game_state->character_targets.end());
+  Character *target = game_state->get_character(t->t);
   ASSERT(target);
 
   target->remove_debuff(Spell_ID::Corruption);
@@ -143,19 +151,23 @@ void corruption_release(Spell_Formula *formula, Game_State *game_state, Characte
   target->apply_debuff(&buff);
 }
 
-void frostbolt_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void frostbolt_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
+  auto c = std::find_if(game_state->character_casts.begin(), game_state->character_casts.end(),
+      [&](auto &cast) { return cast.caster == caster->id; });
+  ASSERT(c != game_state->character_casts.end());
+
   Spell_Object_Formula *object_formula = SPELL_DB.get_spell_object(Spell_ID::Frostbolt);
   Spell_Object object;
   object.formula_index = object_formula->index;
   object.caster = caster->id;
-  object.target = caster->target_id;
+  object.target = c->target;
   object.pos = caster->physics.position;
   object.id = uid();
   game_state->spell_objects[game_state->spell_object_count++] = object;
 }
 
-void blink_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void blink_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
 
@@ -164,7 +176,7 @@ void blink_release(Spell_Formula *formula, Game_State *game_state, Character *ca
   collide_and_slide_char(caster->physics, caster->radius, delta, vec3(0, 0, -100), scene);
 }
 
-void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
 
@@ -177,7 +189,7 @@ void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *c
   caster->apply_buff(&buff);
 }
 
-void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
 
@@ -191,7 +203,7 @@ void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character
 }
 
 void frostbolt_object_on_hit(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph* scene)
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph *scene)
 {
   Character *caster = game_state->get_character(object->caster);
   Character *target = game_state->get_character(object->target);
@@ -228,7 +240,8 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
 {
   BuffDef *corruption_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
 
-  struct {
+  struct
+  {
     Character *character;
     Buff *buff;
   } to_detonate[MAX_CHARACTERS];
@@ -242,10 +255,10 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
   {
     Character *caster = to_detonate[i].character;
     Buff *buff = to_detonate[i].buff;
-    
-    for (size_t j = 0; j < game_state->character_count; j++)
+
+    for (auto &t : game_state->characters)
     {
-      Character *target = &game_state->characters[j];
+      Character *target = &t;
 
       bool within_range = length(target->physics.position - character->physics.position) < 10.f;
       bool same_team = character->team == target->team;
@@ -277,20 +290,25 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
   }
 }
 
-void seed_of_corruption_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void seed_of_corruption_release(
+    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
+  auto c = std::find_if(game_state->character_casts.begin(), game_state->character_casts.end(),
+      [&](auto &cast) { return cast.caster == caster->id; });
+  ASSERT(c != game_state->character_casts.end());
+
   Spell_Object_Formula *object_formula = SPELL_DB.get_spell_object(Spell_ID::Seed_of_Corruption);
   Spell_Object object;
   object.formula_index = object_formula->index;
   object.caster = caster->id;
-  object.target = caster->target_id;
+  object.target = c->target;
   object.pos = caster->physics.position;
   object.id = uid();
   game_state->spell_objects[game_state->spell_object_count++] = object;
 }
 
 void seed_of_corruption_object_on_hit(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph* scene)
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph *scene)
 {
   Character *target = game_state->get_character(object->target);
   ASSERT(target);
@@ -317,7 +335,7 @@ void seed_of_corruption_object_on_hit(
 }
 
 void demonic_circle_summon_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
 
@@ -335,7 +353,7 @@ void demonic_circle_summon_release(
 }
 
 void demonic_circle_teleport_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
 
@@ -388,7 +406,7 @@ void buff_on_tick_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state,
 }
 
 void spell_object_on_hit_dispatch(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph* scene)
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph *scene)
 {
   switch (formula->_id)
   {
@@ -403,39 +421,40 @@ void spell_object_on_hit_dispatch(
   }
 }
 
-void spell_on_release_dispatch(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene)
+void spell_on_release_dispatch(
+    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   switch (formula->_id)
   {
-  case Spell_ID::Blink:
-    blink_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Corruption:
-    corruption_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Frostbolt:
-    frostbolt_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Icy_Veins:
-    icy_veins_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Shadow_Word_Pain:
-    shadow_word_pain_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Sprint:
-    sprint_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Seed_of_Corruption:
-    seed_of_corruption_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Demonic_Circle_Summon:
-    demonic_circle_summon_release(formula, game_state, caster, scene);
-    break;
-  case Spell_ID::Demonic_Circle_Teleport:
-    demonic_circle_teleport_release(formula, game_state, caster, scene);
-    break;
-  default:
-    break;
+    case Spell_ID::Blink:
+      blink_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Corruption:
+      corruption_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Frostbolt:
+      frostbolt_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Icy_Veins:
+      icy_veins_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Shadow_Word_Pain:
+      shadow_word_pain_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Sprint:
+      sprint_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Demonic_Circle_Summon:
+      demonic_circle_summon_release(formula, game_state, caster, scene);
+      break;
+    case Spell_ID::Demonic_Circle_Teleport:
+      demonic_circle_teleport_release(formula, game_state, caster, scene);
+      break;
+    default:
+      break;
   }
 }
 
@@ -504,7 +523,7 @@ Spell_Database::Spell_Database()
   BuffDef *icy_veins_buff = add_buff();
   icy_veins_buff->_id = Spell_ID::Icy_Veins;
   icy_veins_buff->name = "IcyVeinsBuff";
-  icy_veins_buff->icon = "Assets/Icons/icy_veins.jpg";
+  icy_veins_buff->icon = "icy_veins.jpg";
   icy_veins_buff->duration = 20;
   icy_veins_buff->stats_modifiers.cast_speed = 2.f;
 

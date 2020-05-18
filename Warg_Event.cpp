@@ -230,5 +230,5 @@ State_Message::State_Message(UID pc_, Game_State *game_state_)
   reliable = false;
 
   pc = pc_;
-  game_state_copy(&game_state, game_state_);
+  game_state = *game_state_;
 }

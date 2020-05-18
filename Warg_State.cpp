@@ -107,12 +107,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   scene.particle_emitters[0].mesh_index = mesh_index0;
   scene.particle_emitters[0].material_index = material_index0;
 
-   scene.particle_emitters[1].mesh_index = mesh_index1;
-   scene.particle_emitters[1].material_index = material_index1;
-   scene.particle_emitters[2].mesh_index = mesh_index2;
-   scene.particle_emitters[2].material_index = material_index2;
-   scene.particle_emitters[3].mesh_index = mesh_index3;
-   scene.particle_emitters[3].material_index = material_index3;
+  scene.particle_emitters[1].mesh_index = mesh_index1;
+  scene.particle_emitters[1].material_index = material_index1;
+  scene.particle_emitters[2].mesh_index = mesh_index2;
+  scene.particle_emitters[2].material_index = material_index2;
+  scene.particle_emitters[3].mesh_index = mesh_index3;
+  scene.particle_emitters[3].material_index = material_index3;
 
   scene.lights.light_count = 5;
 
@@ -168,20 +168,32 @@ void Warg_State::handle_input_events()
           get_character(&current_game_state, player_character_id))
       {
         Character *player_character = get_character(&current_game_state, player_character_id);
+        int num_spells = std::count_if(current_game_state.character_spells.begin(),
+            current_game_state.character_spells.end(), [&](auto &cs) { return cs.character == player_character_id; });
         size_t key = _e.key.keysym.sym - SDLK_1;
-        if (key < player_character->spell_set.spell_count)
+        if (key < num_spells)
         {
-          Spell_Index spell_formula_index = player_character->spell_set.spell_statuses[key].formula_index;
-          session->push(std::make_unique<Cast_Message>(target_id, spell_formula_index));
+          Spell_Index index;
+          int i = 0;
+          for (auto &cs : current_game_state.character_spells)
+          {
+            if (cs.character != player_character_id)
+              continue;
+            if (i++ == key)
+            {
+              index = cs.spell;
+              break;
+            }
+          }
+          session->push(std::make_unique<Cast_Message>(target_id, index));
         }
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&current_game_state, player_character_id))
       {
-        for (size_t i = 0; i < current_game_state.character_count; i++)
+        for (auto &character : current_game_state.characters)
         {
-          Character *character = &current_game_state.characters[i];
-          if (character->id != player_character_id && character->alive)
-            target_id = character->id;
+          if (character.id != player_character_id && character.alive)
+            target_id = character.id;
         }
       }
       if (_e.key.keysym.sym == SDLK_g)
@@ -507,21 +519,19 @@ void Warg_State::update_hp_bar(UID character_id)
 
 void Warg_State::update_character_nodes()
 {
-  for (size_t i = 0; i < current_game_state.character_count; i++)
+  for (auto &character : current_game_state.characters)
   {
-    Character *character = &current_game_state.characters[i];
+    Node_Index character_node = character_nodes[character.id];
 
-    Node_Index character_node = character_nodes[character->id];
+    scene.nodes[character_node].velocity = (character.physics.position - scene.nodes[character_node].position) / dt;
+    scene.nodes[character_node].position = character.physics.position;
+    scene.nodes[character_node].orientation = character.physics.orientation;
 
-    scene.nodes[character_node].velocity = (character->physics.position - scene.nodes[character_node].position) / dt;
-    scene.nodes[character_node].position = character->physics.position;
-    scene.nodes[character_node].orientation = character->physics.orientation;
+    scene.nodes[character_node].scale = character.radius * vec3(2);
 
-    scene.nodes[character_node].scale = character->radius * vec3(2);
+    update_hp_bar(character.id);
 
-    update_hp_bar(character->id);
-
-    animate_character(character->id);
+    animate_character(character.id);
   }
 }
 
@@ -663,12 +673,11 @@ void Warg_State::predict_state()
 
 void Warg_State::update_meshes()
 {
-  for (size_t i = 0; i < current_game_state.character_count; i++)
+  for (auto &character : current_game_state.characters)
   {
-    Character *character = &current_game_state.characters[i];
-    if (!character_nodes.count(character->id))
+    if (!character_nodes.count(character.id))
     {
-      add_character_mesh(character->id);
+      add_character_mesh(character.id);
     }
   }
 }
@@ -955,73 +964,73 @@ void Warg_State::update()
   if (fract(sin(current_time)) > .5)
     wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
-  Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
-  Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
-  Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
+  // Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
+  // Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
+  // Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
+  // Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
-  scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 415;
-  scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
-  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 415;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
+  //// scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 415;
-  scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
-  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 415;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
+  //// scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 415;
-  scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
-  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 415;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
+  //// scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 185;
-  scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
-  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 185;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
+  //// scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[2].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
-  set_message("Total Particle count:", s(particle_count), 1.0f);
-  uint32 i = sizeof(Octree);
+  // uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
+  // particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
+  // particle_count += scene.particle_emitters[2].shared_data->particles.MVP_Matrices.size();
+  // particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
+  // set_message("Total Particle count:", s(particle_count), 1.0f);
+  // uint32 i = sizeof(Octree);
 }
 
 void Warg_State::draw_gui()
@@ -1576,7 +1585,7 @@ void Warg_State::add_character_mesh(UID character_id)
 void State_Message::handle(Warg_State &state)
 {
   state.player_character_id = pc;
-  game_state_copy(&state.last_recieved_server_state, &game_state);
+  state.last_recieved_server_state = game_state;
   set_message("State_Message::handle() type with \"input_number\" of:", s(game_state.input_number), 1.0f);
   set_message("State_Message::handle() type with \"tick\" of:", s(game_state.tick), 1.0f);
   state.input_buffer.pop_older_than(state.last_recieved_server_state.input_number);
@@ -1631,15 +1640,17 @@ void Warg_State::update_cast_bar()
   if (!player_character)
     return;
 
-  if (!player_character->casting)
+  auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
+      [&](auto &c) { return c.caster == player_character->id; });
+  if (cast == current_game_state.character_casts.end())
     return;
 
   const vec2 resolution = CONFIG.resolution;
 
   ImVec2 size = ImVec2(200, 32);
   ImVec2 position = ImVec2(resolution.x / 2 - size.x / 2, CONFIG.resolution.y * 0.7f);
-  Spell_Formula *casting_spell_formula = spell_db.get_spell(get_casting_spell_formula_index(player_character));
-  float32 progress = player_character->cast_progress / casting_spell_formula->cast_time;
+  Spell_Formula *casting_spell_formula = spell_db.get_spell(cast->spell);
+  float32 progress = cast->progress / casting_spell_formula->cast_time;
 
   create_cast_bar("player_cast_bar", progress, position, size);
 }
@@ -1725,16 +1736,19 @@ void Warg_State::update_unit_frames()
   make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
   make_target_buffs(target->buffs, target->buff_count, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
   make_target_buffs(target->debuffs, target->debuff_count, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
-  if (!target->casting)
+
+  auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
+      [&](auto &c) { return c.caster == target->id; });
+  if (cast == current_game_state.character_casts.end())
     return;
-  Spell_Formula *casting_spell_formula = spell_db.get_spell(get_casting_spell_formula_index(target));
-  float32 cast_progress = target->cast_progress / casting_spell_formula->cast_time;
+
+  Spell_Formula *casting_spell_formula = spell_db.get_spell(cast->spell);
+  float32 cast_progress = cast->progress / casting_spell_formula->cast_time;
   create_cast_bar("target_cast_bar", cast_progress, v(grid.get_position(1, 5)), v(grid.get_section_size(1, 1)));
 }
 
 void Warg_State::update_icons()
 {
-
   Character *player_character = get_character(&current_game_state, player_character_id);
   ASSERT(player_character);
 
@@ -1742,8 +1756,9 @@ void Warg_State::update_icons()
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
   static std::vector<Texture> sources;
 
+  int num_spells = 0;
   static bool configured = false;
-  static size_t num_spells = 0;
+  int i = 0;
   if (!configured)
   {
     Texture_Descriptor texture_descriptor;
@@ -1753,18 +1768,22 @@ void Warg_State::update_icons()
     ASSERT(interface_state.action_bar_textures.size() == 0);
     ASSERT(sources.size() == 0);
 
-    num_spells = player_character->spell_set.spell_count;
+    num_spells = std::count_if(current_game_state.character_spells.begin(), current_game_state.character_spells.end(),
+        [&](auto &cs) { return cs.character == player_character_id; });
     interface_state.action_bar_textures.resize(num_spells);
     sources.resize(num_spells);
     framebuffer.color_attachments.resize(num_spells);
 
-    for (size_t i = 0; i < num_spells; i++)
+    for (auto &cs : current_game_state.character_spells)
     {
-      Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
+      if (cs.character != player_character_id)
+        continue;
+      Spell_Formula *spell = spell_db.get_spell(cs.spell);
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = formula->icon;
+      sources[i] = spell->icon;
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
+      i++;
     }
     configured = true;
   }
@@ -1774,23 +1793,24 @@ void Warg_State::update_icons()
 
   shader.use();
   shader.set_uniform("count", (int)sources.size());
-  for (size_t i = 0; i < num_spells; i++)
+  i = 0;
+  for (auto &cs : current_game_state.character_spells)
   {
-    Spell_Status *spell_status = &player_character->spell_set.spell_statuses[i];
-    Spell_Formula *spell_formula = spell_db.get_spell(spell_status->formula_index);
+    if (cs.character != player_character_id)
+      continue;
+    Spell_Formula *spell = spell_db.get_spell(cs.spell);
 
     float32 cooldown_percent = 0.f;
     float32 cooldown_remaining = 0.f;
 
-    float32 cooldown = spell_formula->cooldown;
-    if (cooldown > 0.f)
-    {
-      cooldown_remaining = spell_status->cooldown_remaining;
-      cooldown_percent = cooldown_remaining / cooldown;
-    }
-    if (spell_formula->on_global_cooldown && cooldown_remaining < player_character->global_cooldown)
+    auto scd = std::find_if(current_game_state.spell_cooldowns.begin(), current_game_state.spell_cooldowns.end(),
+        [&](auto &scd) { return scd.character == player_character_id && scd.spell == cs.spell; });
+    if (scd != current_game_state.spell_cooldowns.end())
+      cooldown_percent = scd->cooldown_remaining / spell->cooldown;
+    if (spell->on_global_cooldown && cooldown_remaining < player_character->global_cooldown)
       cooldown_percent = player_character->global_cooldown / player_character->effective_stats.global_cooldown;
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
+    i++;
   }
 
   run_pixel_shader(&shader, &sources, &framebuffer);
@@ -1913,11 +1933,10 @@ void Warg_State::update_game_interface()
 
 Character *get_character(Game_State *game_state, UID id)
 {
-  for (size_t i = 0; i < game_state->character_count; i++)
+  for (auto &character : game_state->characters)
   {
-    Character *character = &game_state->characters[i];
-    if (character->id == id)
-      return character;
+    if (character.id == id)
+      return &character;
   }
 
   set_message("get_character failed with UID:", s(id), 1.0f);
