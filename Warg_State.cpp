@@ -165,9 +165,9 @@ void Warg_State::handle_input_events()
       {
       }
       if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam &&
-          get_character(&current_game_state, player_character_id))
+          current_game_state.get_character(player_character_id))
       {
-        Character *player_character = get_character(&current_game_state, player_character_id);
+        Character *player_character = current_game_state.get_character(player_character_id);
         int num_spells = std::count_if(current_game_state.character_spells.begin(),
             current_game_state.character_spells.end(), [&](auto &cs) { return cs.character == player_character_id; });
         size_t key = _e.key.keysym.sym - SDLK_1;
@@ -188,7 +188,7 @@ void Warg_State::handle_input_events()
           session->push(std::make_unique<Cast_Message>(target_id, index));
         }
       }
-      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&current_game_state, player_character_id))
+      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && current_game_state.get_character(player_character_id))
       {
         for (auto &character : current_game_state.characters)
         {
@@ -235,7 +235,7 @@ void Warg_State::handle_input_events()
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!player_character_id || !get_character(&current_game_state, player_character_id))
+  if (!player_character_id || !current_game_state.get_character(player_character_id))
     return;
   if (free_cam)
   {
@@ -380,7 +380,7 @@ void Warg_State::handle_input_events()
     character_to_camera = normalize(ry * character_to_camera);
 
     ASSERT(player_character_id);
-    Character *player_character = get_character(&current_game_state, player_character_id);
+    Character *player_character = current_game_state.get_character(player_character_id);
     ASSERT(player_character);
 
     quat orientation;
@@ -433,7 +433,7 @@ void Warg_State::process_messages()
 void Warg_State::set_camera_geometry()
 {
   // set_message(s("set_camera_geometry()",s(" time:", current_time), 1.0f);
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   if (!player_character)
     return;
 
@@ -458,7 +458,7 @@ void Warg_State::set_camera_geometry()
 void Warg_State::update_hp_bar(UID character_id)
 {
   // set_message("update_hp_bar()");
-  Character *character = get_character(&current_game_state, character_id);
+  Character *character = current_game_state.get_character(character_id);
   Node_Index character_node = character_nodes[character_id];
 
   Node_Index hp_bar = scene.find_by_name(character_node, "hp_bar");
@@ -537,7 +537,7 @@ void Warg_State::update_character_nodes()
 
 void Warg_State::update_prediction_ghost()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   if (!player_character)
     return;
 
@@ -591,8 +591,8 @@ bool prediction_correct(UID player_character_id, Game_State &server_state, Game_
           " predicted_state.input_number:", predicted_state.input_number),
       1.0f);
 
-  Character *server_character = get_character(&server_state, player_character_id);
-  Character *predicted_character = get_character(&predicted_state, player_character_id);
+  Character *server_character = server_state.get_character(player_character_id);
+  Character *predicted_character = predicted_state.get_character(player_character_id);
 
   if (!server_character && !predicted_character)
   {
@@ -616,7 +616,7 @@ void Warg_State::predict_state()
 {
   // game_state = server_state;
   return;
-  if (!get_character(&last_recieved_server_state, player_character_id))
+  if (!last_recieved_server_state.get_character(player_character_id))
     return;
 
   if (input_buffer.size() == 0)
@@ -652,7 +652,7 @@ void Warg_State::predict_state()
   {
     Input &input = input_buffer[i];
 
-    Character *player_character = get_character(&predicted_state, player_character_id);
+    Character *player_character = predicted_state.get_character(player_character_id);
     Character_Physics &physics = player_character->physics;
     vec3 radius = player_character->radius;
     float32 movement_speed = player_character->effective_stats.speed;
@@ -730,7 +730,7 @@ void Warg_State::animate_character(UID character_id)
   static std::map<UID, vec3> last_positions;
   static std::map<UID, bool> last_grounded;
 
-  Character *character = get_character(&current_game_state, character_id);
+  Character *character = current_game_state.get_character(character_id);
   ASSERT(character);
 
   if (!character->alive)
@@ -824,7 +824,7 @@ void Warg_State::update()
   process_messages();
   update_stats_bar();
   current_game_state = last_recieved_server_state;
-  Character *target = get_character(&current_game_state, target_id);
+  Character *target = current_game_state.get_character(target_id);
   if (!target || !target->alive)
     target_id = 0;
   predict_state();
@@ -852,7 +852,7 @@ void Warg_State::update()
   beatimer.stop();
   // set_message("octree timer:", beatimer.string_report(), 1.0f);
 
-  Character *me = get_character(&current_game_state, player_character_id);
+  Character *me = current_game_state.get_character(player_character_id);
   if (!me)
     return;
   Mesh_Descriptor mesh(cube, "spawnedcube");
@@ -1045,7 +1045,7 @@ void Warg_State::draw_gui()
 void Warg_State::add_girl_character_mesh(UID character_id)
 {
 
-  Character *character = get_character(&current_game_state, character_id);
+  Character *character = current_game_state.get_character(character_id);
   character_nodes[character_id];
 
   // Material_Descriptor hp_bar_material;
@@ -1346,7 +1346,7 @@ void Warg_State::add_character_mesh(UID character_id)
     return;
   }
 
-  Character *character = get_character(&current_game_state, character_id);
+  Character *character = current_game_state.get_character(character_id);
   character_nodes[character_id];
 
   Material_Descriptor skin_material;
@@ -1636,7 +1636,7 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
 
 void Warg_State::update_cast_bar()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   if (!player_character)
     return;
 
@@ -1657,7 +1657,7 @@ void Warg_State::update_cast_bar()
 
 void Warg_State::update_unit_frames()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   if (!player_character)
     return;
 
@@ -1729,7 +1729,7 @@ void Warg_State::update_unit_frames()
 
   make_unit_frame("player_unit_frame", player_character, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
 
-  Character *target = get_character(&current_game_state, target_id);
+  Character *target = current_game_state.get_character(target_id);
   if (!target)
     return;
 
@@ -1749,7 +1749,7 @@ void Warg_State::update_unit_frames()
 
 void Warg_State::update_icons()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   ASSERT(player_character);
 
   static Framebuffer framebuffer = Framebuffer();
@@ -1845,7 +1845,7 @@ void Warg_State::update_action_bar()
 
 void Warg_State::update_buff_indicators()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   ASSERT(player_character);
 
   auto duration_string = [](float32 seconds) {
@@ -1919,7 +1919,7 @@ void Warg_State::update_buff_indicators()
 
 void Warg_State::update_game_interface()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
+  Character *player_character = current_game_state.get_character(player_character_id);
   if (!player_character)
     return;
 
@@ -1929,16 +1929,4 @@ void Warg_State::update_game_interface()
   update_unit_frames();
   update_action_bar();
   update_buff_indicators();
-}
-
-Character *get_character(Game_State *game_state, UID id)
-{
-  for (auto &character : game_state->characters)
-  {
-    if (character.id == id)
-      return &character;
-  }
-
-  set_message("get_character failed with UID:", s(id), 1.0f);
-  return nullptr;
 }

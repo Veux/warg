@@ -95,8 +95,3 @@ struct Warg_State : protected State
 
   Interface_State interface_state;
 };
-
-Character *get_character(Game_State *game_state, UID id);
-
-
-

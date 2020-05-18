@@ -39,9 +39,9 @@ void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float3
 {
   for (auto &scd : spell_cooldowns)
     scd.cooldown_remaining -= dt;
-  auto erase_it = std::remove_if(
-      spell_cooldowns.begin(), spell_cooldowns.end(), [](auto &scd) { return scd.cooldown_remaining <= 0.0; });
-  spell_cooldowns.erase(erase_it, spell_cooldowns.end());
+  spell_cooldowns.erase(std::remove_if(
+      spell_cooldowns.begin(), spell_cooldowns.end(), [](auto &scd) { return scd.cooldown_remaining <= 0.0; }),
+    spell_cooldowns.end());
 }
 
 void Character::update_global_cooldown(float32 dt)
@@ -627,35 +627,6 @@ void cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Gra
     release_spell(game_state, spell_db, scene, caster_id, target_id, spell_id);
 }
 
-// void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, Character &caster,
-//    UID target_id, Spell_Index spell_formula_index)
-//{
-//  Spell_Formula *spell_formula = spell_db.get_spell(spell_formula_index);
-//
-//  bool caster_has_spell = false;
-//  Spell_Status *spell_status = nullptr;
-//  for (size_t i = 0; i < caster.spell_set.spell_count; i++)
-//    if (caster.spell_set.spell_statuses[i].formula_index == spell_formula_index)
-//    {
-//      caster_has_spell = true;
-//      spell_status = &caster.spell_set.spell_statuses[i];
-//    }
-//  if (!caster_has_spell)
-//    return;
-//
-//  Character *target = nullptr;
-//  if (spell_formula->targets == Spell_Targets::Self)
-//    target = &caster;
-//  else if (spell_formula->targets == Spell_Targets::Terrain)
-//    ASSERT(target_id == 0);
-//  else if (target_id && game_state.get_character(target_id))
-//    target = game_state.get_character(target_id);
-//
-//  Cast_Error err;
-//  if (cast_viable(game_state, spell_db, scene, caster.id, target_id, spell_status, false) == Cast_Error::Success)
-//    cast_spell(game_state, spell_db, scene, caster.id, target ? target->id : 0, spell_status);
-//}
-
 void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id,
     UID target_id, Spell_Index spell_id)
 {
@@ -677,71 +648,26 @@ void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene
     cast_spell(game_state, spell_db, scene, caster->id, target ? target->id : 0, spell_id);
 }
 
-// void interrupt_cast(Game_State &game_state, Spell_Database &spell_db, UID character_id)
-//{
-//  ASSERT(character_id);
-//  Character *character = game_state.get_character(character_id);
-//  ASSERT(character);
-//
-//  if (!character->casting)
-//    return;
-//
-//  ASSERT(character->casting_spell_status_index < character->spell_set.spell_count);
-//  Spell_Status *casting_spell_status = &character->spell_set.spell_statuses[character->casting_spell_status_index];
-//  Spell_Formula *casting_spell_formula = spell_db.get_spell(casting_spell_status->formula_index);
-//
-//  character->casting = false;
-//  character->cast_progress = 0;
-//  if (casting_spell_formula->on_global_cooldown)
-//    character->global_cooldown = 0;
-//}
-
-// void update_cast(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, float32
-// dt)
-//{
-//  Character *caster = game_state.get_character(caster_id);
-//  ASSERT(caster);
-//
-//  if (!caster->casting)
-//    return;
-//
-//  ASSERT(caster->casting_spell_status_index < caster->spell_set.spell_count);
-//  Spell_Status *casting_spell_status = &caster->spell_set.spell_statuses[caster->casting_spell_status_index];
-//  ASSERT(casting_spell_status);
-//
-//  Spell_Formula *formula = spell_db.get_spell(casting_spell_status->formula_index);
-//  caster->cast_progress += caster->effective_stats.cast_speed * dt;
-//  if (caster->cast_progress >= formula->cast_time)
-//  {
-//    caster->cast_progress = 0;
-//    caster->casting = false;
-//    release_spell(game_state, spell_db, scene, caster_id, caster->cast_target, casting_spell_status);
-//    caster->cast_target = 0;
-//  }
-//}
-
 void update_casts(Game_State &game_state, std::vector<Character_Cast> &character_casts, Spell_Database &spell_db,
     Flat_Scene_Graph &scene, float32 dt)
 {
   for (auto &cc : character_casts)
-    cc.progress += dt;
-  auto erase_it = std::remove_if(character_casts.begin(), character_casts.end(), [&](auto &cc) {
-    if (cc.progress >= spell_db.get_spell(cc.spell)->cast_time)
-    {
-      release_spell(game_state, spell_db, scene, cc.caster, cc.target, cc.spell);
-      return true;
-    }
-    return false;
-  });
-  character_casts.erase(erase_it, character_casts.end());
+    cc.progress += game_state.get_character(cc.caster)->effective_stats.cast_speed * dt;
+  character_casts.erase(std::remove_if(character_casts.begin(), character_casts.end(), [&](auto &cc) {
+      if (cc.progress >= spell_db.get_spell(cc.spell)->cast_time)
+      {
+        release_spell(game_state, spell_db, scene, cc.caster, cc.target, cc.spell);
+        return true;
+      }
+      return false;
+    }), character_casts.end());
 }
 
 void update_targets(std::vector<Character> &characters, std::vector<Character_Target> &character_targets)
 {
-  auto erase_it = std::remove_if(character_targets.begin(), character_targets.end(), [&](auto &t) {
+  character_targets.erase(std::remove_if(character_targets.begin(), character_targets.end(), [&](auto &t) {
     return std::none_of(characters.begin(), characters.end(), [&](auto &c) { return c.id == t.t; });
-  });
-  character_targets.erase(erase_it, character_targets.end());
+  }), character_targets.end());
 }
 
 UID add_dummy(Game_State &game_state, Map *map, vec3 position)

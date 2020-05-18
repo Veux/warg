@@ -54,19 +54,6 @@ struct Character_Physics
   Input command;
 };
 
-// struct Spell_Status
-//{
-//  size_t index;
-//  Spell_Index formula_index;
-//  float32 cooldown_remaining = 0;
-//};
-
-//struct Spell_Set
-//{
-//  // Spell_Status spell_statuses[MAX_SPELLS];
-//  uint8 spell_count = 0;
-//};
-
 struct Character
 {
   void update_hp(float32 dt);
@@ -103,11 +90,6 @@ struct Character
   float64 attack_cooldown = 0;
   float64 global_cooldown = 0;
 
-  //Spell_Set spell_set;
-  // bool casting = false;
-  // size_t casting_spell_status_index;
-  // float32 cast_progress = 0;
-  // UID cast_target = 0;
   bool silenced = false;
 };
 

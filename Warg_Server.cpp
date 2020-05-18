@@ -61,11 +61,10 @@ void Warg_Server::update(float32 dt)
     if (character.alive)
     {
       if (character.physics.position != old_pos)
-      {
-        auto erase_it = std::remove_if(game_state.character_casts.begin(), game_state.character_casts.end(),
-            [&](auto &cast) { return cast.caster == character.id; });
-        game_state.character_casts.erase(erase_it, game_state.character_casts.end());
-      }
+        game_state.character_casts.erase(
+            std::remove_if(game_state.character_casts.begin(), game_state.character_casts.end(),
+                [&](auto &cast) { return cast.caster == character.id; }),
+            game_state.character_casts.end());
       update_buffs(game_state, spell_db, character.id);
       character.update_hp(dt);
       character.update_mana(dt);
@@ -108,7 +107,7 @@ void Input_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  Character *character = server.get_character(peer_->character);
+  Character *character = server.game_state.get_character(peer_->character);
   ASSERT(character);
 
   Input command;
@@ -128,7 +127,7 @@ void Cast_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  Character *character = server.get_character(peer_->character);
+  Character *character = server.game_state.get_character(peer_->character);
   ASSERT(character);
 
   try_cast_spell(server.game_state, server.spell_db, server.scene, peer_->character, _target_id, _spell_index);
@@ -137,14 +136,4 @@ void Cast_Message::handle(Warg_Server &server)
 void Warg_Server::connect(std::shared_ptr<Peer> peer)
 {
   peers[uid()] = peer;
-}
-
-Character *Warg_Server::get_character(UID id)
-{
-  for (auto &character : game_state.characters)
-  {
-    if (character.id == id)
-      return &character;
-  }
-  return nullptr;
 }

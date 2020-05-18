@@ -17,8 +17,6 @@ struct Warg_Server
   void connect(std::shared_ptr<Peer> peer);
   void process_messages();
 
-  Character *get_character(UID id);
-
   std::map<UID, std::shared_ptr<Peer>> peers;
   float64 time = 0;
   uint32 tick = 0;
