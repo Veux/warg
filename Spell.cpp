@@ -116,14 +116,14 @@ void shadow_word_pain_release(
   Character *target = game_state->get_character(t->t);
   ASSERT(target);
 
-  target->remove_debuff(Spell_ID::Shadow_Word_Pain);
+  remove_debuff(*target, Spell_ID::Shadow_Word_Pain);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Shadow_Word_Pain);
   Buff buff;
   buff._id = Spell_ID::Shadow_Word_Pain;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.time_since_last_tick = 0.f;
-  target->apply_debuff(&buff);
+  apply_debuff(*target, &buff);
 }
 
 void corruption_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
@@ -141,14 +141,14 @@ void corruption_release(Spell_Formula *formula, Game_State *game_state, Characte
   Character *target = game_state->get_character(t->t);
   ASSERT(target);
 
-  target->remove_debuff(Spell_ID::Corruption);
+  remove_debuff(*target, Spell_ID::Corruption);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
   Buff buff;
   buff._id = Spell_ID::Corruption;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.time_since_last_tick = 0.f;
-  target->apply_debuff(&buff);
+  apply_debuff(*target, &buff);
 }
 
 void frostbolt_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
@@ -180,26 +180,26 @@ void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *c
 {
   ASSERT(caster);
 
-  caster->remove_buff(Spell_ID::Sprint);
+  remove_buff(*caster, Spell_ID::Sprint);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Sprint);
   Buff buff;
   buff._id = Spell_ID::Sprint;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  caster->apply_buff(&buff);
+  apply_buff(*caster, &buff);
 }
 
 void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
 {
   ASSERT(caster);
 
-  caster->remove_buff(Spell_ID::Icy_Veins);
+  remove_buff(*caster, Spell_ID::Icy_Veins);
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Icy_Veins);
   Buff buff;
   buff._id = Spell_ID::Icy_Veins;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  caster->apply_buff(&buff);
+  apply_buff(*caster, &buff);
 }
 
 void frostbolt_object_on_hit(
@@ -213,13 +213,13 @@ void frostbolt_object_on_hit(
 
   game_state->damage_character(caster, target, 10);
 
-  target->remove_debuff(Spell_ID::Frostbolt);
+  remove_debuff(*target, Spell_ID::Frostbolt);
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Frostbolt);
   Buff debuff;
   debuff._id = Spell_ID::Frostbolt;
   debuff.formula_index = debuff_formula->index;
   debuff.duration = debuff_formula->duration;
-  target->apply_debuff(&debuff);
+  apply_debuff(*target, &debuff);
 }
 
 void seed_of_corruption_debuff_on_damage(
@@ -232,7 +232,7 @@ void seed_of_corruption_debuff_on_damage(
   if (buff->u.seed_of_corruption.damage_taken >= 20)
   {
     buff_on_end_dispatch(formula, buff, game_state, object);
-    object->remove_debuff(Spell_ID::Seed_of_Corruption);
+    remove_debuff(*object, Spell_ID::Seed_of_Corruption);
   }
 }
 
@@ -271,7 +271,7 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
       buff.formula_index = corruption_formula->index;
       buff.duration = corruption_formula->duration;
       buff.time_since_last_tick = 0.f;
-      target->apply_debuff(&buff);
+      apply_debuff(*target, &buff);
 
       bool should_detonate = true;
       for (size_t k = 0; k < to_detonate_count; k++)
@@ -279,7 +279,7 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
         if (to_detonate[k].character == target)
           should_detonate = false;
       }
-      Buff *existing_seed = target->find_debuff(Spell_ID::Seed_of_Corruption);
+      Buff *existing_seed = find_debuff(*target, Spell_ID::Seed_of_Corruption);
       if (should_detonate && existing_seed)
       {
         to_detonate[to_detonate_count].character = target;
@@ -317,11 +317,11 @@ void seed_of_corruption_object_on_hit(
 
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Seed_of_Corruption);
 
-  Buff *existing = target->find_debuff(Spell_ID::Seed_of_Corruption);
+  Buff *existing = find_debuff(*target, Spell_ID::Seed_of_Corruption);
   if (existing)
   {
     buff_on_end_dispatch(debuff_formula, existing, game_state, target);
-    target->remove_debuff(Spell_ID::Seed_of_Corruption);
+    remove_debuff(*target, Spell_ID::Seed_of_Corruption);
     return;
   }
 
@@ -331,7 +331,7 @@ void seed_of_corruption_object_on_hit(
   debuff.duration = debuff_formula->duration;
   debuff.u.seed_of_corruption.caster = object->caster;
   debuff.u.seed_of_corruption.damage_taken = 0;
-  target->apply_debuff(&debuff);
+  apply_debuff(*target, &debuff);
 }
 
 void demonic_circle_summon_release(
@@ -342,14 +342,14 @@ void demonic_circle_summon_release(
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Demonic_Circle_Summon);
   ASSERT(buff_formula);
 
-  caster->remove_buff(Spell_ID::Demonic_Circle_Summon);
+  remove_buff(*caster, Spell_ID::Demonic_Circle_Summon);
   Buff buff;
   buff._id = Spell_ID::Demonic_Circle_Summon;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.u.demonic_circle.position = caster->physics.position;
   buff.u.demonic_circle.grounded = caster->physics.grounded;
-  caster->apply_buff(&buff);
+  apply_buff(*caster, &buff);
 }
 
 void demonic_circle_teleport_release(
@@ -357,7 +357,7 @@ void demonic_circle_teleport_release(
 {
   ASSERT(caster);
 
-  Buff *circle_buff = caster->find_buff(Spell_ID::Demonic_Circle_Summon);
+  Buff *circle_buff = find_buff(*caster, Spell_ID::Demonic_Circle_Summon);
 
   if (!circle_buff)
     return;

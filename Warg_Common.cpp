@@ -20,108 +20,113 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
 }
 
-void Character::update_hp(float32 dt)
+void regen_characters_hp(std::vector<Character> &cs, float32 dt)
 {
-  hp += (int)round(effective_stats.hp_regen * dt); // todo: fix dis shit
-  if (hp > hp_max)
-    hp = hp_max;
+  for (auto &c : cs)
+  {
+    c.hp += c.effective_stats.hp_regen * dt;
+    if (c.hp > c.hp_max)
+      c.hp = c.hp_max;
+  }
 }
 
-void Character::update_mana(float32 dt)
+void regen_characters_mana(std::vector<Character> &cs, float32 dt)
 {
-  mana += effective_stats.mana_regen * dt;
-
-  if (mana > mana_max)
-    mana = mana_max;
+  for (auto &c : cs)
+  {
+    c.mana += c.effective_stats.mana_regen * dt;
+    if (c.mana > c.mana_max)
+      c.mana = c.mana_max;
+  }
 }
 
 void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float32 dt)
 {
   for (auto &scd : spell_cooldowns)
     scd.cooldown_remaining -= dt;
-  spell_cooldowns.erase(std::remove_if(
-      spell_cooldowns.begin(), spell_cooldowns.end(), [](auto &scd) { return scd.cooldown_remaining <= 0.0; }),
-    spell_cooldowns.end());
+  spell_cooldowns.erase(std::remove_if(spell_cooldowns.begin(), spell_cooldowns.end(),
+                            [](auto &scd) { return scd.cooldown_remaining <= 0.0; }),
+      spell_cooldowns.end());
 }
 
-void Character::update_global_cooldown(float32 dt)
+void update_global_cooldowns(std::vector<Character> &cs, float32 dt)
 {
-  global_cooldown -= dt * effective_stats.cast_speed;
-  if (global_cooldown < 0)
-    global_cooldown = 0;
-}
-
-void Character::take_heal(float32 heal)
-{
-  if (!alive)
-    return;
-
-  hp += heal;
-
-  if (hp > hp_max)
+  for (auto &c : cs)
   {
-    hp = hp_max;
+    c.global_cooldown -= dt * c.effective_stats.cast_speed;
+    if (c.global_cooldown < 0)
+      c.global_cooldown = 0;
   }
 }
 
-void Character::apply_buff(Buff *buff)
+void heal_character(Character &c, int32 heal)
 {
-  if (buff_count >= MAX_BUFFS)
+  if (!c.alive)
     return;
 
-  buffs[buff_count++] = *buff;
+  c.hp += heal;
+  if (c.hp > c.hp_max)
+    c.hp = c.hp_max;
 }
 
-void Character::apply_debuff(Buff *debuff)
+void apply_buff(Character &c, Buff *buff)
 {
-  if (debuff_count >= MAX_DEBUFFS)
+  if (c.buff_count >= MAX_BUFFS)
     return;
 
-  debuffs[debuff_count++] = *debuff;
+  c.buffs[c.buff_count++] = *buff;
 }
 
-Buff *Character::find_buff(Spell_ID buff_id)
+void apply_debuff(Character &c, Buff *debuff)
+{
+  if (c.debuff_count >= MAX_DEBUFFS)
+    return;
+
+  c.debuffs[c.debuff_count++] = *debuff;
+}
+
+Buff *find_buff(Character &c, Spell_ID buff_id)
 {
   Buff *buff = nullptr;
-  for (size_t i = 0; i < buff_count; i++)
-    if (buffs[i]._id == buff_id)
-      buff = &buffs[i];
+  for (size_t i = 0; i < c.buff_count; i++)
+    if (c.buffs[i]._id == buff_id)
+      buff = &c.buffs[i];
 
   return buff;
 }
 
-Buff *Character::find_debuff(Spell_ID debuff_id)
+Buff *find_debuff(Character &c, Spell_ID debuff_id)
 {
   Buff *debuff = nullptr;
-  for (size_t i = 0; i < debuff_count; i++)
-    if (debuffs[i]._id == debuff_id)
-      debuff = &debuffs[i];
+  for (size_t i = 0; i < c.debuff_count; i++)
+    if (c.debuffs[i]._id == debuff_id)
+      debuff = &c.debuffs[i];
 
   return debuff;
 }
 
-void Character::remove_buff(Spell_ID buff_id)
+void remove_buff(Character &c, Spell_ID buff_id)
 {
-  for (size_t i = 0; i < buff_count; i++)
+  for (size_t i = 0; i < c.buff_count; i++)
   {
-    Buff *buff = &buffs[i];
+    Buff *buff = &c.buffs[i];
     if (buff->_id == buff_id)
     {
-      *buff = buffs[buff_count - 1];
-      buff_count--;
+      *buff = c.buffs[c.buff_count - 1];
+      c.buff_count--;
     }
   }
 }
 
-void Character::remove_debuff(Spell_ID debuff_id)
+void remove_debuff(Character &c, Spell_ID debuff_id)
 {
-  for (size_t i = 0; i < debuff_count; i++)
+  for (size_t i = 0; i < c.debuff_count; i++)
   {
-    Buff *debuff = &debuffs[i];
+    Buff *debuff = &c.debuffs[i];
     if (debuff->_id == debuff_id)
     {
-      *debuff = debuffs[debuff_count - 1];
-      debuff_count--;
+      *debuff = c.debuffs[c.debuff_count - 1];
+      c.debuff_count--;
     }
   }
 }
@@ -592,6 +597,10 @@ void release_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_
 
   if (spell_formula->cooldown > 0.0)
     game_state.spell_cooldowns.push_back({caster_id, spell_id, spell_formula->cooldown});
+
+  caster->mana -= spell_formula->mana_cost;
+  if (caster->mana < 0)
+    caster->mana = 0;
 }
 
 void begin_cast(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, UID target_id,
@@ -648,26 +657,28 @@ void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene
     cast_spell(game_state, spell_db, scene, caster->id, target ? target->id : 0, spell_id);
 }
 
-void update_casts(Game_State &game_state, std::vector<Character_Cast> &character_casts, Spell_Database &spell_db,
+void update_casts(Game_State &game_state, std::vector<Character_Cast> &ccs, Spell_Database &spell_db,
     Flat_Scene_Graph &scene, float32 dt)
 {
-  for (auto &cc : character_casts)
+  for (auto &cc : ccs)
     cc.progress += game_state.get_character(cc.caster)->effective_stats.cast_speed * dt;
-  character_casts.erase(std::remove_if(character_casts.begin(), character_casts.end(), [&](auto &cc) {
-      if (cc.progress >= spell_db.get_spell(cc.spell)->cast_time)
-      {
-        release_spell(game_state, spell_db, scene, cc.caster, cc.target, cc.spell);
-        return true;
-      }
-      return false;
-    }), character_casts.end());
+  ccs.erase(std::remove_if(ccs.begin(), ccs.end(),
+                [&](auto &cc) {
+                  if (cc.progress >= spell_db.get_spell(cc.spell)->cast_time)
+                  {
+                    release_spell(game_state, spell_db, scene, cc.caster, cc.target, cc.spell);
+                    return true;
+                  }
+                  return false;
+                }),
+      ccs.end());
 }
 
-void update_targets(std::vector<Character> &characters, std::vector<Character_Target> &character_targets)
+void update_targets(std::vector<Character> &cs, std::vector<Character_Target> &cts)
 {
-  character_targets.erase(std::remove_if(character_targets.begin(), character_targets.end(), [&](auto &t) {
-    return std::none_of(characters.begin(), characters.end(), [&](auto &c) { return c.id == t.t; });
-  }), character_targets.end());
+  cts.erase(std::remove_if(cts.begin(), cts.end(),
+                [&](auto &ct) { return std::none_of(cs.begin(), cs.end(), [&](auto &c) { return c.id == ct.t; }); }),
+      cts.end());
 }
 
 UID add_dummy(Game_State &game_state, Map *map, vec3 position)
@@ -689,7 +700,7 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position)
   stats.global_cooldown = 1.5;
   stats.speed = 0.0;
   stats.cast_speed = 1;
-  stats.hp_regen = 0;
+  stats.hp_regen = 3;
   stats.mana_regen = 1000;
   stats.damage_mod = 1;
   stats.atk_dmg = 0;
@@ -765,7 +776,10 @@ void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Fla
       add_dummy(game_state, map, {1, i, 5});
     set_message("NEEEEEEXTTTT", "", 5);
   }
-
+  
+  regen_characters_hp(game_state.characters, dt);
+  regen_characters_mana(game_state.characters, dt);
+  update_global_cooldowns(game_state.characters, dt);
   update_targets(game_state.characters, game_state.character_targets);
   update_spell_objects(game_state, spell_db, scene);
   update_spell_cooldowns(game_state.spell_cooldowns, dt);

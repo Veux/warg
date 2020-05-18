@@ -66,9 +66,6 @@ void Warg_Server::update(float32 dt)
                 [&](auto &cast) { return cast.caster == character.id; }),
             game_state.character_casts.end());
       update_buffs(game_state, spell_db, character.id);
-      character.update_hp(dt);
-      character.update_mana(dt);
-      character.update_global_cooldown(dt);
     }
     else
     {

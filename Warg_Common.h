@@ -56,17 +56,6 @@ struct Character_Physics
 
 struct Character
 {
-  void update_hp(float32 dt);
-  void update_mana(float32 dt);
-  void update_global_cooldown(float32 dt);
-  void take_heal(float32 heal);
-  void apply_buff(Buff *buff);
-  void apply_debuff(Buff *debuff);
-  Buff *find_buff(Spell_ID buff_id);
-  Buff *find_debuff(Spell_ID debuff_id);
-  void remove_buff(Spell_ID buff_id);
-  void remove_debuff(Spell_ID debuff_id);
-
   UID id;
 
   Character_Physics physics;
@@ -83,7 +72,7 @@ struct Character
   uint8 buff_count = 0;
   uint8 debuff_count = 0;
 
-  int32 hp, hp_max;
+  float32 hp, hp_max;
   float32 mana, mana_max;
   bool alive = true;
 
@@ -176,3 +165,13 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position);
 UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int team, const char *name);
 void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene, float32 dt);
 void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float32 dt);
+void remove_debuff(Character &c, Spell_ID debuff_id);
+void remove_buff(Character &c, Spell_ID buff_id);
+Buff *find_buff(Character &c, Spell_ID debuff_id);
+Buff *find_debuff(Character &c, Spell_ID debuff_id);
+void apply_buff(Character &c, Buff *buff);
+void apply_debuff(Character &c, Buff *debuff);
+void regen_characters_hp(std::vector<Character> &cs, float32 dt);
+void regen_characters_mana(std::vector<Character> &cs, float32 dt);
+void update_global_cooldowns(std::vector<Character> &cs, float32 dt);
+void heal_character(Character &c, int32 heal);
