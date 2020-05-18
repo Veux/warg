@@ -31,18 +31,7 @@ void Warg_Server::update(float32 dt)
   set_message("server character count:", s(game_state.characters.size()), 5);
 
   update_game(game_state, map, spell_db, scene, dt);
-
-  for (auto &character : game_state.characters)
-  {
-    Input last_input;
-    for (auto &peer_ : peers)
-    {
-      std::shared_ptr<Peer> peer = peer_.second;
-      if (peer->character == character.id)
-        last_input = peer->last_input;
-    }
-  }
-
+  
   for (auto &character : game_state.characters)
   {
     Input last_input;
@@ -61,11 +50,12 @@ void Warg_Server::update(float32 dt)
     if (character.alive)
     {
       if (character.physics.position != old_pos)
+      {
         game_state.character_casts.erase(
             std::remove_if(game_state.character_casts.begin(), game_state.character_casts.end(),
                 [&](auto &cast) { return cast.caster == character.id; }),
             game_state.character_casts.end());
-      update_buffs(game_state, spell_db, character.id);
+      }
     }
     else
     {

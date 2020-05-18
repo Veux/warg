@@ -5,6 +5,21 @@
 #include <string>
 #include <vector>
 
+struct Map
+{
+  Node_Index node;
+  Mesh_Data mesh;
+  Material_Descriptor material;
+
+  vec3 spawn_pos[2];
+  quat spawn_orientation[2];
+};
+
+struct Blades_Edge : public Map
+{
+  Blades_Edge(Flat_Scene_Graph &scene);
+};
+
 enum Move_Status
 {
   None = 0,
@@ -67,35 +82,16 @@ struct Character
   Character_Stats base_stats;
   Character_Stats effective_stats;
 
-  Buff buffs[MAX_BUFFS];
-  Buff debuffs[MAX_DEBUFFS];
-  uint8 buff_count = 0;
-  uint8 debuff_count = 0;
-
   float32 hp, hp_max;
   float32 mana, mana_max;
   bool alive = true;
 
-  float64 attack_cooldown = 0;
-  float64 global_cooldown = 0;
+  float32 attack_cooldown = 0;
+  float32 global_cooldown = 0;
 
   bool silenced = false;
 };
 
-struct Map
-{
-  Node_Index node;
-  Mesh_Data mesh;
-  Material_Descriptor material;
-
-  vec3 spawn_pos[2];
-  quat spawn_orientation[2];
-};
-
-struct Blades_Edge : public Map
-{
-  Blades_Edge(Flat_Scene_Graph &scene);
-};
 
 struct Character_Target
 {
@@ -127,10 +123,15 @@ struct Character_Spell
   Spell_Index spell;
 };
 
+struct Character_Buff
+{
+  UID character;
+  Buff buff;
+};
+
 struct Game_State
 {
   Character *get_character(UID id);
-  void damage_character(Character *subject, Character *object, float32 damage);
 
   Map *map = nullptr;
 
@@ -144,13 +145,15 @@ struct Game_State
   std::vector<Character_Spell> character_spells;
   std::vector<Character_Cast> character_casts;
   std::vector<Spell_Cooldown> spell_cooldowns;
+  std::vector<Character_Buff> character_buffs;
+  std::vector<Character_Buff> character_debuffs;
 };
 
 void move_char(Character &character, Input command, Flat_Scene_Graph *scene);
 void collide_and_slide_char(
     Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity, Flat_Scene_Graph *scene);
 void update_spell_objects(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene);
-void update_buffs(Game_State &game_state, Spell_Database &spell_db, UID character_id);
+void update_buffs(Game_State &game_state, Spell_Database &spell_db);
 Cast_Error cast_viable(Game_State &game_state, Spell_Database &spell_db, UID caster_id, UID target_id,
     Spell_Index spell_id, bool ignore_gcd, bool ignore_already_casting);
 void release_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id,
@@ -165,13 +168,14 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position);
 UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int team, const char *name);
 void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene, float32 dt);
 void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float32 dt);
-void remove_debuff(Character &c, Spell_ID debuff_id);
-void remove_buff(Character &c, Spell_ID buff_id);
-Buff *find_buff(Character &c, Spell_ID debuff_id);
-Buff *find_debuff(Character &c, Spell_ID debuff_id);
-void apply_buff(Character &c, Buff *buff);
-void apply_debuff(Character &c, Buff *debuff);
+void remove_debuff(Game_State &gs, Character &c, Spell_ID debuff_id);
+void remove_buff(Game_State &gs, Character &c, Spell_ID buff_id);
+Buff *find_buff(Game_State &gs, Character &c, Spell_ID debuff_id);
+Buff *find_debuff(Game_State &gs, Character &c, Spell_ID debuff_id);
+void apply_buff(Game_State &gs, Character &c, Buff *buff);
+void apply_debuff(Game_State &gs, Character &c, Buff *debuff);
 void regen_characters_hp(std::vector<Character> &cs, float32 dt);
 void regen_characters_mana(std::vector<Character> &cs, float32 dt);
 void update_global_cooldowns(std::vector<Character> &cs, float32 dt);
 void heal_character(Character &c, int32 heal);
+void damage_character(Game_State &gs, Character *subject, Character *object, float32 damage);

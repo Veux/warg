@@ -1698,11 +1698,19 @@ void Warg_State::update_unit_frames()
     ImGui::PopStyleVar(3);
   };
 
-  auto make_target_buffs = [&](Buff *buffs, uint8 buff_count, vec2 position, vec2 size, bool debuffs) {
+  auto make_target_buffs = [&](std::vector<Character_Buff> cbs, UID character, vec2 position, vec2 size,
+                               bool debuffs) {
+    int buff_count =
+        std::count_if(cbs.begin(), cbs.end(), [character](auto &cb) { return cb.character == character; });
+
     Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(buff_count, 1), vec2(1, 1), 1);
 
-    for (size_t i = 0; i < buff_count; i++)
+    int i = 0;
+    for (auto &cb : cbs)
     {
+      if (cb.character != character)
+        continue;
+
       Layout_Grid inner_grid(outer_grid.get_section_size(1, 1), vec2(2), vec2(0), 1, 1);
 
       bool display_buff = true;
@@ -1717,11 +1725,12 @@ void Warg_State::update_unit_frames()
               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
               ImGuiWindowFlags_NoFocusOnAppearing);
 
-      BuffDef *buff_formula = spell_db.get_buff(buffs[i].formula_index);
+      BuffDef *buff_formula = spell_db.get_buff(cb.buff.formula_index);
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
       put_imgui_texture(&buff_formula->icon, inner_grid.get_section_size(1, 1));
       ImGui::End();
       ImGui::PopStyleVar(4);
+      i++;
     }
   };
 
@@ -1734,8 +1743,9 @@ void Warg_State::update_unit_frames()
     return;
 
   make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
-  make_target_buffs(target->buffs, target->buff_count, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
-  make_target_buffs(target->debuffs, target->debuff_count, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
+  make_target_buffs(current_game_state.character_buffs, target_id, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
+  make_target_buffs(
+      current_game_state.character_debuffs, target_id, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
 
   auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
       [&](auto &c) { return c.caster == target->id; });
@@ -1896,24 +1906,32 @@ void Warg_State::update_buff_indicators()
   size_t max_columns = 18;
   Layout_Grid grid(vec2(800, 300), vec2(10), vec2(5), max_columns, 3);
 
-  for (size_t i = 0; i < player_character->buff_count && i < max_columns; i++)
+  int col = 0;
+  for (auto &cb : current_game_state.character_buffs)
   {
-    Buff *buff = &player_character->buffs[i];
-    BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
-
-    float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(i, 0).y), grid.get_section_size(1, 1), &buff_formula->icon,
-        buff->duration, false, i);
+    if (col >= max_columns)
+      break;
+    if (cb.character != player_character_id)
+      continue;
+    BuffDef *buff_formula = spell_db.get_buff(cb.buff.formula_index);
+    float32 position_x = resolution.x - grid.get_position(col, 0).x - grid.get_section_size(1, 1).x;
+    create_indicator(vec2(position_x, grid.get_position(col, 0).y), grid.get_section_size(1, 1), &buff_formula->icon,
+        cb.buff.duration, false, col);
+    col++;
   }
 
-  for (size_t i = 0; i < player_character->debuff_count && i < max_columns; i++)
+  col = 0;
+  for (auto &cd : current_game_state.character_debuffs)
   {
-    Buff *debuff = &player_character->debuffs[i];
-    BuffDef *debuff_formula = spell_db.get_buff(debuff->formula_index);
-
-    float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(i, 2).y), grid.get_section_size(1, 1), &debuff_formula->icon,
-        debuff->duration, true, i);
+    if (col >= max_columns)
+      break;
+    if (cd.character != player_character_id)
+      continue;
+    BuffDef *debuff_formula = spell_db.get_buff(cd.buff.formula_index);
+    float32 position_x = resolution.x - grid.get_position(col, 0).x - grid.get_section_size(1, 1).x;
+    create_indicator(vec2(position_x, grid.get_position(col, 2).y), grid.get_section_size(1, 1), &debuff_formula->icon,
+        cd.buff.duration, false, col);
+    col++;
   }
 }
 

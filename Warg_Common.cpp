@@ -69,66 +69,42 @@ void heal_character(Character &c, int32 heal)
     c.hp = c.hp_max;
 }
 
-void apply_buff(Character &c, Buff *buff)
+void apply_buff(Game_State &gs, Character &c, Buff *buff)
 {
-  if (c.buff_count >= MAX_BUFFS)
-    return;
-
-  c.buffs[c.buff_count++] = *buff;
+  gs.character_buffs.push_back({c.id, *buff});
 }
 
-void apply_debuff(Character &c, Buff *debuff)
+void apply_debuff(Game_State &gs, Character &c, Buff *debuff)
 {
-  if (c.debuff_count >= MAX_DEBUFFS)
-    return;
-
-  c.debuffs[c.debuff_count++] = *debuff;
+  gs.character_debuffs.push_back({c.id, *debuff});
 }
 
-Buff *find_buff(Character &c, Spell_ID buff_id)
+Buff *find_buff(Game_State &gs, Character &c, Spell_ID buff_id)
 {
-  Buff *buff = nullptr;
-  for (size_t i = 0; i < c.buff_count; i++)
-    if (c.buffs[i]._id == buff_id)
-      buff = &c.buffs[i];
-
-  return buff;
+  auto buff = std::find_if(gs.character_buffs.begin(), gs.character_buffs.end(),
+      [&](auto &cb) { return cb.character == c.id && cb.buff._id == buff_id; });
+  return buff != gs.character_buffs.end() ? &buff->buff : nullptr;
 }
 
-Buff *find_debuff(Character &c, Spell_ID debuff_id)
+Buff *find_debuff(Game_State &gs, Character &c, Spell_ID debuff_id)
 {
-  Buff *debuff = nullptr;
-  for (size_t i = 0; i < c.debuff_count; i++)
-    if (c.debuffs[i]._id == debuff_id)
-      debuff = &c.debuffs[i];
-
-  return debuff;
+  auto debuff = std::find_if(gs.character_debuffs.begin(), gs.character_debuffs.end(),
+      [&](auto &cb) { return cb.character == c.id && cb.buff._id == debuff_id; });
+  return debuff != gs.character_debuffs.end() ? &debuff->buff : nullptr;
 }
 
-void remove_buff(Character &c, Spell_ID buff_id)
+void remove_buff(Game_State &gs, Character &c, Spell_ID buff_id)
 {
-  for (size_t i = 0; i < c.buff_count; i++)
-  {
-    Buff *buff = &c.buffs[i];
-    if (buff->_id == buff_id)
-    {
-      *buff = c.buffs[c.buff_count - 1];
-      c.buff_count--;
-    }
-  }
+  gs.character_buffs.erase(std::remove_if(gs.character_buffs.begin(), gs.character_buffs.end(),
+                               [&](auto &cb) { return cb.character == c.id && cb.buff._id == buff_id; }),
+      gs.character_buffs.end());
 }
 
-void remove_debuff(Character &c, Spell_ID debuff_id)
+void remove_debuff(Game_State &gs, Character &c, Spell_ID buff_id)
 {
-  for (size_t i = 0; i < c.debuff_count; i++)
-  {
-    Buff *debuff = &c.debuffs[i];
-    if (debuff->_id == debuff_id)
-    {
-      *debuff = c.debuffs[c.debuff_count - 1];
-      c.debuff_count--;
-    }
-  }
+  gs.character_debuffs.erase(std::remove_if(gs.character_debuffs.begin(), gs.character_debuffs.end(),
+                               [&](auto &cd) { return cd.character == c.id && cd.buff._id == buff_id; }),
+      gs.character_debuffs.end());
 }
 
 void move_char(Character &character, Input command, Flat_Scene_Graph *scene)
@@ -435,7 +411,7 @@ Character *Game_State::get_character(UID id)
   return character == characters.end() ? nullptr : &*character;
 }
 
-void Game_State::damage_character(Character *subject, Character *object, float32 damage)
+void damage_character(Game_State &gs, Character *subject, Character *object, float32 damage)
 {
   if (!object->alive)
     return;
@@ -454,12 +430,13 @@ void Game_State::damage_character(Character *subject, Character *object, float32
     return;
   }
 
-  for (size_t i = 0; i < object->debuff_count; i++)
+  for (auto &cd : gs.character_debuffs)
   {
-    Buff *buff = &object->debuffs[i];
-    BuffDef *buff_formula = SPELL_DB.get_buff(buff->formula_index);
+    if (cd.character != object->id)
+      continue;
+    BuffDef *buff_formula = SPELL_DB.get_buff(cd.buff.formula_index);
     if (subject)
-      buff_on_damage_dispatch(buff_formula, buff, this, subject, object, damage);
+      buff_on_damage_dispatch(buff_formula, &cd.buff, &gs, subject, object, damage);
   }
 }
 
@@ -502,39 +479,46 @@ void update_spell_objects(Game_State &game_state, Spell_Database &spell_db, Flat
   }
 }
 
-void update_buffs(Game_State &game_state, Spell_Database &spell_db, UID character_id)
+void update_stats(std::vector<Character> &characters)
 {
-  ASSERT(character_id);
-  Character *character = game_state.get_character(character_id);
-  ASSERT(character);
+  for (auto &c : characters)
+  {
+    c.effective_stats = c.base_stats;
+    c.silenced = false;
+  }
+}
 
-  character->effective_stats = character->base_stats;
-  character->silenced = false;
-
-  auto update_buffs_ = [&](Buff *buffs, uint8 *buff_count) {
-    for (size_t i = 0; i < *buff_count; i++)
+void update_buffs(Game_State &game_state, Spell_Database &spell_db)
+{
+  auto update_buffs_ = [&](std::vector<Character_Buff> &buffs) {
+    for (auto &b : buffs)
     {
-      Buff *buff = buffs + i;
-      BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
-      buff->duration -= dt;
-      buff->time_since_last_tick += dt;
+      Character *character = game_state.get_character(b.character);
+      BuffDef *buff_formula = spell_db.get_buff(b.buff.formula_index);
+      b.buff.duration -= dt;
+      b.buff.time_since_last_tick += dt;
       character->effective_stats *= buff_formula->stats_modifiers;
-      if (buff->time_since_last_tick > 1.f / buff_formula->tick_freq)
+      if (b.buff.time_since_last_tick > 1.f / buff_formula->tick_freq)
       {
-        buff_on_tick_dispatch(buff_formula, buff, &game_state, character);
-        buff->time_since_last_tick = 0;
-      }
-      if (buff->duration <= 0)
-      {
-        buff_on_end_dispatch(buff_formula, buff, &game_state, character);
-        *buff = buffs[*buff_count - 1];
-        (*buff_count)--;
+        buff_on_tick_dispatch(buff_formula, &b.buff, &game_state, character);
+        b.buff.time_since_last_tick = 0;
       }
     }
+    buffs.erase(std::remove_if(buffs.begin(), buffs.end(),
+                    [&](auto &b) {
+                      if (b.buff.duration <= 0)
+                      {
+                        buff_on_end_dispatch(spell_db.get_buff(b.buff.formula_index), &b.buff, &game_state,
+                            game_state.get_character(b.character));
+                        return true;
+                      }
+                      return false;
+                    }),
+        buffs.end());
   };
 
-  update_buffs_(character->buffs, &character->buff_count);
-  update_buffs_(character->debuffs, &character->debuff_count);
+  update_buffs_(game_state.character_buffs);
+  update_buffs_(game_state.character_debuffs);
 }
 
 Cast_Error cast_viable(Game_State &game_state, Spell_Database &spell_db, UID caster_id, UID target_id,
@@ -776,7 +760,9 @@ void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Fla
       add_dummy(game_state, map, {1, i, 5});
     set_message("NEEEEEEXTTTT", "", 5);
   }
-  
+
+  update_stats(game_state.characters);
+  update_buffs(game_state, spell_db);
   regen_characters_hp(game_state.characters, dt);
   regen_characters_mana(game_state.characters, dt);
   update_global_cooldowns(game_state.characters, dt);
