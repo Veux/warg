@@ -217,8 +217,8 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
 {
 
   AABB box(colpkt.pos_r3);
-  push_aabb(box, colpkt.pos_r3 - (1.51f*colpkt.e_radius)-(1.f*colpkt.vel_r3));
-  push_aabb(box, colpkt.pos_r3 + (1.51f*colpkt.e_radius)+(1.f*colpkt.vel_r3));
+  push_aabb(box, colpkt.pos_r3 - (2.751f*colpkt.e_radius)-(2.5f*colpkt.vel_r3));
+  push_aabb(box, colpkt.pos_r3 + (2.751f*colpkt.e_radius)+(2.5f*colpkt.vel_r3));
   uint32 counter = 0;
   std::vector<Triangle_Normal> colliders = scene->collision_octree.test_all(box, &counter);
   

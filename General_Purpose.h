@@ -83,7 +83,8 @@ struct Image_Data
   int32 x;
   int32 y;
   int32 comp;
-  GLenum format;
+  uint32 data_size;
+  GLenum data_type;
   bool initialized = false;
 };
 
@@ -92,7 +93,7 @@ struct Image_Loader
 public:
   Image_Loader();
   ~Image_Loader();
-  bool load(std::string filename, Image_Data *data);
+  bool load(std::string filename, Image_Data *data,GLenum format);
   static void loader_loop(Image_Loader *loader);
 
   bool running = true;
@@ -103,7 +104,7 @@ private:
   std::mutex db_mtx;
   std::mutex queue_mtx;
   std::atomic<size_t> queue_size;
-  std::thread threads[3];
+  std::thread threads[1];
 };
 
 bool all_equal(int32 a, int32 b, int32 c);
@@ -144,8 +145,8 @@ vec2 random_2D_unit_vector();
 vec3 random_3D_unit_vector();
 vec2 random_2D_unit_vector(float32 azimuth_min, float32 azimuth_max);
 vec3 random_3D_unit_vector(float32 azimuth_min, float32 azimuth_max, float32 altitude_min, float32 altitude_max);
-Uint32 string_to_U32_color(std::string color);
-glm::vec4 string_to_float4_color(std::string color);
+//Uint32 string_to_U32_color(std::string color);
+//glm::vec4 string_to_float4_color(std::string color);
 const char *texture_format_to_string(GLenum texture_format);
 bool has_img_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);

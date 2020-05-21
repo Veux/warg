@@ -33,7 +33,7 @@ enum Texture_Location
 
   brdf_ibl_lut,
   refraction,
-  t10,
+  t11,
   uv_grid,
 
   s0, // shadow maps
@@ -59,7 +59,6 @@ struct Renderbuffer_Handle
 struct Texture_Handle
 {
   ~Texture_Handle();
-  GLuint texture = 0;
   time_t file_mod_t = 0;
   // this resource's current set settings
   // should only be set by Texture class inside .bind()
@@ -71,17 +70,11 @@ struct Texture_Handle
 
   GLenum get_format()
   {
-    return format;
+    return internalformat;
   }
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
-
-  // private:
-  //  friend struct Texture;
-  //  friend struct Cubemap;
-  //  friend struct Environment_Map;
-  //  friend struct Renderer;
-  //  friend struct SDL_Imgui_State;
+  GLuint texture = 0;
 
   // last bound dynamic state:
   GLenum magnification_filter = GLenum(0);
@@ -94,41 +87,72 @@ struct Texture_Handle
   // should be constant for this handle after initialization:
   std::string filename = "TEXTURE_HANDLE_FILENAME_NOT_SET";
   glm::ivec2 size = glm::ivec2(0, 0);
-  GLenum format = GLenum(0);
+  GLenum internalformat = GLenum(0);
 
   // specific for specular environment maps
   bool ibl_mipmaps_started = false;
   bool ibl_mipmaps_generated = false;
 
   bool is_cubemap = false;
+
+  // stream state:
+  GLsync upload_sync = 0;
+  GLuint uploading_pbo = 0;
+  GLenum datatype = 0;
+
+
+private:
 };
 
+// struct Generated_Texture_Descriptor
+//{
+//  Generated_Texture_Descriptor(const char *name, GLenum format)
+//  {
+//    this->name = name;
+//    this->format = format;
+//  }
+//  Generated_Texture_Descriptor(std::string name, GLenum format)
+//  {
+//    this->name = name;
+//    this->format = format;
+//  }
+//
+//  std::string name = "";
+//  GLenum format = 0;
+//  vec4 mod;
+//  GLenum magnification_filter = GL_LINEAR;
+//  GLenum minification_filter = GL_LINEAR_MIPMAP_LINEAR;
+//  GLenum wrap_s = GL_REPEAT;
+//  GLenum wrap_t = GL_REPEAT;
+//  glm::vec4 border_color = glm::vec4(0);
+//};
 struct Texture_Descriptor
 {
   Texture_Descriptor() {}
   Texture_Descriptor(const char *filename)
   {
-    this->name = filename;
+    name = filename;
+    source = filename;
+    format = GL_SRGB8_ALPHA8;
   }
   Texture_Descriptor(std::string filename)
   {
-    this->name = filename;
+    name = filename;
+    source = filename;
+    format = GL_SRGB8_ALPHA8;
   }
 
-  // solid colors can be specified with "color(r,g,b,a)" float values
-  std::string name = "";
-
-  vec4 mod = MISSING_TEXTURE_MOD;
-  glm::ivec2 size = glm::ivec2(0);
-  GLenum format = GL_RGBA;
+  std::string name= "default";
+  std::string source= "default";
+  std::string key;
+  GLenum format = 0;
+  glm::ivec2 size = ivec2(0);
+  glm::vec4 mod = vec4(1);
   GLenum magnification_filter = GL_LINEAR;
   GLenum minification_filter = GL_LINEAR_MIPMAP_LINEAR;
-  uint32 anisotropic_filtering = MAX_ANISOTROPY;
   GLenum wrap_s = GL_REPEAT;
   GLenum wrap_t = GL_REPEAT;
   glm::vec4 border_color = glm::vec4(0);
-  bool process_premultiply = false;
-  bool cache_as_unique = true;
 };
 
 struct Texture
@@ -140,32 +164,14 @@ struct Texture
       GLenum magnification_filter = GL_LINEAR, GLenum wraps = GL_CLAMP_TO_EDGE, GLenum wrapt = GL_CLAMP_TO_EDGE,
       glm::vec4 border_color = glm::vec4(0));
 
-  Texture(std::string file_path, bool premul = false);
-
   Texture_Descriptor t;
   void load();
-
-  void bind(GLuint texture_unit);
-
+  bool bind(GLuint texture_unit);
   void check_set_parameters();
-
-  // not guaranteed to be constant for every call -
-  // handle lifetime only guaranteed for as long as the Texture object
-  // is held, and if dynamic texture reloading has not been triggered
-  // by a file modification - if it is, it will gracefully display
-  // black, or a random other texture
   GLuint get_handle();
-
-  bool is_initialized()
-  {
-    return initialized;
-  }
-
-  // do not modify the handle
   std::shared_ptr<Texture_Handle> texture;
 
 private:
-  bool initialized = false;
 };
 struct Image
 {
@@ -206,21 +212,6 @@ struct Environment_Map_Descriptor
   bool source_is_equirectangular = true;
 };
 
-/*
-when one of the constructors that take arguments is called
-load() is called:
-it initializes the cubemaps - first checks if the cubemap has already been created/cached and uses the shared ptr for
-that if theres no shared ptr for it, it creates a new cubemap and loads the source texture and stalls on it then draws
-the cubemap, and drops the source handle, and returns after both cubemaps are constructed, it checks the cubemap handles
-for whether or not theyve had their ibl mipmaps generated, and runs that if not.
-
-in both of these some opengl state may be set that isnt unset
-cubemap seems good
-
-
-
-*/
-
 struct Environment_Map
 {
   Environment_Map() {}
@@ -231,7 +222,7 @@ struct Environment_Map
   bool radiance_is_gamma_encoded = true;
 
   void load();
-  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit,float32 time,vec2 size);
+  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit, float32 time, vec2 size);
 
   Environment_Map_Descriptor m;
 
@@ -243,13 +234,12 @@ struct Environment_Map
   void probe_world(glm::vec3 p, glm::vec2 resolution);
 
 private:
-  //std::shared_ptr<Texture_Handle> ibl_source;
   GLuint ibl_source = 0;
   GLuint ibl_texture_target = 0;
-  GLsync ibl_sync= 0;
+  GLsync ibl_sync = 0;
   GLuint ibl_fbo = 0;
   GLuint ibl_rbo = 0;
-  uint32 ibl_tile_max = 15;
+  uint32 ibl_tile_max = 10;
   int32 tilex = 0;
   int32 tiley = 0;
   bool working_on_ibl = false;
@@ -323,7 +313,10 @@ struct Uniform_Set_Descriptor
 
 struct Material_Descriptor
 {
-  Material_Descriptor() {}
+  Material_Descriptor()
+  {
+    
+  }
   void mod_by(const Material_Descriptor *override);
   Texture_Descriptor albedo;
   Texture_Descriptor normal;
@@ -437,8 +430,6 @@ private:
   Shader shader;
   void load();
   void bind();
-  void unbind_textures();
-  void bind_texture_or_set_default(Texture &t, const char *uniform, const glm::vec4 &default_mod, Texture_Location loc);
 };
 
 enum struct Light_Type
@@ -837,7 +828,7 @@ struct Particle_Emitter
   Material_Index material_index;
   Particle_Emitter_Descriptor descriptor;
 
-//private:
+  // private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 
@@ -904,7 +895,7 @@ struct Renderer
     pixel.y = window_size.y - pixel.y;
     const vec2 pixel_normalized = vec2(pixel) / vec2(window_size);
     const vec2 screen_ndc = 2.0f * (pixel_normalized - vec2(0.5f));
-   // set_message("cursor_ndc:", s(vec4(screen_ndc, 0, 0)), 1.0f);
+    // set_message("cursor_ndc:", s(vec4(screen_ndc, 0, 0)), 1.0f);
     mat4 inv = glm::inverse(projection * camera);
     return normalize(inv * vec4(screen_ndc, 1, 1));
   }
@@ -947,6 +938,7 @@ struct Renderer
   Shader skybox = Shader("vertex_shader.vert", "skybox.frag");
   Shader refraction = Shader("vertex_shader.vert", "refraction.frag");
   Shader water = Shader("vertex_shader.vert", "water.frag");
+  void bind_white_to_all_textures();
 
   Texture uv_map_grid;
   Texture brdf_integration_lut;
@@ -967,12 +959,11 @@ struct Renderer
   void postprocess_pass(float32 time);
   void skybox_pass(float32 time);
   void copy_to_primary_framebuffer_and_txaa(float32 time);
-  Texture translucent_blur_target;
   Texture bloom_target;
   Texture bloom_result;
   Texture bloom_intermediate;
   Framebuffer bloom_fbo;
-
+  uint32 bloom_mip_levels;
   float64 time_of_last_scale_change = 0.;
   void init_render_targets();
   void dynamic_framerate_target();
@@ -993,7 +984,7 @@ struct Renderer
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
-
+ 
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:

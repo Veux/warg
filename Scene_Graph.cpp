@@ -2050,7 +2050,7 @@ void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
     vec3 atoc = t.c - t.a;
     t.n = normalize(cross(atob, atoc));
 
-    all_worked = all_worked && root->push(t, 0,this);
+    all_worked = all_worked && root->push(t, 0, this);
     // return;//sponge
   }
 
@@ -2079,9 +2079,9 @@ inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
   ptr->halfsize = 0.5f * size;
   ptr->center = p + vec3(ptr->halfsize);
   ptr->mydepth = depth + 1;
-  #ifdef OCTREE_VECTOR_STYLE
-    ptr->occupying_triangles.reserve(16);
-  #endif 
+#ifdef OCTREE_VECTOR_STYLE
+  ptr->occupying_triangles.reserve(16);
+#endif
   return ptr;
 }
 
@@ -2276,7 +2276,7 @@ inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
   return true;
 }
 
-inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth,Octree* owner) noexcept
+inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octree *owner) noexcept
 {
 #ifdef OCTREE_SPLIT_STYLE
   if (depth == MAX_OCTREE_DEPTH)
@@ -2300,10 +2300,9 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth,Octre
         ASSERT(child);
       }
 
-
       bool retest = aabb_triangle_intersection(box, triangle);
 
-      bool success = child->push(triangle, depth + 1,owner);
+      bool success = child->push(triangle, depth + 1, owner);
       if (!success)
       {
         requires_self = true;
@@ -2708,7 +2707,6 @@ inline void Octree_Node::clear()
     children[i] = nullptr;
   }
 }
-
 
 // ccw
 Plane_nd compute_plane(vec3 a, vec3 b, vec3 c)

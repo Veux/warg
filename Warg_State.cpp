@@ -45,10 +45,10 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
   // collider_cache = collect_colliders(scene);
 
-  // scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
-  //    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-  scene.initialize_lighting(
-      "Assets/Textures/black.jpg", "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+   scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
+      "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+  //scene.initialize_lighting(
+  //    "Assets/Textures/black.jpg", "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
   scene.particle_emitters.push_back({});
@@ -60,7 +60,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
   small_object_water_settings(&material.uniform_set);
   Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
@@ -69,7 +68,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(1.25f, .0f, .35f, 1.f);
   Node_Index particle_node1 = scene.add_mesh(cube, "particle1", &material);
   Mesh_Index mesh_index1 = scene.nodes[particle_node1].model[0].first;
@@ -77,7 +75,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(1.05f, .0f, 2.15f, 1.f);
   Node_Index particle_node2 = scene.add_mesh(cube, "particle2", &material);
   Mesh_Index mesh_index2 = scene.nodes[particle_node2].model[0].first;
@@ -85,7 +82,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
   Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
   Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
@@ -535,7 +531,6 @@ void Warg_State::update_prediction_ghost()
 
   static Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
-  material.emissive = "";
   material.normal = "test_normal.png";
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
@@ -677,7 +672,6 @@ void Warg_State::update_spell_object_nodes()
 {
   Material_Descriptor material;
   material.albedo.mod = vec4(0.f);
-  material.emissive = "color(1, 1, 1, 1)";
   material.emissive.mod = vec4(0.5f, 0.5f, 100.f, 1.f);
 
   for (size_t i = 0; i < current_game_state.spell_object_count; i++)
@@ -872,7 +866,7 @@ void Warg_State::update()
   {
     WANT_SPAWN_OCTREE_BOX = false;
     Material_Descriptor mat;
-    mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
+    mat.albedo = "3D_pattern_62/pattern_335/diffuse.png";
     mat.normal = "3D_pattern_62/pattern_335/normal.png";
     mat.roughness.mod.x = 1.0f;
     mat.metalness.mod.x = 0.f;
@@ -962,7 +956,7 @@ void Warg_State::update()
 
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 5;
+  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 1;
   scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
   // scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -976,7 +970,7 @@ void Warg_State::update()
 
   scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 5;
+  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 1;
   scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
   // scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -990,7 +984,7 @@ void Warg_State::update()
 
   scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 5;
+  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 1;
   scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
   // scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -1004,7 +998,7 @@ void Warg_State::update()
 
   scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 5;
+  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 1;
   scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
   // scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
@@ -1040,7 +1034,6 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   character_nodes[character_id];
 
   // Material_Descriptor hp_bar_material;
-  // hp_bar_material.emissive = "color(1, 1, 1, 1)";
   // Node_Index hp_bar = scene.add_mesh(cube, "hp_bar", &hp_bar_material);
   // scene.set_parent(hp_bar, character_node);
   // float32 bar_z_pos = character->radius.z;
@@ -1088,7 +1081,6 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   shirt_material.albedo.mod = vec4(1);
   shirt_material.uv_scale = vec2(1.);
   Material_Descriptor solid_material = shirt_material;
-  solid_material.normal = "";
 
   // proper way to do this after we define the materials we want to use:
 
@@ -1368,7 +1360,7 @@ void Warg_State::add_character_mesh(UID character_id)
   shirt_material.albedo.mod = vec4(1);
   shirt_material.uv_scale = vec2(1.);
   Material_Descriptor solid_material = shirt_material;
-  solid_material.normal = "";
+  solid_material.normal = "default";
 
   Mesh_Descriptor md(cube, "girl's cube");
   Mesh_Index cube_mesh_index = scene.resource_manager->push_custom_mesh(&md);
@@ -1747,7 +1739,7 @@ void Warg_State::update_icons()
   if (!configured)
   {
     Texture_Descriptor texture_descriptor;
-    texture_descriptor.size = ivec2(56);
+    texture_descriptor.source = "generate";
     texture_descriptor.minification_filter = GL_LINEAR;
 
     ASSERT(interface_state.action_bar_textures.size() == 0);

@@ -10,7 +10,7 @@ uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
 
-uniform sampler2D texture10; // uv map grid
+uniform sampler2D texture10; // refraction
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
@@ -332,8 +332,8 @@ void main()
   vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
   if (discard_on_alpha)
   {
-    if (texture0_mod.a*albedo_tex.a < 0.3)
-      discard;
+    //if (texture0_mod.a*albedo_tex.a < 0.3)
+     // discard;
   }
   gather_shadow_moments();
 
@@ -367,7 +367,7 @@ void main()
   }
   premultiply_alpha *= texture0_mod.a;
 
-  m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
+  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
   m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
@@ -478,6 +478,13 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
-  
+  result = m.albedo;
+  //result = m.emissive;
+  //result = texture3_mod.rgb;
+  //result = m.normal;
+  //result = vec3(frag_normal_uv,0);
+  //result = texture2D(texture3, frag_normal_uv).rgb;
+  //result = vec3(albedo_tex.a);
+  result = clamp(result,vec3(0),vec3(1));
   out0 = vec4(result, premultiply_alpha);
 }

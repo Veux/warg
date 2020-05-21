@@ -165,7 +165,6 @@ void to_json(json &result, const Texture_Descriptor &p)
   j["Magnification Filter"] = p.magnification_filter;
   j["Wrap_S"] = p.wrap_s;
   j["Wrap_T"] = p.wrap_t;
-  j["Premultiply"] = p.process_premultiply;
   result = j;
 }
 
@@ -181,7 +180,6 @@ void from_json(const json &j, Texture_Descriptor &p)
   result.magnification_filter = j.at("Magnification Filter");
   result.wrap_s = j.at("Wrap_S");
   result.wrap_t = j.at("Wrap_T");
-  result.process_premultiply = j.at("Premultiply");
   p = result;
 }
 

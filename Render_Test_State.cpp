@@ -6,7 +6,7 @@
 #include "State.h"
 #include "Animation_Utilities.h"
 using namespace glm;
-void spawn_test_spheres(Flat_Scene_Graph &scene);
+bool spawn_test_spheres(Flat_Scene_Graph &scene);
 
 void world_water_settings(Uniform_Set_Descriptor *dst)
 {
@@ -232,20 +232,19 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
     : State(name, window, window_size)
 {
 
-  scene.initialize_lighting("Assets/Textures/Environment_Maps/Frozen_Waterfall/Frozen_Waterfall_HiRes_TMap.jpg",
-      "Assets/Textures/Environment_Maps/Frozen_Waterfall/irradiance.hdr");
-    //scene.initialize_lighting("Assets/Textures/black.png",
-    //  "Assets/Textures/black.png");
+  scene.initialize_lighting("Environment_Maps/Frozen_Waterfall/Frozen_Waterfall_HiRes_TMap.jpg",
+      "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+  // scene.initialize_lighting("Assets/Textures/black.png",
+  //  "Assets/Textures/black.png");
 
   camera.phi = .25;
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  spawn_test_spheres(scene);
   // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  //spawn_planets(&scene, vec3(12, 6, 3));
+  // spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   spawn_test_triangle(&scene);
   spawn_compass(&scene);
@@ -259,7 +258,6 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   Particle_Emitter *pe = &scene.particle_emitters.back();
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
   small_object_water_settings(&material.uniform_set);
   Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
@@ -647,9 +645,15 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 void Render_Test_State::update()
 {
   // update_grabbyarm(&scene, current_time);
-  //update_planets(&scene, current_time);
+  // update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
+
+  static bool spheresuccess = false;
+  if (!spheresuccess)
+  {
+    spheresuccess = spawn_test_spheres(scene);
+  }
 
   update_test_triangle(&scene);
 
@@ -714,14 +718,18 @@ void Render_Test_State::update()
   // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
 }
 
-void spawn_test_spheres(Flat_Scene_Graph &scene)
+bool spawn_test_spheres(Flat_Scene_Graph &scene)
 {
+  Node_Index test = scene.add_aiscene("smoothsphere.fbx", "spheretest", false);
+  if (test == NODE_NULL)
+  {
+    return false;
+  }
+  scene.delete_node(test);
+
   Material_Descriptor material;
-  material.albedo = "color(1,1,1,1)";
   // material.emissive = "";
   // material.normal = "test_normal.png";
-  material.roughness = "color(1,1,1,1)";
-  material.metalness = "color(1,1,1,1)";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(1);
@@ -784,4 +792,5 @@ void spawn_test_spheres(Flat_Scene_Graph &scene)
       }
     }
   }
+  return true;
 }

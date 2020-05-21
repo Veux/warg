@@ -3,6 +3,7 @@
 #include "Json.h"
 #include "Third_party/stb/stb_image.h"
 #include "Render.h"
+using namespace std;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
   const float32 range = max - min;
@@ -101,94 +102,94 @@ std::string read_file(const char *path)
   return result;
 }
 
-Uint32 string_to_U32_color(std::string color)
-{
-  // color(n,n,n,n)
-  std::string a = color.substr(6);
-  // n,n,n,n)
-  a.pop_back();
-  // n,n,n,n
+// Uint32 string_to_U32_color(std::string color)
+//{
+//  // color(n,n,n,n)
+//  std::string a = color.substr(6);
+//  // n,n,n,n)
+//  a.pop_back();
+//  // n,n,n,n
+//
+//  std::string c;
+//  ivec4 r(0);
+//
+//  int i = 0;
+//  auto it = a.begin();
+//  while (true)
+//  {
+//    if (it == a.end() || *it == ',')
+//    {
+//      ASSERT(i < 4);
+//      r[i] = std::stoi(c);
+//      if (it == a.end())
+//      {
+//        break;
+//      }
+//      c.clear();
+//      ++i;
+//      ++it;
+//      continue;
+//    }
+//    c.push_back(*it);
+//    ++it;
+//  }
+//  Uint32 result = (r.r << 24) + (r.g << 16) + (r.b << 8) + r.a;
+//  return result;
+//}
 
-  std::string c;
-  ivec4 r(0);
-
-  int i = 0;
-  auto it = a.begin();
-  while (true)
-  {
-    if (it == a.end() || *it == ',')
-    {
-      ASSERT(i < 4);
-      r[i] = std::stoi(c);
-      if (it == a.end())
-      {
-        break;
-      }
-      c.clear();
-      ++i;
-      ++it;
-      continue;
-    }
-    c.push_back(*it);
-    ++it;
-  }
-  Uint32 result = (r.r << 24) + (r.g << 16) + (r.b << 8) + r.a;
-  return result;
-}
-
-glm::vec4 string_to_float4_color(std::string color)
-{
-  // color(n,n,n,n)
-  std::string a = color.substr(6);
-
-  if (a.length() == 0)
-  {
-    return vec4(0);
-  }
-  if (a.back() != ')')
-  {
-    return vec4(0);
-  }
-
-  // n,n,n,n)
-  a.pop_back();
-  // n,n,n,n
-
-  std::string buffer;
-  vec4 result(0);
-
-  int i = 0;
-  auto it = a.begin();
-  while (true)
-  {
-    if (it == a.end() || *it == ',')
-    {
-      if (i == 4)
-      { // more than three ','
-        return vec4(0);
-      }
-      result[i] = std::stof(buffer);
-      if (it == a.end())
-      {
-        break;
-      }
-      buffer.clear();
-      ++i;
-      ++it;
-      continue;
-    }
-
-    const char c = *it;
-    if (!isdigit(c) && c != '.' && c != '-' && c != 'f')
-    {
-      return vec4(0);
-    }
-    buffer.push_back(c);
-    ++it;
-  }
-
-  return result;
-}
+// glm::vec4 string_to_float4_color(std::string color)
+//{
+//  // color(n,n,n,n)
+//  std::string a = color.substr(6);
+//
+//  if (a.length() == 0)
+//  {
+//    return vec4(0);
+//  }
+//  if (a.back() != ')')
+//  {
+//    return vec4(0);
+//  }
+//
+//  // n,n,n,n)
+//  a.pop_back();
+//  // n,n,n,n
+//
+//  std::string buffer;
+//  vec4 result(0);
+//
+//  int i = 0;
+//  auto it = a.begin();
+//  while (true)
+//  {
+//    if (it == a.end() || *it == ',')
+//    {
+//      if (i == 4)
+//      { // more than three ','
+//        return vec4(0);
+//      }
+//      result[i] = std::stof(buffer);
+//      if (it == a.end())
+//      {
+//        break;
+//      }
+//      buffer.clear();
+//      ++i;
+//      ++it;
+//      continue;
+//    }
+//
+//    const char c = *it;
+//    if (!isdigit(c) && c != '.' && c != '-' && c != 'f')
+//    {
+//      return vec4(0);
+//    }
+//    buffer.push_back(c);
+//    ++it;
+//  }
+//
+//  return result;
+//}
 
 Uint64 dankhash(const float32 *data, uint32 size)
 {
@@ -199,7 +200,7 @@ Uint64 dankhash(const float32 *data, uint32 size)
   for (uint32 i = 0; i < size; ++i)
   {
     float32 f = data[i];
-    h ^= hasher(f) + 0x9e3779b9 + (h<<6) + (h>>2);
+    h ^= hasher(f) + 0x9e3779b9 + (h << 6) + (h >> 2);
   }
   hashtimer.stop();
   set_message("hashtimer:", hashtimer.string_report(), 30.0f);
@@ -299,13 +300,13 @@ float64 get_real_time()
 }
 struct Message
 {
-  std::string identifier;
-  std::string message;
+  string identifier;
+  string message;
   float64 time_of_expiry;
-  std::string thread_id;
+  string thread_id;
 };
-static std::vector<Message> messages;
-static std::string message_log = "";
+static vector<Message> messages;
+static string message_log = "";
 std::string get_message_log()
 {
   return message_log;
@@ -313,10 +314,10 @@ std::string get_message_log()
 std::mutex SET_MESSAGE_MUTEX;
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
-  std::lock_guard<std::mutex> l(SET_MESSAGE_MUTEX);
-  std::thread::id thread_id = std::this_thread::get_id();
-  std::stringstream ss;
-  ss << std::this_thread::get_id();
+  lock_guard<mutex> l(SET_MESSAGE_MUTEX);
+  thread::id thread_id = this_thread::get_id();
+  stringstream ss;
+  ss << this_thread::get_id();
   const float64 time = get_real_time();
   bool found = false;
   if (identifier != "")
@@ -347,7 +348,7 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
 
 std::string get_messages()
 {
-  std::string result;
+  string result;
   float64 time = get_real_time();
   auto it = messages.begin();
   while (it != messages.end())
@@ -368,11 +369,11 @@ void push_log_to_disk()
   static bool first = true;
   if (first)
   {
-    std::fstream file("warg_log.txt", std::ios::out | std::ios::trunc);
+    fstream file("warg_log.txt", ios::out | ios::trunc);
     first = false;
   }
-  std::fstream file("warg_log.txt", std::ios::in | std::ios::out | std::ios::app);
-  file.seekg(std::ios::end);
+  fstream file("warg_log.txt", ios::in | ios::out | ios::app);
+  file.seekg(ios::end);
   file.write(message_log.c_str(), message_log.size());
   file.close();
   message_log.clear();
@@ -386,7 +387,7 @@ std::string vtos(glm::vec2 v)
     {
       result += " ";
     }
-    result += std::to_string(v[i]) + " ";
+    result += to_string(v[i]) + " ";
   }
   return result;
 }
@@ -399,7 +400,7 @@ std::string vtos(glm::vec3 v)
     {
       result += " ";
     }
-    result += std::to_string(v[i]) + " ";
+    result += to_string(v[i]) + " ";
   }
   return result;
 }
@@ -412,7 +413,7 @@ std::string vtos(glm::vec4 v)
     {
       result += " ";
     }
-    std::string sf = std::to_string(v[i]);
+    string sf = to_string(v[i]);
     while (sf.length() > 6)
       sf.pop_back();
     while (sf.length() <= 6)
@@ -424,14 +425,14 @@ std::string vtos(glm::vec4 v)
 
 std::string qtos(glm::quat v)
 {
-  std::string result = "";
+  string result = "";
   for (uint32 i = 0; i < 4; ++i)
   {
     if (v[i] >= 0.0f)
     {
       result += " ";
     }
-    std::string sf = std::to_string(v[i]);
+    string sf = to_string(v[i]);
     while (sf.length() > 6)
       sf.pop_back();
     while (sf.length() <= 6)
@@ -443,14 +444,14 @@ std::string qtos(glm::quat v)
 
 std::string to_string(glm::mat4 &m)
 {
-  std::string result = "";
+  string result = "";
   for (uint32 column = 0; column < 4; ++column)
   {
     result += "|";
     for (uint32 row = 0; row < 4; ++row)
     {
       float32 f = m[row][column];
-      std::string sf = s(f);
+      string sf = s(f);
       while (sf.length() > 6)
       {
         if (sf.back() != '.')
@@ -475,24 +476,24 @@ std::string to_string(glm::mat4 &m)
   return result;
 }
 
-std::string to_string(vec4& value)
+std::string to_string(vec4 &value)
 {
-  std::string r = std::to_string(value.r);
-  std::string g = std::to_string(value.g);
-  std::string b = std::to_string(value.b);
-  std::string a = std::to_string(value.a);
-  return "color(" + r + "," + g + "," + b + "," + a + ")";
+  string r = to_string(value.r);
+  string g = to_string(value.g);
+  string b = to_string(value.b);
+  string a = to_string(value.a);
+  return "(" + r + "," + g + "," + b + "," + a + ")";
 }
-template <> std::string s<const char *>(const char *value)
+template <> string s<const char *>(const char *value)
 {
-  return std::string(value);
+  return string(value);
 }
-template <> std::string s<std::string>(std::string value)
+template <> string s<string>(string value)
 {
   return value;
 }
 
-std::string to_string(Light_Type& value)
+string to_string(Light_Type &value)
 {
   if (value == Light_Type::parallel)
     return "Parallel";
@@ -580,9 +581,9 @@ bool is_float_format(GLenum texture_format)
   }
 }
 
-std::string to_string(Array_String &s)
+string to_string(Array_String &s)
 {
-  std::string result;
+  string result;
   for (uint32 i = 0; i < MAX_ARRAY_STRING_LENGTH; ++i)
   {
     char *ch = &s.str[i];
@@ -593,12 +594,12 @@ std::string to_string(Array_String &s)
   return result;
 }
 
-void Config::load(std::string filename)
+void Config::load(string filename)
 {
   json j;
   try
   {
-    std::string str = read_file(filename.c_str());
+    string str = read_file(filename.c_str());
     j = json::parse(str);
   }
   catch (...)
@@ -626,7 +627,7 @@ void Config::load(std::string filename)
     render_simple = *i;
 }
 
-void Config::save(std::string filename)
+void Config::save(string filename)
 {
   json j;
   j["Resolution"] = resolution;
@@ -636,24 +637,33 @@ void Config::save(std::string filename)
   j["Low Quality Specular Convolution"] = use_low_quality_specular;
   j["Render Simple"] = render_simple;
 
-  std::string str = pretty_dump(j);
-  std::fstream file(filename, std::ios::out);
+  string str = pretty_dump(j);
+  fstream file(filename, ios::out);
   file.write(str.c_str(), str.size());
 }
 
-Image_Data load_image(std::string path)
+Image_Data load_image(string path)
 {
   Image_Data data;
+
+  uint32 p = path.find("Assets/");
+  if (p == -1)
+  {
+    path = BASE_TEXTURE_PATH + path;
+  }
+
   const bool is_hdr = stbi_is_hdr(path.c_str());
   if (is_hdr)
   {
     data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
-    data.format = GL_FLOAT;
+    data.data_type = GL_FLOAT;
+    data.data_size = data.x*data.y*sizeof(float32)*4;
   }
   else
   {
     data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
-    data.format = GL_UNSIGNED_BYTE;
+    data.data_type = GL_UNSIGNED_BYTE;
+    data.data_size = data.x*data.y*sizeof(uint8)*4;
   }
   data.initialized = true;
   return data;
@@ -667,18 +677,42 @@ void Image_Loader::loader_loop(Image_Loader *loader)
     if (loader->queue_size == 0)
       continue;
 
-    std::string task;
+    string task;
     {
-      std::lock_guard<std::mutex> lock0(loader->queue_mtx);
+      lock_guard<mutex> loc(loader->queue_mtx);
       if (loader->queue_size == 0)
         continue;
       task = loader->load_queue.front();
       loader->load_queue.pop();
       loader->queue_size = loader->load_queue.size();
     }
+    uint32 back = task.find_last_of(",");
+    string filename = task.substr(0, back);
+    string fmt = task.substr(back + 1);
+    GLenum format = stoi(fmt);
+    Image_Data data = load_image(filename);
 
-    Image_Data data = load_image(task);
-    std::lock_guard<std::mutex> lock1(loader->db_mtx);
+    if (format == GL_SRGB8_ALPHA8 && data.data)
+    { // premultiply alpha
+      ASSERT(data.data_type == GL_UNSIGNED_BYTE);
+      for (int32 i = 0; i < data.x * data.y; ++i)
+      {
+        uint32 pixel = ((uint32 *)data.data)[i];
+        uint8 r = (uint8)(0x000000FF & pixel);
+        uint8 g = (uint8)((0x0000FF00 & pixel) >> 8);
+        uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
+        uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
+        float32 af = float32(a) / 255.f;
+        af = pow(af, 1 / 2.2);
+        vec3 c(r, g, b);
+        c = vec3(af) * c;
+        r = (uint8)round(c.r);
+        g = (uint8)round(c.g);
+        b = (uint8)round(c.b);
+        //((uint32 *)data.data)[i] = (24 << a) | (16 << b) | (8 << g) | r;
+      }
+    }
+    std::lock_guard<std::mutex> lock(loader->db_mtx);
     loader->database[task] = data;
   }
 }
@@ -686,35 +720,37 @@ void Image_Loader::loader_loop(Image_Loader *loader)
 Image_Loader::Image_Loader()
 {
   threads[0] = std::thread(loader_loop, this);
-  threads[1] = std::thread(loader_loop, this);
-  threads[2] = std::thread(loader_loop, this);
+ // threads[1] = std::thread(loader_loop, this);
+  //threads[2] = std::thread(loader_loop, this);
   // threads[3] = std::thread(loader_loop, this);
 }
 Image_Loader::~Image_Loader()
 {
   running = false;
   threads[0].join();
-  threads[1].join();
-  threads[2].join();
+  //threads[1].join();
+  //threads[2].join();
   // threads[3].join();
 }
 
-bool Image_Loader::load(std::string path, Image_Data *data)
+bool Image_Loader::load(std::string path, Image_Data *data, GLenum internalformat)
 {
+  string key = s(path, ",", internalformat);
   std::lock_guard<std::mutex> lock0(db_mtx);
-  if (database.count(path))
+  if (database.count(key))
   {
-    if (database[path].initialized)
+    if (database[key].initialized)
     {
-      *data = database[path];
-      database.erase(path);
+      *data = database[key];
+      database.erase(key);
+
       return true;
     }
     return false;
   }
-  database[path];
+  database[key];
   std::lock_guard<std::mutex> lock1(queue_mtx);
-  load_queue.push(path);
+  load_queue.push(key);
   queue_size = load_queue.size();
   return false;
 }

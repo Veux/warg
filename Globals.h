@@ -83,4 +83,3 @@ extern std::thread::id MAIN_THREAD_ID;
 extern std::mutex IMGUI_MUTEX;
 extern SDL_Imgui_State IMGUI;
 extern SDL_Imgui_State TRASH_IMGUI;
-extern const glm::vec4 MISSING_TEXTURE_MOD;
