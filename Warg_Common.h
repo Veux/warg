@@ -75,23 +75,19 @@ struct Character
 
   Character_Physics physics;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
-
   char name[MAX_CHARACTER_NAME_LENGTH + 1] = {};
   int team;
-
   Character_Stats base_stats;
-  Character_Stats effective_stats;
-
-  float32 hp, hp_max;
-  float32 mana, mana_max;
-  bool alive = true;
-
-  float32 attack_cooldown = 0;
-  float32 global_cooldown = 0;
-
-  bool silenced = false;
 };
 
+struct Living_Character
+{
+  UID id;
+
+  Character_Stats effective_stats;
+  float32 hp, hp_max;
+  float32 mana, mana_max;
+};
 
 struct Character_Target
 {
@@ -129,6 +125,19 @@ struct Character_Buff
   Buff buff;
 };
 
+struct Character_Silencing
+{
+  UID character;
+  Spell_ID buff_id;
+};
+
+struct Character_GCD
+{
+  UID character;
+
+  double remaining;
+};
+
 struct Game_State
 {
   Character *get_character(UID id);
@@ -141,15 +150,18 @@ struct Game_State
   Spell_Object spell_objects[MAX_SPELL_OBJECTS];
   uint8 spell_object_count = 0;
 
+  std::vector<Living_Character> living_characters;
   std::vector<Character_Target> character_targets;
   std::vector<Character_Spell> character_spells;
   std::vector<Character_Cast> character_casts;
   std::vector<Spell_Cooldown> spell_cooldowns;
   std::vector<Character_Buff> character_buffs;
   std::vector<Character_Buff> character_debuffs;
+  std::vector<Character_Silencing> character_silencings;
+  std::vector<Character_GCD> character_gcds;
 };
 
-void move_char(Character &character, Input command, Flat_Scene_Graph *scene);
+void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_Graph *scene);
 void collide_and_slide_char(
     Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity, Flat_Scene_Graph *scene);
 void update_spell_objects(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene);
@@ -166,16 +178,15 @@ void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene
     UID target_id, Spell_Index spell_id);
 UID add_dummy(Game_State &game_state, Map *map, vec3 position);
 UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int team, const char *name);
-void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene, float32 dt);
-void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float32 dt);
+void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene);
+void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns);
 void remove_debuff(Game_State &gs, Character &c, Spell_ID debuff_id);
 void remove_buff(Game_State &gs, Character &c, Spell_ID buff_id);
 Buff *find_buff(Game_State &gs, Character &c, Spell_ID debuff_id);
 Buff *find_debuff(Game_State &gs, Character &c, Spell_ID debuff_id);
 void apply_buff(Game_State &gs, Character &c, Buff *buff);
 void apply_debuff(Game_State &gs, Character &c, Buff *debuff);
-void regen_characters_hp(std::vector<Character> &cs, float32 dt);
-void regen_characters_mana(std::vector<Character> &cs, float32 dt);
-void update_global_cooldowns(std::vector<Character> &cs, float32 dt);
-void heal_character(Character &c, int32 heal);
-void damage_character(Game_State &gs, Character *subject, Character *object, float32 damage);
+void regen_characters_hp(std::vector<Living_Character> &lcs);
+void regen_characters_mana(std::vector<Living_Character> &lcs);
+void update_global_cooldowns(std::vector<Character_GCD> &cgs);
+bool damage_character(Game_State &gs, Character *subject, Character *object, float32 damage);

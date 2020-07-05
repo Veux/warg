@@ -14,7 +14,7 @@ void server_loop(std::shared_ptr<Warg_Server> server)
     while (current_time + dt < last_time + elapsed_time)
     {
       current_time += dt;
-      server->update(dt);
+      server->update();
       // SDL_Delay(random_between(0, 3));
     }
     SDL_Delay(5);

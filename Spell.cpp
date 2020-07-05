@@ -211,7 +211,9 @@ void frostbolt_object_on_hit(
   ASSERT(formula);
   ASSERT(object);
 
-  damage_character(*game_state, caster, target, 10);
+  bool target_dead = damage_character(*game_state, caster, target, 10);
+  if (target_dead)
+    return;
 
   remove_debuff(*game_state, *target, Spell_ID::Frostbolt);
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Frostbolt);

@@ -167,34 +167,18 @@ void Warg_State::handle_input_events()
       if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam &&
           current_game_state.get_character(player_character_id))
       {
-        Character *player_character = current_game_state.get_character(player_character_id);
-        int num_spells = std::count_if(current_game_state.character_spells.begin(),
-            current_game_state.character_spells.end(), [&](auto &cs) { return cs.character == player_character_id; });
-        size_t key = _e.key.keysym.sym - SDLK_1;
-        if (key < num_spells)
-        {
-          Spell_Index index;
-          int i = 0;
-          for (auto &cs : current_game_state.character_spells)
-          {
-            if (cs.character != player_character_id)
-              continue;
-            if (i++ == key)
-            {
-              index = cs.spell;
-              break;
-            }
-          }
-          session->push(std::make_unique<Cast_Message>(target_id, index));
-        }
+        int i = 0;
+        auto &spell =
+            std::find_if(current_game_state.character_spells.begin(), current_game_state.character_spells.end(),
+                [&](auto &cs) { return cs.character == player_character_id && i++ == _e.key.keysym.sym - SDLK_1; });
+        if (spell != current_game_state.character_spells.end())
+          session->push(std::make_unique<Cast_Message>(target_id, spell->spell));
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam && current_game_state.get_character(player_character_id))
       {
-        for (auto &character : current_game_state.characters)
-        {
-          if (character.id != player_character_id && character.alive)
-            target_id = character.id;
-        }
+        for (auto &lc : current_game_state.living_characters)
+          if (lc.id != player_character_id)
+            target_id = lc.id;
       }
       if (_e.key.keysym.sym == SDLK_g)
       {
@@ -463,7 +447,9 @@ void Warg_State::update_hp_bar(UID character_id)
 
   Node_Index hp_bar = scene.find_by_name(character_node, "hp_bar");
 
-  if (!character->alive)
+  auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == character_id; });
+  if (lc == current_game_state.living_characters.end())
   {
     scene.delete_node(hp_bar);
 
@@ -512,7 +498,7 @@ void Warg_State::update_hp_bar(UID character_id)
   if (hp_bar == NODE_NULL)
     return;
 
-  float32 hp_percent = ((float32)character->hp) / ((float32)character->hp_max);
+  float32 hp_percent = ((float32)lc->hp) / ((float32)lc->hp_max);
   Material_Descriptor *md = scene.get_modifiable_material_pointer_for(hp_bar, 0);
   md->emissive.mod = vec4(1.f - hp_percent, hp_percent, 0.f, 1.f);
 }
@@ -655,9 +641,9 @@ void Warg_State::predict_state()
     Character *player_character = predicted_state.get_character(player_character_id);
     Character_Physics &physics = player_character->physics;
     vec3 radius = player_character->radius;
-    float32 movement_speed = player_character->effective_stats.speed;
+    /*float32 movement_speed = player_character->effective_stats.speed;*/
 
-    move_char(*player_character, input, &scene);
+    move_char(predicted_state, *player_character, input, &scene);
     if (vec3_has_nan(physics.position))
       physics.position = map->spawn_pos[player_character->team];
 
@@ -733,8 +719,10 @@ void Warg_State::animate_character(UID character_id)
   Character *character = current_game_state.get_character(character_id);
   ASSERT(character);
 
-  if (!character->alive)
-    return;
+  auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == character_id; });
+
+  if (lc == current_game_state.living_characters.end()) return;
 
   ASSERT(character_nodes.count(character_id));
 
@@ -775,7 +763,7 @@ void Warg_State::animate_character(UID character_id)
     return float32(4.f * abs(fract(m * x + b) - 0.5f) - 1.f);
   };
 
-  float32 cadence = character->effective_stats.speed / STEP_SIZE;
+  float32 cadence = lc->effective_stats.speed / STEP_SIZE;
 
   float32 m = cadence / 2;
   float32 x = *animation_time;
@@ -825,7 +813,9 @@ void Warg_State::update()
   update_stats_bar();
   current_game_state = last_recieved_server_state;
   Character *target = current_game_state.get_character(target_id);
-  if (!target || !target->alive)
+  auto &tlc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == target_id; });
+  if (tlc == current_game_state.living_characters.end())
     target_id = 0;
   predict_state();
   set_camera_geometry();
@@ -1680,15 +1670,18 @@ void Warg_State::update_unit_frames()
     ImGui::SetCursorPos(v(grid.get_position(0, 0)));
     ImGui::Text("%s", character_name);
 
+    auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+        [&](auto &lc) { return lc.id == character->id; });
+
     ImGui::SetCursorPos(v(grid.get_position(0, 1)));
-    float32 hp_percentage = (float32)character->hp / (float32)character->hp_max;
+    float32 hp_percentage = (float32)lc->hp / (float32)lc->hp_max;
     ImVec4 hp_color = ImVec4((1.f - hp_percentage) * 0.75f, hp_percentage * 0.75f, 0.f, 1.f);
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, hp_color);
     ImGui::ProgressBar(hp_percentage, v(grid.get_section_size(1, 2)), "");
     ImGui::PopStyleColor();
 
     ImGui::SetCursorPos(v(grid.get_position(0, 3)));
-    float32 mana_percentage = (float32)character->mana / (float32)character->mana_max;
+    float32 mana_percentage = (float32)lc->mana / (float32)lc->mana_max;
     vec4 mana_color = rgb_vec4(64, 112, 255);
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(mana_color.x, mana_color.y, mana_color.z, mana_color.w));
     ImGui::ProgressBar(mana_percentage, v(grid.get_section_size(1, 1)), "");
@@ -1698,10 +1691,8 @@ void Warg_State::update_unit_frames()
     ImGui::PopStyleVar(3);
   };
 
-  auto make_target_buffs = [&](std::vector<Character_Buff> cbs, UID character, vec2 position, vec2 size,
-                               bool debuffs) {
-    int buff_count =
-        std::count_if(cbs.begin(), cbs.end(), [character](auto &cb) { return cb.character == character; });
+  auto make_target_buffs = [&](std::vector<Character_Buff> cbs, UID character, vec2 position, vec2 size, bool debuffs) {
+    int buff_count = std::count_if(cbs.begin(), cbs.end(), [character](auto &cb) { return cb.character == character; });
 
     Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(buff_count, 1), vec2(1, 1), 1);
 
@@ -1743,7 +1734,8 @@ void Warg_State::update_unit_frames()
     return;
 
   make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
-  make_target_buffs(current_game_state.character_buffs, target_id, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
+  make_target_buffs(
+      current_game_state.character_buffs, target_id, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
   make_target_buffs(
       current_game_state.character_debuffs, target_id, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
 
@@ -1817,8 +1809,15 @@ void Warg_State::update_icons()
         [&](auto &scd) { return scd.character == player_character_id && scd.spell == cs.spell; });
     if (scd != current_game_state.spell_cooldowns.end())
       cooldown_percent = scd->cooldown_remaining / spell->cooldown;
-    if (spell->on_global_cooldown && cooldown_remaining < player_character->global_cooldown)
-      cooldown_percent = player_character->global_cooldown / player_character->effective_stats.global_cooldown;
+    if (spell->on_global_cooldown)
+    {
+      auto &cg = std::find_if(current_game_state.character_gcds.begin(), current_game_state.character_gcds.end(),
+          [&](auto &cg) { return cg.character == player_character_id; });
+      auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+          [&](auto &lc) { return lc.id == player_character_id; });
+      if (cg != current_game_state.character_gcds.end())
+        cooldown_percent = cg->remaining / lc->effective_stats.global_cooldown;
+    }
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
     i++;
   }

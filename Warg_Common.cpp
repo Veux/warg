@@ -20,27 +20,19 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
 }
 
-void regen_characters_hp(std::vector<Character> &cs, float32 dt)
+void regen_characters_hp(std::vector<Living_Character> &lcs)
 {
-  for (auto &c : cs)
-  {
-    c.hp += c.effective_stats.hp_regen * dt;
-    if (c.hp > c.hp_max)
-      c.hp = c.hp_max;
-  }
+  for (auto &lc : lcs)
+    lc.hp = min(lc.hp + lc.effective_stats.hp_regen * dt, lc.hp_max);
 }
 
-void regen_characters_mana(std::vector<Character> &cs, float32 dt)
+void regen_characters_mana(std::vector<Living_Character> &lcs)
 {
-  for (auto &c : cs)
-  {
-    c.mana += c.effective_stats.mana_regen * dt;
-    if (c.mana > c.mana_max)
-      c.mana = c.mana_max;
-  }
+  for (auto &lc : lcs)
+    lc.mana = min(lc.hp + lc.effective_stats.mana_regen * dt, lc.mana_max);
 }
 
-void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float32 dt)
+void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns)
 {
   for (auto &scd : spell_cooldowns)
     scd.cooldown_remaining -= dt;
@@ -49,24 +41,11 @@ void update_spell_cooldowns(std::vector<Spell_Cooldown> &spell_cooldowns, float3
       spell_cooldowns.end());
 }
 
-void update_global_cooldowns(std::vector<Character> &cs, float32 dt)
+void update_global_cooldowns(std::vector<Character_GCD> &cgs)
 {
-  for (auto &c : cs)
-  {
-    c.global_cooldown -= dt * c.effective_stats.cast_speed;
-    if (c.global_cooldown < 0)
-      c.global_cooldown = 0;
-  }
-}
-
-void heal_character(Character &c, int32 heal)
-{
-  if (!c.alive)
-    return;
-
-  c.hp += heal;
-  if (c.hp > c.hp_max)
-    c.hp = c.hp_max;
+  for (auto &cg : cgs)
+    cg.remaining -= dt;
+  cgs.erase(std::remove_if(cgs.begin(), cgs.end(), [](auto &cg) { return cg.remaining <= 0.f; }), cgs.end());
 }
 
 void apply_buff(Game_State &gs, Character &c, Buff *buff)
@@ -103,11 +82,11 @@ void remove_buff(Game_State &gs, Character &c, Spell_ID buff_id)
 void remove_debuff(Game_State &gs, Character &c, Spell_ID buff_id)
 {
   gs.character_debuffs.erase(std::remove_if(gs.character_debuffs.begin(), gs.character_debuffs.end(),
-                               [&](auto &cd) { return cd.character == c.id && cd.buff._id == buff_id; }),
+                                 [&](auto &cd) { return cd.character == c.id && cd.buff._id == buff_id; }),
       gs.character_debuffs.end());
 }
 
-void move_char(Character &character, Input command, Flat_Scene_Graph *scene)
+void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_Graph *scene)
 {
   // return;
   vec3 &pos = character.physics.position;
@@ -136,8 +115,10 @@ void move_char(Character &character, Input command, Flat_Scene_Graph *scene)
   }
   if (move_status & ~Move_Status::Jumping)
   {
-    v = normalize(v);
-    v *= character.effective_stats.speed;
+    auto &lc = std::find_if(
+        gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) { return lc.id == character.id; });
+    v = normalize(v) * lc->effective_stats.speed;
+    // v *= character.effective_stats.speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {
@@ -411,33 +392,53 @@ Character *Game_State::get_character(UID id)
   return character == characters.end() ? nullptr : &*character;
 }
 
-void damage_character(Game_State &gs, Character *subject, Character *object, float32 damage)
+bool damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage)
 {
-  if (!object->alive)
-    return;
+  auto slc = std::find_if(
+      gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) { return lc.id == subject_id; });
+  if (slc == gs.living_characters.end())
+    return false;
+  auto tlc = std::find_if(
+      gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) { return lc.id == object_id; });
+  if (tlc == gs.living_characters.end())
+    return false;
 
-  object->hp -= damage;
-
-  if (object->hp <= 0)
-  {
-    object->hp = 0;
-    object->alive = false;
-
-    float32 new_height = object->radius.y;
-    object->physics.grounded = false;
-    object->physics.position.z -= object->radius.z - object->radius.y;
-
-    return;
-  }
+  tlc->hp -= damage;
 
   for (auto &cd : gs.character_debuffs)
   {
-    if (cd.character != object->id)
-      continue;
-    BuffDef *buff_formula = SPELL_DB.get_buff(cd.buff.formula_index);
-    if (subject)
-      buff_on_damage_dispatch(buff_formula, &cd.buff, &gs, subject, object, damage);
+    //if (cd.character != object_id)
+    //  continue;
+    //BuffDef *buff_formula = SPELL_DB.get_buff(cd.buff.formula_index);
+    //if (subject)
+    //  buff_on_damage_dispatch(buff_formula, &cd.buff, &gs, subject, object, damage);
   }
+
+  if (tlc->hp <= 0)
+  {
+    gs.character_casts.erase(std::remove_if(gs.character_casts.begin(), gs.character_casts.end(),
+                                 [&](auto &cc) { return cc.caster == tlc->id; }),
+        gs.character_casts.end());
+    gs.spell_cooldowns.erase(std::remove_if(gs.spell_cooldowns.begin(), gs.spell_cooldowns.end(),
+                                 [&](auto &sc) { return sc.character == tlc->id; }),
+        gs.spell_cooldowns.end());
+    gs.character_buffs.erase(std::remove_if(gs.character_buffs.begin(), gs.character_buffs.end(),
+                                 [&](auto &cb) { return cb.character == tlc->id; }),
+        gs.character_buffs.end());
+    gs.character_debuffs.erase(std::remove_if(gs.character_debuffs.begin(), gs.character_debuffs.end(),
+                                   [&](auto &cd) { return cd.character == tlc->id; }),
+        gs.character_debuffs.end());
+    gs.character_silencings.erase(std::remove_if(gs.character_silencings.begin(), gs.character_silencings.end(),
+                                      [&](auto &cs) { return cs.character == tlc->id; }),
+        gs.character_silencings.end());
+    gs.character_gcds.erase(std::remove_if(gs.character_gcds.begin(), gs.character_gcds.end(),
+                                [&](auto &cg) { return cg.character == tlc->id; }),
+        gs.character_gcds.end());
+
+    gs.living_characters.erase(tlc);
+    return true;
+  }
+  return false;
 }
 
 bool update_spell_object(
@@ -479,17 +480,15 @@ void update_spell_objects(Game_State &game_state, Spell_Database &spell_db, Flat
   }
 }
 
-void update_stats(std::vector<Character> &characters)
-{
-  for (auto &c : characters)
-  {
-    c.effective_stats = c.base_stats;
-    c.silenced = false;
-  }
-}
-
 void update_buffs(Game_State &game_state, Spell_Database &spell_db)
 {
+  for (auto &lc : game_state.living_characters)
+  {
+    auto &c = std::find_if(
+        game_state.characters.begin(), game_state.characters.end(), [&](auto &c) { return c.id == lc.id; });
+    lc.effective_stats = c->base_stats;
+  }
+
   auto update_buffs_ = [&](std::vector<Character_Buff> &buffs) {
     for (auto &b : buffs)
     {
@@ -497,7 +496,9 @@ void update_buffs(Game_State &game_state, Spell_Database &spell_db)
       BuffDef *buff_formula = spell_db.get_buff(b.buff.formula_index);
       b.buff.duration -= dt;
       b.buff.time_since_last_tick += dt;
-      character->effective_stats *= buff_formula->stats_modifiers;
+      auto &lc = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
+          [&](auto &lc) { return lc.id == b.character; });
+      lc->effective_stats *= buff_formula->stats_modifiers;
       if (b.buff.time_since_last_tick > 1.f / buff_formula->tick_freq)
       {
         buff_on_tick_dispatch(buff_formula, &b.buff, &game_state, character);
@@ -536,16 +537,23 @@ Cast_Error cast_viable(Game_State &game_state, Spell_Database &spell_db, UID cas
 
   if (!target)
     return Cast_Error::Invalid_Target;
-  if (!caster->alive || !target->alive)
+  auto &casterr = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == caster_id; });
+  bool target_alive = std::any_of(game_state.living_characters.begin(), game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == target->id; });
+  if (casterr == game_state.living_characters.end() || !target_alive)
     return Cast_Error::Invalid_Target;
-  if (caster->silenced)
+  if (std::any_of(game_state.character_silencings.begin(), game_state.character_silencings.end(),
+          [caster_id](auto &cs) { return cs.character == caster_id; }))
     return Cast_Error::Silenced;
-  if (!ignore_gcd && caster->global_cooldown > 0 && spell_formula->on_global_cooldown)
+  if (!ignore_gcd && spell_formula->on_global_cooldown &&
+      std::any_of(game_state.character_gcds.begin(), game_state.character_gcds.end(),
+          [caster_id](auto &cg) { return cg.character == caster_id; }))
     return Cast_Error::Global_Cooldown;
   if (std::any_of(game_state.spell_cooldowns.begin(), game_state.spell_cooldowns.end(),
           [&](auto &c) { return c.character == caster_id && c.spell == spell_id; }))
     return Cast_Error::Cooldown;
-  if (spell_formula->mana_cost > caster->mana)
+  if (spell_formula->mana_cost > casterr->mana)
     return Cast_Error::Insufficient_Mana;
   if (!target && spell_formula->targets != Spell_Targets::Terrain)
     return Cast_Error::Invalid_Target;
@@ -576,15 +584,15 @@ void release_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_
 
   spell_on_release_dispatch(spell_formula, &game_state, caster, &scene);
 
+  auto &lc = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == caster_id; });
   if (!spell_formula->cast_time && spell_formula->on_global_cooldown)
-    caster->global_cooldown = caster->effective_stats.global_cooldown;
+    game_state.character_gcds.push_back({caster_id, lc->effective_stats.global_cooldown});
 
   if (spell_formula->cooldown > 0.0)
     game_state.spell_cooldowns.push_back({caster_id, spell_id, spell_formula->cooldown});
 
-  caster->mana -= spell_formula->mana_cost;
-  if (caster->mana < 0)
-    caster->mana = 0;
+  lc->mana = std::max(0.f, lc->mana - spell_formula->mana_cost);
 }
 
 void begin_cast(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, UID target_id,
@@ -604,8 +612,10 @@ void begin_cast(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Gra
   cast.progress = 0;
   game_state.character_casts.push_back(cast);
 
+  auto &lc = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == caster_id; });
   if (formula->on_global_cooldown)
-    caster->global_cooldown = caster->effective_stats.global_cooldown;
+    game_state.character_gcds.push_back({caster_id, lc->effective_stats.global_cooldown});
 }
 
 void cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, UID target_id,
@@ -641,11 +651,15 @@ void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene
     cast_spell(game_state, spell_db, scene, caster->id, target ? target->id : 0, spell_id);
 }
 
-void update_casts(Game_State &game_state, std::vector<Character_Cast> &ccs, Spell_Database &spell_db,
-    Flat_Scene_Graph &scene, float32 dt)
+void update_casts(
+    Game_State &game_state, std::vector<Character_Cast> &ccs, Spell_Database &spell_db, Flat_Scene_Graph &scene)
 {
   for (auto &cc : ccs)
-    cc.progress += game_state.get_character(cc.caster)->effective_stats.cast_speed * dt;
+  {
+    auto &lc = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
+        [&](auto &lc) { return lc.id == cc.caster; });
+    cc.progress += lc->effective_stats.cast_speed * dt;
+  }
   ccs.erase(std::remove_if(ccs.begin(), ccs.end(),
                 [&](auto &cc) {
                   if (cc.progress >= spell_db.get_spell(cc.spell)->cast_time)
@@ -669,17 +683,6 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position)
 {
   UID id = uid();
 
-  Character dummy;
-  dummy.id = id;
-  dummy.team = 2;
-  strcpy(dummy.name, "Combat Dummy");
-  dummy.physics.position = position;
-  dummy.physics.orientation = map->spawn_orientation[0];
-  dummy.hp_max = 50;
-  dummy.hp = dummy.hp_max;
-  dummy.mana_max = 10000;
-  dummy.mana = dummy.mana_max;
-
   Character_Stats stats;
   stats.global_cooldown = 1.5;
   stats.speed = 0.0;
@@ -690,10 +693,23 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position)
   stats.atk_dmg = 0;
   stats.atk_dmg = 1;
 
+  Character dummy;
+  dummy.id = id;
   dummy.base_stats = stats;
-  dummy.effective_stats = stats;
-
+  dummy.team = 2;
+  strcpy(dummy.name, "Combat Dummy");
+  dummy.physics.position = position;
+  dummy.physics.orientation = map->spawn_orientation[0];
   game_state.characters.push_back(dummy);
+
+  Living_Character lc;
+  lc.id = id;
+  lc.effective_stats = stats;
+  lc.hp_max = 15;
+  lc.hp = lc.hp_max;
+  lc.mana_max = 10000;
+  lc.mana = lc.mana_max;
+  game_state.living_characters.push_back(lc);
 
   return id;
 }
@@ -705,17 +721,6 @@ UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int tea
 
   UID id = uid();
 
-  Character character;
-  character.id = id;
-  character.team = team;
-  strncpy(character.name, name, MAX_CHARACTER_NAME_LENGTH);
-  character.physics.position = map->spawn_pos[team];
-  character.physics.orientation = map->spawn_orientation[team];
-  character.hp_max = 100;
-  character.hp = character.hp_max;
-  character.mana_max = 500;
-  character.mana = character.mana_max;
-
   Character_Stats stats;
   stats.global_cooldown = 1.5;
   stats.speed = MOVE_SPEED;
@@ -726,8 +731,23 @@ UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int tea
   stats.atk_dmg = 5;
   stats.atk_speed = 2;
 
+  Character character;
+  character.id = id;
   character.base_stats = stats;
-  character.effective_stats = stats;
+  character.team = team;
+  strncpy(character.name, name, MAX_CHARACTER_NAME_LENGTH);
+  character.physics.position = map->spawn_pos[team];
+  character.physics.orientation = map->spawn_orientation[team];
+  game_state.characters.push_back(character);
+
+  Living_Character lc;
+  lc.id = id;
+  lc.effective_stats = stats;
+  lc.hp_max = 100;
+  lc.hp = lc.hp_max;
+  lc.mana_max = 500;
+  lc.mana = lc.mana_max;
+  game_state.living_characters.push_back(lc);
 
   auto add_spell = [&](const char *name) {
     game_state.character_spells.push_back({id, spell_db.get_spell(name)->index});
@@ -741,33 +761,23 @@ UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int tea
   add_spell("Demonic Circle: Summon");
   add_spell("Demonic Circle: Teleport");
 
-  game_state.characters.push_back(character);
-
   return id;
 }
 
-void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene, float32 dt)
+void update_game(Game_State &gs, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene)
 {
-  bool found_living_dummy = false;
-  for (auto &character : game_state.characters)
-  {
-    if (std::string(character.name) == "Combat Dummy" && character.alive)
-      found_living_dummy = true;
-  }
-  if (!found_living_dummy)
-  {
-    for (int i = 0; i <= 1; i++)
-      add_dummy(game_state, map, {1, i, 5});
-    set_message("NEEEEEEXTTTT", "", 5);
-  }
+  if (!std::any_of(gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) {
+        return std::any_of(gs.characters.begin(), gs.characters.end(),
+            [&](auto &c) { return c.id == lc.id && std::string(c.name) == "Combat Dummy"; });
+      }))
+    add_dummy(gs, map, {1, 1, 5});
 
-  update_stats(game_state.characters);
-  update_buffs(game_state, spell_db);
-  regen_characters_hp(game_state.characters, dt);
-  regen_characters_mana(game_state.characters, dt);
-  update_global_cooldowns(game_state.characters, dt);
-  update_targets(game_state.characters, game_state.character_targets);
-  update_spell_objects(game_state, spell_db, scene);
-  update_spell_cooldowns(game_state.spell_cooldowns, dt);
-  update_casts(game_state, game_state.character_casts, spell_db, scene, dt);
+  update_buffs(gs, spell_db);
+  regen_characters_hp(gs.living_characters);
+  regen_characters_mana(gs.living_characters);
+  update_global_cooldowns(gs.character_gcds);
+  update_targets(gs.characters, gs.character_targets);
+  update_spell_objects(gs, spell_db, scene);
+  update_spell_cooldowns(gs.spell_cooldowns);
+  update_casts(gs, gs.character_casts, spell_db, scene);
 }

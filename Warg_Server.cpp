@@ -19,19 +19,15 @@ Warg_Server::~Warg_Server()
   delete map;
 }
 
-void Warg_Server::update(float32 dt)
+void Warg_Server::update()
 {
   time += dt;
   tick += 1;
 
-  set_message("Server update() ", s("Time:", time, " Tick:", tick, " Tick*dt:", tick * dt), 1.0f);
-
   process_messages();
 
-  set_message("server character count:", s(game_state.characters.size()), 5);
+  update_game(game_state, map, spell_db, scene);
 
-  update_game(game_state, map, spell_db, scene, dt);
-  
   for (auto &character : game_state.characters)
   {
     Input last_input;
@@ -43,11 +39,12 @@ void Warg_Server::update(float32 dt)
     }
 
     vec3 old_pos = character.physics.position;
-    move_char(character, last_input, &scene);
+    move_char(game_state, character, last_input, &scene);
     if (_isnan(character.physics.position.x) || _isnan(character.physics.position.y) ||
         _isnan(character.physics.position.z))
       character.physics.position = map->spawn_pos[character.team];
-    if (character.alive)
+    if (std::any_of(game_state.living_characters.begin(), game_state.living_characters.end(),
+            [&](auto &lc) { return lc.id == character.id; }))
     {
       if (character.physics.position != old_pos)
       {
@@ -66,7 +63,6 @@ void Warg_Server::update(float32 dt)
   for (auto &p : peers)
   {
     shared_ptr<Peer> peer = p.second;
-
     peer->push_to_peer(make_unique<State_Message>(peer->character, &game_state));
   }
 }

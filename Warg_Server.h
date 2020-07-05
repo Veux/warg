@@ -13,7 +13,7 @@ struct Warg_Server
 {
   Warg_Server();
   ~Warg_Server();
-  void update(float32 dt);
+  void update();
   void connect(std::shared_ptr<Peer> peer);
   void process_messages();
 
