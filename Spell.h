@@ -12,6 +12,8 @@ struct Spell_Effect_Formula;
 struct BuffDef;
 struct Character;
 struct Game_State;
+struct Spell_Object;
+struct Buff;
 
 enum class Spell_ID
 {
@@ -25,15 +27,6 @@ enum class Spell_ID
   Corruption,
   Seed_of_Corruption,
   COUNT
-};
-
-struct Spell_Object
-{
-  UID id;
-  Spell_Index formula_index;
-  UID caster;
-  UID target;
-  vec3 pos;
 };
 
 struct Spell_Object_Formula
@@ -82,28 +75,6 @@ struct Character_Stats
   float32 atk_speed = 1.f;
 };
 
-struct Buff
-{
-  Spell_ID _id;
-  Spell_Index formula_index;
-  float64 duration;
-  float64 time_since_last_tick = 0;
-  union U {
-    U() : none(false) {}
-    bool none;
-    struct
-    {
-      UID caster;
-      int damage_taken;
-    } seed_of_corruption;
-    struct
-    {
-      bool grounded;
-      vec3 position;
-    } demonic_circle;
-  } u;
-};
-
 struct BuffDef
 {
   Spell_Index index;
@@ -150,10 +121,8 @@ private:
 
 extern Spell_Database SPELL_DB;
 
-void buff_on_end_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character);
-void buff_on_damage_dispatch(
-    BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage);
-void buff_on_tick_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character);
-void spell_object_on_hit_dispatch(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph* scene);
-void spell_on_release_dispatch(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene);
+void buff_on_end_dispatch(Spell_ID sid, UID c_id, Buff &b, Game_State &gs);
+void buff_on_damage_dispatch(Spell_ID sid, UID subject_id, UID object_id, Buff &buff, float32 damage, Game_State &gs);
+void buff_on_tick_dispatch(Spell_ID sid, UID c_id, Buff &b, Game_State &gs);
+void spell_object_on_hit_dispatch(Spell_ID sid, Spell_Object &so, Game_State &gs, Flat_Scene_Graph &scene);
+void spell_on_release_dispatch(Spell_ID sid, UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene);

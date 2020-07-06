@@ -64,6 +64,11 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
 #endif
 }
 
+template <class Container, class F> auto erase_if(Container &c, F &&f)
+{
+  return c.erase(std::remove_if(c.begin(), c.end(), std::forward<F>(f)), c.end());
+}
+
 struct Config
 { // if you add more settings, be sure to put them in load() and save()
   ivec2 resolution = ivec2(1280, 720);

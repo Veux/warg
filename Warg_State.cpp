@@ -643,7 +643,7 @@ void Warg_State::predict_state()
     vec3 radius = player_character->radius;
     /*float32 movement_speed = player_character->effective_stats.speed;*/
 
-    move_char(predicted_state, *player_character, input, &scene);
+    move_char(predicted_state, *player_character, input, scene);
     if (vec3_has_nan(physics.position))
       physics.position = map->spawn_pos[player_character->team];
 
@@ -675,27 +675,25 @@ void Warg_State::update_spell_object_nodes()
   material.emissive = "color(1, 1, 1, 1)";
   material.emissive.mod = vec4(0.5f, 0.5f, 100.f, 1.f);
 
-  for (size_t i = 0; i < current_game_state.spell_object_count; i++)
+  for (auto &so : current_game_state.spell_objects)
   {
-    Spell_Object *spell_object = &current_game_state.spell_objects[i];
-    if (spell_object_nodes.count(spell_object->id) == 0)
+    if (spell_object_nodes.count(so.id) == 0)
     {
-      spell_object_nodes[spell_object->id] = scene.add_mesh(cube, "spell_object_cube", &material);
+      spell_object_nodes[so.id] = scene.add_mesh(cube, "spell_object_cube", &material);
       // set_message(s("adding spell object node on tick ", game_state.tick), "", 20);
     }
-    Node_Index mesh = spell_object_nodes[spell_object->id];
+    Node_Index mesh = spell_object_nodes[so.id];
     scene.nodes[mesh].scale = vec3(0.4f);
-    scene.nodes[mesh].position = spell_object->pos;
+    scene.nodes[mesh].position = so.pos;
   }
 
   std::vector<UID> to_erase;
   for (auto &node : spell_object_nodes)
   {
     bool orphaned = true;
-    for (size_t i = 0; i < current_game_state.spell_object_count; i++)
+    for (auto &so : current_game_state.spell_objects)
     {
-      Spell_Object *spell_object = &current_game_state.spell_objects[i];
-      if (node.first == spell_object->id)
+      if (node.first == so.id)
         orphaned = false;
     }
     if (orphaned)
@@ -791,7 +789,7 @@ void Warg_State::update_animation_objects()
       animation_object.physics.velocity.z = 0;
 
     collide_and_slide_char(animation_object.physics, animation_object.radius, animation_object.physics.velocity,
-        vec3(0.f, 0.f, animation_object.physics.velocity.z), &scene);
+        vec3(0.f, 0.f, animation_object.physics.velocity.z), scene);
 
     scene.nodes[animation_object.node].position = animation_object.physics.position;
 

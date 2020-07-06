@@ -99,148 +99,126 @@ BuffDef *Spell_Database::add_buff()
   return &buffs.back();
 }
 
-void shadow_word_pain_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+void shadow_word_pain_debuff_tick(UID c_id, Buff &b, Game_State &gs)
 {
-  ASSERT(character);
-  damage_character(*game_state, nullptr, character, 5);
+  damage_character(gs, 0, c_id, 5);
 }
 
-void shadow_word_pain_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void shadow_word_pain_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  ASSERT(caster);
-
-  auto t = std::find_if(game_state->character_targets.begin(), game_state->character_targets.end(),
-      [&](auto &t) { return t.c == caster->id; });
-  ASSERT(t != game_state->character_targets.end());
-  Character *target = game_state->get_character(t->t);
-  ASSERT(target);
-
-  remove_debuff(*game_state, *target, Spell_ID::Shadow_Word_Pain);
+  erase_if(gs.character_debuffs,
+      [&](auto &cd) { return cd.character == target_id && cd.buff._id == Spell_ID::Shadow_Word_Pain; });
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Shadow_Word_Pain);
   Buff buff;
   buff._id = Spell_ID::Shadow_Word_Pain;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.time_since_last_tick = 0.f;
-  apply_debuff(*game_state, *target, &buff);
+  gs.character_debuffs.push_back({target_id, buff});
 }
 
-void corruption_debuff_tick(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+void corruption_debuff_tick(UID c_id, Buff &b, Game_State &gs)
 {
-  ASSERT(character);
-  damage_character(*game_state, nullptr, character, 5);
+  damage_character(gs, 0, c_id, 5);
 }
 
-void corruption_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void corruption_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  ASSERT(caster);
-  auto t = std::find_if(game_state->character_targets.begin(), game_state->character_targets.end(),
-      [&](auto &t) { return t.c == caster->id; });
-  ASSERT(t != game_state->character_targets.end());
-  Character *target = game_state->get_character(t->t);
-  ASSERT(target);
-
-  remove_debuff(*game_state, *target, Spell_ID::Corruption);
+  erase_if(gs.character_debuffs, [&](auto &cd) { return cd.character == target_id && cd.buff._id == Spell_ID::Corruption; });
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
   Buff buff;
   buff._id = Spell_ID::Corruption;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
   buff.time_since_last_tick = 0.f;
-  apply_debuff(*game_state, *target, &buff);
+  gs.character_debuffs.push_back({target_id, buff});
 }
 
-void frostbolt_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void frostbolt_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  auto c = std::find_if(game_state->character_casts.begin(), game_state->character_casts.end(),
-      [&](auto &cast) { return cast.caster == caster->id; });
-  ASSERT(c != game_state->character_casts.end());
-
+  auto c = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == caster_id; });
   Spell_Object_Formula *object_formula = SPELL_DB.get_spell_object(Spell_ID::Frostbolt);
   Spell_Object object;
   object.formula_index = object_formula->index;
-  object.caster = caster->id;
-  object.target = c->target;
-  object.pos = caster->physics.position;
+  object.caster = caster_id;
+  object.target = target_id;
+  object.pos = c->physics.position;
   object.id = uid();
-  game_state->spell_objects[game_state->spell_object_count++] = object;
+  gs.spell_objects.push_back(object);
 }
 
-void blink_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void blink_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  ASSERT(caster);
-
+  auto caster = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == caster_id; });
   vec3 dir = caster->physics.orientation * vec3(0, 1, 0);
   vec3 delta = normalize(dir) * vec3(15.f);
   collide_and_slide_char(caster->physics, caster->radius, delta, vec3(0, 0, -100), scene);
 }
 
-void sprint_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void sprint_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  ASSERT(caster);
-
-  remove_buff(*game_state, *caster, Spell_ID::Sprint);
+  erase_if(gs.character_buffs, [&](auto &cb) { return cb.character == caster_id && cb.buff._id == Spell_ID::Sprint; });
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Sprint);
   Buff buff;
   buff._id = Spell_ID::Sprint;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  apply_buff(*game_state, *caster, &buff);
+  gs.character_buffs.push_back({caster_id, buff});
 }
 
-void icy_veins_release(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void icy_veins_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  ASSERT(caster);
-
-  remove_buff(*game_state, *caster, Spell_ID::Icy_Veins);
+  erase_if(
+      gs.character_buffs, [&](auto &cb) { return cb.character == caster_id && cb.buff._id == Spell_ID::Icy_Veins; });
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Icy_Veins);
   Buff buff;
   buff._id = Spell_ID::Icy_Veins;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  apply_buff(*game_state, *caster, &buff);
+  gs.character_buffs.push_back({caster_id, buff});
 }
 
-void frostbolt_object_on_hit(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph *scene)
+void frostbolt_object_on_hit(Spell_Object &so, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  Character *caster = game_state->get_character(object->caster);
-  Character *target = game_state->get_character(object->target);
-  ASSERT(target);
-  ASSERT(formula);
-  ASSERT(object);
-
-  bool target_dead = damage_character(*game_state, caster, target, 10);
+  bool target_dead = damage_character(gs, so.caster, so.target, 10);
   if (target_dead)
     return;
 
-  remove_debuff(*game_state, *target, Spell_ID::Frostbolt);
+  erase_if(
+      gs.character_debuffs, [&](auto &cd) { return cd.character == so.target && cd.buff._id == Spell_ID::Frostbolt; });
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Frostbolt);
   Buff debuff;
   debuff._id = Spell_ID::Frostbolt;
   debuff.formula_index = debuff_formula->index;
   debuff.duration = debuff_formula->duration;
-  apply_debuff(*game_state, *target, &debuff);
+  gs.character_debuffs.push_back({so.target, debuff});
 }
 
-void seed_of_corruption_debuff_on_damage(
-    BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage)
+void seed_of_corruption_debuff_on_damage(UID subject_id, UID object_id, Buff &buff, float32 damage, Game_State &gs)
 {
-  if (subject->id != buff->u.seed_of_corruption.caster)
+  auto soc = std::find_if(gs.seeds_of_corruption.begin(), gs.seeds_of_corruption.end(),
+      [&](auto &soc) { return soc.character == object_id && soc.caster == subject_id; });
+  if (soc == gs.seeds_of_corruption.end())
     return;
 
-  buff->u.seed_of_corruption.damage_taken += damage;
-  if (buff->u.seed_of_corruption.damage_taken >= 20)
+  soc->damage_taken += damage;
+  if (soc->damage_taken >= 20)
   {
-    buff_on_end_dispatch(formula, buff, game_state, object);
-    remove_debuff(*game_state, *object, Spell_ID::Seed_of_Corruption);
+    buff_on_end_dispatch(Spell_ID::Seed_of_Corruption, object_id, buff, gs);
+    erase_if(gs.character_debuffs,
+        [&](auto &cd) { return cd.character == object_id && cd.buff._id == Spell_ID::Seed_of_Corruption; });
   }
 }
 
-void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+void seed_of_corruption_debuff_on_end(UID c_id, Buff &b, Game_State &gs)
 {
   BuffDef *corruption_formula = SPELL_DB.get_buff(Spell_ID::Corruption);
+
+  auto character = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == c_id; });
+
+  gs.seeds_of_corruption.erase(std::remove_if(gs.seeds_of_corruption.begin(), gs.seeds_of_corruption.end(),
+                                   [&](auto &soc) { return soc.character == c_id && soc.caster == b.caster; }),
+      gs.seeds_of_corruption.end());
 
   struct
   {
@@ -249,8 +227,8 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
   } to_detonate[MAX_CHARACTERS];
   size_t to_detonate_count = 0;
 
-  to_detonate[0].character = character;
-  to_detonate[0].buff = buff;
+  to_detonate[0].character = &*character;
+  to_detonate[0].buff = &b;
   to_detonate_count++;
 
   for (size_t i = 0; i < to_detonate_count; i++)
@@ -258,7 +236,7 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
     Character *caster = to_detonate[i].character;
     Buff *buff = to_detonate[i].buff;
 
-    for (auto &t : game_state->characters)
+    for (auto &t : gs.characters)
     {
       Character *target = &t;
 
@@ -273,7 +251,7 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
       buff.formula_index = corruption_formula->index;
       buff.duration = corruption_formula->duration;
       buff.time_since_last_tick = 0.f;
-      apply_debuff(*game_state, *target, &buff);
+      gs.character_debuffs.push_back({target->id, buff});
 
       bool should_detonate = true;
       for (size_t k = 0; k < to_detonate_count; k++)
@@ -281,49 +259,43 @@ void seed_of_corruption_debuff_on_end(BuffDef *formula, Buff *buff, Game_State *
         if (to_detonate[k].character == target)
           should_detonate = false;
       }
-      Buff *existing_seed = find_debuff(*game_state, *target, Spell_ID::Seed_of_Corruption);
-      if (should_detonate && existing_seed)
+      auto existing_seed = std::find_if(gs.character_debuffs.begin(), gs.character_debuffs.end(),
+          [&](auto &cd) { return cd.character == target->id && cd.buff._id == Spell_ID::Seed_of_Corruption; });
+      if (should_detonate && existing_seed != gs.character_debuffs.end())
       {
         to_detonate[to_detonate_count].character = target;
-        to_detonate[to_detonate_count].buff = existing_seed;
+        to_detonate[to_detonate_count].buff = &existing_seed->buff;
         to_detonate_count++;
       }
     }
   }
 }
 
-void seed_of_corruption_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void seed_of_corruption_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  auto c = std::find_if(game_state->character_casts.begin(), game_state->character_casts.end(),
-      [&](auto &cast) { return cast.caster == caster->id; });
-  ASSERT(c != game_state->character_casts.end());
-
+  auto c = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == caster_id; });
   Spell_Object_Formula *object_formula = SPELL_DB.get_spell_object(Spell_ID::Seed_of_Corruption);
   Spell_Object object;
   object.formula_index = object_formula->index;
-  object.caster = caster->id;
-  object.target = c->target;
-  object.pos = caster->physics.position;
+  object.caster = caster_id;
+  object.target = target_id;
+  object.pos = c->physics.position;
   object.id = uid();
-  game_state->spell_objects[game_state->spell_object_count++] = object;
+  gs.spell_objects.push_back(object);
 }
 
-void seed_of_corruption_object_on_hit(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph *scene)
+void seed_of_corruption_object_on_hit(Spell_Object &so, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  Character *target = game_state->get_character(object->target);
-  ASSERT(target);
-  ASSERT(formula);
-  ASSERT(object);
-
   BuffDef *debuff_formula = SPELL_DB.get_buff(Spell_ID::Seed_of_Corruption);
 
-  Buff *existing = find_debuff(*game_state, *target, Spell_ID::Seed_of_Corruption);
-  if (existing)
+  auto existing = std::find_if(gs.character_debuffs.begin(), gs.character_debuffs.end(),
+      [&](auto &cd) { return cd.character == so.target && cd.buff._id == Spell_ID::Seed_of_Corruption; });
+
+  if (existing != gs.character_debuffs.end())
   {
-    buff_on_end_dispatch(debuff_formula, existing, game_state, target);
-    remove_debuff(*game_state, *target, Spell_ID::Seed_of_Corruption);
+    buff_on_end_dispatch(Spell_ID::Seed_of_Corruption, so.target, existing->buff, gs);
+    erase_if(gs.character_debuffs,
+        [&](auto &cd) { return cd.character == so.target && cd.buff._id == Spell_ID::Seed_of_Corruption; });
     return;
   }
 
@@ -331,129 +303,133 @@ void seed_of_corruption_object_on_hit(
   debuff._id = Spell_ID::Seed_of_Corruption;
   debuff.formula_index = debuff_formula->index;
   debuff.duration = debuff_formula->duration;
-  debuff.u.seed_of_corruption.caster = object->caster;
-  debuff.u.seed_of_corruption.damage_taken = 0;
-  apply_debuff(*game_state, *target, &debuff);
+  debuff.caster = so.caster;
+  gs.character_debuffs.push_back({so.target, debuff});
+
+  gs.seeds_of_corruption.push_back({so.target, so.caster, 0.0});
 }
 
-void demonic_circle_summon_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void demonic_circle_summon_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
 {
-  ASSERT(caster);
-
   BuffDef *buff_formula = SPELL_DB.get_buff(Spell_ID::Demonic_Circle_Summon);
   ASSERT(buff_formula);
 
-  remove_buff(*game_state, *caster, Spell_ID::Demonic_Circle_Summon);
+  erase_if(gs.character_debuffs,
+      [&](auto &cb) { return cb.character == caster_id && cb.buff._id == Spell_ID::Demonic_Circle_Summon; });
   Buff buff;
   buff._id = Spell_ID::Demonic_Circle_Summon;
   buff.formula_index = buff_formula->index;
   buff.duration = buff_formula->duration;
-  buff.u.demonic_circle.position = caster->physics.position;
-  buff.u.demonic_circle.grounded = caster->physics.grounded;
-  apply_buff(*game_state, *caster, &buff);
+  buff.caster = caster_id;
+  gs.character_buffs.push_back({caster_id, buff});
+    
+  auto &c = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == caster_id; });
+  gs.demonic_circles.push_back({caster_id, c->physics.position});
 }
 
-void demonic_circle_teleport_release(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
+void demonic_circle_summon_buff_on_end(UID c_id, Buff &b, Game_State &gs)
 {
-  ASSERT(caster);
+  gs.demonic_circles.erase(
+      std::remove_if(gs.demonic_circles.begin(), gs.demonic_circles.end(), [&](auto &ds) { return ds.owner == c_id; }),
+      gs.demonic_circles.end());
+}
 
-  Buff *circle_buff = find_buff(*game_state, *caster, Spell_ID::Demonic_Circle_Summon);
-
-  if (!circle_buff)
+void demonic_circle_teleport_release(UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene)
+{
+  auto ds = std::find_if(
+      gs.demonic_circles.begin(), gs.demonic_circles.end(), [&](auto &ds) { return ds.owner == caster_id; });
+  if (ds == gs.demonic_circles.end())
     return;
-
-  caster->physics.position = circle_buff->u.demonic_circle.position;
-  caster->physics.grounded = circle_buff->u.demonic_circle.grounded;
+  auto c = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == caster_id; });
+  c->physics.position = ds->position;
+  c->physics.grounded = false;
 }
 
-void buff_on_end_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
+void buff_on_end_dispatch(Spell_ID sid, UID c_id, Buff &b, Game_State &gs)
 {
-  switch (formula->_id)
+  switch (sid)
   {
     case Spell_ID::Seed_of_Corruption:
-      seed_of_corruption_debuff_on_end(formula, buff, game_state, character);
-      break;
-    default:
-      break;
-  }
-}
-
-void buff_on_damage_dispatch(
-    BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage)
-{
-  switch (formula->_id)
-  {
-    case Spell_ID::Seed_of_Corruption:
-      seed_of_corruption_debuff_on_damage(formula, buff, game_state, subject, object, damage);
-      break;
-    default:
-      break;
-  }
-}
-
-void buff_on_tick_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character)
-{
-  switch (formula->_id)
-  {
-    case Spell_ID::Shadow_Word_Pain:
-      shadow_word_pain_debuff_tick(formula, buff, game_state, character);
-      break;
-    case Spell_ID::Corruption:
-      corruption_debuff_tick(formula, buff, game_state, character);
-    default:
-      break;
-  }
-}
-
-void spell_object_on_hit_dispatch(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph *scene)
-{
-  switch (formula->_id)
-  {
-    case Spell_ID::Frostbolt:
-      frostbolt_object_on_hit(formula, object, game_state, scene);
-      break;
-    case Spell_ID::Seed_of_Corruption:
-      seed_of_corruption_object_on_hit(formula, object, game_state, scene);
-      break;
-    default:
-      break;
-  }
-}
-
-void spell_on_release_dispatch(
-    Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph *scene)
-{
-  switch (formula->_id)
-  {
-    case Spell_ID::Blink:
-      blink_release(formula, game_state, caster, scene);
-      break;
-    case Spell_ID::Corruption:
-      corruption_release(formula, game_state, caster, scene);
-      break;
-    case Spell_ID::Frostbolt:
-      frostbolt_release(formula, game_state, caster, scene);
-      break;
-    case Spell_ID::Icy_Veins:
-      icy_veins_release(formula, game_state, caster, scene);
-      break;
-    case Spell_ID::Shadow_Word_Pain:
-      shadow_word_pain_release(formula, game_state, caster, scene);
-      break;
-    case Spell_ID::Sprint:
-      sprint_release(formula, game_state, caster, scene);
-      break;
-    case Spell_ID::Seed_of_Corruption:
-      seed_of_corruption_release(formula, game_state, caster, scene);
+      seed_of_corruption_debuff_on_end(c_id, b, gs);
       break;
     case Spell_ID::Demonic_Circle_Summon:
-      demonic_circle_summon_release(formula, game_state, caster, scene);
+      demonic_circle_summon_buff_on_end(c_id, b, gs);
+    default:
+      break;
+  }
+}
+
+void buff_on_damage_dispatch(Spell_ID sid, UID subject_id, UID object_id, Buff &buff, float32 damage, Game_State &gs)
+{
+  switch (sid)
+  {
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_debuff_on_damage(subject_id, object_id, buff, damage, gs);
+      break;
+    default:
+      break;
+  }
+}
+
+void buff_on_tick_dispatch(Spell_ID sid, UID c_id, Buff &b, Game_State &gs)
+{
+  switch (sid)
+  {
+    case Spell_ID::Shadow_Word_Pain:
+      shadow_word_pain_debuff_tick(c_id, b, gs);
+      break;
+    case Spell_ID::Corruption:
+      corruption_debuff_tick(c_id, b, gs);
+    default:
+      break;
+  }
+}
+
+void spell_object_on_hit_dispatch(Spell_ID sid, Spell_Object &so, Game_State &gs, Flat_Scene_Graph &scene)
+{
+  switch (sid)
+  {
+    case Spell_ID::Frostbolt:
+      frostbolt_object_on_hit(so, gs, scene);
+      break;
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_object_on_hit(so, gs, scene);
+      break;
+    default:
+      break;
+  }
+}
+
+void spell_on_release_dispatch(Spell_ID sid, UID caster_id, UID target_id, Game_State &game_state, Flat_Scene_Graph &scene)
+{
+  switch (sid)
+  {
+    case Spell_ID::Blink:
+      blink_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Corruption:
+      corruption_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Frostbolt:
+      frostbolt_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Icy_Veins:
+      icy_veins_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Shadow_Word_Pain:
+      shadow_word_pain_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Sprint:
+      sprint_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Seed_of_Corruption:
+      seed_of_corruption_release(caster_id, target_id, game_state, scene);
+      break;
+    case Spell_ID::Demonic_Circle_Summon:
+      demonic_circle_summon_release(caster_id, target_id, game_state, scene);
       break;
     case Spell_ID::Demonic_Circle_Teleport:
-      demonic_circle_teleport_release(formula, game_state, caster, scene);
+      demonic_circle_teleport_release(caster_id, target_id, game_state, scene);
       break;
     default:
       break;
@@ -614,7 +590,7 @@ Spell_Database::Spell_Database()
   BuffDef *soc_buff = add_buff();
   soc_buff->_id = Spell_ID::Seed_of_Corruption;
   soc_buff->name = "Seed of Corruption";
-  soc_buff->duration = 20.f;
+  soc_buff->duration = 5.f;
   soc_buff->icon = "seed_of_corruption.jpg";
 
   Spell_Object_Formula *soc_object = add_spell_object();

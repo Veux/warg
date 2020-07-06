@@ -39,7 +39,7 @@ void Warg_Server::update()
     }
 
     vec3 old_pos = character.physics.position;
-    move_char(game_state, character, last_input, &scene);
+    move_char(game_state, character, last_input, scene);
     if (_isnan(character.physics.position.x) || _isnan(character.physics.position.y) ||
         _isnan(character.physics.position.z))
       character.physics.position = map->spawn_pos[character.team];
@@ -99,9 +99,9 @@ void Input_Message::handle(Warg_Server &server)
   command.m = move_status;
   peer_->last_input = command;
   auto t = std::find_if(server.game_state.character_targets.begin(), server.game_state.character_targets.end(),
-      [&](auto &t) { return t.c == character->id; });
+      [&](auto &t) { return t.character == character->id; });
   if (t != server.game_state.character_targets.end())
-    t->t = target_id;
+    t->target = target_id;
   else
     server.game_state.character_targets.push_back({character->id, target_id});
 }
