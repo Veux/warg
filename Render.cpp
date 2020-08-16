@@ -352,6 +352,7 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
   {
     return;
   }
+  this->time = time;
   static bool loaded = false;
   static Shader specular_filter;
   if (!loaded)
@@ -394,13 +395,13 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glCreateFramebuffers(1, &ibl_fbo);
     glCreateRenderbuffers(1, &ibl_rbo);
 
-    glNamedRenderbufferStorage(ibl_rbo, GL_DEPTH_COMPONENT24, size.x, size.y);
-    glNamedFramebufferRenderbuffer(ibl_fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, ibl_rbo);
+    //glNamedRenderbufferStorage(ibl_rbo, GL_DEPTH_COMPONENT24, size.x, size.y);
+   // glNamedFramebufferRenderbuffer(ibl_fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, ibl_rbo);
 
     ibl_source = texture;
 
     // uncomment to see progress:
-    // texture = ibl_texture_target;
+    texture = ibl_texture_target;
   }
   GLint current_fbo;
   glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
@@ -418,12 +419,14 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
 
   glEnable(GL_CULL_FACE);
   glDisable(GL_BLEND);
+  glDisable(GL_DEPTH_TEST);
   glDepthMask(GL_TRUE);
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glDepthFunc(GL_LESS);
-   glEnable(GL_FRAMEBUFFER_SRGB);
+  //glEnable(GL_FRAMEBUFFER_SRGB);
   glEnable(GL_SCISSOR_TEST);
+  
 
   for (uint32 mip_level = 0; mip_level < ENV_MAP_MIP_LEVELS; ++mip_level)
   {
@@ -451,10 +454,11 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
       specular_filter.set_uniform("camera", cameras[i]);
       glFramebufferTexture2D(
           GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl_texture_target, mip_level);
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       cube.draw();
     }
   }
+  
   glDisable(GL_SCISSOR_TEST);
   glCullFace(GL_BACK);
   glEnable(GL_CULL_FACE);

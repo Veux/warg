@@ -735,8 +735,8 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
   material.uv_scale = vec2(1);
   material.casts_shadows = true;
   material.backface_culling = true;
-  material.roughness.source = "generated";
-  material.metalness.source = "generated";
+  material.roughness.source = "white";
+  material.metalness.source = "white";
   uint32 count = 4;
   uint32 zcount = 4;
 
