@@ -842,6 +842,7 @@ Material::Material(Material_Descriptor &m)
 {
   descriptor = m;
 
+  static const  Material_Descriptor default_md;
   descriptor.albedo.format = GL_SRGB8_ALPHA8;
   descriptor.normal.format = GL_RGBA8;
   descriptor.emissive.format = GL_SRGB8_ALPHA8;

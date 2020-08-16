@@ -1340,6 +1340,7 @@ void Warg_State::add_character_mesh(UID character_id)
   Material_Descriptor suit_material;
   suit_material.albedo.mod = vec4(0, 0, 0, 1);
   suit_material.roughness.mod = vec4(1);
+  suit_material.roughness.source = "white";
   suit_material.metalness.mod = vec4(0);
   suit_material.normal = "cloth_normal.jpg";
   suit_material.uv_scale = vec2(0.25f);
@@ -1347,6 +1348,7 @@ void Warg_State::add_character_mesh(UID character_id)
   Material_Descriptor hair_material;
   hair_material.albedo.mod = 0.75f * rgb_vec4(63, 26, 3);
   hair_material.roughness.mod = vec4(0.82);
+  hair_material.roughness.source = "white";
   hair_material.metalness.mod = vec4(0);
   hair_material.normal = "hair_normal.jpg";
   hair_material.uv_scale = vec2(1.f);
@@ -1360,7 +1362,6 @@ void Warg_State::add_character_mesh(UID character_id)
   shirt_material.albedo.mod = vec4(1);
   shirt_material.uv_scale = vec2(1.);
   Material_Descriptor solid_material = shirt_material;
-  solid_material.normal = "default";
 
   Mesh_Descriptor md(cube, "girl's cube");
   Mesh_Index cube_mesh_index = scene.resource_manager->push_custom_mesh(&md);
