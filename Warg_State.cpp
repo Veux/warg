@@ -1762,7 +1762,7 @@ void Warg_State::update_icons()
   }
 
   framebuffer.init();
-  framebuffer.bind();
+  framebuffer.bind_for_drawing_dst();
 
   shader.use();
   shader.set_uniform("count", (int)sources.size());

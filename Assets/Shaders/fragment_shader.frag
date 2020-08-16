@@ -368,6 +368,8 @@ void main()
   premultiply_alpha *= texture0_mod.a;
 
   m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+//  vec2 fragnormaluv = frag_normal_uv;
+//  fragnormaluv.y = -fragnormaluv.y;
   m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
@@ -459,7 +461,7 @@ void main()
     // ambient
     direct_ambient += lights[i].ambient * at;
   }
-
+  vec3 directonly = result;
   // ambient light
 
   // ambient specular
@@ -478,13 +480,24 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
-  result = m.albedo;
+  //result = vec3(ndotv);
+  //result = m.normal;
+  //result = vec3(m.roughness);
+  //result = vec3(texture2_mod.r);
+  //result = directonly;
+  //result = vec3(Ks);
+  //result = vec3(texture2D(texture4, frag_uv).r);
+  //result = irradiance;
+  //result = m.albedo;
   //result = m.emissive;
   //result = texture3_mod.rgb;
-  //result = m.normal;
   //result = vec3(frag_normal_uv,0);
   //result = texture2D(texture3, frag_normal_uv).rgb;
   //result = vec3(albedo_tex.a);
-  result = clamp(result,vec3(0),vec3(1));
+  //result = clamp(result,vec3(0),vec3(1));
+ // result = textureLod(texture6,r,.687).rgb;
+  //result = pow(result,vec3(1/2.2));
+   //result = pow(result,vec3(1/2.2));
+   //result = 1*result;
   out0 = vec4(result, premultiply_alpha);
 }

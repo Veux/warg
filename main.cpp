@@ -43,7 +43,7 @@
 //  check_gl_error();
 //}
 
-void _post_call_callback_default(const char *name, void *funcptr, int len_args, ...)
+void glad_callback(const char *name, void *funcptr, int len_args, ...)
 {
   if (!WARG_RUNNING)
   {
@@ -82,7 +82,7 @@ void _post_call_callback_default(const char *name, void *funcptr, int len_args, 
     }
     set_message("GL ERROR", "GL_" + error);
     push_log_to_disk();
-    ASSERT(0);
+    // ASSERT(0);
   }
 }
 
@@ -201,12 +201,13 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
     else
     {
       if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP)
-      state_key_events->push_back(e);
+        state_key_events->push_back(e);
       return;
     }
   }
 
-  if (e.type == SDL_MOUSEWHEEL)//e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL)
+  if (e.type ==
+      SDL_MOUSEWHEEL) // e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEWHEEL)
   {
     if (WantCaptureMouse && (!IMGUI.ignore_all_input))
     {
@@ -291,6 +292,7 @@ int main(int argc, char *argv[])
     // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+    // SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     window = SDL_CreateWindow("Warg_Engine", 100, 130, window_size.x, window_size.y, flags);
     SDL_RaiseWindow(window);
@@ -316,10 +318,8 @@ int main(int argc, char *argv[])
       swap = SDL_GL_SetSwapInterval(1);
     }
     gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress);
-    
-  
 
-   // set_message("glad OpenGL", s(GLVersion.major, ".", GLVersion.minor));
+    // set_message("glad OpenGL", s(GLVersion.major, ".", GLVersion.minor));
     // GLAPI void glad_set_pre_callback(gl_before_check);
 
     // glbinding::Binding::initialize();
@@ -327,8 +327,6 @@ int main(int argc, char *argv[])
     //   glbinding::CallbackMask::After | glbinding::CallbackMask::ParametersAndReturnValue, {"glGetError",
     //   "glFlush"});
 #if ENABLE_OPENGL_ERROR_CATCHING_AND_LOG
-
-    //glad_set_post_callback(_post_call_callback_default);
 
     // glbinding::setBeforeCallback(gl_before_check);
     // glbinding::setAfterCallback(gl_after_check);
@@ -339,8 +337,8 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-
-Local_Session warg_session = Local_Session();
+  glad_set_post_callback(glad_callback);
+  Local_Session warg_session = Local_Session();
 
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
@@ -352,8 +350,7 @@ Local_Session warg_session = Local_Session();
   states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
-  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
-
+  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
   // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
   // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it
@@ -483,7 +480,7 @@ Local_Session warg_session = Local_Session();
         {
           if (imgui_frame_active)
           {
-          
+
             states[i]->draw_gui();
           }
         }
@@ -573,7 +570,7 @@ Local_Session warg_session = Local_Session();
   push_log_to_disk();
   states.clear();
   IMAGE_LOADER.running = false;
-  //warg_session.end();
+  // warg_session.end();
   IMGUI_TEXTURE_DRAWS.clear();
   IMGUI.destroy();
   SDL_Quit();

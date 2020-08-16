@@ -657,13 +657,13 @@ Image_Data load_image(string path)
   {
     data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
     data.data_type = GL_FLOAT;
-    data.data_size = data.x*data.y*sizeof(float32)*4;
+    data.data_size = data.x * data.y * sizeof(float32) * 4;
   }
   else
   {
     data.data = stbi_load(path.c_str(), &data.x, &data.y, &data.comp, 4);
     data.data_type = GL_UNSIGNED_BYTE;
-    data.data_size = data.x*data.y*sizeof(uint8)*4;
+    data.data_size = data.x * data.y * sizeof(uint8) * 4;
   }
   data.initialized = true;
   return data;
@@ -689,27 +689,31 @@ void Image_Loader::loader_loop(Image_Loader *loader)
     uint32 back = task.find_last_of(",");
     string filename = task.substr(0, back);
     string fmt = task.substr(back + 1);
-    GLenum format = stoi(fmt);
+    GLenum gl_texture_internalformat = stoi(fmt);
     Image_Data data = load_image(filename);
 
-    if (format == GL_SRGB8_ALPHA8 && data.data)
-    { // premultiply alpha
-      ASSERT(data.data_type == GL_UNSIGNED_BYTE);
-      for (int32 i = 0; i < data.x * data.y; ++i)
-      {
-        uint32 pixel = ((uint32 *)data.data)[i];
-        uint8 r = (uint8)(0x000000FF & pixel);
-        uint8 g = (uint8)((0x0000FF00 & pixel) >> 8);
-        uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
-        uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
-        float32 af = float32(a) / 255.f;
-        af = pow(af, 1 / 2.2);
-        vec3 c(r, g, b);
-        c = vec3(af) * c;
-        r = (uint8)round(c.r);
-        g = (uint8)round(c.g);
-        b = (uint8)round(c.b);
-        //((uint32 *)data.data)[i] = (24 << a) | (16 << b) | (8 << g) | r;
+    if (data.data_type != GL_FLOAT)
+    {
+      if (gl_texture_internalformat == GL_SRGB8_ALPHA8 && data.data)
+      { // premultiply alpha
+        ASSERT(data.data_type == GL_UNSIGNED_BYTE);
+        for (int32 i = 0; i < data.x * data.y; ++i)
+        {
+          break;
+          uint32 pixel = ((uint32 *)data.data)[i];
+          uint8 r = (uint8)(0x000000FF & pixel);
+          uint8 g = (uint8)((0x0000FF00 & pixel) >> 8);
+          uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
+          uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
+          float32 af = float32(a) / 255.f;
+          af = pow(af, 1 / 2.2);
+          vec3 c(r, g, b);
+          c = vec3(af) * c;
+          r = (uint8)glm::clamp((uint32)round(c.r), 0u, 255u);
+          g = (uint8)glm::clamp((uint32)round(c.g), 0u, 255u);
+          b = (uint8)glm::clamp((uint32)round(c.b), 0u, 255u);
+          //((uint32 *)data.data)[i] = (24 << a) | (16 << b) | (8 << g) | r;
+        }
       }
     }
     std::lock_guard<std::mutex> lock(loader->db_mtx);
@@ -720,16 +724,16 @@ void Image_Loader::loader_loop(Image_Loader *loader)
 Image_Loader::Image_Loader()
 {
   threads[0] = std::thread(loader_loop, this);
- // threads[1] = std::thread(loader_loop, this);
-  //threads[2] = std::thread(loader_loop, this);
+  //threads[1] = std::thread(loader_loop, this);
+  // threads[2] = std::thread(loader_loop, this);
   // threads[3] = std::thread(loader_loop, this);
 }
 Image_Loader::~Image_Loader()
 {
   running = false;
   threads[0].join();
-  //threads[1].join();
-  //threads[2].join();
+  // threads[1].join();
+  // threads[2].join();
   // threads[3].join();
 }
 
@@ -755,6 +759,20 @@ bool Image_Loader::load(std::string path, Image_Data *data, GLenum internalforma
   return false;
 }
 
+bool has_hdr_file_extension(std::string name)
+{
+  size_t size = name.size();
+
+  if (size <= 3)
+    return false;
+
+  std::string end = name.substr(size - 4, 4);
+  if (end == ".hdr" || end == ".HDR")
+  {
+    return true;
+  }
+  return false;
+}
 bool has_img_file_extension(std::string name)
 {
   size_t size = name.size();

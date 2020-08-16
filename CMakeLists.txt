@@ -13,9 +13,9 @@ file (GLOB CPP_FILES "*.cpp")
 file (GLOB HEADER_FILES "*.h" ".hpp")
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-set(CPP_FILES ${CPP_FILES} "${CMAKE_SOURCE_DIR}/Third_party/glad/glad_debug/src/glad.c")
+set(CPP_FILES ${CPP_FILES} "${CMAKE_SOURCE_DIR}/Third_party/glad/glad_debug/src/glad.cpp")
 else()
-set(CPP_FILES ${CPP_FILES} "${CMAKE_SOURCE_DIR}/Third_party/glad/glad/src/glad.c") 
+set(CPP_FILES ${CPP_FILES} "${CMAKE_SOURCE_DIR}/Third_party/glad/glad/src/glad.cpp") 
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -83,10 +83,11 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 include_directories (${GLAD_INCLUDE_DIRS})
 
 target_include_directories (warg PRIVATE "Third_Party")
+target_include_directories (warg PRIVATE "")
 
 
 target_link_libraries (warg ${CMAKE_THREAD_LIBS_INIT})
-
+#target_precompile_headers(warg PRIVATE stdafx.h)
 
 
 

@@ -735,6 +735,8 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
   material.uv_scale = vec2(1);
   material.casts_shadows = true;
   material.backface_culling = true;
+  material.roughness.source = "generated";
+  material.metalness.source = "generated";
   uint32 count = 4;
   uint32 zcount = 4;
 
@@ -782,7 +784,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         Node_Index index = scene.add_aiscene("smoothsphere.fbx", "Spherearray");
         Material_Index mi = scene.resource_manager->push_custom_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
-
+        scene.nodes[scene.nodes[index].children[0]].name = s("sphere ",i," ",j," ",k);
         material.uniform_set.clear();
 
         Flat_Scene_Graph_Node *node = &scene.nodes[index];

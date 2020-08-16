@@ -36,4 +36,5 @@ void main()
     color += textureLod(texture0, sample_uv,lod) * gauss[i].y;
   }
   out0 = color;
+  //out0 = vec4(0,1,1,1);
 }

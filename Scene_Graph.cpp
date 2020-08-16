@@ -670,6 +670,7 @@ void Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture_Desc
   ImGui::InputText("Name", &str.str[0], str.str.size());
 
   ptr->name = s(str);
+  ptr->source = ptr->name;
   ImGui::DragFloat("mod_r", &ptr->mod[0], 0.001f, 0.0f);
   ImGui::DragFloat("mod_g", &ptr->mod[1], 0.001f, 0.0f);
   ImGui::DragFloat("mod_b", &ptr->mod[2], 0.001f, 0.0f);

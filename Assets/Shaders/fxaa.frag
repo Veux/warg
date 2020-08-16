@@ -13,9 +13,11 @@ uniform float SUBPIXEL_QUALITY;
 
 layout(location = 0) out vec3 out0;
 
+//encodes the linear texture input into gamma space
 float rgb2luma(vec3 rgb)
 {
   return pow(dot(rgb, vec3(0.299, 0.587, 0.114)),1.0f/2.22f);
+  //return dot(rgb, vec3(0.299, 0.587, 0.114));
 }
 
 void main()

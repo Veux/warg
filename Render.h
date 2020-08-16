@@ -87,19 +87,28 @@ struct Texture_Handle
   // should be constant for this handle after initialization:
   std::string filename = "TEXTURE_HANDLE_FILENAME_NOT_SET";
   glm::ivec2 size = glm::ivec2(0, 0);
+  uint8 levels = 0;
   GLenum internalformat = GLenum(0);
 
   // specific for specular environment maps
-  bool ibl_mipmaps_started = false;
   bool ibl_mipmaps_generated = false;
-
+  GLuint ibl_source = 0;
+  GLuint ibl_texture_target = 0;
+  GLsync ibl_sync = 0;
+  GLuint ibl_fbo = 0;
+  GLuint ibl_rbo = 0;
+  uint32 ibl_tile_max = 10;
+  int32 tilex = 0;
+  int32 tiley = 0;
+  float32 time = 0;
   bool is_cubemap = false;
+  void generate_ibl_mipmaps(float32 time);
 
   // stream state:
   GLsync upload_sync = 0;
+  GLsync transfer_sync = 0;
   GLuint uploading_pbo = 0;
   GLenum datatype = 0;
-
 
 private:
 };
@@ -142,9 +151,10 @@ struct Texture_Descriptor
     format = GL_SRGB8_ALPHA8;
   }
 
-  std::string name= "default";
-  std::string source= "default";
+  std::string name = "default";
+  std::string source = "default";
   std::string key;
+  uint8 levels = 6;
   GLenum format = 0;
   glm::ivec2 size = ivec2(0);
   glm::vec4 mod = vec4(1);
@@ -160,11 +170,13 @@ struct Texture
   Texture() {}
   Texture(Texture_Descriptor &td);
 
-  Texture(std::string name, glm::ivec2 size, GLenum format, GLenum minification_filter,
+  Texture(std::string name, glm::ivec2 size, uint8 levels, GLenum format, GLenum minification_filter,
       GLenum magnification_filter = GL_LINEAR, GLenum wraps = GL_CLAMP_TO_EDGE, GLenum wrapt = GL_CLAMP_TO_EDGE,
       glm::vec4 border_color = glm::vec4(0));
 
   Texture_Descriptor t;
+ //a call to load guarantees we will have a Texture_Handle after it returns
+ //but the texture will start loading asynchronously and may not yet be ready
   void load();
   bool bind(GLuint texture_unit);
   void check_set_parameters();
@@ -212,6 +224,30 @@ struct Environment_Map_Descriptor
   bool source_is_equirectangular = true;
 };
 
+// we should have n environment map probes distributed within the world
+// these should probably be held within the 'scene graph'
+// when an object is gathered for rendering from the graph, we can point to the probes it is affected by
+// the probes themselves should be
+
+struct Environment_Probe
+{
+  Environment_Probe(Environment_Map_Descriptor d) {}
+};
+
+// a basic single environment map that is a fallback for all objects
+// only one - held by the scene graph
+// constructed from equirectangular images
+// when the scene graph is initialized, the skybox will be missing/black
+// when do we begin to load the data?
+// we should have a way to signal to begin loading
+// what do we do if rendering is called before we are finished loading?
+// we could render them as tiles as before, but we see it stream in very ugly
+// we should just use the source mip only, and swap to the correct cubemap only after it is all finished
+// with convolution
+struct Skybox
+{
+};
+
 struct Environment_Map
 {
   Environment_Map() {}
@@ -226,25 +262,8 @@ struct Environment_Map
 
   Environment_Map_Descriptor m;
 
-  // todo: irradiance map generation
-  void irradiance_convolution();
-  void generate_ibl_mipmaps();
-
   // todo: rendered environment map
   void probe_world(glm::vec3 p, glm::vec2 resolution);
-
-private:
-  GLuint ibl_source = 0;
-  GLuint ibl_texture_target = 0;
-  GLsync ibl_sync = 0;
-  GLuint ibl_fbo = 0;
-  GLuint ibl_rbo = 0;
-  uint32 ibl_tile_max = 10;
-  int32 tilex = 0;
-  int32 tiley = 0;
-  bool working_on_ibl = false;
-  float32 time = 0;
-  vec2 size = vec2(0);
 };
 
 struct Mesh_Handle
@@ -313,10 +332,7 @@ struct Uniform_Set_Descriptor
 
 struct Material_Descriptor
 {
-  Material_Descriptor()
-  {
-    
-  }
+  Material_Descriptor() {}
   void mod_by(const Material_Descriptor *override);
   Texture_Descriptor albedo;
   Texture_Descriptor normal;
@@ -584,14 +600,13 @@ struct Framebuffer
 {
   Framebuffer();
   void init();
-  void bind();
+  void bind_for_drawing_dst();
   std::shared_ptr<Framebuffer_Handle> fbo;
   std::vector<Texture> color_attachments = {Texture()};
   std::shared_ptr<Renderbuffer_Handle> depth;
   glm::ivec2 depth_size = glm::ivec2(0);
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
-  bool encode_srgb_on_draw = false; // only works for srgb framebuffer
 };
 
 struct Gaussian_Blur
@@ -984,13 +999,13 @@ struct Renderer
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
- 
+
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:
-  Framebuffer draw_target;       // full render scaled, float linear
-  Framebuffer draw_target_srgb8; // full render scaled, srgb
-  Framebuffer draw_target_fxaa;  // full render scaled. srgb
+  Framebuffer draw_target;              // full render scaled, float linear
+  Framebuffer tonemapping_target_srgb8; // full render scaled, srgb
+  Framebuffer fxaa_target_srgb8;        // full render scaled. srgb
 
   // instance attribute buffers
   // GLuint instance_mvp_buffer = 0;
