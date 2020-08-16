@@ -255,5 +255,6 @@ void main()
 
   // Read the color at the new UV coordinates, and use it.
   vec3 finalColor = texture(texture0, finalUv).rgb;
-  out0 = finalColor;
+  //out0 = finalColor;
+  out0 = colorCenter;
 }

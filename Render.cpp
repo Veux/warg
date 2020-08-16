@@ -347,8 +347,8 @@ Texture_Handle::~Texture_Handle()
 
 void Texture_Handle::generate_ibl_mipmaps(float32 time)
 {
-  
-  if (ibl_mipmaps_generated || (!(time > (this->time + 1 * dt))))
+
+  if (ibl_mipmaps_generated || (!(time > (this->time + 2 * dt))))
   {
     return;
   }
@@ -395,13 +395,10 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glCreateFramebuffers(1, &ibl_fbo);
     glCreateRenderbuffers(1, &ibl_rbo);
 
-    //glNamedRenderbufferStorage(ibl_rbo, GL_DEPTH_COMPONENT24, size.x, size.y);
-   // glNamedFramebufferRenderbuffer(ibl_fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, ibl_rbo);
-
     ibl_source = texture;
 
     // uncomment to see progress:
-    texture = ibl_texture_target;
+    // texture = ibl_texture_target;
   }
   GLint current_fbo;
   glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
@@ -424,9 +421,8 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glDepthFunc(GL_LESS);
-  //glEnable(GL_FRAMEBUFFER_SRGB);
+  // glEnable(GL_FRAMEBUFFER_SRGB);
   glEnable(GL_SCISSOR_TEST);
-  
 
   for (uint32 mip_level = 0; mip_level < ENV_MAP_MIP_LEVELS; ++mip_level)
   {
@@ -448,17 +444,16 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glScissor(x - 15, y - 15, draw_width + 33, draw_height + 33);
     float roughness = (float)mip_level / (float)(ENV_MAP_MIP_LEVELS - 1);
     specular_filter.set_uniform("roughness", roughness);
-    set_message(s("Generate mip:", s(mip_level)), "", 5.0f);
     for (unsigned int i = 0; i < 6; ++i)
     {
       specular_filter.set_uniform("camera", cameras[i]);
       glFramebufferTexture2D(
           GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl_texture_target, mip_level);
-      //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       cube.draw();
     }
   }
-  
+
   glDisable(GL_SCISSOR_TEST);
   glCullFace(GL_BACK);
   glEnable(GL_CULL_FACE);
@@ -494,7 +489,6 @@ void Texture::load()
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
 
-  
   if (texture)
   {
     if (texture->texture == 0)
@@ -949,17 +943,17 @@ void Material::bind()
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
   bool success = albedo.bind(Texture_Location::albedo);
-  shader.set_uniform("texture0_mod", albedo.t.mod);
+  shader.set_uniform("texture0_mod", albedo.t.mod * albedo.t.mod);
 
   success = emissive.bind(Texture_Location::emissive);
-  shader.set_uniform("texture1_mod", emissive.t.mod);
+  shader.set_uniform("texture1_mod", emissive.t.mod * emissive.t.mod);
   if (!success)
   {
     shader.set_uniform("texture1_mod", DEFAULT_EMISSIVE);
   }
 
   success = roughness.bind(Texture_Location::roughness);
-  shader.set_uniform("texture2_mod", roughness.t.mod);
+  shader.set_uniform("texture2_mod", roughness.t.mod * roughness.t.mod);
   if (!success)
   {
     shader.set_uniform("texture2_mod", DEFAULT_ROUGHNESS);
@@ -973,7 +967,7 @@ void Material::bind()
   }
 
   success = metalness.bind(Texture_Location::metalness);
-  shader.set_uniform("texture4_mod", metalness.t.mod);
+  shader.set_uniform("texture4_mod", metalness.t.mod * metalness.t.mod);
   if (!success)
   {
     shader.set_uniform("texture4_mod", DEFAULT_METALNESS);
@@ -1431,11 +1425,8 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
 
 void Renderer::opaque_pass(float32 time)
 {
-  brdf_integration_lut.bind(brdf_ibl_lut);
 
   // set_message("opaque_pass()");
-
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
 
   glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1452,8 +1443,10 @@ void Renderer::opaque_pass(float32 time)
   bind_white_to_all_textures();
   for (Render_Entity &entity : render_entities)
   {
-    
+
     bind_white_to_all_textures();
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+    brdf_integration_lut.bind(brdf_ibl_lut);
     ASSERT(entity.mesh);
     entity.material->bind();
     if (entity.material->descriptor.wireframe)
@@ -1992,7 +1985,7 @@ void Renderer::render(float64 state_time)
 
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;
-  glEnable(GL_FRAMEBUFFER_SRGB);
+  // glEnable(GL_FRAMEBUFFER_SRGB);
   // set_message("FRAME_START", "");
   // set_message("BUILDING SHADOW MAPS START", "");
   if (!CONFIG.render_simple)
@@ -2004,11 +1997,15 @@ void Renderer::render(float64 state_time)
 
   opaque_pass(time);
 
+  skybox_pass(time);
+  instance_pass(time);
+  translucent_pass(time);
+  postprocess_pass(time);
+
   // debug draw to screen
 
-  if (false)
+  if (true)
   {
-
     glEnable(GL_FRAMEBUFFER_SRGB);
     glViewport(0, 0, window_size.x, window_size.y);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -2032,13 +2029,7 @@ void Renderer::render(float64 state_time)
     frame_count += 1;
     return;
   }
-
   // end debug draw to screen
-
-  skybox_pass(time);
-  instance_pass(time);
-  translucent_pass(time);
-  postprocess_pass(time);
 
   // all pixel data is now in draw_target in 16f linear space
 
@@ -2093,7 +2084,13 @@ void Renderer::render(float64 state_time)
   }
   else
   {
-    // draw to tonemapping_target_srgb8 framebuffer
+    ///////////////////////////////////////
+    ///////////////////////////////////////
+    // HERE IS DRAWING TO TONEMAPPER FRAMEBUFFER
+    ////////////////////////////////////////
+    ////////////////////////////////////////
+    glDisable(GL_FRAMEBUFFER_SRGB);
+
     glViewport(0, 0, size.x, size.y);
     glBindVertexArray(quad.get_vao());
     tonemapping_target_srgb8.bind_for_drawing_dst();
@@ -2102,18 +2099,12 @@ void Renderer::render(float64 state_time)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glEnable(GL_FRAMEBUFFER_SRGB);
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glDisable(GL_FRAMEBUFFER_SRGB);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
   if (use_fxaa)
     previous_camera = camera;
-
-  // the pixel data is now in tonemapping_target_srgb8 and is srgb encoded
-
-  // do fxaa or passthrough if fxaa disabled
 
   if (use_fxaa)
   {
@@ -2144,34 +2135,38 @@ void Renderer::render(float64 state_time)
     fxaa.set_uniform("transform", ortho_projection(window_size));
     fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
     fxaa.set_uniform("time", (float32)state_time);
-    // the fxaa shader reads the input in linear space because the source is an srgb texture, but converts and works in
-    // srgb colorspace and will output srgb values, so we don't want to double encode
-    glDisable(GL_FRAMEBUFFER_SRGB);
+    // glDisable(GL_FRAMEBUFFER_SRGB);
   }
   else
   {
     passthrough.use();
     passthrough.set_uniform("transform", ortho_projection(window_size));
-    // the passthrough shader will convert to linear space on texture input read for copy
-    // but does not then encode to srgb itself, so we want this enabled
-    glEnable(GL_FRAMEBUFFER_SRGB);
+
+    // glDisable(GL_FRAMEBUFFER_SRGB);
   }
+
+  ///////////////////////////////////////
+  ///////////////////////////////////////
+  // HERE IS DRAWING TO FXAA FRAMEBUFFER
+  ////////////////////////////////////////
+  ////////////////////////////////////////
   glEnable(GL_FRAMEBUFFER_SRGB);
+
   fxaa_target_srgb8.bind_for_drawing_dst();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   tonemapping_target_srgb8.color_attachments[0].bind(0);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-  // here, the colors in tonemapping_target_srgb8 are gamma encoded regardless of if we used fxaa or passthrough
 
-  // draw fxaa_target_srgb8 to screen
-  // the src is an srgb texture so it will be sampled in linear space
-  // so we need to make sure its gamma encoded for the screen
-  // well it will be gamma encoded automatically for us if it is an srgb framebuffer and we turn the encoding on
-
-  glEnable(GL_FRAMEBUFFER_SRGB);
   glViewport(0, 0, window_size.x, window_size.y);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  ///////////////////////////////////////
+  ///////////////////////////////////////
+  // HERE IS DRAWING TO DEFAULT FRAMEBUFFER
+  ////////////////////////////////////////
+  ////////////////////////////////////////
+  glEnable(GL_FRAMEBUFFER_SRGB);
 
   passthrough.use();
   passthrough.set_uniform("transform", ortho_projection(window_size));
@@ -2374,7 +2369,7 @@ void Renderer::init_render_targets()
   srgb8.name = name + " Renderer::draw_target_srgb8.color[0]";
   srgb8.size = size;
   srgb8.levels = 1;
-  srgb8.format = GL_SRGB8;
+  srgb8.format = GL_RGB16F;
   srgb8.minification_filter = GL_LINEAR;
   tonemapping_target_srgb8.color_attachments[0] = Texture(srgb8);
   tonemapping_target_srgb8.init();
@@ -2385,7 +2380,7 @@ void Renderer::init_render_targets()
   fxaa.name = name + " Renderer::draw_target_post_fxaa.color[0]";
   fxaa.size = size;
   fxaa.levels = 1;
-  fxaa.format = GL_SRGB8;
+  fxaa.format = GL_RGB8;
   fxaa.minification_filter = GL_LINEAR;
   fxaa_target_srgb8.color_attachments[0] = Texture(fxaa);
   fxaa_target_srgb8.init();
@@ -2779,6 +2774,8 @@ Environment_Map::Environment_Map(Environment_Map_Descriptor d)
 }
 void Environment_Map::load()
 {
+
+  radiance_is_gamma_encoded = !has_hdr_file_extension(m.radiance);
 
   if (m.source_is_equirectangular)
   {

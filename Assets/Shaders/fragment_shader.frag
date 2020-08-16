@@ -368,10 +368,12 @@ void main()
   premultiply_alpha *= texture0_mod.a;
 
   m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+  //m.albedo = pow(m.albedo,vec3(1/2.2));
   m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
+  
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
@@ -457,15 +459,17 @@ void main()
     vec3 diffuse_result = radiance * diffuse;
     result += (specular_result + diffuse_result) * visibility * ndotl;
     // ambient
-    direct_ambient += lights[i].ambient * at;
+    direct_ambient += lights[i].ambient * at * m.albedo;
   }
   vec3 directonly = result;
   // ambient light
 
   // ambient specular
   vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  
   const float MAX_REFLECTION_LOD = 5.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
+  
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
   vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
 
@@ -478,12 +482,28 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
+  //result = prefilteredColor;
+//  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
+//  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
+//  result = vec3(brdfc ,0);
+ // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
+  //result = (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
   //result = vec3(ndotv);
+  //result = vec3(m.metalness);
+  //result = vec3(m.roughness);
+  //result = mix(vec3(1),F0,m.metalness)*prefilteredColor;
+ // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
+  //result = vec3(gl_FragCoord.x/1920);
+  //result = 0.05f*vec3(length(frag_world_position));
+  //result = m.albedo;
+  //result = pow(result,vec3(2.2));
+  //result = clamp(result,vec3(0),vec3(1));
   //result = prefilteredColor;
   //result = vec3(texture2D(texture2, frag_uv).r);
   //result = vec3(texture2_mod.r);
   //result = directonly;
   //result = vec3(Ks);
+  //result = textureLod(texture6, r, .8).rgb;
   //result = vec3(texture2D(texture4, frag_uv).r);
   //result = irradiance;
   //result = m.albedo;
@@ -494,8 +514,7 @@ void main()
   //result = vec3(albedo_tex.a);
   //result = clamp(result,vec3(0),vec3(1));
   //result = textureLod(texture6,r,4).rgb;
-  //result = pow(result,vec3(1/2.2));
-   //result = pow(result,vec3(1/2.2));
+  //result = pow(result,vec3(2.2));
    //result = 1*result;
   out0 = vec4(result, premultiply_alpha);
 }

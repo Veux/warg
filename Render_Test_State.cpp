@@ -737,18 +737,19 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
   material.backface_culling = true;
   material.roughness.source = "white";
   material.metalness.source = "white";
-  uint32 count = 4;
-  uint32 zcount = 4;
+  uint32 kcount = 2;
+  uint32 icount = 15;
+  uint32 jcount = 4;
 
-  for (uint32 i = 0; i < count; ++i)
+  for (uint32 i = 0; i < icount; ++i)
   {
-    for (uint32 j = 0; j < zcount; ++j)
+    for (uint32 j = 0; j < jcount; ++j)
     {
-      for (uint32 k = 0; k < count; ++k)
+      for (uint32 k = 0; k < kcount; ++k)
       {
-        float roughness = mix(0.f, 1.f, float(i) / float(count - 1));
-        float metalness = mix(0.f, 1.f, float(j) / float(zcount - 1));
-        float color = mix(0.f, 1.f, float(k) / float(count - 1));
+        float roughness = mix(0.f, 1.f, float(i) / float(icount - 1));
+        float metalness = mix(0.f, 1.f, float(j) / float(jcount - 1));
+        float color = mix(0.f, 1.f, float(k) / float(kcount - 1));
 
         material.albedo.mod = vec4(color, 1, 1, 1.0);
         material.roughness.mod = vec4(roughness);
@@ -761,7 +762,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         {
           material.casts_shadows = false;
           material.uses_transparency = true;
-          material.albedo.mod.a = mix(0.0f, 0.8f, float(k) / float(count - 1));
+          material.albedo.mod.a = mix(0.0f, 0.8f, float(k) / float(kcount - 1));
           material.roughness.mod = vec4(0);
           material.frag_shader = "refraction.frag";
           small_object_refraction_settings(&material.uniform_set);

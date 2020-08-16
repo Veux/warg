@@ -22,7 +22,7 @@ vec2 hammersley2d(uint i, uint N)
 vec3 ImportanceSampleGGX(vec2 Xi, vec3 n, float roughness)
 {
   float a = roughness * roughness;
-
+  
   float phi = 2.0 * PI * Xi.x;
   float c = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
   float s = sqrt(1.0 - c * c);
@@ -53,7 +53,7 @@ void main()
   vec3 r = n;
   vec3 v = r;
 
-  const uint SAMPLE_COUNT = 3000u;
+  const uint SAMPLE_COUNT = 2000u;
   float weight = 0.0;
   vec3 result = vec3(0.0);
   for (uint i = 0u; i < SAMPLE_COUNT; ++i)
