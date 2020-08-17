@@ -86,6 +86,7 @@ void Framebuffer::init()
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
+    ASSERT(color_attachments[i].texture->size != ivec2(0));
     draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
   glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
@@ -102,7 +103,7 @@ void Framebuffer::init()
     depth->size = depth_size;
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
   }
-  // check_FBO_status();
+  check_FBO_status();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
@@ -111,7 +112,7 @@ void Framebuffer::bind_for_drawing_dst()
   ASSERT(fbo);
   ASSERT(fbo->fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-  // check_FBO_status();
+  check_FBO_status();
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
@@ -393,7 +394,7 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glTextureParameteri(ibl_texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glCreateFramebuffers(1, &ibl_fbo);
-    glCreateRenderbuffers(1, &ibl_rbo);
+    // glCreateRenderbuffers(1, &ibl_rbo);
 
     ibl_source = texture;
 
@@ -588,6 +589,22 @@ void Texture::load()
   if (IMAGE_LOADER.load(t.source, &imgdata, t.format))
   {
 
+    if (!imgdata.data)
+    {
+      texture = make_shared<Texture_Handle>();
+      texture->filename = t.name + " - MISSING";
+
+      TEXTURE2D_CACHE[t.key] = texture;
+      texture->internalformat = GL_RGBA8;
+      texture->size = ivec2(1);
+      texture->datatype = GL_UNSIGNED_BYTE;
+      texture->levels = t.levels;
+      uint8 arr[4] = {255, 255, 255, 255};
+      glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
+      glTextureStorage2D(texture->texture, 1, GL_RGBA8, 1, 1);
+      glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &arr[0]);
+      return;
+    }
     texture = make_shared<Texture_Handle>();
     TEXTURE2D_CACHE[t.key] = texture;
 
@@ -842,7 +859,7 @@ Material::Material(Material_Descriptor &m)
 {
   descriptor = m;
 
-  static const  Material_Descriptor default_md;
+  static const Material_Descriptor default_md;
   descriptor.albedo.format = GL_SRGB8_ALPHA8;
   descriptor.normal.format = GL_RGBA8;
   descriptor.emissive.format = GL_SRGB8_ALPHA8;
@@ -2356,12 +2373,14 @@ void Renderer::init_render_targets()
   td.format = FRAMEBUFFER_FORMAT;
   td.minification_filter = GL_LINEAR;
   draw_target.color_attachments[0] = Texture(td);
+  draw_target.color_attachments[0].load();
   draw_target.depth_enabled = true;
   draw_target.depth_size = size;
   draw_target.init();
 
   td.name = name + " Renderer::previous_frame.color[0]";
   previous_draw_target.color_attachments[0] = Texture(td);
+  previous_draw_target.color_attachments[0].load();
   previous_draw_target.init();
 
   // full render scaled, clamped and encoded srgb
@@ -2373,6 +2392,7 @@ void Renderer::init_render_targets()
   srgb8.format = GL_RGB16F;
   srgb8.minification_filter = GL_LINEAR;
   tonemapping_target_srgb8.color_attachments[0] = Texture(srgb8);
+  tonemapping_target_srgb8.color_attachments[0].load();
   tonemapping_target_srgb8.init();
 
   // full render scaled, fxaa or passthrough target
@@ -2384,6 +2404,7 @@ void Renderer::init_render_targets()
   fxaa.format = GL_RGB8;
   fxaa.minification_filter = GL_LINEAR;
   fxaa_target_srgb8.color_attachments[0] = Texture(fxaa);
+  fxaa_target_srgb8.color_attachments[0].load();
   fxaa_target_srgb8.init();
 }
 

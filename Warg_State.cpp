@@ -42,12 +42,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   map = new Blades_Edge(scene);
   spell_db = Spell_Database(); /*
    map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
-  // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
-  // collider_cache = collect_colliders(scene);
+                               // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
+                               // collider_cache = collect_colliders(scene);
 
-   scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
+  scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
       "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-  //scene.initialize_lighting(
+  // scene.initialize_lighting(
   //    "Assets/Textures/black.jpg", "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
@@ -103,12 +103,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   scene.particle_emitters[0].mesh_index = mesh_index0;
   scene.particle_emitters[0].material_index = material_index0;
 
-   scene.particle_emitters[1].mesh_index = mesh_index1;
-   scene.particle_emitters[1].material_index = material_index1;
-   scene.particle_emitters[2].mesh_index = mesh_index2;
-   scene.particle_emitters[2].material_index = material_index2;
-   scene.particle_emitters[3].mesh_index = mesh_index3;
-   scene.particle_emitters[3].material_index = material_index3;
+  scene.particle_emitters[1].mesh_index = mesh_index1;
+  scene.particle_emitters[1].material_index = material_index1;
+  scene.particle_emitters[2].mesh_index = mesh_index2;
+  scene.particle_emitters[2].material_index = material_index2;
+  scene.particle_emitters[3].mesh_index = mesh_index3;
+  scene.particle_emitters[3].material_index = material_index3;
 
   scene.lights.light_count = 5;
 
@@ -1735,31 +1735,64 @@ void Warg_State::update_icons()
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
   static std::vector<Texture> sources;
 
-  static bool configured = false;
+  static bool setup_complete = false;
+  static bool all_textures_ready = true;
   static size_t num_spells = 0;
-  if (!configured)
+  if (!setup_complete)
   {
     Texture_Descriptor texture_descriptor;
     texture_descriptor.source = "generate";
     texture_descriptor.minification_filter = GL_LINEAR;
+    texture_descriptor.size = vec2(90, 90);
+    texture_descriptor.format = GL_RGB;
+    texture_descriptor.levels = 1;
 
-    ASSERT(interface_state.action_bar_textures.size() == 0);
-    ASSERT(sources.size() == 0);
-
-    num_spells = player_character->spell_set.spell_count;
-    interface_state.action_bar_textures.resize(num_spells);
-    sources.resize(num_spells);
-    framebuffer.color_attachments.resize(num_spells);
-
-    for (size_t i = 0; i < num_spells; i++)
+    if (sources.size() != 0)
     {
-      Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
-      texture_descriptor.name = s("duration-spiral-", i);
-      interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = formula->icon;
-      framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
+      for (size_t i = 0; i < num_spells; i++)
+      {
+        if (!sources[i].bind(0))
+        {
+          all_textures_ready = false;
+        }
+        if (!interface_state.action_bar_textures[i].bind(0))
+        {
+          all_textures_ready = false;
+        }
+      }
+         if (!all_textures_ready)
+        return;
     }
-    configured = true;
+    else
+    {
+      ASSERT(interface_state.action_bar_textures.size() == 0);
+      ASSERT(sources.size() == 0);
+
+      num_spells = player_character->spell_set.spell_count;
+      interface_state.action_bar_textures.resize(num_spells);
+      sources.resize(num_spells);
+      framebuffer.color_attachments.resize(num_spells);
+
+      for (size_t i = 0; i < num_spells; i++)
+      {
+        Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
+        texture_descriptor.name = s("duration-spiral-", i);
+        interface_state.action_bar_textures[i] = Texture(texture_descriptor);
+        sources[i] = formula->icon;
+        if (!sources[i].bind(0))
+        {
+          all_textures_ready = false;
+        }
+        if (!interface_state.action_bar_textures[i].bind(0))
+        {
+          all_textures_ready = false;
+        }
+        framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
+      }
+      if (!all_textures_ready)
+        return;
+    }
+    setup_complete = true;
   }
 
   framebuffer.init();

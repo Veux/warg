@@ -45,7 +45,7 @@ vec4 compute(vec4 src, float progress)
 
 void main()
 {
-  out0 = compute(texture2D(texture0, frag_uv), progress0);
+ // out0 = compute(texture2D(texture0, frag_uv), progress0);
   out1 = compute(texture2D(texture1, frag_uv), progress1);
   out2 = compute(texture2D(texture2, frag_uv), progress2);
   out3 = compute(texture2D(texture3, frag_uv), progress3);
@@ -53,4 +53,6 @@ void main()
   out5 = compute(texture2D(texture5, frag_uv), progress5);
   out6 = compute(texture2D(texture6, frag_uv), progress6);
   out7 = compute(texture2D(texture7, frag_uv), progress7);
+
+  out0 = vec4(1,1,0,1);
 }

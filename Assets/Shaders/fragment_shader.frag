@@ -482,7 +482,7 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
-  //result = prefilteredColor;
+  //result = m.emissive;
 //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
 //  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
 //  result = vec3(brdfc ,0);

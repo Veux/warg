@@ -80,8 +80,8 @@ struct Config
 struct Image_Data
 {
   void *data = nullptr;
-  int32 x;
-  int32 y;
+  int32 x = 0;
+  int32 y = 0;
   int32 comp;
   uint32 data_size;
   GLenum data_type;

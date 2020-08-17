@@ -179,6 +179,10 @@ struct Texture
  //but the texture will start loading asynchronously and may not yet be ready
   void load();
   bool bind(GLuint texture_unit);
+  bool is_ready()
+  {
+
+  }
   void check_set_parameters();
   GLuint get_handle();
   std::shared_ptr<Texture_Handle> texture;
