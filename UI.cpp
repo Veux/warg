@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "UI.h"
 #include "SDL_Imgui_State.h"
+#include "Render.h"
 
 std::unordered_map<std::string, Texture> FILE_PICKER_TEXTURE_CACHE;
 
@@ -229,3 +230,5 @@ vec2 Layout_Grid::get_section_size(uint32 number_columns, uint32 number_rows)
 {
   return element_size + vec2(number_columns - 1, number_rows - 1) * (element_size + spacing);
 }
+
+

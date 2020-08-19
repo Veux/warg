@@ -161,7 +161,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.use();
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform("lod", uint32(1));
-  gaussian_blur_shader.set_uniform("transform", Renderer::ortho_projection(*dst_size));
+  gaussian_blur_shader.set_uniform("transform", ortho_projection(*dst_size));
   src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
@@ -588,12 +588,10 @@ void Texture::load()
   Image_Data imgdata;
   if (IMAGE_LOADER.load(t.source, &imgdata, t.format))
   {
-
     if (!imgdata.data)
     {
       texture = make_shared<Texture_Handle>();
-      texture->filename = t.name + " - MISSING";
-
+      texture->filename = t.name + " - FILE MISSING";
       TEXTURE2D_CACHE[t.key] = texture;
       texture->internalformat = GL_RGBA8;
       texture->size = ivec2(1);
@@ -1157,7 +1155,7 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
-mat4 Renderer::ortho_projection(ivec2 dst_size)
+mat4 ortho_projection(ivec2 dst_size)
 {
   mat4 o = ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f, 100.0f);
   mat4 t = translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1));
@@ -1170,6 +1168,8 @@ void Renderer::draw_imgui()
 {
   if (!imgui_this_tick)
     return;
+
+  painter.run();
 
   if (show_renderer_window)
   {
@@ -1208,6 +1208,10 @@ void Renderer::draw_imgui()
         glUseProgram(program);
         ptr->set_location_cache();
       }
+    }
+    if (ImGui::Button("Texture Painter"))
+    {
+      painter.window_open = !painter.window_open;
     }
     if (ImGui::CollapsingHeader("GPU Textures"))
     { // todo improve texture names for generated textures
@@ -1428,7 +1432,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   glDisable(GL_CULL_FACE);
   // glBindVertexArray(quad.get_vao());
   shader->use();
-  shader->set_uniform("transform", Renderer::ortho_projection(viewport_size));
+  shader->set_uniform("transform", ortho_projection(viewport_size));
   shader->set_uniform("time", (float32)get_real_time());
   // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -3510,4 +3514,341 @@ void Image::rotate90()
     }
   }
   data = result.data;
+}
+
+void Texture_Paint::run()
+{
+  if (!window_open)
+    return;
+
+  float32 time = get_real_time();
+  if (!initialized)
+  {
+    Mesh_Descriptor md(plane, "Texture_Paint's quad");
+    quad = Mesh(md);
+    drawing_shader = Shader("passthrough.vert", "paint.frag");
+    copy = Shader("passthrough.vert", "passthrough.frag");
+
+    surface = Texture("scratchpad", vec2(4096), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    intermediate = Texture("scratchpad_intermediate", vec2(4096), 1, GL_LINEAR, GL_RGB16F, GL_LINEAR);
+    preview = Texture("scratchpad_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    initialized = true;
+  }
+  preview.load();
+  surface.load();
+  intermediate.load();
+  ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+  ImGui::Begin("Texture_Paint", &window_open, window_flags);
+  ImGui::Text("painter");
+  const ImVec2 mouse = ImGui::GetMousePos();
+  const ImVec2 windowp = ImGui::GetWindowPos();
+  const ImVec2 window_size = ImGui::GetWindowSize();
+
+  ivec2 window_cursor_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
+
+  // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0 ||
+  //                    window_cursor_pos.y > window_size.y;
+  window_cursor_pos = clamp(window_cursor_pos, ivec2(0), ivec2(window_size.x, window_size.y));
+
+  if (!surface.texture || !surface.bind(0))
+  {
+    ImGui::Text("Surface not ready");
+    ImGui::End();
+    return;
+  }
+
+  ImGui::BeginChild("asdgasda", ImVec2(240, 0), true);
+  ImGui::Checkbox("HDR", &hdr);
+  ImGui::SameLine();
+  if (ImGui::Button("Clear"))
+  {
+    clear = 1;
+  }
+   ImGui::SameLine();
+  if (ImGui::Button("Clear Color"))
+  {
+    clear = 2;
+  }
+  
+   ImGui::SameLine();
+  
+  //ImGui::SetNextItemWidth(20);
+  ImGui::ColorEdit4("clearcolor", &clear_color[0],ImGuiColorEditFlags_NoInputs| ImGuiColorEditFlags_NoLabel);
+
+  // ImGui::SetNextItemWidth(60);
+  ImGui::InputFloat("Zoom", &zoom, 0.01);
+
+  // ImGui::SetNextItemWidth(60);
+
+  // ImGui::SetNextItemWidth(60);
+  char *txt = "";
+  if (blendmode == 0)
+    txt = "Mix";
+
+  if (blendmode == 1)
+    txt = "Blend";
+
+  if (blendmode == 2)
+    txt = "Add";
+
+  if (ImGui::BeginCombo("combo", txt))
+  {
+    if (ImGui::Selectable("Blend"))
+    {
+      blendmode = 1;
+      put_imgui_texture_button(&preview, vec2(128));
+    }
+
+    if (ImGui::MenuItem("Mix"))
+    {
+      blendmode = 0;
+      put_imgui_texture_button(&preview, vec2(128));
+    }
+
+    if (ImGui::Selectable("Add"))
+    {
+      blendmode = 2;
+      put_imgui_texture_button(&preview, vec2(128));
+    }
+    ImGui::EndCombo();
+  }
+
+  // ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Intensity", &intensity);
+  ImGui::DragFloat("Size", &size, 0.03, 0, 1000, "%.3f", 2.5f);
+  ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Exposure", &exposure_delta, 0.01, 0.0f, 5.0f);
+  ImGui::SameLine();
+
+  if (ImGui::Button("Darker"))
+  {
+    apply_exposure = -1;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Brighter"))
+  {
+    apply_exposure = 1;
+  }
+  if (ImGui::Button("ACES Tonemap"))
+  {
+    apply_tonemap = 1;
+  }
+
+  // ImGui::SameLine();
+
+  ImGui::InputInt("Brush", &brush_selection);
+  put_imgui_texture_button(&preview, vec2(128));
+
+  ImGui::SetNextItemWidth(160);
+  ImGui::ColorPicker4("Color", &brush_color[0]);
+
+  if (ImGui::Button("Save Texture"))
+  {
+    Texture new_texture = surface.t;
+    new_texture.load();
+    fbo_intermediate.color_attachments[0] = new_texture;
+    fbo_intermediate.init();
+    fbo_intermediate.bind_for_drawing_dst();
+    glViewport(0, 0, surface.texture->size.x, surface.texture->size.y);
+    mat4 mat = ortho_projection(surface.texture->size);
+    surface.bind(0);
+    copy.use();
+    copy.set_uniform("texture0_mod", vec4(1));
+    copy.set_uniform("transform", mat);
+    quad.draw();
+
+    textures.push_back(new_texture);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Clear all"))
+  {
+    textures.clear();
+  }
+
+  for (uint32 i = 0; i < textures.size(); ++i)
+  {
+    ImGui::PushID(s(i).c_str());
+    bool green = selected_texture == i;
+    if (green)
+    {
+
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 1, 0, 1));
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 1, 0, 1));
+    }
+    if (put_imgui_texture_button(&textures[i], vec2(160), false))
+    {
+      surface = textures[i];
+      selected_texture = i;
+    }
+    if (green)
+    {
+
+      ImGui::PopStyleColor();
+      ImGui::PopStyleColor();
+    }
+    ImGui::SameLine();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
+    if (ImGui::Button("X"))
+    {
+      textures.erase(textures.begin() + i);
+      selected_texture = -1;
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopID();
+  }
+
+  ImGui::EndChild();
+  ImGui::SameLine();
+  const ImVec2 childo = ImGui::GetCursorPos();
+  ivec2 childoffset = vec2(childo.x, childo.y);
+  ImGuiWindowFlags childflags = ImGuiWindowFlags_HorizontalScrollbar;
+  ImGui::BeginChild("paintbox", ImVec2(0, 0), false, childflags);
+  ivec2 texture_size = zoom * vec2(surface.texture->size);
+  const ImVec2 imgui_draw_cursor_pos = ImGui::GetCursorPos();
+  ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
+  put_imgui_texture(&surface, texture_size);
+  ivec2 scroll = vec2(ImGui::GetScrollX(), ImGui::GetScrollY());
+
+  vec2 cursor_pos_within_texture = window_cursor_pos - window_position_for_texture - childoffset + scroll;
+
+  bool out_of_texture = cursor_pos_within_texture.x < 0 || cursor_pos_within_texture.x > texture_size.x ||
+                        cursor_pos_within_texture.y < 0 || cursor_pos_within_texture.y > texture_size.y;
+  fbo_preview.color_attachments[0] = preview;
+  fbo_preview.init();
+
+  // ImGui::Text(s(cursor_pos_within_texture.x, " ", cursor_pos_within_texture.y).c_str());
+  vec2 ndc_cursor = cursor_pos_within_texture / vec2(texture_size);
+  ndc_cursor = 2.0f * ndc_cursor;
+  ndc_cursor = ndc_cursor - vec2(1);
+  ImGui::Text(s("ndc", ndc_cursor.x, " ", ndc_cursor.y).c_str());
+
+  ImGui::Text(s("window_cursor_pos", window_cursor_pos.x, " ", window_cursor_pos.y).c_str());
+  ImGui::Text(
+      s("window_position_for_texture", window_position_for_texture.x, " ", window_position_for_texture.y).c_str());
+  ImGui::Text(s("childoffset", childoffset.x, " ", childoffset.y).c_str());
+  ImGui::Text(s("scroll", scroll.x, " ", scroll.y).c_str());
+
+  ImVec2 mouse_delta = ImGui::GetIO().MouseDelta;
+  ImGui::Text(s("mouse_delta", mouse_delta.x, " ", mouse_delta.y).c_str());
+
+  ImGuiContext &g = *ImGui::GetCurrentContext();
+  ImGuiWindow *window = g.CurrentWindow;
+  bool hovered = false;
+  bool held = false;
+  uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+
+  // if (g.HoveredId == 0) // If nothing hovered so far in the frame (not same as IsAnyItemHovered()!)
+  ImGui::ButtonBehavior(
+      window->Rect(), window->GetID("Texturasde_Paint"), &hovered, &held, ImGuiButtonFlags_MouseButtonMiddle);
+  if (held)
+  {
+    ImGui::SetScrollX(scroll.x - mouse_delta.x);
+    ImGui::SetScrollY(scroll.y - mouse_delta.y);
+    // window->Scroll.x -= mouse_delta.x;
+    // window->Scroll.y -= mouse_delta.y;
+  }
+
+  if (!intermediate.texture || intermediate.texture->size != surface.texture->size ||
+      intermediate.texture->internalformat != surface.texture->internalformat)
+  {
+    intermediate = surface.t;
+    intermediate.load();
+  }
+
+  fbo.color_attachments[0] = surface;
+  fbo_intermediate.color_attachments[0] = intermediate;
+  fbo_preview.color_attachments[0] = preview;
+
+  fbo.init();
+  fbo_intermediate.init();
+
+  fbo_intermediate.bind_for_drawing_dst();
+  glViewport(0, 0, surface.texture->size.x, surface.texture->size.y);
+  mat4 mat = ortho_projection(surface.texture->size);
+  surface.bind(0);
+  copy.use();
+  copy.set_uniform("texture0_mod", vec4(1));
+  copy.set_uniform("transform", mat);
+  quad.draw();
+
+  fbo.bind_for_drawing_dst();
+  mat = ortho_projection(surface.texture->size);
+  intermediate.bind(0);
+  drawing_shader.use();
+  drawing_shader.set_uniform("texture0_mod", vec4(1));
+  drawing_shader.set_uniform("transform", mat);
+  drawing_shader.set_uniform("mouse_pos", ndc_cursor);
+  drawing_shader.set_uniform("size", size);
+  drawing_shader.set_uniform("exponent", 4.f);
+  drawing_shader.set_uniform("hdr", (int32)hdr);
+  drawing_shader.set_uniform("brush_selection", (int32)brush_selection);
+  drawing_shader.set_uniform("brush_color", brush_color);
+  drawing_shader.set_uniform("time", time);
+  drawing_shader.set_uniform("blendmode", blendmode);
+
+  if (clear)
+  {
+    if(clear == 1)
+    drawing_shader.set_uniform("mode", 0);
+    if (clear == 2)
+    {
+       drawing_shader.set_uniform("mode", 6);
+       drawing_shader.set_uniform("brush_color", clear_color);
+    }
+   
+
+    quad.draw();
+    clear = 0;
+  }
+  if (!out_of_texture)
+  {
+
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+      drawing_shader.set_uniform("mode", 1);
+      quad.draw();
+    }
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+    {
+      drawing_shader.set_uniform("mode", 2);
+      quad.draw();
+    }
+  }
+
+  if (apply_exposure != 0)
+  {
+    drawing_shader.set_uniform("tonemap_x", 1.0f + (apply_exposure * exposure_delta));
+    drawing_shader.set_uniform("mode", 4);
+    quad.draw();
+    apply_exposure = 0;
+  }
+
+  if (apply_tonemap)
+  {
+    drawing_shader.set_uniform("mode", 5);
+    quad.draw();
+    apply_tonemap = 0;
+  }
+
+  glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);
+  glBindTextureUnit(0, 0);
+  fbo_preview.bind_for_drawing_dst();
+  drawing_shader.use();
+  drawing_shader.set_uniform("texture0_mod", vec4(1));
+  drawing_shader.set_uniform("transform", ortho_projection(preview.texture->size));
+  drawing_shader.set_uniform("mouse_pos", vec2(0));
+  drawing_shader.set_uniform("size", 150.f);
+  drawing_shader.set_uniform("exponent", 4.f);
+  drawing_shader.set_uniform("hdr", (int32)hdr);
+  drawing_shader.set_uniform("brush_selection", (int32)brush_selection);
+  drawing_shader.set_uniform("brush_color", brush_color);
+  drawing_shader.set_uniform("time", time);
+  drawing_shader.set_uniform("mode", 3);
+  drawing_shader.set_uniform("blendmode", blendmode);
+  glClear(GL_COLOR_BUFFER_BIT);
+  quad.draw();
+
+  ImGui::EndChild();
+  ImGui::End();
 }

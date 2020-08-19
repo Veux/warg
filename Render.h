@@ -175,14 +175,11 @@ struct Texture
       glm::vec4 border_color = glm::vec4(0));
 
   Texture_Descriptor t;
- //a call to load guarantees we will have a Texture_Handle after it returns
- //but the texture will start loading asynchronously and may not yet be ready
+  // a call to load guarantees we will have a Texture_Handle after it returns
+  // but the texture will start loading asynchronously and may not yet be ready
   void load();
   bool bind(GLuint texture_unit);
-  bool is_ready()
-  {
-
-  }
+  bool is_ready() {}
   void check_set_parameters();
   GLuint get_handle();
   std::shared_ptr<Texture_Handle> texture;
@@ -880,6 +877,44 @@ struct Particle_Emitter
   std::shared_ptr<Physics_Shared_Data> shared_data;
 };
 
+struct Texture_Paint
+{
+  Texture_Paint()
+  {
+
+
+  }
+  void run();
+
+  bool window_open = false;
+  Shader drawing_shader;
+  Texture surface;
+  std::vector<Texture> textures;
+private:
+  Framebuffer fbo;
+  Framebuffer fbo_intermediate;
+  Framebuffer fbo_preview;
+  Shader copy;
+  Mesh quad;
+  Texture intermediate;
+  Texture preview;
+  float32 zoom = .70f;
+  bool hdr = false;
+  bool initialized = false;
+  int8 clear = 0;
+  int8 apply_exposure = false;
+  bool apply_tonemap = false;
+  int32 brush_selection = 1;
+  int32 blendmode = 1;
+  vec4 brush_color = vec4(1);
+  vec4 clear_color = vec4(0.05);
+  float32 intensity = 1.0f;
+  float32 size = 5.0f;
+  float32 exposure_delta = 0.1f;
+  int32 selected_texture = -1;
+
+};
+mat4 ortho_projection(ivec2 dst_size);
 struct Renderer
 {
   // todo: irradiance map generation
@@ -931,7 +966,7 @@ struct Renderer
   float32 blur_radius = 0.0021;
   float32 blur_factor = 2.12f;
   uint32 draw_calls_last_frame = 0;
-  static mat4 ortho_projection(ivec2 dst_size);
+  
   Environment_Map environment;
 
   bool imgui_this_tick = false;
@@ -939,7 +974,7 @@ struct Renderer
   bool show_imgui_fxaa = false;
   bool show_bloom = false;
   void draw_imgui();
-
+  Texture_Paint painter;
   Mesh quad;
   Mesh cube;
   Shader temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
