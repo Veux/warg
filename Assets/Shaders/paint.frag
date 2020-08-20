@@ -12,6 +12,7 @@ uniform float i;
 uniform float j;
 uniform float k;
 uniform float time;
+uniform float tonemap_pow;;
 uniform float tonemap_x;
 uniform vec4 brush_color = vec4(1,1,1,1);
 in vec2 frag_uv;
@@ -228,6 +229,12 @@ void main()
     if(mode == 6)
   {
     result = brush_color;
+  }
+
+  
+    if(mode == 7)
+  {
+    result = pow(source,vec4(tonemap_pow));
   }
 
   if(hdr == 0)

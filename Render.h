@@ -852,9 +852,7 @@ struct Particle_Emitter
   { // todo :
 
     /*
-    collision
-    collision flag for nodes in scene graph,
-    collision bounds draw flag in nodes
+    
     proper rigid body physics algorithm
 
 
@@ -879,17 +877,14 @@ struct Particle_Emitter
 
 struct Texture_Paint
 {
-  Texture_Paint()
-  {
-
-
-  }
+  Texture_Paint() {}
   void run();
 
   bool window_open = false;
   Shader drawing_shader;
   Texture surface;
   std::vector<Texture> textures;
+
 private:
   Framebuffer fbo;
   Framebuffer fbo_intermediate;
@@ -912,24 +907,22 @@ private:
   float32 size = 5.0f;
   float32 exposure_delta = 0.1f;
   int32 selected_texture = -1;
-  vec2 last_drawn_ndc = vec2(0,0);
+  vec2 last_drawn_ndc = vec2(0, 0);
+  vec2 last_seen_mouse_ndc = vec2(0);
   bool is_new_click = true;
   float32 accumulator = 0.0f;
-
+  float32 draw_dt = .0035f;
+  float32 pow = 1.5f;
+  bool apply_pow = false;
 };
 mat4 ortho_projection(ivec2 dst_size);
 struct Renderer
 {
   // todo: irradiance map generation
-  // todo: water shader
   // todo: skeletal animation
-  // todo: particle system/instancing
   // todo: deferred rendering
   // todo: screen space reflections
   // todo: parallax mapping
-  // todo: negative glow
-  // not describe them
-  // with shader3 and materialB  these special effect methods would be hardcoded and the objects would point to them,
   Renderer() {}
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
@@ -969,7 +962,7 @@ struct Renderer
   float32 blur_radius = 0.0021;
   float32 blur_factor = 2.12f;
   uint32 draw_calls_last_frame = 0;
-  
+
   Environment_Map environment;
 
   bool imgui_this_tick = false;

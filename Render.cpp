@@ -3529,8 +3529,8 @@ void Texture_Paint::run()
     drawing_shader = Shader("passthrough.vert", "paint.frag");
     copy = Shader("passthrough.vert", "passthrough.frag");
 
-    surface = Texture("scratchpad", vec2(4096), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
-    intermediate = Texture("scratchpad_intermediate", vec2(4096), 1, GL_LINEAR, GL_RGB16F, GL_LINEAR);
+    surface = Texture("scratchpad", vec2(2048), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    intermediate = Texture("scratchpad_intermediate", vec2(2048), 1, GL_LINEAR, GL_RGB32F, GL_LINEAR);
     preview = Texture("scratchpad_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
     initialized = true;
   }
@@ -3634,9 +3634,18 @@ void Texture_Paint::run()
     apply_tonemap = 1;
   }
 
+  ImGui::DragFloat("Pow()", &pow, 0.01 ,0.1f, 16.0f,"%.3f",2.0f);
+  
+  ImGui::SameLine();
+  if (ImGui::Button("Apply"))
+  {
+    apply_pow = 1;
+  }
+
   // ImGui::SameLine();
 
   ImGui::InputInt("Brush", &brush_selection);
+  ImGui::DragFloat("Density", &draw_dt, 0.0005, 0.001, 1, "%.4f", 2.5f);
   put_imgui_texture_button(&preview, vec2(128));
 
   ImGui::SetNextItemWidth(160);
@@ -3793,6 +3802,7 @@ void Texture_Paint::run()
   drawing_shader.set_uniform("brush_color", brush_color);
   drawing_shader.set_uniform("time", time);
   drawing_shader.set_uniform("blendmode", blendmode);
+  drawing_shader.set_uniform("tonemap_pow", pow);
 
   if (clear)
   {
@@ -3814,7 +3824,7 @@ void Texture_Paint::run()
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
       drawing_shader.set_uniform("mode", 1);
-      quad.draw();
+      // quad.draw();
       draw = true;
     }
     if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
@@ -3829,63 +3839,60 @@ void Texture_Paint::run()
 
     if (draw)
     {
-      /*
-
-      0 1 2 3 4 5
-
-      */
-
-      // ndc_cursor = vec2(.175);
-      // last_drawn_ndc = vec2(-.175);
-
       if (is_new_click)
       {
+        // drawing_shader.set_uniform("brush_color", vec4(0, 1, 0, 1));
         drawing_shader.set_uniform("mouse_pos", ndc_cursor);
         quad.draw();
+        // drawing_shader.set_uniform("brush_color", brush_color);
         is_new_click = false;
         last_drawn_ndc = ndc_cursor;
+        accumulator = 0.0f;
       }
       else
       {
-        vec2 d = ndc_cursor - last_drawn_ndc;
-        float32 len = length(d);
-        vec2 nd = normalize(d);
-        float32 draw_dt = .01f;
-        vec2 step = draw_dt * nd;
-        vec2 start = last_drawn_ndc + (accumulator * nd);
-
-        float32 t = accumulator;
-        // float32 adjusted_length = length(ndc_cursor - start);
-        vec2 draw_pos = start;
-        int count = 0;
-
-        if (len < length(start-last_drawn_ndc))
+        const vec2 d = ndc_cursor - last_drawn_ndc;
+        const float32 len = length(d);
+        const vec2 nd = normalize(d);
+        const vec2 step = draw_dt * nd;
+        const vec2 start = last_drawn_ndc + (draw_dt * nd);
+        const bool mouse_stationary = last_seen_mouse_ndc == ndc_cursor;
+        const bool too_short = length(start - ndc_cursor) < draw_dt;
+        if (too_short || mouse_stationary)
         {
-         
+          // return;
         }
         else
         {
-
-          while (t < len)
+          accumulator += length(start - ndc_cursor);
+          ASSERT(len != 0);
+          bool first_draw = true;
+          vec2 draw_pos = start;
+          uint8 count = 0;
+          while (accumulator >= draw_dt)
           {
             if (count > 200)
             {
-              int a = 3;
+              break;
             }
-
             fbo.bind_for_drawing_dst();
             intermediate.bind(0);
             drawing_shader.use();
+            // drawing_shader.set_uniform("brush_color", 4.f * accumulator * vec4(0, 1., 0, 1));
             drawing_shader.set_uniform("mouse_pos", draw_pos);
-            // drawing_shader.set_uniform("brush_color", vec4(.01) + vec4(3. * t));
+            if (first_draw)
+            {
+              // drawing_shader.set_uniform("brush_color", vec4(1, 0, 0, 1));
+              first_draw = false;
+            }
             quad.draw();
+            // drawing_shader.set_uniform("brush_color", 10.f * accumulator * vec4(0, 5., 0, 1));
             last_drawn_ndc = draw_pos;
             draw_pos = draw_pos + step;
-            accumulator = len - t;
-            t += draw_dt;
+            accumulator -= draw_dt;
             ++count;
-
-            if (t < len)
+            bool not_last_iteration = accumulator >= draw_dt;
+            if (not_last_iteration)
             {
               fbo_intermediate.bind_for_drawing_dst();
               glViewport(0, 0, surface.texture->size.x, surface.texture->size.y);
@@ -3899,6 +3906,7 @@ void Texture_Paint::run()
     }
   }
 
+  last_seen_mouse_ndc = ndc_cursor;
   if (apply_exposure != 0)
   {
     drawing_shader.set_uniform("tonemap_x", 1.0f + (apply_exposure * exposure_delta));
@@ -3912,6 +3920,13 @@ void Texture_Paint::run()
     drawing_shader.set_uniform("mode", 5);
     quad.draw();
     apply_tonemap = 0;
+  }
+
+  if (apply_pow)
+  {
+    drawing_shader.set_uniform("mode", 7);
+    quad.draw();
+    apply_pow = 0;
   }
 
   glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);
