@@ -3564,16 +3564,16 @@ void Texture_Paint::run()
   {
     clear = 1;
   }
-   ImGui::SameLine();
+  ImGui::SameLine();
   if (ImGui::Button("Clear Color"))
   {
     clear = 2;
   }
-  
-   ImGui::SameLine();
-  
-  //ImGui::SetNextItemWidth(20);
-  ImGui::ColorEdit4("clearcolor", &clear_color[0],ImGuiColorEditFlags_NoInputs| ImGuiColorEditFlags_NoLabel);
+
+  ImGui::SameLine();
+
+  // ImGui::SetNextItemWidth(20);
+  ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 
   // ImGui::SetNextItemWidth(60);
   ImGui::InputFloat("Zoom", &zoom, 0.01);
@@ -3729,25 +3729,32 @@ void Texture_Paint::run()
   ImGui::Text(s("childoffset", childoffset.x, " ", childoffset.y).c_str());
   ImGui::Text(s("scroll", scroll.x, " ", scroll.y).c_str());
 
-  ImVec2 mouse_delta = ImGui::GetIO().MouseDelta;
-  ImGui::Text(s("mouse_delta", mouse_delta.x, " ", mouse_delta.y).c_str());
+  ImVec2 imouse_delta = ImGui::GetIO().MouseDelta;
+  vec2 mouse_delta = vec2(imouse_delta.x, imouse_delta.y);
+
+  // ImGui::Text(s("mouse_delta", mouse_delta.x, " ", mouse_delta.y).c_str());
 
   ImGuiContext &g = *ImGui::GetCurrentContext();
   ImGuiWindow *window = g.CurrentWindow;
   bool hovered = false;
-  bool held = false;
+  bool middle_mouse_held = false;
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
 
   // if (g.HoveredId == 0) // If nothing hovered so far in the frame (not same as IsAnyItemHovered()!)
-  ImGui::ButtonBehavior(
-      window->Rect(), window->GetID("Texturasde_Paint"), &hovered, &held, ImGuiButtonFlags_MouseButtonMiddle);
-  if (held)
+  ImGui::ButtonBehavior(window->Rect(), window->GetID("Texturasde_Paint"), &hovered, &middle_mouse_held,
+      ImGuiButtonFlags_MouseButtonMiddle);
+  if (middle_mouse_held)
   {
     ImGui::SetScrollX(scroll.x - mouse_delta.x);
     ImGui::SetScrollY(scroll.y - mouse_delta.y);
-    // window->Scroll.x -= mouse_delta.x;
-    // window->Scroll.y -= mouse_delta.y;
   }
+
+  // bool left_mouse_held = false;
+
+  //// if (g.HoveredId == 0) // If nothing hovered so far in the frame (not same as IsAnyItemHovered()!)
+  // ImGui::ButtonBehavior(
+  //    window->Rect(), window->GetID("Texturasade_Paint"), &hovered, &left_mouse_held,
+  //    ImGuiButtonFlags_MouseButtonLeft);
 
   if (!intermediate.texture || intermediate.texture->size != surface.texture->size ||
       intermediate.texture->internalformat != surface.texture->internalformat)
@@ -3789,30 +3796,106 @@ void Texture_Paint::run()
 
   if (clear)
   {
-    if(clear == 1)
-    drawing_shader.set_uniform("mode", 0);
+    if (clear == 1)
+      drawing_shader.set_uniform("mode", 0);
     if (clear == 2)
     {
-       drawing_shader.set_uniform("mode", 6);
-       drawing_shader.set_uniform("brush_color", clear_color);
+      drawing_shader.set_uniform("mode", 6);
+      drawing_shader.set_uniform("brush_color", clear_color);
     }
-   
 
     quad.draw();
     clear = 0;
   }
+
   if (!out_of_texture)
   {
-
+    bool draw = false;
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
       drawing_shader.set_uniform("mode", 1);
       quad.draw();
+      draw = true;
     }
     if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
     {
       drawing_shader.set_uniform("mode", 2);
-      quad.draw();
+      draw = true;
+    }
+    if (!draw)
+    {
+      is_new_click = true;
+    }
+
+    if (draw)
+    {
+      /*
+
+      0 1 2 3 4 5
+
+      */
+
+      // ndc_cursor = vec2(.175);
+      // last_drawn_ndc = vec2(-.175);
+
+      if (is_new_click)
+      {
+        drawing_shader.set_uniform("mouse_pos", ndc_cursor);
+        quad.draw();
+        is_new_click = false;
+        last_drawn_ndc = ndc_cursor;
+      }
+      else
+      {
+        vec2 d = ndc_cursor - last_drawn_ndc;
+        float32 len = length(d);
+        vec2 nd = normalize(d);
+        float32 draw_dt = .01f;
+        vec2 step = draw_dt * nd;
+        vec2 start = last_drawn_ndc + (accumulator * nd);
+
+        float32 t = accumulator;
+        // float32 adjusted_length = length(ndc_cursor - start);
+        vec2 draw_pos = start;
+        int count = 0;
+
+        if (len < length(start-last_drawn_ndc))
+        {
+         
+        }
+        else
+        {
+
+          while (t < len)
+          {
+            if (count > 200)
+            {
+              int a = 3;
+            }
+
+            fbo.bind_for_drawing_dst();
+            intermediate.bind(0);
+            drawing_shader.use();
+            drawing_shader.set_uniform("mouse_pos", draw_pos);
+            // drawing_shader.set_uniform("brush_color", vec4(.01) + vec4(3. * t));
+            quad.draw();
+            last_drawn_ndc = draw_pos;
+            draw_pos = draw_pos + step;
+            accumulator = len - t;
+            t += draw_dt;
+            ++count;
+
+            if (t < len)
+            {
+              fbo_intermediate.bind_for_drawing_dst();
+              glViewport(0, 0, surface.texture->size.x, surface.texture->size.y);
+              surface.bind(0);
+              copy.use();
+              quad.draw();
+            }
+          }
+        }
+      }
     }
   }
 
@@ -3837,6 +3920,7 @@ void Texture_Paint::run()
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", vec4(1));
   drawing_shader.set_uniform("transform", ortho_projection(preview.texture->size));
+
   drawing_shader.set_uniform("mouse_pos", vec2(0));
   drawing_shader.set_uniform("size", 150.f);
   drawing_shader.set_uniform("exponent", 4.f);

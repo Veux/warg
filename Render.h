@@ -912,6 +912,9 @@ private:
   float32 size = 5.0f;
   float32 exposure_delta = 0.1f;
   int32 selected_texture = -1;
+  vec2 last_drawn_ndc = vec2(0,0);
+  bool is_new_click = true;
+  float32 accumulator = 0.0f;
 
 };
 mat4 ortho_projection(ivec2 dst_size);
