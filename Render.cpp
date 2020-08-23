@@ -10,6 +10,9 @@
 #include "Timer.h"
 #include "Scene_Graph.h"
 #include "UI.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb/stb_image_write.h"
+#undef STB_IMAGE_WRITE_IMPLEMENTATION
 using glm::ivec2;
 using glm::lookAt;
 using glm::mat4;
@@ -255,6 +258,36 @@ void save_and_log_screen()
   else
   {
     set_message("surface creation failed in save_and_log_screen()");
+  }
+}
+
+int32 save_texture(Texture *texture, uint32 level)
+{
+  const GLenum format = texture->texture->internalformat;
+  uint32 width = texture->texture->size.x;
+  uint32 height = texture->texture->size.y;
+
+  if (is_float_format(texture->texture->internalformat))
+  {
+    uint32 comp = 4;
+    std::vector<float32> data(width * height * comp);
+    uint32 size = data.size() * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
+
+    int32 result = stbi_write_hdr(s(texture->t.name, ".hdr").c_str(), width, height, comp, &data[0]);
+    return result;
+  }
+  else
+  {
+    uint32 comp = 4;
+    std::vector<uint8> data(width * height * comp);
+    uint32 size = data.size() * sizeof(uint8);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_BYTE, size, &data[0]);
+
+    int32 result = stbi_write_png(s(texture->t.name, ".png").c_str(), width, height, comp, &data[0],0);
+    return result;
   }
 }
 
@@ -1150,15 +1183,13 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   // save_and_log_texture(brdf_integration_lut.texture->texture);
 
   Texture_Descriptor white_td;
-  
+
   WHITE_TEXTURE.t.key = "default";
   bind_white_to_all_textures();
   set_message("Renderer init finished");
   init_render_targets();
 
   FRAME_TIMER.start();
-
-
 }
 
 void Renderer::bind_white_to_all_textures()
@@ -3583,8 +3614,36 @@ Texture Texture_Paint::create_new_texture(const char *name)
   t.load();
   return t;
 }
-void Texture_Paint::run()
+
+void Texture_Paint::preset_pen()
 {
+  intensity = 6.1;
+  exponent = 4.37;
+  size = 4.5;
+  hdr = true;
+  brush_selection = 4;
+  constant_density = false;
+  smoothing_count = 28;
+  blendmode = 1;
+  brush_color = vec4(0);
+}
+
+void Texture_Paint::preset_pen2()
+{
+  intensity = -14.5;
+  exponent = 1.8;
+  size = 1.8;
+  brush_selection = 4;
+  constant_density = false;
+  smoothing_count = 28;
+  blendmode = 2;
+  brush_color = vec4(1);
+}
+
+void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
+{
+
+  ASSERT(imgui_event_accumulator);
   if (!window_open)
     return;
 
@@ -3610,7 +3669,8 @@ void Texture_Paint::run()
 
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGui::Begin("Texture_Paint", &window_open, window_flags);
-  ImGui::Text("painter");
+
+  imgui_visit_count += 1;
   const ImVec2 mouse = ImGui::GetMousePos();
   const ImVec2 windowp = ImGui::GetWindowPos();
   const ImVec2 window_size = ImGui::GetWindowSize();
@@ -3628,7 +3688,6 @@ void Texture_Paint::run()
     ImGui::End();
     return;
   }
-
   ImGui::BeginChild("asdgasda", ImVec2(240, 0), true);
   ImGui::Checkbox("HDR", &hdr);
   ImGui::SameLine();
@@ -3646,54 +3705,72 @@ void Texture_Paint::run()
   ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
   ImGui::InputFloat("Zoom", &zoom, 0.01);
 
-  char *txt = "";
+  char *selected_blendmode = "";
   if (blendmode == 0)
-    txt = "Mix";
+    selected_blendmode = "Mix";
 
   if (blendmode == 1)
-    txt = "Blend";
+    selected_blendmode = "Blend";
 
   if (blendmode == 2)
-    txt = "Add";
+    selected_blendmode = "Add";
 
-  if (ImGui::BeginCombo("combo", txt))
+  if (ImGui::BeginCombo("", "Presets"))
   {
-    if (ImGui::Selectable("Blend"))
+    if (ImGui::Selectable("Pen"))
+    {
+      preset_pen();
+    }
+    if (ImGui::Selectable("Pen2"))
+    {
+      preset_pen2();
+    }
+    ImGui::EndCombo();
+  }
+
+  if (ImGui::BeginCombo("", selected_blendmode))
+  {
+    if (ImGui::Selectable("Blend Mode"))
     {
       blendmode = 1;
-      put_imgui_texture_button(&preview, vec2(128));
+      // put_imgui_texture_button(&preview, vec2(128));
     }
 
     if (ImGui::MenuItem("Mix"))
     {
       blendmode = 0;
-      put_imgui_texture_button(&preview, vec2(128));
     }
 
     if (ImGui::Selectable("Add"))
     {
       blendmode = 2;
-      put_imgui_texture_button(&preview, vec2(128));
     }
     ImGui::EndCombo();
   }
-  
+  ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Intensity", &intensity, 0.001, -100, 100, "%.3f", 2.5f);
+  ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Exponent", &exponent, 0.001, 0.1, 25, "%.3f", 1.5f);
+  ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Size", &size, 0.03, 0, 1000, "%.3f", 2.5f);
+
+  ImGui::Separator();
+  ImGui::Separator();
   ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Exposure", &exposure_delta, 0.005, 0.0f, 3.0f);
-  ImGui::SameLine();
 
-  if (ImGui::Button("Darker"))
+  if (ImGui::Button("Apply Darker"))
   {
     apply_exposure = -1;
   }
   ImGui::SameLine();
-  if (ImGui::Button("Brighter"))
+  if (ImGui::Button("Apply Brighter"))
   {
     apply_exposure = 1;
   }
+
+  ImGui::Separator();
+  ImGui::Separator();
   ImGui::Checkbox("ACES Tonemap", &postprocess_aces);
 
   if (ImGui::Button("Apply ACES Tonemap"))
@@ -3701,6 +3778,10 @@ void Texture_Paint::run()
     apply_tonemap = 1;
   }
 
+  ImGui::Separator();
+
+  ImGui::Separator();
+  ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Pow()", &pow, 0.01, 0.1f, 16.0f, "%.3f", 2.0f);
 
   ImGui::SameLine();
@@ -3709,6 +3790,8 @@ void Texture_Paint::run()
     apply_pow = 1;
   }
 
+  ImGui::Separator();
+  ImGui::Separator();
   ImGui::InputInt("Brush", &brush_selection);
 
   ImGui::Checkbox("Constant Density", &constant_density);
@@ -3716,7 +3799,7 @@ void Texture_Paint::run()
   {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(40);
-    ImGui::DragFloat("Density", &density, 0.1, 0.1, 100, "%.4f", 2.5f);
+    ImGui::DragFloat("", &density, 0.1, 0.1, 100, "%.2f", 2.5f);
   }
   else
   {
@@ -3727,6 +3810,8 @@ void Texture_Paint::run()
   ImGui::SetNextItemWidth(160);
   ImGui::ColorPicker4("Color", &brush_color[0]);
 
+  ImGui::Separator();
+  ImGui::Separator();
   if (ImGui::Button("Clone Texture"))
   {
     Texture new_texture = create_new_texture(s(surface->t.name).c_str());
@@ -3774,6 +3859,8 @@ void Texture_Paint::run()
       ImGui::PopStyleColor();
     }
     ImGui::SameLine();
+    ImGui::BeginGroup();
+    // ImGui::BeginChild(s("buttons for ", i).c_str(), ImVec2(30, 160), true,flags1);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
     if (ImGui::Button("X"))
     {
@@ -3791,6 +3878,16 @@ void Texture_Paint::run()
       surface = &textures[selected_texture];
     }
     ImGui::PopStyleColor();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
+    ImGui::Dummy(ImVec2(10, 45));
+    if (ImGui::Button("S"))
+    {
+      surface = &textures[selected_texture];
+    }
+    ImGui::PopStyleColor();
+    ImGui::EndGroup();
+    // ImGui::EndChild();
+
     ImGui::PopID();
   }
 
@@ -3798,10 +3895,12 @@ void Texture_Paint::run()
   ImGui::SameLine();
   const ImVec2 childo = ImGui::GetCursorPos();
   ivec2 childoffset = vec2(childo.x, childo.y);
-  ImGuiWindowFlags childflags = ImGuiWindowFlags_HorizontalScrollbar;
+  // ImGuiWindowFlags childflags = ImGuiWindowFlags_HorizontalScrollbar;
 
-  // ImGuiWindowFlags childflags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+  ImGuiWindowFlags childflags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
   ImGui::BeginChild("paintbox", ImVec2(0, 0), false, childflags);
+
+  bool is_within = ImGui::IsWindowHovered();
   ImGui::Dummy(ImVec2(0.0f, 120.0f));
   ImGui::Dummy(ImVec2(120.0f, 0.f));
   ImGui::SameLine();
@@ -3811,8 +3910,29 @@ void Texture_Paint::run()
 
   put_imgui_texture(&display_surface, texture_size);
 
-  // jank way of capturing mouse wheel input to use for something other than scrolling
+  ImGui::SameLine();
+  ImGui::Dummy(ImVec2(120.0f, 0.f));
+  ImGui::Dummy(ImVec2(0.0f, 120.0f));
+  if (imgui_visit_count == 2)
+  {
+    ImGui::SetScrollX(0.5f * ImGui::GetScrollMaxX());
+    ImGui::SetScrollY(0.5f * ImGui::GetScrollMaxY());
+  }
   const ivec2 scroll = vec2(ImGui::GetScrollX(), ImGui::GetScrollY());
+
+  float32 zoom_step = 0.051f;
+  for (SDL_Event &e : *imgui_event_accumulator)
+  {
+    if (is_within && e.type == SDL_MOUSEWHEEL)
+    {
+      if (e.wheel.y < 0)
+        zoom -= zoom_step;
+      else if (e.wheel.y > 0)
+        zoom += zoom_step;
+    }
+  }
+
+  zoom = clamp(zoom, 0.1f, 10.f);
 
   const vec2 cursor_pos_within_texture = window_cursor_pos - window_position_for_texture - childoffset + scroll;
 
@@ -3825,21 +3945,12 @@ void Texture_Paint::run()
   vec2 ndc_cursor = cursor_pos_within_texture / vec2(texture_size);
   ndc_cursor = 2.0f * ndc_cursor;
   ndc_cursor = ndc_cursor - vec2(1);
-  ImGui::Text(s("ndc", ndc_cursor.x, " ", ndc_cursor.y).c_str());
-
-  ImGui::Text(s("window_cursor_pos", window_cursor_pos.x, " ", window_cursor_pos.y).c_str());
-  ImGui::Text(
-      s("window_position_for_texture", window_position_for_texture.x, " ", window_position_for_texture.y).c_str());
-  ImGui::Text(s("childoffset", childoffset.x, " ", childoffset.y).c_str());
-  ImGui::Text(s("scroll", scroll.x, " ", scroll.y).c_str());
 
   ImVec2 imouse_delta = ImGui::GetIO().MouseDelta;
   vec2 mouse_delta = vec2(imouse_delta.x, imouse_delta.y);
-
-  // ImGui::Text(s("mouse_delta", mouse_delta.x, " ", mouse_delta.y).c_str());
-
   ImGuiContext &g = *ImGui::GetCurrentContext();
   ImGuiWindow *window = g.CurrentWindow;
+
   bool hovered = false;
   bool middle_mouse_held = false;
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
@@ -3852,13 +3963,6 @@ void Texture_Paint::run()
     ImGui::SetScrollX(scroll.x - mouse_delta.x);
     ImGui::SetScrollY(scroll.y - mouse_delta.y);
   }
-
-  // bool left_mouse_held = false;
-
-  //// if (g.HoveredId == 0) // If nothing hovered so far in the frame (not same as IsAnyItemHovered()!)
-  // ImGui::ButtonBehavior(
-  //    window->Rect(), window->GetID("Texturasade_Paint"), &hovered, &left_mouse_held,
-  //    ImGuiButtonFlags_MouseButtonLeft);
 
   if (!intermediate.texture || intermediate.texture->size != surface->texture->size ||
       intermediate.texture->internalformat != surface->texture->internalformat)
@@ -3894,8 +3998,8 @@ void Texture_Paint::run()
   drawing_shader.set_uniform("transform", mat);
   drawing_shader.set_uniform("mouse_pos", ndc_cursor);
   drawing_shader.set_uniform("size", size);
-  drawing_shader.set_uniform("intensity",intensity);
-  drawing_shader.set_uniform("brush_exponent",exponent);
+  drawing_shader.set_uniform("intensity", intensity);
+  drawing_shader.set_uniform("brush_exponent", exponent);
   drawing_shader.set_uniform("hdr", (int32)hdr);
   drawing_shader.set_uniform("brush_selection", (int32)brush_selection);
   drawing_shader.set_uniform("brush_color", brush_color);
@@ -3917,7 +4021,8 @@ void Texture_Paint::run()
     clear = 0;
   }
 
-  if (!out_of_texture)
+  // if (!out_of_texture && iswithin)
+  if (is_within)
   {
     bool draw = false;
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
@@ -3936,12 +4041,15 @@ void Texture_Paint::run()
       is_new_click = true;
     }
 
+    float32 dt = max(0.00001f, time - last_time);
+    float32 apparent_speed = length(last_drawn_ndc - ndc_cursor);
+    float32 deltaspeed = abs(apparent_speed - previous_speed);
+
     if (draw)
     {
       if (is_new_click || !constant_density)
       {
-        bool smoothing = true;
-        if (!is_new_click && smoothing && !constant_density)
+        if (!is_new_click && !constant_density)
         {
           fbo_drawing.bind_for_drawing_dst();
           intermediate.bind(0);
@@ -3957,23 +4065,21 @@ void Texture_Paint::run()
             drawing_shader.use();
             drawing_shader.set_uniform("mouse_pos", p);
 
+            vec4 calculated_brush_color = brush_color;
             if (blendmode == 2) // add
             {
-              drawing_shader.set_uniform("brush_color", (1.0f / smoothing_count) * brush_color);
+              calculated_brush_color = (1.0f / smoothing_count) * brush_color;
             }
-
+            drawing_shader.set_uniform("brush_color", calculated_brush_color);
             if (i == smoothing_count - 1) // actual mouse pos
             {
               // drawing_shader.set_uniform("brush_color", vec4(1, 0, 0, 1));
             }
-
             if (last_drawn_ndc != ndc_cursor)
             { // we sometimes get the same cursor position even if we're moving
               quad.draw();
             }
-
             bool not_last_iteration = (i + 1) < smoothing_count;
-
             if (not_last_iteration)
             {
               fbo_intermediate.bind_for_drawing_dst();
@@ -3991,11 +4097,13 @@ void Texture_Paint::run()
         {
           // drawing_shader.set_uniform("brush_color", vec4(0, 1, 0, 1));
           drawing_shader.set_uniform("mouse_pos", ndc_cursor);
+          drawing_shader.set_uniform("brush_color", brush_color);
           quad.draw();
-          // drawing_shader.set_uniform("brush_color", brush_color);
+
           is_new_click = false;
           last_drawn_ndc = ndc_cursor;
           accumulator = 0.0f;
+          last_time = time;
         }
       }
       else
@@ -4054,6 +4162,7 @@ void Texture_Paint::run()
         }
       }
     }
+    previous_speed = apparent_speed;
   }
 
   last_seen_mouse_ndc = ndc_cursor;
@@ -4090,7 +4199,6 @@ void Texture_Paint::run()
   drawing_shader.set_uniform("mode", 3);
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
- 
 
   glViewport(0, 0, display_surface.texture->size.x, display_surface.texture->size.y);
   surface->bind(0);
@@ -4107,4 +4215,5 @@ void Texture_Paint::run()
 
   ImGui::EndChild();
   ImGui::End();
+  last_time = time;
 }

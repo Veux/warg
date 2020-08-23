@@ -344,6 +344,8 @@ int main(int argc, char *argv[])
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
+  
+  std::vector<SDL_Event> imgui_event_accumulator;
 
   std::vector<State *> states;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
@@ -351,6 +353,7 @@ int main(int argc, char *argv[])
   //states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
+  states[0]->imgui_event_accumulator = &imgui_event_accumulator;
   //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
   // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it
@@ -359,7 +362,6 @@ int main(int argc, char *argv[])
   // rendered state has control of the mouse as well
   State *rendered_state = states[0];
 
-  std::vector<SDL_Event> imgui_event_accumulator;
   bool first_update = false;
   float64 last_time = 0.0;
   float64 elapsed_time = 0.0;
@@ -420,7 +422,6 @@ int main(int argc, char *argv[])
         IMGUI.handle_input(&imgui_event_accumulator);
         IMGUI.new_frame(window, imgui_dt_accumulator);
         IMGUI_TEXTURE_DRAWS.clear();
-        imgui_event_accumulator.clear();
         imgui_frame_active = true;
       }
 
@@ -540,6 +541,8 @@ int main(int argc, char *argv[])
     {
       IMGUI.render();
     }
+    
+        imgui_event_accumulator.clear();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

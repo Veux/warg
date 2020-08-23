@@ -878,7 +878,7 @@ struct Particle_Emitter
 struct Texture_Paint
 {
   Texture_Paint() {}
-  void run();
+  void run(std::vector<SDL_Event>* imgui_event_accumulator);
 
   bool window_open = false;
   Shader drawing_shader;
@@ -886,7 +886,8 @@ struct Texture_Paint
   std::vector<Texture> textures;
   Shader postprocessing_shader;
   Shader liquid_shader;
-
+  void preset_pen();
+  void preset_pen2();
 private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
@@ -896,9 +897,9 @@ private:
   Mesh quad;
   Texture intermediate;
   Texture preview;
-  float32 zoom = .70f;
+  float32 zoom = .40f;
   int32 selected_texture = 0;
-  bool hdr = false;
+  bool hdr = true;
   bool initialized = false;
   int8 clear = 0;
   int8 apply_exposure = false;
@@ -915,12 +916,15 @@ private:
   vec2 last_seen_mouse_ndc = vec2(0);
   bool is_new_click = true;
   float32 accumulator = 0.0f;
-  float32 density = 50.f;
+  float32 density = 25.f;
   float32 pow = 1.5f;
+  float32 previous_speed = 0.0f;
+  float32 last_time = 0.0f;
   bool apply_pow = false;
   bool constant_density = true;
   int32 smoothing_count = 1;
   bool postprocess_aces = 0;
+  uint32 imgui_visit_count = 0;
   Texture create_new_texture(const char* name = nullptr);
 
 };

@@ -151,6 +151,10 @@ const char *texture_format_to_string(GLenum texture_format);
 bool has_img_file_extension(std::string name);
 bool has_hdr_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
+int32 save_texture(Texture *texture, uint32 level);
+uint32 type_of_float_format(GLenum texture_format);
+uint32 components_of_float_format(GLenum texture_format);
+
 std::string strip_file_extension(std::string file);
 Uint64 dankhash(const float32 *data, uint32 size);
 void checkSDLError(int32 line = -1);

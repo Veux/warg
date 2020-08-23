@@ -23,23 +23,17 @@ layout(location = 0) out vec4 out0;
 
 float brush0(vec2 p,float d)
 {
- // float d = (1-size)*2.5*length(p-mouse_pos);
-
   d = .1*pow(d,1);
-
   float brush_width = 10.f;
   float t =  exp(-85*pow(d,2.350f));
   float c = mix(0,.15,clamp(t,0,1)); 
   vec4 color = vec4(c);
-
   return c;
 }
 
 float brush1(vec2 p,float d)
 {
   float result = 0;
- // float d = (1-size)*length(p-mouse_pos);
-
   if(d < 1)
   {
     result = 1;
@@ -50,48 +44,33 @@ float brush1(vec2 p,float d)
 float brush2(vec2 p,float d)
 {
   float result = float(0);
- // float d = (1-size)*length(p-mouse_pos);
-
   d = max(d,0.00001);
-
-
   result = .051/d;
-  
   return result;
 }
 
 float brush3(vec2 p,float d)
 {
   float result = float(0);
-  //float d = (1-size)*100*length(p-mouse_pos);
-
   float k1 = .0031250f;
   float h = pow(4*d,2.5762);
   result = .0321*exp(1-k1*h);
-  
   return result;
 }
 
 float brush4(vec2 p,float d)
 {
   float result = float(0);
- // float d = (1-size)*100*length(p-mouse_pos);
-
   float k1 = .50f;
   float h = pow(2*d,1);
   result = .21*exp(1-k1*h);
-  
   return result;
 }
 
 float brush5(vec2 p,float d)
 {
   float result = float(0);
- // float d = (1-size)*10*length(p-mouse_pos);
-
-  
   result = clamp(1-.8*d,0,1);
-  
   return result;
 }
 
@@ -99,11 +78,7 @@ float brush6(vec2 p,float d)
 {
   float result = float(0);
   float k = 2.;
-  
- // float d = (1-size)*8*length(p-mouse_pos);
-
   result = 1.0-pow(max(0,d),k);
-  
   return clamp(result,0,1);
 }
 
@@ -112,11 +87,7 @@ float brush7(vec2 p,float d)
   float result = float(0);
   float size = 8;
   float k = 2.;
-  
-  //float d = (1-size)*8*length(p-mouse_pos);
-
   result = pow(cos(.5*3.14159 * min(.5*3.14,d)),1);
-  
   return clamp(result,0,1);
 }
 
@@ -124,12 +95,9 @@ float brush8(vec2 p,float d)
 {
   float result = float(0);
   float k = 2.;
-  
   float stime = 0.5+0.5*sin(time*cos(time*3));
   float dd = (1+(2*stime))*1*d;
-
   result = 1.0-pow(max(0,dd),k);
-  
   return clamp(result,0,1);
 }
 
@@ -147,9 +115,6 @@ vec4 Tonemap_ACES(vec4 x) {
 void main()
 {
   vec4 source = texture0_mod * texture2D(texture0, frag_uv);
-  
-  vec2 fc = gl_FragCoord.xy/1024;
-  //vec2 p = 2*(fc-vec2(0.5));
   vec2 p =  2*(frag_uv-vec2(0.5));
 
   float d = 1000.*(1./size)*length(p-mouse_pos);
@@ -198,9 +163,7 @@ void main()
 
   brush_result = intensity*pow(brush_result,brush_exponent);
   vec4 result_mod_color = brush_result*brush_color;
-
   vec4 result = vec4(0);
-  
   if(mode == 0)
   {
     result = vec4(0);
@@ -235,18 +198,16 @@ void main()
    result = tonemap_x * source;
   }
 
-    if(mode == 5)
+  if(mode == 5)
   {
    result = Tonemap_ACES(source);
   }
 
-    if(mode == 6)
+  if(mode == 6)
   {
     result = brush_color;
   }
-
-  
-    if(mode == 7)
+  if(mode == 7)
   {
     result = pow(source,vec4(tonemap_pow));
   }
@@ -256,5 +217,4 @@ void main()
     result = clamp(result,0,1);
   }
   out0 = result;
-  //out0 = source;
 }

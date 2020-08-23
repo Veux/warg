@@ -732,7 +732,7 @@ void Render_Test_State::draw_gui()
     {
       painter.window_open = !painter.window_open;
     }
-    painter.run();
+    painter.run(imgui_event_accumulator);
 
     //static std::vector<char> buf = {};
     //uint32 size = buf.size();

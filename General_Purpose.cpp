@@ -580,6 +580,55 @@ bool is_float_format(GLenum texture_format)
       return false;
   }
 }
+uint32 components_of_float_format(GLenum texture_format)
+{
+  switch (texture_format)
+  {
+    case GL_RGBA32F:
+      return 4;
+    case GL_RGBA16F:
+      return 4;
+    case GL_RGB32F:
+      return 3;
+    case GL_RGB16F:
+      return 3;
+    case GL_RG32F:
+      return 2;
+    case GL_RG16F:
+      return 2;
+    case GL_R32F:
+      return 1;
+    case GL_R16F:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+uint32 type_of_float_format(GLenum texture_format)
+{
+  switch (texture_format)
+  {
+    case GL_RGBA32F:
+      return 32;
+    case GL_RGBA16F:
+      return 16;
+    case GL_RGB32F:
+      return 32;
+    case GL_RGB16F:
+      return 16;
+    case GL_RG32F:
+      return 32;
+    case GL_RG16F:
+      return 16;
+    case GL_R32F:
+      return 32;
+    case GL_R16F:
+      return 16;
+    default:
+      return 0;
+  }
+}
 
 string to_string(Array_String &s)
 {
@@ -724,7 +773,7 @@ void Image_Loader::loader_loop(Image_Loader *loader)
 Image_Loader::Image_Loader()
 {
   threads[0] = std::thread(loader_loop, this);
-  //threads[1] = std::thread(loader_loop, this);
+  // threads[1] = std::thread(loader_loop, this);
   // threads[2] = std::thread(loader_loop, this);
   // threads[3] = std::thread(loader_loop, this);
 }
