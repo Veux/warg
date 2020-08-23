@@ -547,9 +547,6 @@ void Warg_State::update_prediction_ghost()
 
 void Warg_State::update_stats_bar()
 {
-  if (!imgui_this_tick)
-    return;
-  IMGUI_LOCK lock(this);
 
   vec2 resolution = CONFIG.resolution;
 
@@ -1935,6 +1932,7 @@ void Warg_State::update_game_interface()
   update_unit_frames();
   update_action_bar();
   update_buff_indicators();
+  update_stats_bar();
 }
 
 Character *get_character(Game_State *game_state, UID id)

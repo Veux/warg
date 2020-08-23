@@ -389,7 +389,11 @@ private:
   bool command_window_open = false;
   bool showing_model = false;
   bool showing_mesh_data = false;
-  imgui_pane imgui_panes[6] = {node_tree, resource_man, light_array, selected_node, selected_mat, blank};
+
+  std::vector<std::vector<imgui_pane>> imgui_rows = {{node_tree}};
+  uint32 imgui_rows_count = 1;
+  uint32 imgui_col_count  = 1;
+  //imgui_pane imgui_panes[6] = {node_tree, resource_man, light_array, selected_node, selected_mat, blank};
 
   void draw_imgui_specific_mesh(Mesh_Index mesh_index);
   void draw_imgui_specific_material(Material_Index material_index);

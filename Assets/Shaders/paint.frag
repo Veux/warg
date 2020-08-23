@@ -7,7 +7,8 @@ uniform int blendmode;
 uniform int hdr;
 uniform int brush_selection;
 uniform float size;
-uniform float exponent;
+uniform float intensity;
+uniform float brush_exponent;
 uniform float i;
 uniform float j;
 uniform float k;
@@ -157,45 +158,48 @@ void main()
   {
     p = size*(frag_uv-vec2(0.5));
   }
-  float color = 0;
+  float brush_result = 0;
   if(brush_selection == 0)
   {
-    color = brush0(p,d);
+    brush_result = brush0(p,d);
   }
   if(brush_selection == 1)
   {
-    color = brush1(p,d);
+    brush_result = brush1(p,d);
   }
   if(brush_selection == 2)
   {
-    color = brush2(p,d);
+    brush_result = brush2(p,d);
   }
   if(brush_selection == 3)
   {
-    color = brush3(p,d);
+    brush_result = brush3(p,d);
   }
   if(brush_selection == 4)
   {
-    color = brush4(p,d);
+    brush_result = brush4(p,d);
   }
   if(brush_selection == 5)
   {
-    color = brush5(p,d);
+    brush_result = brush5(p,d);
   }
   if(brush_selection == 6)
   {
-    color = brush6(p,d);
+    brush_result = brush6(p,d);
   }
   if(brush_selection == 7)
   {
-    color = brush7(p,d);
+    brush_result = brush7(p,d);
   } 
   if(brush_selection == 8)
   {
-    color = brush8(p,d);
+    brush_result = brush8(p,d);
   }
 
-  vec4 result = color*brush_color;
+  brush_result = intensity*pow(brush_result,brush_exponent);
+  vec4 result_mod_color = brush_result*brush_color;
+
+  vec4 result = vec4(0);
   
   if(mode == 0)
   {
@@ -203,18 +207,28 @@ void main()
   }
   if(mode == 1)
   {
-  if(blendmode == 0)
-    result = mix(source,result,color);
+    if(blendmode == 0)
+    {
+      result = mix(source,result_mod_color,brush_result);
+    }
     if(blendmode == 1)
-    result = mix(source,brush_color,color);
+    result = mix(source,brush_color,brush_result);
     if(blendmode == 2)
-    result = source + result;
+    result = source + result_mod_color;
   }
   if(mode == 2)
   {
-   result = source - result;
+   result = source - result_mod_color;
   }
-
+  if(mode == 3)
+  {    
+    if(blendmode == 0)
+    result = mix(source,result_mod_color,brush_result);
+    if(blendmode == 1)
+    result = mix(source,brush_color,brush_result);
+    if(blendmode == 2)
+    result = source + result_mod_color;
+  }
   
   if(mode == 4)
   {
@@ -242,5 +256,5 @@ void main()
     result = clamp(result,0,1);
   }
   out0 = result;
-  
+  //out0 = source;
 }

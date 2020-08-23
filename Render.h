@@ -882,18 +882,22 @@ struct Texture_Paint
 
   bool window_open = false;
   Shader drawing_shader;
-  Texture surface;
+  Texture display_surface;
   std::vector<Texture> textures;
+  Shader postprocessing_shader;
+  Shader liquid_shader;
 
 private:
-  Framebuffer fbo;
+  Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
   Framebuffer fbo_preview;
+  Framebuffer fbo_display;
   Shader copy;
   Mesh quad;
   Texture intermediate;
   Texture preview;
   float32 zoom = .70f;
+  int32 selected_texture = 0;
   bool hdr = false;
   bool initialized = false;
   int8 clear = 0;
@@ -904,16 +908,21 @@ private:
   vec4 brush_color = vec4(1);
   vec4 clear_color = vec4(0.05);
   float32 intensity = 1.0f;
+  float32 exponent = 1.0f;
   float32 size = 5.0f;
   float32 exposure_delta = 0.1f;
-  int32 selected_texture = -1;
   vec2 last_drawn_ndc = vec2(0, 0);
   vec2 last_seen_mouse_ndc = vec2(0);
   bool is_new_click = true;
   float32 accumulator = 0.0f;
-  float32 draw_dt = .0035f;
+  float32 density = 50.f;
   float32 pow = 1.5f;
   bool apply_pow = false;
+  bool constant_density = true;
+  int32 smoothing_count = 1;
+  bool postprocess_aces = 0;
+  Texture create_new_texture(const char* name = nullptr);
+
 };
 mat4 ortho_projection(ivec2 dst_size);
 struct Renderer
@@ -970,7 +979,6 @@ struct Renderer
   bool show_imgui_fxaa = false;
   bool show_bloom = false;
   void draw_imgui();
-  Texture_Paint painter;
   Mesh quad;
   Mesh cube;
   Shader temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
@@ -1022,7 +1030,6 @@ struct Renderer
   ivec2 window_size; // actual window size
   ivec2 size;        // render target size
   float32 vfov = CONFIG.fov;
-  float shadow_map_scale = CONFIG.shadow_map_scale;
   mat4 camera;
   mat4 previous_camera;
   mat4 projection;

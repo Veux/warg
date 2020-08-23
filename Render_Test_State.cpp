@@ -118,6 +118,7 @@ void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
 {
   Material_Descriptor material_star;
 
+  material_star.emissive.source = "white";
   material_star.albedo.mod = vec4(0, 0, 0, 1);
   material_star.emissive.mod = vec4(2.f, 2.f, .3f, 0.f);
   material_star.frag_shader = "water.frag";
@@ -161,6 +162,8 @@ void spawn_compass(Flat_Scene_Graph *scene)
 {
   Node_Index root = scene->new_node("compass");
   Material_Descriptor material;
+
+  material.emissive.source = "white";
   material.frag_shader = "emission.frag";
   material.emissive.mod = vec4(0);
   material.emissive.mod.r = 2.0f;
@@ -194,6 +197,8 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
 {
 
   Material_Descriptor material;
+
+  material.emissive.source = "white";
   material.frag_shader = "emission.frag";
   material.emissive.mod = vec4(0);
   material.emissive.mod.r = 2.0f;
@@ -216,6 +221,8 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   scene->nodes[c].position = random_3D_unit_vector();
 
   Material_Descriptor material2;
+
+  material.albedo.source = "white";
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
   material2.uses_transparency = true;
@@ -232,8 +239,8 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
     : State(name, window, window_size)
 {
 
-  scene.initialize_lighting("Environment_Maps/Frozen_Waterfall/Frozen_Waterfall_HiRes_TMap.jpg",
-      "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+  scene.initialize_lighting(
+      "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
   // scene.initialize_lighting("Assets/Textures/black.png",
   //  "Assets/Textures/black.png");
 
@@ -244,34 +251,34 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  // spawn_planets(&scene, vec3(12, 6, 3));
+  spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   spawn_test_triangle(&scene);
   spawn_compass(&scene);
   // spawn_map(&scene);
 
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  Material_Descriptor material;
-  Particle_Emitter *pe = &scene.particle_emitters.back();
-  material.vertex_shader = "instance.vert";
-  material.frag_shader = "emission.frag";
-  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
-  small_object_water_settings(&material.uniform_set);
-  Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
-  Mesh_Index mesh_index = scene.nodes[particle_node].model[0].first;
-  Material_Index material_index = scene.nodes[particle_node].model[0].second;
-  scene.nodes[particle_node].visible = false;
-  scene.particle_emitters[0].mesh_index = mesh_index;
-  scene.particle_emitters[0].material_index = material_index;
-  scene.particle_emitters[1].mesh_index = mesh_index;
-  scene.particle_emitters[1].material_index = material_index;
-  scene.particle_emitters[2].mesh_index = mesh_index;
-  scene.particle_emitters[2].material_index = material_index;
-  scene.particle_emitters[3].mesh_index = mesh_index;
-  scene.particle_emitters[3].material_index = material_index;
+  // scene.particle_emitters.push_back({});
+  // scene.particle_emitters.push_back({});
+  // scene.particle_emitters.push_back({});
+  // scene.particle_emitters.push_back({});
+  // Material_Descriptor material;
+  // Particle_Emitter *pe = &scene.particle_emitters.back();
+  // material.vertex_shader = "instance.vert";
+  // material.frag_shader = "emission.frag";
+  // material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  // small_object_water_settings(&material.uniform_set);
+  // Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
+  // Mesh_Index mesh_index = scene.nodes[particle_node].model[0].first;
+  // Material_Index material_index = scene.nodes[particle_node].model[0].second;
+  // scene.nodes[particle_node].visible = false;
+  // scene.particle_emitters[0].mesh_index = mesh_index;
+  // scene.particle_emitters[0].material_index = material_index;
+  // scene.particle_emitters[1].mesh_index = mesh_index;
+  // scene.particle_emitters[1].material_index = material_index;
+  // scene.particle_emitters[2].mesh_index = mesh_index;
+  // scene.particle_emitters[2].material_index = material_index;
+  // scene.particle_emitters[3].mesh_index = mesh_index;
+  // scene.particle_emitters[3].material_index = material_index;
 
   auto &lights = scene.lights.lights;
   scene.lights.light_count = 2;
@@ -619,6 +626,8 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   scene->resource_manager->mesh_pool[meshi] = md;
   Material_Descriptor *material = scene->get_modifiable_material_pointer_for(triangle, 0);
 
+  material->albedo.source = "white";
+  material->emissive.source = "white";
   material->albedo.mod = vec4(.3, .3, .3, .3);
   material->uses_transparency = true;
   material->blending = true;
@@ -644,17 +653,11 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 }
 void Render_Test_State::update()
 {
+
   // update_grabbyarm(&scene, current_time);
-  // update_planets(&scene, current_time);
+  update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
-
-  static bool spheresuccess = false;
-  if (!spheresuccess)
-  {
-    spheresuccess = spawn_test_spheres(scene);
-  }
-
   update_test_triangle(&scene);
 
   // static vec3 wind_dir;
@@ -716,6 +719,26 @@ void Render_Test_State::update()
   // scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
   // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.02;
   // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
+}
+
+void Render_Test_State::draw_gui()
+{
+  IMGUI_LOCK lock(this);
+  scene.draw_imgui(state_name);
+
+  if (imgui_this_tick)
+  {
+    if (ImGui::Button("Texture Painter"))
+    {
+      painter.window_open = !painter.window_open;
+    }
+    painter.run();
+
+    //static std::vector<char> buf = {};
+    //uint32 size = buf.size();
+    //ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
+    //ImGui::InputTextMultiline("blah",&buf[0],size,ImVec2(512,512),flags);
+  }
 }
 
 bool spawn_test_spheres(Flat_Scene_Graph &scene)
@@ -785,7 +808,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         Node_Index index = scene.add_aiscene("smoothsphere.fbx", "Spherearray");
         Material_Index mi = scene.resource_manager->push_custom_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
-        scene.nodes[scene.nodes[index].children[0]].name = s("sphere ",i," ",j," ",k);
+        scene.nodes[scene.nodes[index].children[0]].name = s("sphere ", i, " ", j, " ", k);
         material.uniform_set.clear();
 
         Flat_Scene_Graph_Node *node = &scene.nodes[index];

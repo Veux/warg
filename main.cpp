@@ -82,7 +82,7 @@ void glad_callback(const char *name, void *funcptr, int len_args, ...)
     }
     set_message("GL ERROR", "GL_" + error);
     push_log_to_disk();
-    // ASSERT(0);
+     ASSERT(0);
   }
 }
 
@@ -337,21 +337,21 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-  glad_set_post_callback(glad_callback);
-  Local_Session warg_session = Local_Session();
+  //glad_set_pre_callback(glad_callback);
+  //glad_set_post_callback(glad_callback);
+  //Local_Session warg_session = Local_Session();
 
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
 
   std::vector<State *> states;
-  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
-
-  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
-  states[0]->recieves_input = true;
-  states[0]->draws_imgui = true;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
+  //states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  states[0]->recieves_input = true;
+  states[0]->draws_imgui = true;
+  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
   // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it
   // global is best?
@@ -480,7 +480,6 @@ int main(int argc, char *argv[])
         {
           if (imgui_frame_active)
           {
-
             states[i]->draw_gui();
           }
         }
