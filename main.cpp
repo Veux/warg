@@ -9,39 +9,75 @@
 #include "Warg_State.h"
 #include "SDL_Imgui_State.h"
 
-// void gl_before_check(const glbinding::FunctionCall &f)
-//{
-//  std::stringstream opengl_call_ss;
-//  opengl_call_ss << f.function->name() << '(';
-//  for (size_t i = 0; i < f.parameters.size(); ++i)
-//  {
-//    opengl_call_ss << f.parameters[i];
-//    if (i < f.parameters.size() - 1)
-//      opengl_call_ss << ", ";
-//  }
-//  opengl_call_ss << ")";
-//  if (f.returnValue)
-//    opengl_call_ss << " Returned: " << f.returnValue;
-//
-//  set_message("BEFORE OPENGL call: ", opengl_call_ss.str());
-//}
-// void gl_after_check(const glbinding::FunctionCall &f)
-//{
-//  std::stringstream opengl_call_ss;
-//  opengl_call_ss << f.function->name() << '(';
-//  for (size_t i = 0; i < f.parameters.size(); ++i)
-//  {
-//    opengl_call_ss << f.parameters[i];
-//    if (i < f.parameters.size() - 1)
-//      opengl_call_ss << ", ";
-//  }
-//  opengl_call_ss << ")";
-//  if (f.returnValue)
-//    opengl_call_ss << " Returned: " << f.returnValue;
-//
-//  set_message("", opengl_call_ss.str());
-//  check_gl_error();
-//}
+struct FreeTypeTest
+{
+    enum FontBuildMode
+    {
+        FontBuildMode_FreeType,
+        FontBuildMode_Stb
+    };
+
+    FontBuildMode BuildMode;
+    bool          WantRebuild;
+    float         FontsMultiply;
+    int           FontsPadding;
+    unsigned int  FontsFlags;
+
+    FreeTypeTest()
+    {
+        BuildMode = FontBuildMode_FreeType;
+        WantRebuild = true;
+        FontsMultiply = 1.0f;
+        FontsPadding = 1;
+        FontsFlags = 0;
+    }
+
+    // Call _BEFORE_ NewFrame()
+    bool UpdateRebuild()
+    {
+        if (!WantRebuild)
+            return false;
+        ImGuiIO& io = ImGui::GetIO();
+        io.Fonts->TexGlyphPadding = FontsPadding;
+        for (int n = 0; n < io.Fonts->ConfigData.Size; n++)
+        {
+            ImFontConfig* font_config = (ImFontConfig*)&io.Fonts->ConfigData[n];
+            font_config->RasterizerMultiply = FontsMultiply;
+            font_config->RasterizerFlags = (BuildMode == FontBuildMode_FreeType) ? FontsFlags : 0x00;
+        }
+        if (BuildMode == FontBuildMode_FreeType)
+            ImGuiFreeType::BuildFontAtlas(io.Fonts, FontsFlags);
+        else if (BuildMode == FontBuildMode_Stb)
+            io.Fonts->Build();
+        WantRebuild = false;
+        return true;
+    }
+
+    // Call to draw interface
+    void ShowFreetypeOptionsWindow()
+    {
+        ImGui::Begin("FreeType Options");
+        ImGui::ShowFontSelector("Fonts");
+        WantRebuild |= ImGui::RadioButton("FreeType", (int*)&BuildMode, FontBuildMode_FreeType);
+        ImGui::SameLine();
+        WantRebuild |= ImGui::RadioButton("Stb (Default)", (int*)&BuildMode, FontBuildMode_Stb);
+        WantRebuild |= ImGui::DragFloat("Multiply", &FontsMultiply, 0.001f, 0.0f, 2.0f);
+        WantRebuild |= ImGui::DragInt("Padding", &FontsPadding, 0.1f, 0, 16);
+        if (BuildMode == FontBuildMode_FreeType)
+        {
+            WantRebuild |= ImGui::CheckboxFlags("NoHinting",     &FontsFlags, ImGuiFreeType::NoHinting);
+            WantRebuild |= ImGui::CheckboxFlags("NoAutoHint",    &FontsFlags, ImGuiFreeType::NoAutoHint);
+            WantRebuild |= ImGui::CheckboxFlags("ForceAutoHint", &FontsFlags, ImGuiFreeType::ForceAutoHint);
+            WantRebuild |= ImGui::CheckboxFlags("LightHinting",  &FontsFlags, ImGuiFreeType::LightHinting);
+            WantRebuild |= ImGui::CheckboxFlags("MonoHinting",   &FontsFlags, ImGuiFreeType::MonoHinting);
+            WantRebuild |= ImGui::CheckboxFlags("Bold",          &FontsFlags, ImGuiFreeType::Bold);
+            WantRebuild |= ImGui::CheckboxFlags("Oblique",       &FontsFlags, ImGuiFreeType::Oblique);
+            WantRebuild |= ImGui::CheckboxFlags("Monochrome",    &FontsFlags, ImGuiFreeType::Monochrome);
+        }
+        ImGui::End();
+    }
+};
+
 
 void glad_callback(const char *name, void *funcptr, int len_args, ...)
 {
@@ -82,7 +118,7 @@ void glad_callback(const char *name, void *funcptr, int len_args, ...)
     }
     set_message("GL ERROR", "GL_" + error);
     push_log_to_disk();
-     ASSERT(0);
+    ASSERT(0);
   }
 }
 
@@ -337,24 +373,56 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-  //glad_set_pre_callback(glad_callback);
-  //glad_set_post_callback(glad_callback);
-  //Local_Session warg_session = Local_Session();
+  // glad_set_pre_callback(glad_callback);
+  // glad_set_post_callback(glad_callback);
+  // Local_Session warg_session = Local_Session();
 
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
-  
+  ImGuiIO io = ImGui::GetIO();
+  io.Fonts->AddFontFromFileTTF("Assets/Fonts/LiberationSans-Regular.ttf", 14.0f);
+
+
+
+  ImVec4 *colors = ImGui::GetStyle().Colors;
+  colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+  colors[ImGuiCol_TextDisabled] = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
+  colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.84f);
+  colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.50f);
+  colors[ImGuiCol_FrameBg] = ImVec4(0.00f, 0.16f, 0.26f, 1.00f);
+  colors[ImGuiCol_FrameBgHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_FrameBgActive] = ImVec4(1.00f, 0.31f, 0.00f, 0.92f);
+  colors[ImGuiCol_TitleBgActive] = ImVec4(1.00f, 0.28f, 0.00f, 1.00f);
+  colors[ImGuiCol_CheckMark] = ImVec4(0.08f, 1.00f, 0.00f, 1.00f);
+  colors[ImGuiCol_SliderGrab] = ImVec4(0.00f, 0.77f, 0.08f, 1.00f);
+  colors[ImGuiCol_SliderGrabActive] = ImVec4(0.87f, 1.00f, 0.00f, 1.00f);
+  colors[ImGuiCol_Button] = ImVec4(1.00f, 0.38f, 0.00f, 0.59f);
+  colors[ImGuiCol_ButtonHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_ButtonActive] = ImVec4(1.00f, 0.31f, 0.00f, 1.00f);
+  colors[ImGuiCol_Header] = ImVec4(0.94f, 0.36f, 0.00f, 0.31f);
+  colors[ImGuiCol_HeaderHovered] = ImVec4(0.98f, 0.40f, 0.00f, 0.80f);
+  colors[ImGuiCol_HeaderActive] = ImVec4(1.00f, 0.53f, 0.00f, 1.00f);
+  colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 0.31f, 0.00f, 0.72f);
+  colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 0.35f, 0.00f, 1.00f);
+  colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_Tab] = ImVec4(0.81f, 0.33f, 0.00f, 0.81f);
+  colors[ImGuiCol_TabHovered] = ImVec4(1.00f, 0.35f, 0.00f, 0.84f);
+  colors[ImGuiCol_TabActive] = ImVec4(0.99f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_TextSelectedBg] = ImVec4(0.36f, 0.15f, 0.00f, 0.96f);
+  colors[ImGuiCol_NavHighlight] = ImVec4(0.99f, 0.53f, 0.00f, 1.00f);
+
   std::vector<SDL_Event> imgui_event_accumulator;
 
   std::vector<State *> states;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
-  //states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  // states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
   states[0]->imgui_event_accumulator = &imgui_event_accumulator;
-  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
+  // states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   // todo: support rendering multiple windows - should be easy, just do them one after another onto different windows
   // no problem right? just one opengl context - asset managers wont be sharing data, though, perhaps leaving it
   // global is best?
@@ -541,8 +609,8 @@ int main(int argc, char *argv[])
     {
       IMGUI.render();
     }
-    
-        imgui_event_accumulator.clear();
+
+    imgui_event_accumulator.clear();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

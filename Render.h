@@ -880,7 +880,7 @@ struct Texture_Paint
   Texture_Paint() {}
   void run(std::vector<SDL_Event>* imgui_event_accumulator);
 
-  bool window_open = false;
+  bool window_open = true;
   Shader drawing_shader;
   Texture display_surface;
   std::vector<Texture> textures;
@@ -925,6 +925,9 @@ private:
   int32 smoothing_count = 1;
   bool postprocess_aces = 0;
   uint32 imgui_visit_count = 0;
+  bool save_dialogue = false;
+  int32 save_type_radio_button_state = 0;
+  std::string filename;
   Texture create_new_texture(const char* name = nullptr);
 
 };

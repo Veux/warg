@@ -13,6 +13,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
+
+#include <filesystem>
+
 using glm::ivec2;
 using glm::lookAt;
 using glm::mat4;
@@ -261,7 +264,7 @@ void save_and_log_screen()
   }
 }
 
-int32 save_texture(Texture *texture, uint32 level)
+int32 save_texture(Texture *texture, std::string filename, uint32 level)
 {
   const GLenum format = texture->texture->internalformat;
   uint32 width = texture->texture->size.x;
@@ -275,7 +278,7 @@ int32 save_texture(Texture *texture, uint32 level)
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
 
-    int32 result = stbi_write_hdr(s(texture->t.name, ".hdr").c_str(), width, height, comp, &data[0]);
+    int32 result = stbi_write_hdr(s(filename, ".hdr").c_str(), width, height, comp, &data[0]);
     return result;
   }
   else
@@ -284,11 +287,42 @@ int32 save_texture(Texture *texture, uint32 level)
     std::vector<uint8> data(width * height * comp);
     uint32 size = data.size() * sizeof(uint8);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_BYTE, size, &data[0]);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
 
-    int32 result = stbi_write_png(s(texture->t.name, ".png").c_str(), width, height, comp, &data[0],0);
+    int32 result = stbi_write_png(s(texture->t.name, ".png").c_str(), width, height, comp, &data[0], 0);
     return result;
   }
+}
+
+int32 save_texture_type(Texture *texture, std::string filename, std::string type, uint32 level)
+{
+  const GLenum format = texture->texture->internalformat;
+  uint32 width = texture->texture->size.x;
+  uint32 height = texture->texture->size.y;
+
+  if (type == "hdr")
+  {
+    uint32 comp = 4;
+    std::vector<float32> data(width * height * comp);
+    uint32 size = data.size() * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
+
+    int32 result = stbi_write_hdr(s(filename, ".hdr").c_str(), width, height, comp, &data[0]);
+    return result;
+  }
+  if (type == "png")
+  {
+    uint32 comp = 4;
+    std::vector<uint8> data(width * height * comp);
+    uint32 size = data.size() * sizeof(uint8);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
+
+    int32 result = stbi_write_png(s(filename, ".png").c_str(), width, height, comp, &data[0], 0);
+    return result;
+  }
+  return 0;
 }
 
 void save_and_log_texture(GLuint texture)
@@ -3842,6 +3876,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   for (uint32 i = 0; i < textures.size(); ++i)
   {
+
+    Texture *this_texture = &textures[i];
     ImGui::PushID(s(i).c_str());
     bool green = selected_texture == i;
     if (green)
@@ -3849,7 +3885,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
       ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 1, 0, 1));
       ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 1, 0, 1));
     }
-    if (put_imgui_texture_button(&textures[i], vec2(160), false))
+    if (put_imgui_texture_button(this_texture, vec2(160), false))
     {
       selected_texture = i;
     }
@@ -3876,15 +3912,79 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
         }
       }
       surface = &textures[selected_texture];
+      this_texture = nullptr;
     }
     ImGui::PopStyleColor();
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
     ImGui::Dummy(ImVec2(10, 45));
-    if (ImGui::Button("S"))
+    if (ImGui::Button("S") && this_texture != nullptr)
     {
-      surface = &textures[selected_texture];
+      ImGui::OpenPopup("Save Texture");
+      filename = this_texture->t.name;
     }
     ImGui::PopStyleColor();
+    if (ImGui::BeginPopupModal("Save Texture", NULL, ImGuiWindowFlags_AlwaysAutoResize) && this_texture != nullptr)
+    {
+      std::string type = "";
+      Texture *saved_texture = this_texture;
+      put_imgui_texture(saved_texture, vec2(320));
+      filename.resize(64);
+      ImGui::InputText("filename", &filename[0], filename.size());
+      filename.erase(std::find(filename.begin(), filename.end(), '\0'), filename.end());
+
+      uint32 last_radio_state = save_type_radio_button_state;
+      ImGui::Text("Image file type:");
+      ImGui::RadioButton("HDR", &save_type_radio_button_state, 0);
+      ImGui::SameLine();
+      ImGui::RadioButton("PNG", &save_type_radio_button_state, 1);
+
+      if (save_type_radio_button_state == 0)
+      {
+        type = "hdr";
+      }
+
+      if (save_type_radio_button_state == 1)
+      {
+        type = "png";
+      }
+      std::string extension = s(".", type);
+      bool file_exists = std::filesystem::exists(s(filename, extension));
+
+      ImGui::Separator();
+
+      if (file_exists)
+      {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
+        ImGui::Text("File exists!");
+        if (ImGui::Button("Overwrite", ImVec2(120, 0)))
+        {
+          int32 save_result = save_texture_type(saved_texture, filename, type);
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
+        if (ImGui::Button("Generate Filename", ImVec2(120, 0)))
+        {
+          int32 save_result = save_texture_type(saved_texture, find_free_filename(filename, extension), type);
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor();
+      }
+      else if (ImGui::Button("Save", ImVec2(120, 0)))
+      {
+        int32 save_result = save_texture_type(saved_texture, filename, type);
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SetItemDefaultFocus();
+
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel", ImVec2(120, 0)))
+      {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
     ImGui::EndGroup();
     // ImGui::EndChild();
 

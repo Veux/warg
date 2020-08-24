@@ -3,6 +3,7 @@
 #include "Json.h"
 #include "Third_party/stb/stb_image.h"
 #include "Render.h"
+#include <filesystem>
 using namespace std;
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max)
 {
@@ -305,7 +306,7 @@ struct Message
   float64 time_of_expiry;
   string thread_id;
 };
-static vector<Message> messages;
+static vector<Message> warg_messages;
 static string message_log = "";
 std::string get_message_log()
 {
@@ -322,7 +323,7 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   bool found = false;
   if (identifier != "")
   {
-    for (auto &msg : messages)
+    for (auto &msg : warg_messages)
     {
       if (msg.identifier == identifier)
       {
@@ -336,7 +337,7 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   if (!found)
   {
     Message m = {identifier, message, time + msg_duration, ss.str()};
-    messages.push_back(std::move(m));
+    warg_messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
   message_log.append(s("Thread: ", ss.str(), " Time: ", time, " Event: ", identifier, " ", message, " File: ", file,
@@ -350,12 +351,12 @@ std::string get_messages()
 {
   string result;
   float64 time = get_real_time();
-  auto it = messages.begin();
-  while (it != messages.end())
+  auto it = warg_messages.begin();
+  while (it != warg_messages.end())
   {
     if (it->time_of_expiry < time)
     {
-      it = messages.erase(it);
+      it = warg_messages.erase(it);
       continue;
     }
     result = result + s(it->thread_id, ": ", it->identifier, " ", it->message, "\n");
@@ -628,6 +629,18 @@ uint32 type_of_float_format(GLenum texture_format)
     default:
       return 0;
   }
+}
+
+std::string find_free_filename(std::string filename, std::string extension)
+{
+  bool exists = std::filesystem::exists(s(filename, extension));
+  uint32 i = 0;
+  while (exists)
+  {
+    exists = std::filesystem::exists(s(filename, i,extension));
+    ++i;
+  }
+  return s(filename, i);
 }
 
 string to_string(Array_String &s)
