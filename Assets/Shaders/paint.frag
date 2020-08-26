@@ -161,7 +161,15 @@ void main()
     brush_result = brush8(p,d);
   }
 
-  brush_result = intensity*pow(brush_result,brush_exponent);
+  //if(brush_exponent != 1)
+  {
+    brush_result = intensity*pow(brush_result,brush_exponent);
+  }
+ // else
+  {
+   // brush_result = intensity*brush_result;
+  }
+
   vec4 result_mod_color = brush_result*brush_color;
   vec4 result = vec4(0);
   if(mode == 0)

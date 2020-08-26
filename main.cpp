@@ -9,75 +9,77 @@
 #include "Warg_State.h"
 #include "SDL_Imgui_State.h"
 
+#include <imgui/misc/freetype/imgui_freetype.h>
+#include <imgui/misc/freetype/imgui_freetype.cpp>
+
 struct FreeTypeTest
 {
-    enum FontBuildMode
-    {
-        FontBuildMode_FreeType,
-        FontBuildMode_Stb
-    };
+  enum FontBuildMode
+  {
+    FontBuildMode_FreeType,
+    FontBuildMode_Stb
+  };
 
-    FontBuildMode BuildMode;
-    bool          WantRebuild;
-    float         FontsMultiply;
-    int           FontsPadding;
-    unsigned int  FontsFlags;
+  FontBuildMode BuildMode;
+  bool WantRebuild;
+  float FontsMultiply;
+  int FontsPadding;
+  unsigned int FontsFlags;
 
-    FreeTypeTest()
+  FreeTypeTest()
+  {
+    BuildMode = FontBuildMode_FreeType;
+    WantRebuild = true;
+    FontsMultiply = 1.0f;
+    FontsPadding = 1;
+    FontsFlags = 0;
+  }
+
+  // Call _BEFORE_ NewFrame()
+  bool UpdateRebuild()
+  {
+    if (!WantRebuild)
+      return false;
+    ImGuiIO &io = ImGui::GetIO();
+    io.Fonts->TexGlyphPadding = FontsPadding;
+    for (int n = 0; n < io.Fonts->ConfigData.Size; n++)
     {
-        BuildMode = FontBuildMode_FreeType;
-        WantRebuild = true;
-        FontsMultiply = 1.0f;
-        FontsPadding = 1;
-        FontsFlags = 0;
+      ImFontConfig *font_config = (ImFontConfig *)&io.Fonts->ConfigData[n];
+      font_config->RasterizerMultiply = FontsMultiply;
+      font_config->RasterizerFlags = (BuildMode == FontBuildMode_FreeType) ? FontsFlags : 0x00;
     }
+    if (BuildMode == FontBuildMode_FreeType)
+      ImGuiFreeType::BuildFontAtlas(io.Fonts, FontsFlags);
+    else if (BuildMode == FontBuildMode_Stb)
+      io.Fonts->Build();
+    WantRebuild = false;
+    return true;
+  }
 
-    // Call _BEFORE_ NewFrame()
-    bool UpdateRebuild()
+  // Call to draw interface
+  void ShowFreetypeOptionsWindow()
+  {
+    ImGui::Begin("FreeType Options");
+    ImGui::ShowFontSelector("Fonts");
+    WantRebuild |= ImGui::RadioButton("FreeType", (int *)&BuildMode, FontBuildMode_FreeType);
+    ImGui::SameLine();
+    WantRebuild |= ImGui::RadioButton("Stb (Default)", (int *)&BuildMode, FontBuildMode_Stb);
+    WantRebuild |= ImGui::DragFloat("Multiply", &FontsMultiply, 0.001f, 0.0f, 2.0f);
+    WantRebuild |= ImGui::DragInt("Padding", &FontsPadding, 0.1f, 0, 16);
+    if (BuildMode == FontBuildMode_FreeType)
     {
-        if (!WantRebuild)
-            return false;
-        ImGuiIO& io = ImGui::GetIO();
-        io.Fonts->TexGlyphPadding = FontsPadding;
-        for (int n = 0; n < io.Fonts->ConfigData.Size; n++)
-        {
-            ImFontConfig* font_config = (ImFontConfig*)&io.Fonts->ConfigData[n];
-            font_config->RasterizerMultiply = FontsMultiply;
-            font_config->RasterizerFlags = (BuildMode == FontBuildMode_FreeType) ? FontsFlags : 0x00;
-        }
-        if (BuildMode == FontBuildMode_FreeType)
-            ImGuiFreeType::BuildFontAtlas(io.Fonts, FontsFlags);
-        else if (BuildMode == FontBuildMode_Stb)
-            io.Fonts->Build();
-        WantRebuild = false;
-        return true;
+      WantRebuild |= ImGui::CheckboxFlags("NoHinting", &FontsFlags, ImGuiFreeType::NoHinting);
+      WantRebuild |= ImGui::CheckboxFlags("NoAutoHint", &FontsFlags, ImGuiFreeType::NoAutoHint);
+      WantRebuild |= ImGui::CheckboxFlags("ForceAutoHint", &FontsFlags, ImGuiFreeType::ForceAutoHint);
+      WantRebuild |= ImGui::CheckboxFlags("LightHinting", &FontsFlags, ImGuiFreeType::LightHinting);
+      WantRebuild |= ImGui::CheckboxFlags("MonoHinting", &FontsFlags, ImGuiFreeType::MonoHinting);
+      WantRebuild |= ImGui::CheckboxFlags("Bold", &FontsFlags, ImGuiFreeType::Bold);
+      WantRebuild |= ImGui::CheckboxFlags("Oblique", &FontsFlags, ImGuiFreeType::Oblique);
+      WantRebuild |= ImGui::CheckboxFlags("Monochrome", &FontsFlags, ImGuiFreeType::Monochrome);
     }
-
-    // Call to draw interface
-    void ShowFreetypeOptionsWindow()
-    {
-        ImGui::Begin("FreeType Options");
-        ImGui::ShowFontSelector("Fonts");
-        WantRebuild |= ImGui::RadioButton("FreeType", (int*)&BuildMode, FontBuildMode_FreeType);
-        ImGui::SameLine();
-        WantRebuild |= ImGui::RadioButton("Stb (Default)", (int*)&BuildMode, FontBuildMode_Stb);
-        WantRebuild |= ImGui::DragFloat("Multiply", &FontsMultiply, 0.001f, 0.0f, 2.0f);
-        WantRebuild |= ImGui::DragInt("Padding", &FontsPadding, 0.1f, 0, 16);
-        if (BuildMode == FontBuildMode_FreeType)
-        {
-            WantRebuild |= ImGui::CheckboxFlags("NoHinting",     &FontsFlags, ImGuiFreeType::NoHinting);
-            WantRebuild |= ImGui::CheckboxFlags("NoAutoHint",    &FontsFlags, ImGuiFreeType::NoAutoHint);
-            WantRebuild |= ImGui::CheckboxFlags("ForceAutoHint", &FontsFlags, ImGuiFreeType::ForceAutoHint);
-            WantRebuild |= ImGui::CheckboxFlags("LightHinting",  &FontsFlags, ImGuiFreeType::LightHinting);
-            WantRebuild |= ImGui::CheckboxFlags("MonoHinting",   &FontsFlags, ImGuiFreeType::MonoHinting);
-            WantRebuild |= ImGui::CheckboxFlags("Bold",          &FontsFlags, ImGuiFreeType::Bold);
-            WantRebuild |= ImGui::CheckboxFlags("Oblique",       &FontsFlags, ImGuiFreeType::Oblique);
-            WantRebuild |= ImGui::CheckboxFlags("Monochrome",    &FontsFlags, ImGuiFreeType::Monochrome);
-        }
-        ImGui::End();
-    }
+    ImGui::End();
+  }
 };
-
 
 void glad_callback(const char *name, void *funcptr, int len_args, ...)
 {
@@ -381,9 +383,40 @@ int main(int argc, char *argv[])
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
   ImGuiIO io = ImGui::GetIO();
-  io.Fonts->AddFontFromFileTTF("Assets/Fonts/LiberationSans-Regular.ttf", 14.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/LiberationSans-Regular.ttf", 16.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/LiberationSans-Regular.ttf", 14.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/Roboto-Medium.ttf", 14.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 14.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/Roboto-Medium.ttf", 16.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 16.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 18.0f);
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 18.0f);
 
+  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/spleen-8x16.psfu", 18.0f);
+  ImFontConfig font_cfg;
+  font_cfg.OversampleH = 1;
+  font_cfg.OversampleV = 1;
+  font_cfg.PixelSnapH = true;
+  font_cfg.RasterizerFlags = ImGuiFreeType::Monochrome | ImGuiFreeType::MonoHinting;
 
+  io.Fonts->AddFontFromFileTTF("Assets/Fonts/spleen-8x16.otf", 16.0f, &font_cfg);
+
+  // save texture atlas to file:
+  //  IMGUI.new_frame(window, 1);
+  //  GLuint font_texture = IMGUI.font_texture;
+  //
+  //  GLint w,h;
+  //
+  //  glBindTexture(GL_TEXTURE_2D,font_texture);
+  //  glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_WIDTH,&w);
+  //  glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_HEIGHT,&h);
+  //
+  // save_texture_type(font_texture,ivec2(w,h), "test");
+
+  FreeTypeTest freetype_test;
+  freetype_test.FontsFlags = ImGuiFreeType::MonoHinting;
+  freetype_test.FontsMultiply = 1.35;
+  bool show_freetype_window = false;
 
   ImVec4 *colors = ImGui::GetStyle().Colors;
   colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
@@ -488,7 +521,15 @@ int main(int argc, char *argv[])
         IMGUI.cursor_position = cursor_position;
         IMGUI.mouse_state = mouse_state;
         IMGUI.handle_input(&imgui_event_accumulator);
+
+        if (freetype_test.UpdateRebuild())
+        {
+          IMGUI.invalidate_device_objects();
+        }
         IMGUI.new_frame(window, imgui_dt_accumulator);
+        if (show_freetype_window)
+          freetype_test.ShowFreetypeOptionsWindow();
+
         IMGUI_TEXTURE_DRAWS.clear();
         imgui_frame_active = true;
       }
@@ -589,10 +630,19 @@ int main(int argc, char *argv[])
     rendered_state->renderer.imgui_this_tick = imgui_frame_active;
     rendered_state->render(rendered_state->current_time);
 
+    static float32 scale_factor = 1.0f;
+
     if (imgui_frame_active)
     {
+      ImGui::SameLine();
+      if (ImGui::Button("Font config"))
+      {
+        show_freetype_window = !show_freetype_window;
+      }
       std::string messages = get_messages();
       ImGui::Text("%s", messages.c_str());
+
+      ImGui::DragFloat("testfontsize", &scale_factor, 0.001f);
 
       static bool show_demo_window = true;
       if (show_demo_window)
@@ -611,6 +661,38 @@ int main(int argc, char *argv[])
     }
 
     imgui_event_accumulator.clear();
+    glEnable(GL_BLEND);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, IMGUI.font_texture);
+    GLint w, h;
+
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &w);
+    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &h);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glViewport(0, 0, window_size.x, window_size.y);
+    glDisable(GL_CULL_FACE);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    vec2 texture_size_scaling = vec2(w, h) / vec2(window_size);
+    mat4 scale = glm::scale(scale_factor * vec3(texture_size_scaling,1) * vec3(1, -1, 1));
+
+    mat4 transform = fullscreen_quad(); 
+    
+    transform = fullscreen_quad();
+
+    
+    mat4 T = glm::translate(vec3());
+    transform = fullscreen_quad();
+
+
+    states[0]->renderer.passthrough.use();
+    states[0]->renderer.passthrough.set_uniform("transform", transform);//(window_size));
+    //states[0]->renderer.passthrough.set_uniform("transform",  ortho_projection(texture_size_scaling));
+   // states[0]->renderer.quad.draw();
+    glDisable(GL_BLEND);
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

@@ -43,19 +43,19 @@ struct SDL_Imgui_State
 
   glm::ivec2 cursor_position = glm::ivec2(0);
   glm::uint32 mouse_state = 0;
-
+  
+  GLuint font_texture = 0;
+  void invalidate_device_objects();
 private:
   bool process_event(SDL_Event *event);
   static const char *get_clipboard(void *);
   static void set_clipboard(void *, const char *text);
   void create_fonts_texture();
-  void invalidate_device_objects();
   bool create_device_objects();
 
   ImDrawData *draw_data = nullptr;
 
   bool mouse_pressed[3] = {false, false, false};
-  GLuint font_texture = 0;
   int shader_handle = 0, vert_handle = 0, frag_handle = 0;
   int texture_location = 0, projection_location = 0;
   int position_location = 0, uv_location = 0, color_location = 0;

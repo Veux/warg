@@ -154,6 +154,7 @@ bool has_hdr_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
 int32 save_texture(Texture *texture, std::string filename, uint32 level = 0);
 int32 save_texture_type(Texture *texture, std::string filename, std::string type = "png", uint32 level = 0);
+int32 save_texture_type(GLuint texture,ivec2 size, std::string filename, std::string type = "png", uint32 level = 0);
 uint32 type_of_float_format(GLenum texture_format);
 uint32 components_of_float_format(GLenum texture_format);
 

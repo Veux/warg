@@ -852,7 +852,7 @@ struct Particle_Emitter
   { // todo :
 
     /*
-    
+
     proper rigid body physics algorithm
 
 
@@ -875,19 +875,178 @@ struct Particle_Emitter
   std::shared_ptr<Physics_Shared_Data> shared_data;
 };
 
+struct Liquid_Surface
+{
+
+  void run() {}
+
+  Shader liquid_shader;
+
+  /*
+
+
+
+
+  float height[N*M];
+float vertical_derivative[N*M];
+float previous_height[N*M];
+// ... initialize to zero ...
+// ... begin loop over frames ...
+// --- This is the propagation code ---
+// Convolve height with the kernel
+// and put it into vertical_derivative
+Convolve( height, vertical_derivative );
+float temp;
+for(int k=0;k<N*M;k++)
+{
+temp = height[k];
+height[k] = height[k]*(2.0-alpha*dt)/(1.0+alpha*dt)- previous_height[k]/(1.0+alpha*dt)- vertical_derivative[k]*g*dt*dt/(1.0+alpha*dt);
+previous_height[k] = temp;
+}
+// --- end propagation code ---
+// ... end loop over frames ...
+
+
+
+h(x,y,t) is height (respect to mean) at pixel x,y at time t 
+
+
+-g* is gravitational restoring force
+
+
+
+sqrt(-delta^2) is mass conservation operator, aka vertical derivative of the surface
+
+we need to evaluate this as a convolution
+
+
+
+
+
+
+kernel generation:
+
+uint32 WIDTH = 7;
+float32 G[WIDTH][WIDTH] = {0};
+
+G0 = 0
+for(uint32 n = 0; n < 10000; ++n)
+{
+  float o = 1.0f
+  float a = (n * 0.001)
+  G0 += (a*a) * exp(-o * (a*a));
+}
+for(uint32 y = 0; y < WIDTH; ++y)
+{
+  for(uint32 x = 0; x < WIDTH; ++x)
+  {
+    for(uint32 n = 0; n < 10000;++n)
+    {
+        float r = sqrt(x*x+y*y);
+        float a = (n * 0.001)
+        G[y][x] += (a*a) * exp(-o * (a*a)) * J(a*r) / G0
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+convolution:
+
+just as with the gaussian shader, we will have a look up table of values that are calculated
+and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and offsety
+
+where p is this pixels position:
+vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
+
+the number of iterations on the offsets, which is the width of the kernel, affects the quality
+
+
+however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to save work
+
+
+
+
+
+
+
+
+propagation:
+
+per pix: 
+
+  result = heightsample *(2.0-alpha*dt) -  (previous_frame_height_sample)/(1+alpha*dt) - vertical_derivative_sample *g*dt*dt / (1.0+alpha*dt);
+  previous_frame_height = heightsample
+  return result
+
+
+
+
+
+
+  so in summary, 
+  G(x,y) is a kernel sample at x,y
+  h(x,y) is a heightmap sample at x,y
+
+
+  1): we precompute the kernel like the gauss shader, except it will be a full 2d lut
+  2): we store a texture for the vertical derivative and compute it with:
+        inputs required: heightmap, kernel LUT (can be hardcoded in the shader code)
+        vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
+  3): we copy the heightmap texture, we will need it last frame
+  4): we propagate the waves
+        inputs required: vertical derivative texture, heightmap, previous_heightmap
+        output: heightmap
+
+        code:   
+        g is gravity
+        a = heightsample*(2.0-alpha*dt)
+        b = previous_frame_height_sample/(1+alpha*dt)
+        c = vertical_derivative_sample*g*dt*dt / (1.0+alpha*dt)
+        result = a - b - c;
+  
+
+
+
+
+
+  **/
+
+
+
+
+
+  // lets store height information in alpha channel and color info in the rgb
+  // we will modify the painter to be able to paint the alpha channel too directly
+  // instead of using it as a blend operator
+
+  // when we iterate on velocity, we can also spread color along those vectors
+
+  Texture heightmap;
+  Texture heightmap_intermediate;
+};
+
 struct Texture_Paint
 {
   Texture_Paint() {}
-  void run(std::vector<SDL_Event>* imgui_event_accumulator);
+  void run(std::vector<SDL_Event> *imgui_event_accumulator);
 
   bool window_open = true;
   Shader drawing_shader;
   Texture display_surface;
   std::vector<Texture> textures;
   Shader postprocessing_shader;
-  Shader liquid_shader;
   void preset_pen();
   void preset_pen2();
+
 private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
@@ -919,7 +1078,7 @@ private:
   float32 density = 25.f;
   float32 pow = 1.5f;
   float32 previous_speed = 0.0f;
-  float32 last_time = 0.0f;
+  float32 last_run_visit_time = 0.0f;
   bool apply_pow = false;
   bool constant_density = true;
   int32 smoothing_count = 1;
@@ -928,10 +1087,13 @@ private:
   bool save_dialogue = false;
   int32 save_type_radio_button_state = 0;
   std::string filename;
-  Texture create_new_texture(const char* name = nullptr);
+  float32 sim_time = 0.f;
 
+  void iterate(Texture *t, float32 time);
+
+  Texture create_new_texture(const char *name = nullptr);
 };
-mat4 ortho_projection(ivec2 dst_size);
+mat4 fullscreen_quad();
 struct Renderer
 {
   // todo: irradiance map generation

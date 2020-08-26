@@ -82,7 +82,13 @@ set(GLAD_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/Third_party/glad/glad_debug/include")
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 include_directories (${GLAD_INCLUDE_DIRS})
 
+#freetype
+target_include_directories (warg PRIVATE "Third_Party/freetype-windows-binaries-2.10.2/include/")
+target_link_libraries (warg "${CMAKE_SOURCE_DIR}/Third_party/freetype-windows-binaries-2.10.2/win64/freetype.lib")
+
+
 target_include_directories (warg PRIVATE "Third_Party")
+target_include_directories (warg PRIVATE "Third_Party/imgui")
 target_include_directories (warg PRIVATE "")
 
 
@@ -107,6 +113,7 @@ set(DLL_COPIES ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/assimp/x64/Release/assimp
                ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/SDL2_image-2.0.3/lib/x64/libwebp-7.dll
                ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/SDL2_image-2.0.3/lib/x64/SDL2_image.dll
                ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/SDL2_image-2.0.3/lib/x64/zlib1.dll
+               ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/freetype-windows-binaries-2.10.2/win64/freetype.dll
                )
 
                 

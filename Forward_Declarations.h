@@ -79,5 +79,3 @@ using namespace glm;
 #include <variant>
 #include <vector>
 #include <Windows.h>
-#include <imgui/misc/freetype/imgui_freetype.h>
-#include <imgui/misc/freetype/imgui_freetype.cpp>

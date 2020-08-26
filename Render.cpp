@@ -174,7 +174,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.use();
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform("lod", uint32(1));
-  gaussian_blur_shader.set_uniform("transform", ortho_projection(*dst_size));
+  gaussian_blur_shader.set_uniform("transform", fullscreen_quad());
   src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
@@ -292,6 +292,36 @@ int32 save_texture(Texture *texture, std::string filename, uint32 level)
     int32 result = stbi_write_png(s(texture->t.name, ".png").c_str(), width, height, comp, &data[0], 0);
     return result;
   }
+}
+
+int32 save_texture_type(GLuint texture, ivec2 size, std::string filename, std::string type, uint32 level)
+{
+  uint32 width = size.x;
+  uint32 height = size.y;
+
+  if (type == "hdr")
+  {
+    uint32 comp = 4;
+    std::vector<float32> data(width * height * comp);
+    uint32 size = data.size() * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
+
+    int32 result = stbi_write_hdr(s(filename, ".hdr").c_str(), width, height, comp, &data[0]);
+    return result;
+  }
+  if (type == "png")
+  {
+    uint32 comp = 4;
+    std::vector<uint8> data(width * height * comp);
+    uint32 size = data.size() * sizeof(uint8);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
+
+    int32 result = stbi_write_png(s(filename, ".png").c_str(), width, height, comp, &data[0], 0);
+    return result;
+  }
+  return 0;
 }
 
 int32 save_texture_type(Texture *texture, std::string filename, std::string type, uint32 level)
@@ -1209,7 +1239,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   lut_fbo.color_attachments[0] = brdf_integration_lut;
   lut_fbo.init();
   lut_fbo.bind_for_drawing_dst();
-  auto mat = ortho_projection(brdf_lut_size);
+  auto mat = fullscreen_quad();
   glViewport(0, 0, brdf_lut_size.x, brdf_lut_size.y);
   brdf_lut_generator.set_uniform("transform", mat);
   set_message("drawing brdf lut..", "", 1.0f);
@@ -1274,13 +1304,9 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
-mat4 ortho_projection(ivec2 dst_size)
+mat4 fullscreen_quad()
 {
-  mat4 o = ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f, 100.0f);
-  mat4 t = translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1));
-  mat4 s = scale(vec3(dst_size, 1));
-
-  return o * t * s;
+  return scale(vec3(2, 2, 1));
 }
 
 void Renderer::draw_imgui()
@@ -1546,7 +1572,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   glDisable(GL_CULL_FACE);
   // glBindVertexArray(quad.get_vao());
   shader->use();
-  shader->set_uniform("transform", ortho_projection(viewport_size));
+  shader->set_uniform("transform", fullscreen_quad());
   shader->set_uniform("time", (float32)get_real_time());
   // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -1645,7 +1671,7 @@ void Renderer::instance_pass(float32 time)
     glViewport(0, 0, size.x, size.y);
     passthrough.use();
     draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
     quad.draw();
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -1851,7 +1877,7 @@ void Renderer::translucent_pass(float32 time)
     glViewport(0, 0, size.x, size.y);
     passthrough.use();
     draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
     quad.draw();
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -1994,7 +2020,7 @@ void Renderer::postprocess_pass(float32 time)
   bloom_fbo.init();
   bloom_fbo.bind_for_drawing_dst();
   high_pass_shader.use();
-  high_pass_shader.set_uniform("transform", ortho_projection(size));
+  high_pass_shader.set_uniform("transform", fullscreen_quad());
   glViewport(0, 0, size.x, size.y);
   draw_target.color_attachments[0].bind(0);
   quad.draw();
@@ -2028,7 +2054,7 @@ void Renderer::postprocess_pass(float32 time)
     vec2 gaus_scale = vec2(aspect_ratio_factor * blur_radius, 0.0);
     gaussian_blur_15x.set_uniform("gauss_axis_scale", gaus_scale);
     gaussian_blur_15x.set_uniform("lod", i);
-    gaussian_blur_15x.set_uniform("transform", ortho_projection(resolution));
+    gaussian_blur_15x.set_uniform("transform", fullscreen_quad());
     quad.draw();
 
     gaus_scale = vec2(0.0f, blur_radius);
@@ -2049,7 +2075,7 @@ void Renderer::postprocess_pass(float32 time)
   bloom_mix.use();
   bloom_target.bind(0);
   glViewport(0, 0, bloom_result.t.size.x, bloom_result.t.size.y);
-  bloom_mix.set_uniform("transform", ortho_projection(bloom_result.t.size));
+  bloom_mix.set_uniform("transform", fullscreen_quad());
   bloom_mix.set_uniform("mip_count", levels);
   quad.draw();
   // all of these bloom textures should now be averaged and drawn into a texture at 1/4 the source resolution
@@ -2061,7 +2087,7 @@ void Renderer::postprocess_pass(float32 time)
   bloom_result.bind(0);
   glViewport(0, 0, size.x, size.y);
   passthrough.use();
-  passthrough.set_uniform("transform", ortho_projection(size));
+  passthrough.set_uniform("transform", fullscreen_quad());
   if (enabled)
     quad.draw();
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -2148,7 +2174,7 @@ void Renderer::render(float64 state_time)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     passthrough.use();
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind(0);
 
@@ -2199,7 +2225,7 @@ void Renderer::render(float64 state_time)
       previous_draw_target.color_attachments[0].bind(1);
     }
 
-    temporalaa.set_uniform("transform", ortho_projection(window_size));
+    temporalaa.set_uniform("transform", fullscreen_quad());
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
     glActiveTexture(GL_TEXTURE0);
@@ -2212,7 +2238,7 @@ void Renderer::render(float64 state_time)
     glViewport(0, 0, size.x, size.y);
     passthrough.use();
     draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
@@ -2232,7 +2258,7 @@ void Renderer::render(float64 state_time)
     glBindVertexArray(quad.get_vao());
     tonemapping_target_srgb8.bind_for_drawing_dst();
     tonemapping.use();
-    tonemapping.set_uniform("transform", ortho_projection(size));
+    tonemapping.set_uniform("transform", fullscreen_quad());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
@@ -2269,7 +2295,7 @@ void Renderer::render(float64 state_time)
     fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
     fxaa.set_uniform("ITERATIONS", ITERATIONS);
     fxaa.set_uniform("QUALITY", QUALITY);
-    fxaa.set_uniform("transform", ortho_projection(window_size));
+    fxaa.set_uniform("transform", fullscreen_quad());
     fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
     fxaa.set_uniform("time", (float32)state_time);
     // glDisable(GL_FRAMEBUFFER_SRGB);
@@ -2277,7 +2303,7 @@ void Renderer::render(float64 state_time)
   else
   {
     passthrough.use();
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
 
     // glDisable(GL_FRAMEBUFFER_SRGB);
   }
@@ -2306,7 +2332,7 @@ void Renderer::render(float64 state_time)
   glEnable(GL_FRAMEBUFFER_SRGB);
 
   passthrough.use();
-  passthrough.set_uniform("transform", ortho_projection(window_size));
+  passthrough.set_uniform("transform", fullscreen_quad());
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   fxaa_target_srgb8.color_attachments[0].bind(0);
 
@@ -2315,10 +2341,6 @@ void Renderer::render(float64 state_time)
 
   FRAME_TIMER.stop();
   SWAP_TIMER.start();
-  GLint par = -3;
-  GLint srgb = GL_SRGB;
-  GLint rgb = GL_LINEAR;
-  glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_FRONT, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &par);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, 0);
   glDisable(GL_FRAMEBUFFER_SRGB);
@@ -3674,6 +3696,14 @@ void Texture_Paint::preset_pen2()
   brush_color = vec4(1);
 }
 
+void Texture_Paint::iterate(float32 current_time) {
+
+
+
+
+
+}
+
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 {
 
@@ -3761,10 +3791,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     }
     ImGui::EndCombo();
   }
-
+  ImGui::PushID("blendmode");
   if (ImGui::BeginCombo("", selected_blendmode))
   {
-    if (ImGui::Selectable("Blend Mode"))
+    if (ImGui::Selectable("Blend"))
     {
       blendmode = 1;
       // put_imgui_texture_button(&preview, vec2(128));
@@ -3781,6 +3811,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     }
     ImGui::EndCombo();
   }
+  ImGui::PopID();
   ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Intensity", &intensity, 0.001, -100, 100, "%.3f", 2.5f);
   ImGui::SetNextItemWidth(60);
@@ -3853,11 +3884,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     fbo_intermediate.init();
     fbo_intermediate.bind_for_drawing_dst();
     glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-    mat4 mat = ortho_projection(surface->texture->size);
     surface->bind(0);
     copy.use();
     copy.set_uniform("texture0_mod", vec4(1));
-    copy.set_uniform("transform", mat);
+    copy.set_uniform("transform", fullscreen_quad());
     quad.draw();
     textures.insert(textures.begin() + selected_texture, new_texture);
     selected_texture += 1;
@@ -3896,7 +3926,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     }
     ImGui::SameLine();
     ImGui::BeginGroup();
-    // ImGui::BeginChild(s("buttons for ", i).c_str(), ImVec2(30, 160), true,flags1);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
     if (ImGui::Button("X"))
     {
@@ -3986,7 +4015,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
       ImGui::EndPopup();
     }
     ImGui::EndGroup();
-    // ImGui::EndChild();
 
     ImGui::PopID();
   }
@@ -4071,6 +4099,13 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     intermediate.load();
   }
 
+  
+  while (sim_time + dt < time)
+  {
+    iterate(surface,sim_time);
+    sim_time +=dt;
+  }
+
   fbo_drawing.color_attachments[0] = *surface;
   fbo_intermediate.color_attachments[0] = intermediate;
   fbo_preview.color_attachments[0] = preview;
@@ -4083,7 +4118,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   fbo_intermediate.bind_for_drawing_dst();
   glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-  mat4 mat = ortho_projection(surface->texture->size);
+  mat4 mat = fullscreen_quad();
   surface->bind(0);
   copy.use();
   copy.set_uniform("texture0_mod", vec4(1));
@@ -4091,11 +4126,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   quad.draw();
 
   fbo_drawing.bind_for_drawing_dst();
-  mat = ortho_projection(surface->texture->size);
   intermediate.bind(0);
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", vec4(1));
-  drawing_shader.set_uniform("transform", mat);
+  drawing_shader.set_uniform("transform", fullscreen_quad());
   drawing_shader.set_uniform("mouse_pos", ndc_cursor);
   drawing_shader.set_uniform("size", size);
   drawing_shader.set_uniform("intensity", intensity);
@@ -4141,9 +4175,16 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
       is_new_click = true;
     }
 
-    float32 dt = max(0.00001f, time - last_time);
-    float32 apparent_speed = length(last_drawn_ndc - ndc_cursor);
-    float32 deltaspeed = abs(apparent_speed - previous_speed);
+    float32 dt = max(0.00001f, time - last_run_visit_time);
+    float32 d = length(last_drawn_ndc - ndc_cursor);
+    float32 speed = d / dt;
+    float32 deltaspeed = abs(speed - previous_speed);
+    float32 d_curve = zoom * glm::pow(d, .50f);
+
+    if (d == 0 && !is_new_click)
+    {
+      draw = false;
+    }
 
     if (draw)
     {
@@ -4154,12 +4195,15 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
           fbo_drawing.bind_for_drawing_dst();
           intermediate.bind(0);
 
-          for (uint32 i = 0; i < smoothing_count; ++i)
+          uint32 smoothing_iterations = float32(smoothing_count) * d_curve;
+          smoothing_iterations = glm::max(smoothing_iterations, (uint32)1);
+          set_message("smoothing_iterations", s(smoothing_iterations), 1.0f);
+          for (uint32 i = 0; i < smoothing_iterations; ++i)
           {
             if (i > 100)
               break;
 
-            vec2 p = mix(last_drawn_ndc, ndc_cursor, float32(i + 1) / smoothing_count);
+            vec2 p = mix(last_drawn_ndc, ndc_cursor, float32(i + 1) / smoothing_iterations);
             intermediate.bind(0);
             fbo_drawing.bind_for_drawing_dst();
             drawing_shader.use();
@@ -4168,10 +4212,16 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
             vec4 calculated_brush_color = brush_color;
             if (blendmode == 2) // add
             {
-              calculated_brush_color = (1.0f / smoothing_count) * brush_color;
+              calculated_brush_color = (1.0f / smoothing_iterations) * brush_color;
             }
+            float32 t_of_stroke = ((float32(i) + 1.f) / smoothing_iterations);
+            // float32 adjusted_speed = mix(d*previous_speed,speed,t_of_stroke);
+            float32 adjusted_speed = mix(previous_speed, speed, t_of_stroke);
+            vec4 mul = vec4(vec3(adjusted_speed), 1.0f);
+            calculated_brush_color = mul * calculated_brush_color;
+
             drawing_shader.set_uniform("brush_color", calculated_brush_color);
-            if (i == smoothing_count - 1) // actual mouse pos
+            if (i == smoothing_iterations - 1) // actual mouse pos
             {
               // drawing_shader.set_uniform("brush_color", vec4(1, 0, 0, 1));
             }
@@ -4179,7 +4229,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
             { // we sometimes get the same cursor position even if we're moving
               quad.draw();
             }
-            bool not_last_iteration = (i + 1) < smoothing_count;
+            bool not_last_iteration = (i + 1) < smoothing_iterations;
             if (not_last_iteration)
             {
               fbo_intermediate.bind_for_drawing_dst();
@@ -4203,7 +4253,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
           is_new_click = false;
           last_drawn_ndc = ndc_cursor;
           accumulator = 0.0f;
-          last_time = time;
+          last_run_visit_time = time;
         }
       }
       else
@@ -4262,7 +4312,11 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
         }
       }
     }
-    previous_speed = apparent_speed;
+
+    if (!(d == 0 && !is_new_click))
+    {
+      previous_speed = speed;
+    }
   }
 
   last_seen_mouse_ndc = ndc_cursor;
@@ -4293,7 +4347,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   fbo_preview.bind_for_drawing_dst();
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", clear_color);
-  drawing_shader.set_uniform("transform", ortho_projection(preview.texture->size));
+  drawing_shader.set_uniform("transform", fullscreen_quad());
   drawing_shader.set_uniform("mouse_pos", vec2(0));
   drawing_shader.set_uniform("size", 450.f);
   drawing_shader.set_uniform("mode", 3);
@@ -4315,5 +4369,5 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   ImGui::EndChild();
   ImGui::End();
-  last_time = time;
+  last_run_visit_time = time;
 }
