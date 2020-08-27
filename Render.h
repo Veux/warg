@@ -877,148 +877,56 @@ struct Particle_Emitter
 
 struct Liquid_Surface
 {
+  void run(float32 current_time);
 
-  void run() {}
-
-  Shader liquid_shader;
-
-  /*
-
-
-
-
-  float height[N*M];
-float vertical_derivative[N*M];
-float previous_height[N*M];
-// ... initialize to zero ...
-// ... begin loop over frames ...
-// --- This is the propagation code ---
-// Convolve height with the kernel
-// and put it into vertical_derivative
-Convolve( height, vertical_derivative );
-float temp;
-for(int k=0;k<N*M;k++)
-{
-temp = height[k];
-height[k] = height[k]*(2.0-alpha*dt)/(1.0+alpha*dt)- previous_height[k]/(1.0+alpha*dt)- vertical_derivative[k]*g*dt*dt/(1.0+alpha*dt);
-previous_height[k] = temp;
-}
-// --- end propagation code ---
-// ... end loop over frames ...
-
-
-
-h(x,y,t) is height (respect to mean) at pixel x,y at time t 
-
-
--g* is gravitational restoring force
-
-
-
-sqrt(-delta^2) is mass conservation operator, aka vertical derivative of the surface
-
-we need to evaluate this as a convolution
-
-
-
-
-
-
-kernel generation:
-
-uint32 WIDTH = 7;
-float32 G[WIDTH][WIDTH] = {0};
-
-G0 = 0
-for(uint32 n = 0; n < 10000; ++n)
-{
-  float o = 1.0f
-  float a = (n * 0.001)
-  G0 += (a*a) * exp(-o * (a*a));
-}
-for(uint32 y = 0; y < WIDTH; ++y)
-{
-  for(uint32 x = 0; x < WIDTH; ++x)
+  void set_heightmap(Texture texture)
   {
-    for(uint32 n = 0; n < 10000;++n)
-    {
-        float r = sqrt(x*x+y*y);
-        float a = (n * 0.001)
-        G[y][x] += (a*a) * exp(-o * (a*a)) * J(a*r) / G0
-    }
+    heightmap = texture;
+    invalidated = true;
   }
-}
 
+  
 
+private:
+  Texture heightmap;
+  Shader liquid_shader;
+  Texture heightmap_copy;
+  //Texture previous_heightmap;
+  Texture velocity;
+  
+  Framebuffer liquid_shader_fbo;
+  Framebuffer copy_fbo;
+  Shader copy;
+  Mesh quad;
 
+  bool invalidated = true;
+  bool initialized = false;
 
+  //my algo:
+  //bind current heightmap as input, and heightmap intermediate as output
 
+  //spill height data into adjacent pixels:
+  //use height difference to determine a delta velocity to add to a velocity texture for each pixel side
 
+  //the amount of height to spill away from this pixel in each direction is determined by the velocity texture
+  //this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
 
+  //we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means
+  //we will add a negative - subtracting our height
 
+  //this means that a wave can only propagate at a max speed of 1 pixel per draw..
+  //i think this is what the convolution was trying to do
 
-
-
-convolution:
-
-just as with the gaussian shader, we will have a look up table of values that are calculated
-and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and offsety
-
-where p is this pixels position:
-vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
-
-the number of iterations on the offsets, which is the width of the kernel, affects the quality
-
-
-however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to save work
-
-
-
-
-
-
-
-
-propagation:
-
-per pix: 
-
-  result = heightsample *(2.0-alpha*dt) -  (previous_frame_height_sample)/(1+alpha*dt) - vertical_derivative_sample *g*dt*dt / (1.0+alpha*dt);
-  previous_frame_height = heightsample
-  return result
-
-
-
-
-
-
-  so in summary, 
-  G(x,y) is a kernel sample at x,y
-  h(x,y) is a heightmap sample at x,y
-
-
-  1): we precompute the kernel like the gauss shader, except it will be a full 2d lut
-  2): we store a texture for the vertical derivative and compute it with:
-        inputs required: heightmap, kernel LUT (can be hardcoded in the shader code)
-        vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
-  3): we copy the heightmap texture, we will need it last frame
-  4): we propagate the waves
-        inputs required: vertical derivative texture, heightmap, previous_heightmap
-        output: heightmap
-
-        code:   
-        g is gravity
-        a = heightsample*(2.0-alpha*dt)
-        b = previous_frame_height_sample/(1+alpha*dt)
-        c = vertical_derivative_sample*g*dt*dt / (1.0+alpha*dt)
-        result = a - b - c;
   
 
 
+  //if we define a height level that is to be considered the underlying hard ground
+  //water added can flow on terrain easily
 
 
 
-  **/
+
+
 
 
 
@@ -1030,8 +938,6 @@ per pix:
 
   // when we iterate on velocity, we can also spread color along those vectors
 
-  Texture heightmap;
-  Texture heightmap_intermediate;
 };
 
 struct Texture_Paint
@@ -1046,7 +952,7 @@ struct Texture_Paint
   Shader postprocessing_shader;
   void preset_pen();
   void preset_pen2();
-
+  Liquid_Surface liquid;
 private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
@@ -1088,6 +994,7 @@ private:
   int32 save_type_radio_button_state = 0;
   std::string filename;
   float32 sim_time = 0.f;
+  bool draw_cursor = false;
 
   void iterate(Texture *t, float32 time);
 

@@ -3696,12 +3696,10 @@ void Texture_Paint::preset_pen2()
   brush_color = vec4(1);
 }
 
-void Texture_Paint::iterate(float32 current_time) {
+void Texture_Paint::iterate(Texture *t, float32 current_time)
+{
 
-
-
-
-
+  liquid.run(current_time);
 }
 
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
@@ -3719,7 +3717,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     drawing_shader = Shader("passthrough.vert", "paint.frag");
     copy = Shader("passthrough.vert", "passthrough.frag");
     postprocessing_shader = Shader("passthrough.vert", "paint_postprocessing.frag");
-    liquid_shader = Shader("passthrough.vert", "liquid.frag");
 
     textures.push_back(create_new_texture());
 
@@ -3729,6 +3726,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     preview.load();
 
     initialized = true;
+
+    liquid.set_heightmap(textures[0]);
   }
 
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
@@ -3755,10 +3754,13 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::BeginChild("asdgasda", ImVec2(240, 0), true);
   ImGui::Checkbox("HDR", &hdr);
   ImGui::SameLine();
+  
+  ImGui::Checkbox("Cursor",&draw_cursor);
   if (ImGui::Button("Clear"))
   {
     clear = 1;
   }
+  
   ImGui::SameLine();
   if (ImGui::Button("Clear Color"))
   {
@@ -3892,16 +3894,17 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     textures.insert(textures.begin() + selected_texture, new_texture);
     selected_texture += 1;
     surface = &textures[selected_texture];
+
+    liquid.set_heightmap(*surface);
   }
   ImGui::SameLine();
   if (ImGui::Button("Clear all"))
   {
     textures.clear();
-    Texture dst = Texture("Untitled", vec2(2048), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
-    dst.load();
-    textures.push_back(dst);
+    textures.push_back(create_new_texture());
     selected_texture = 0;
     surface = &textures[selected_texture];
+    liquid.set_heightmap(*surface);
   }
 
   for (uint32 i = 0; i < textures.size(); ++i)
@@ -4099,11 +4102,12 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     intermediate.load();
   }
 
-  
+  liquid.run(time);
+
   while (sim_time + dt < time)
   {
-    iterate(surface,sim_time);
-    sim_time +=dt;
+    // iterate(surface, sim_time);
+    sim_time += dt;
   }
 
   fbo_drawing.color_attachments[0] = *surface;
@@ -4363,7 +4367,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   postprocessing_shader.set_uniform("zoom", zoom);
   postprocessing_shader.set_uniform("time", time);
   postprocessing_shader.set_uniform("tonemap_aces", (int32)postprocess_aces);
-  postprocessing_shader.set_uniform("mouse_pos", ndc_cursor);
+  postprocessing_shader.set_uniform("mouse_pos", draw_cursor?ndc_cursor:vec2(-9999999));
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
 
@@ -4371,3 +4375,227 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::End();
   last_run_visit_time = time;
 }
+
+void Liquid_Surface::run(float32 current_time)
+{
+
+  if (!heightmap.texture || !heightmap.texture->texture)
+  {
+    return;
+  }
+  if (!initialized)
+  {
+    liquid_shader = Shader("passthrough.vert", "liquid.frag");
+    Mesh_Descriptor md(plane, "Texture_Paint's quad");
+    quad = Mesh(md);
+    copy = Shader("passthrough.vert", "passthrough.frag");
+    initialized = true;
+  }
+
+  if (invalidated)
+  {
+    if (!heightmap.texture)
+      return;
+
+    heightmap_copy.t = heightmap.t;
+    velocity.t = heightmap.t;
+    // previous_heightmap.t = heightmap.t;
+
+    heightmap_copy.load();
+    velocity.load();
+    // previous_heightmap.load();
+
+    copy_fbo.color_attachments[0] = heightmap_copy;
+    copy_fbo.init();
+
+    liquid_shader_fbo.color_attachments[0] = heightmap;
+    liquid_shader_fbo.init();
+
+    invalidated = false;
+  }
+
+  copy_fbo.bind_for_drawing_dst();
+  glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
+  heightmap.bind(0);
+  copy.use();
+  copy.set_uniform("transform", fullscreen_quad());
+  quad.draw();
+
+  liquid_shader_fbo.bind_for_drawing_dst();
+  heightmap_copy.bind(0);
+  liquid_shader.use();
+  liquid_shader.set_uniform("transform", fullscreen_quad());
+  liquid_shader.set_uniform("time", current_time);
+  quad.draw();
+}
+
+/*
+
+
+
+
+float height[N*M];
+float vertical_derivative[N*M];
+float previous_height[N*M];
+// ... initialize to zero ...
+// ... begin loop over frames ...
+// --- This is the propagation code ---
+// Convolve height with the kernel
+// and put it into vertical_derivative
+Convolve( height, vertical_derivative );
+float temp;
+for(int k=0;k<N*M;k++)
+{
+temp = height[k];
+height[k] = height[k]*(2.0-alpha*dt)/(1.0+alpha*dt)- previous_height[k]/(1.0+alpha*dt)-
+vertical_derivative[k]*g*dt*dt/(1.0+alpha*dt); previous_height[k] = temp;
+}
+// --- end propagation code ---
+// ... end loop over frames ...
+
+
+
+h(x,y,t) is height (respect to mean) at pixel x,y at time t
+
+
+-g* is gravitational restoring force
+
+
+
+sqrt(-delta^2) is mass conservation operator, aka vertical derivative of the surface
+
+we need to evaluate this as a convolution
+
+
+kernel generation:
+
+uint32 WIDTH = 7;
+float32 G[WIDTH][WIDTH] = {0};
+
+G0 = 0
+for(uint32 n = 0; n < 10000; ++n)
+{
+float o = 1.0f
+float a = (n * 0.001)
+G0 += (a*a) * exp(-o * (a*a));
+}
+for(uint32 y = 0; y < WIDTH; ++y)
+{
+for(uint32 x = 0; x < WIDTH; ++x)
+{
+for(uint32 n = 0; n < 10000;++n)
+{
+  float r = sqrt(x*x+y*y);
+  float a = (n * 0.001)
+  G[y][x] += (a*a) * exp(-o * (a*a)) * J(a*r) / G0
+}
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+convolution:
+
+just as with the gaussian shader, we will have a look up table of values that are calculated
+and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and offsety
+
+where p is this pixels position:
+vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
+
+the number of iterations on the offsets, which is the width of the kernel, affects the quality
+
+
+however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to save
+work
+
+
+
+
+
+
+
+
+propagation:
+
+per pix:
+
+result = heightsample *(2.0-alpha*dt) -  (previous_frame_height_sample)/(1+alpha*dt) - vertical_derivative_sample
+*g*dt*dt / (1.0+alpha*dt); previous_frame_height = heightsample return result
+
+
+
+
+
+
+so in summary,
+G(x,y) is a kernel sample at x,y
+h(x,y) is a heightmap sample at x,y
+
+
+1): we precompute the kernel like the gauss shader, except it will be a full 2d lut
+2): we store a texture for the vertical derivative and compute it with:
+  inputs required: heightmap, kernel LUT (can be hardcoded in the shader code)
+  vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
+3): we copy the heightmap texture, we will need it last frame
+4): we propagate the waves
+  inputs required: vertical derivative texture, heightmap, previous_heightmap
+  output: heightmap
+
+  code:
+  g is gravity
+  a = heightsample*(2.0-alpha*dt)
+  b = previous_frame_height_sample/(1+alpha*dt)
+  c = vertical_derivative_sample*g*dt*dt / (1.0+alpha*dt)
+  result = a - b - c;
+
+
+
+
+
+
+**/
+//
+//// const uint32 WIDTH = 2 * 7;
+// const int32 P = 7;
+// static float32 G[(2 * P) + 1][(2 * P) + 1] = {0};
+
+// const float32 o = 1.0f;
+// static float32 G0 = 0;
+
+// static bool computed = false;
+// if (!computed)
+//{
+//  computed = true;
+//  for (int32 n = 1; n <= 10000; ++n)
+//  {
+//    float32 qn = 0.001f * n;
+//    float32 qsqr = qn * qn;
+//    G0 = G0 + (qsqr * exp(-o * qsqr));
+//  }
+//  for (int32 l = -P; l <= P; ++l)
+//  {
+//    for (int32 k = -P; k <= P; ++k)
+//    {
+//      float32 r = sqrt(k * k + l * l);
+//      int32 xi = P + k;
+//      int32 yi = P + l;
+//      for (int32 n = 1; n <= 10000; ++n)
+//      {
+//        float32 qn = 0.001f * n;
+//        float32 qsqr = qn * qn;
+//        G[yi][xi] = G[yi][xi] + (qsqr * exp(-o * qsqr) * j0(qn * r));
+//      }
+//      G[yi][xi] = G[yi][xi] / G0;
+//    }
+//  }
+//}
+
+// ImGui::PlotLines("plotterboi", &G[0][0], 2 * P + 1, 0, "overlaytext", -2, 2, ImVec2(320, 320));

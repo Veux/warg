@@ -7,8 +7,11 @@ layout(location = 0) out vec4 out0;
 
 void main()
 {
+  vec4 source = texture2D(texture0, frag_uv);
+  float h = 0.04f;
+  vec4 result = source - h*source;
 
-  float h = sin(frag_uv.x + 0.1f*time);
+  
 
-  out0 = h + texture2D(texture0, frag_uv);
+  out0 = max(result ,vec4(0));
 }
