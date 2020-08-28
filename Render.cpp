@@ -4433,6 +4433,11 @@ void Liquid_Surface::run(float32 current_time)
 
     invalidated = false;
   }
+
+  for (uint32 i = 0; i < 5; ++i)
+  {
+
+
   glDisable(GL_BLEND);
   // copy heightmap
   copy_fbo.color_attachments[0] = heightmap_copy;
@@ -4462,6 +4467,8 @@ void Liquid_Surface::run(float32 current_time)
   liquid_shader.set_uniform("transform", fullscreen_quad());
   liquid_shader.set_uniform("time", current_time);
   quad.draw();
+    
+  }
 }
 
 /*

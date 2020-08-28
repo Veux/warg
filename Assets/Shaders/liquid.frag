@@ -12,10 +12,19 @@ float dt = 0.01f;
 vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_other)
 {
 
-
+    
     ivec2 sample_loc = clamp(samp_loc,ivec2(0),ivec2(2048-1));
     float height_other = texelFetch(texture0,sample_loc,0).r;
     //height_other = 0.f;
+    
+    float block = texelFetch(texture0,sample_loc,0).g;
+
+    if(block > 0.8f)
+    {
+    vec2 p = gl_FragCoord.xy;
+      height_other = texelFetch(texture0,ivec2(floor(p)),0).r;
+    }
+
 
     float height_difference = height_other-h;
     //height_difference = 0.f;
@@ -25,7 +34,7 @@ vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_other)
     //updated_velocity = velocity_other;
     float delta_height = dt*updated_velocity;
     //return vec2(0,0);
-   return vec4(delta_height,updated_velocity,0,0);
+   return vec4(delta_height,.9999f*updated_velocity,0,0);
 
     //h = 0
     //velocity_other = 0
@@ -93,6 +102,9 @@ void main()
   vec4 velocity = texelFetch(texture1,ivec2(floor(p)),0).rgba;
   
   float height = heightmap.r;
+  float block = heightmap.g;
+
+
 
   vec4 left = calc_contribution(height,ivec2(p.x-1,p.y),velocity.r);
   vec4 right = calc_contribution(height,ivec2(p.x+1,p.y),velocity.g);
@@ -104,15 +116,16 @@ void main()
   float delta_height_sum = (left.r + right.r + down.r + up.r);
   //delta_height_sum = 4.f*delta_height_sum;
   float height_result = height+delta_height_sum;
-  
-  height_result = mix(height_result,0.5f,0.008f);
-
   vec4 velocity_pack = vec4(left.g, right.g, down.g, up.g);
+  
 
-  velocity_pack = mix(velocity_pack,vec4(0),0.008f);
+  //dampens and converges to mean
+  //need a better way to do this so that it works on terrain
+//  height_result = mix(height_result,0.5f,0.000f);
+//  velocity_pack = mix(velocity_pack,vec4(0),0.008f);
 
   //velocity_pack = vec4(0);
-  out0 = vec4(vec3(height_result),1);
+  out0 = vec4(height_result,block,0,1);
   //out0 = velocity;
   //out0 = vec4(p/2048,0,1);
   out1 = velocity_pack;
