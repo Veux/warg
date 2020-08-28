@@ -893,6 +893,7 @@ private:
   Texture heightmap_copy;
   //Texture previous_heightmap;
   Texture velocity;
+  Texture velocity_copy;
   
   Framebuffer liquid_shader_fbo;
   Framebuffer copy_fbo;

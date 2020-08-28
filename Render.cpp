@@ -3666,7 +3666,7 @@ Texture Texture_Paint::create_new_texture(const char *name)
   {
     tname = name;
   }
-  Texture t = Texture(tname, vec2(2048), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+  Texture t = Texture(tname, vec2(2048), 1, GL_RGBA32F, GL_LINEAR, GL_LINEAR);
   t.load();
   return t;
 }
@@ -3754,13 +3754,13 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::BeginChild("asdgasda", ImVec2(240, 0), true);
   ImGui::Checkbox("HDR", &hdr);
   ImGui::SameLine();
-  
-  ImGui::Checkbox("Cursor",&draw_cursor);
+
+  ImGui::Checkbox("Cursor", &draw_cursor);
   if (ImGui::Button("Clear"))
   {
     clear = 1;
   }
-  
+
   ImGui::SameLine();
   if (ImGui::Button("Clear Color"))
   {
@@ -4367,7 +4367,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   postprocessing_shader.set_uniform("zoom", zoom);
   postprocessing_shader.set_uniform("time", time);
   postprocessing_shader.set_uniform("tonemap_aces", (int32)postprocess_aces);
-  postprocessing_shader.set_uniform("mouse_pos", draw_cursor?ndc_cursor:vec2(-9999999));
+  postprocessing_shader.set_uniform("mouse_pos", draw_cursor ? ndc_cursor : vec2(-9999999));
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
 
@@ -4399,21 +4399,44 @@ void Liquid_Surface::run(float32 current_time)
 
     heightmap_copy.t = heightmap.t;
     velocity.t = heightmap.t;
-    // previous_heightmap.t = heightmap.t;
+    velocity_copy.t = heightmap.t;
 
     heightmap_copy.load();
     velocity.load();
-    // previous_heightmap.load();
+    velocity_copy.load();
 
     copy_fbo.color_attachments[0] = heightmap_copy;
     copy_fbo.init();
 
+    liquid_shader_fbo.color_attachments.resize(2);
     liquid_shader_fbo.color_attachments[0] = heightmap;
+    liquid_shader_fbo.color_attachments[1] = velocity;
     liquid_shader_fbo.init();
+
+
+    //// zero velocity?
+    //copy_fbo.color_attachments[0] = velocity;
+    //copy_fbo.init();
+    //copy_fbo.bind_for_drawing_dst();
+    //glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+    //glClearColor(0,0,0,0);
+    //glClear(GL_COLOR_BUFFER_BIT);
+
+    //// zero velocity?
+    //copy_fbo.color_attachments[0] = velocity_copy;
+    //copy_fbo.init();
+    //copy_fbo.bind_for_drawing_dst();
+    //glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+    //glClearColor(0,0,0,0);
+    //glClear(GL_COLOR_BUFFER_BIT);
+
 
     invalidated = false;
   }
-
+  glDisable(GL_BLEND);
+  // copy heightmap
+  copy_fbo.color_attachments[0] = heightmap_copy;
+  copy_fbo.init();
   copy_fbo.bind_for_drawing_dst();
   glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
   heightmap.bind(0);
@@ -4421,8 +4444,20 @@ void Liquid_Surface::run(float32 current_time)
   copy.set_uniform("transform", fullscreen_quad());
   quad.draw();
 
+  // copy velocity
+  copy_fbo.color_attachments[0] = velocity_copy;
+  copy_fbo.init();
+  copy_fbo.bind_for_drawing_dst();
+  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  velocity.bind(0);
+  copy.use();
+  copy.set_uniform("transform", fullscreen_quad());
+  quad.draw();
+
+  // draw shader
   liquid_shader_fbo.bind_for_drawing_dst();
   heightmap_copy.bind(0);
+  velocity_copy.bind(1);
   liquid_shader.use();
   liquid_shader.set_uniform("transform", fullscreen_quad());
   liquid_shader.set_uniform("time", current_time);

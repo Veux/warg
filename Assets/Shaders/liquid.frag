@@ -1,17 +1,119 @@
 #version 330
-uniform sampler2D texture0;
+uniform sampler2D texture0;//height_copy
+uniform sampler2D texture1;//velocity_copy
 uniform float time;
 in vec2 frag_uv;
 
-layout(location = 0) out vec4 out0;
+layout(location = 0) out vec4 out0;//height
+layout(location = 1) out vec4 out1;//velocity
 
+float dt = 0.01f;
+
+vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_other)
+{
+
+
+    ivec2 sample_loc = clamp(samp_loc,ivec2(0),ivec2(2048-1));
+    float height_other = texelFetch(texture0,sample_loc,0).r;
+    //height_other = 0.f;
+
+    float height_difference = height_other-h;
+    //height_difference = 0.f;
+    float acceleration = 3250.f*dt*height_difference;
+    //acceleration = 0.f;
+    float updated_velocity = velocity_other + acceleration;
+    //updated_velocity = velocity_other;
+    float delta_height = dt*updated_velocity;
+    //return vec2(0,0);
+   return vec4(delta_height,updated_velocity,0,0);
+
+    //h = 0
+    //velocity_other = 0
+    //height_other = 1
+    //height_diff = 1
+    //acceleration is 0.01;
+    //updated velocity is 0 + 0.01
+    //delta height is 0.001
+   //we return vec2(0.001,0.01)
+
+    //other pixel:
+    //h = 1
+    //velocity_other = 0
+    //height_other = 0
+    //height_diff = -1
+    //acceleration is -0.01
+    //updated velocity = -0.01
+    //delta_height = -0.001
+
+    //return vec2(-0.001,-0.01)
+
+
+
+
+
+    //if h is 0 for both pixels, and velocity is 0
+    //height_difference = 0;
+    //acceleration = 0;
+    //updated_velocity = 0
+    //delta_height = 0;
+    //return vec2(0,0)
+
+    
+
+    
+
+
+
+
+
+
+
+
+
+}
+
+
+//since we cant write to any pixel but our own, we want to 
+//calculate contribution from adjacent pixels flowint into this one
 void main()
 {
-  vec4 source = texture2D(texture0, frag_uv);
-  float h = 0.04f;
-  vec4 result = source - h*source;
+  
+  //one problem: velocity between pixels should be stored once, not twice
+  //currently each pixel stores a velocity value for each edge between pixels
+  //this means we can diverge over time as error accumulates
+  //3 options:
+  //we could leave it as is (maybe its fine?)
+  //we could run a shader that averages the edges out
+  //we could be smarter and only store them once anyway
+
+
+  vec2 p = gl_FragCoord.xy;
+
+  vec4 heightmap = texelFetch(texture0,ivec2(floor(p)),0).rgba;
+  vec4 velocity = texelFetch(texture1,ivec2(floor(p)),0).rgba;
+  
+  float height = heightmap.r;
+
+  vec4 left = calc_contribution(height,ivec2(p.x-1,p.y),velocity.r);
+  vec4 right = calc_contribution(height,ivec2(p.x+1,p.y),velocity.g);
+  vec4 down = calc_contribution(height,ivec2(p.x,p.y-1),velocity.b);
+  vec4 up = calc_contribution(height,ivec2(p.x,p.y+1),velocity.a);
 
   
 
-  out0 = max(result ,vec4(0));
+  float delta_height_sum = (left.r + right.r + down.r + up.r);
+  //delta_height_sum = 4.f*delta_height_sum;
+  float height_result = height+delta_height_sum;
+  
+  height_result = mix(height_result,0.5f,0.008f);
+
+  vec4 velocity_pack = vec4(left.g, right.g, down.g, up.g);
+
+  velocity_pack = mix(velocity_pack,vec4(0),0.008f);
+
+  //velocity_pack = vec4(0);
+  out0 = vec4(vec3(height_result),1);
+  //out0 = velocity;
+  //out0 = vec4(p/2048,0,1);
+  out1 = velocity_pack;
 }

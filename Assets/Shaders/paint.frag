@@ -123,52 +123,48 @@ void main()
   {
     p = size*(frag_uv-vec2(0.5));
   }
-  float brush_result = 0;
+  float brush_t = 0;
   if(brush_selection == 0)
   {
-    brush_result = brush0(p,d);
+    brush_t = brush0(p,d);
   }
   if(brush_selection == 1)
   {
-    brush_result = brush1(p,d);
+    brush_t = brush1(p,d);
   }
   if(brush_selection == 2)
   {
-    brush_result = brush2(p,d);
+    brush_t = brush2(p,d);
   }
   if(brush_selection == 3)
   {
-    brush_result = brush3(p,d);
+    brush_t = brush3(p,d);
   }
   if(brush_selection == 4)
   {
-    brush_result = brush4(p,d);
+    brush_t = brush4(p,d);
   }
   if(brush_selection == 5)
   {
-    brush_result = brush5(p,d);
+    brush_t = brush5(p,d);
   }
   if(brush_selection == 6)
   {
-    brush_result = brush6(p,d);
+    brush_t = brush6(p,d);
   }
   if(brush_selection == 7)
   {
-    brush_result = brush7(p,d);
+    brush_t = brush7(p,d);
   } 
   if(brush_selection == 8)
   {
-    brush_result = brush8(p,d);
+    brush_t = brush8(p,d);
   }
 
-  //if(brush_exponent != 1)
-  {
-    brush_result = intensity*pow(brush_result,brush_exponent);
-  }
- // else
-  {
-   // brush_result = intensity*brush_result;
-  }
+  
+  float brush_result = intensity*pow(brush_t,brush_exponent);
+  
+
 
   vec4 result_mod_color = brush_result*vec4(brush_color.rgb,1);
   vec4 result = vec4(0);
@@ -178,13 +174,11 @@ void main()
   }
   if(mode == 1)
   {
-    if(blendmode == 0)
-    {
-      result = mix(source,result_mod_color,brush_result);
-    }
-    if(blendmode == 1)
-    result = mix(source,brush_color,brush_result);
-    if(blendmode == 2)
+    if(blendmode == 0)//mix
+      result = mix(source,result_mod_color,brush_t);
+    if(blendmode == 1)//blend
+    result = mix(source,brush_color,brush_t);
+    if(blendmode == 2)//add
     result = source + result_mod_color;
   }
   if(mode == 2)
@@ -193,11 +187,11 @@ void main()
   }
   if(mode == 3)
   {    
-    if(blendmode == 0)
-    result = mix(source,result_mod_color,brush_result);
-    if(blendmode == 1)
-    result = mix(source,brush_color,brush_result);
-    if(blendmode == 2)
+    if(blendmode == 0)//mix
+    result = mix(source,result_mod_color,brush_t);
+    if(blendmode == 1)//blend
+    result = mix(source,brush_color,brush_t);
+    if(blendmode == 2)//add
     result = source + result_mod_color;
   }
   
