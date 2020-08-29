@@ -11,11 +11,8 @@ float dt = 0.01f;
 
 vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_other)
 {
-
-    
     ivec2 sample_loc = clamp(samp_loc,ivec2(0),ivec2(2048-1));
     float height_other = texelFetch(texture0,sample_loc,0).r;
-    //height_other = 0.f;
     
     float block = texelFetch(texture0,sample_loc,0).g;
 
@@ -27,14 +24,12 @@ vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_other)
 
 
     float height_difference = height_other-h;
-    //height_difference = 0.f;
-    float acceleration = 3250.f*dt*height_difference;
-    //acceleration = 0.f;
+    float acceleration = 3551.f*dt*height_difference;
     float updated_velocity = velocity_other + acceleration;
-    //updated_velocity = velocity_other;
     float delta_height = dt*updated_velocity;
-    //return vec2(0,0);
-   return vec4(delta_height,.9999f*updated_velocity,0,0);
+    return vec4(delta_height,.9995f*updated_velocity,0,0);
+    
+    //return vec4(delta_height,updated_velocity,0,0);
 
     //h = 0
     //velocity_other = 0

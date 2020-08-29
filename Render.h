@@ -885,6 +885,8 @@ struct Liquid_Surface
     invalidated = true;
   }
 
+  void zero_velocity();
+
   
 
 private:

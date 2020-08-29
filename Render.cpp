@@ -3758,12 +3758,14 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::Checkbox("Cursor", &draw_cursor);
   if (ImGui::Button("Clear"))
   {
+    liquid.zero_velocity();
     clear = 1;
   }
 
   ImGui::SameLine();
   if (ImGui::Button("Clear Color"))
   {
+    liquid.zero_velocity();
     clear = 2;
   }
 
@@ -3905,6 +3907,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     selected_texture = 0;
     surface = &textures[selected_texture];
     liquid.set_heightmap(*surface);
+    
   }
 
   for (uint32 i = 0; i < textures.size(); ++i)
@@ -4038,7 +4041,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ivec2 texture_size = zoom * vec2(surface->texture->size);
   const ImVec2 imgui_draw_cursor_pos = ImGui::GetCursorPos();
   ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
-
+  glGenerateTextureMipmap(display_surface.texture->texture);
   put_imgui_texture(&display_surface, texture_size);
 
   ImGui::SameLine();
@@ -4102,7 +4105,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     intermediate.load();
   }
 
-  liquid.run(time);
 
   while (sim_time + dt < time)
   {
@@ -4371,11 +4373,32 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
 
+  
+  liquid.run(time);
+
   ImGui::EndChild();
   ImGui::End();
   last_run_visit_time = time;
 }
 
+void Liquid_Surface::zero_velocity()
+{
+    // zero velocity?
+    copy_fbo.color_attachments[0] = velocity;
+    copy_fbo.init();
+    copy_fbo.bind_for_drawing_dst();
+    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+    glClearColor(0,0,0,0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // zero velocity?
+    copy_fbo.color_attachments[0] = velocity_copy;
+    copy_fbo.init();
+    copy_fbo.bind_for_drawing_dst();
+    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+    glClearColor(0,0,0,0);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
 void Liquid_Surface::run(float32 current_time)
 {
 
@@ -4401,6 +4424,10 @@ void Liquid_Surface::run(float32 current_time)
     velocity.t = heightmap.t;
     velocity_copy.t = heightmap.t;
 
+    heightmap_copy.t.name = "heightmap_copy";
+    velocity.t.name  = "velocity";
+    velocity_copy.t.name ="velocity_copy";
+
     heightmap_copy.load();
     velocity.load();
     velocity_copy.load();
@@ -4414,21 +4441,7 @@ void Liquid_Surface::run(float32 current_time)
     liquid_shader_fbo.init();
 
 
-    //// zero velocity?
-    //copy_fbo.color_attachments[0] = velocity;
-    //copy_fbo.init();
-    //copy_fbo.bind_for_drawing_dst();
-    //glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    //glClearColor(0,0,0,0);
-    //glClear(GL_COLOR_BUFFER_BIT);
-
-    //// zero velocity?
-    //copy_fbo.color_attachments[0] = velocity_copy;
-    //copy_fbo.init();
-    //copy_fbo.bind_for_drawing_dst();
-    //glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    //glClearColor(0,0,0,0);
-    //glClear(GL_COLOR_BUFFER_BIT);
+    zero_velocity();
 
 
     invalidated = false;

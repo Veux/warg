@@ -3,6 +3,54 @@
 #include "Globals.h"
 #include "Render.h"
 
+Mesh_Data generate_grid(ivec2 tile_count)
+{
+  Mesh_Data data;
+  data.positions.push_back(vec3(0));
+  data.normals.push_back(vec3(0, 0, 1));
+  data.tangents.push_back(vec3(1, 0, 0));
+  data.bitangents.push_back(vec3(0, 1, 0));
+
+  for (uint32 y = 0; y < tile_count.y; ++y)
+  {
+    data.positions.push_back(vec3(vec2(0, y), 0));
+    data.normals.push_back(vec3(0, 0, 1));
+    data.tangents.push_back(vec3(1, 0, 0));
+    data.bitangents.push_back(vec3(0, 1, 0));
+    for (uint32 x = 0; x < tile_count.x; ++x)
+    {
+
+      data.positions.push_back(vec3(vec2(x + 1, y), 0));
+      data.normals.push_back(vec3(0, 0, 1));
+      data.tangents.push_back(vec3(1, 0, 0));
+      data.bitangents.push_back(vec3(0, 1, 0));
+
+      data.positions.push_back(vec3(vec2(x + 1, y + 1), 0));
+      data.normals.push_back(vec3(0, 0, 1));
+      data.tangents.push_back(vec3(1, 0, 0));
+      data.bitangents.push_back(vec3(0, 1, 0));
+
+      uint32 index = data.positions.size() - 1;
+
+      data.indices.push_back(index - 3);
+      data.indices.push_back(index - 2);
+      data.indices.push_back(index - 1);
+
+      data.indices.push_back(index - 2);
+      data.indices.push_back(index - 0);
+      data.indices.push_back(index - 1);
+    }
+  }
+
+  vec2 tile_size = vec2(1.f) / vec2(tile_count);
+  vec2 offset = vec2(-0.5f);
+  for (uint32 i = 0; i < data.positions.size(); ++i)
+  {
+    data.positions[i] = vec3(tile_size,1)*data.positions[i];
+    data.positions[i] = data.positions[i] + vec3(offset,0);
+  }
+  return data;
+}
 void add_triangle(vec3 a, vec3 b, vec3 c, Mesh_Data &mesh)
 {
   std::vector<vec3> pos = {a, b, c};
