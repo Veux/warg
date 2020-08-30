@@ -33,7 +33,8 @@ enum Texture_Location
 
   brdf_ibl_lut,
   refraction,
-  t11,
+  t10,
+  displacement,
   uv_grid,
 
   s0, // shadow maps
@@ -341,6 +342,7 @@ struct Material_Descriptor
   Texture_Descriptor metalness;
   Texture_Descriptor emissive;
   Texture_Descriptor ambient_occlusion;
+  Texture_Descriptor displacement;
   Texture_Descriptor tangent; // anisotropic surface roughness    - unused for now
   Uniform_Set_Descriptor uniform_set;
   std::string vertex_shader;
@@ -434,7 +436,6 @@ struct Material
     return &descriptor;
   }
 
-private:
   bool reload_from_descriptor = true;
   Material_Descriptor descriptor;
   friend struct Renderer;
@@ -444,6 +445,7 @@ private:
   Texture roughness;
   Texture metalness;
   Texture ambient_occlusion;
+  Texture displacement;
   Shader shader;
   void load();
   void bind();
@@ -887,7 +889,7 @@ struct Liquid_Surface
 
   void zero_velocity();
 
-  
+  int32 iterations = 1;
 
 private:
   Texture heightmap;
@@ -956,7 +958,7 @@ struct Texture_Paint
   void preset_pen();
   void preset_pen2();
   Liquid_Surface liquid;
-private:
+//private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
   Framebuffer fbo_preview;

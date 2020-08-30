@@ -71,16 +71,20 @@ void small_object_refraction_settings(Uniform_Set_Descriptor *dst)
 
 void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 {
+
+  Mesh_Descriptor mesh;
+  mesh.name = "generated water grid";
+  mesh.mesh_data = generate_grid(ivec2(256));
   Material_Descriptor material;
-  material.emissive.mod = vec4(0, 0, 0.005, 1);
-  material.albedo.mod = vec4(.054, .135, .159, .998);
-  material.uses_transparency = true;
+ // material.emissive.mod = vec4(0, 0, 0.005, 1);
+  //material.albedo.mod = vec4(.054, .135, .159, .998);
+  //material.uses_transparency = true;
   material.uv_scale = vec2(1);
-  material.roughness.mod = vec4(0.25);
-  material.metalness.mod = vec4(0.84);
-  material.frag_shader = "water.frag";
+  //material.roughness.mod = vec4(0.25);
+ // material.metalness.mod = vec4(0.84);
+  //material.frag_shader = "water.frag";
   world_water_settings(&material.uniform_set);
-  Node_Index memewater = scene->add_mesh(cube, "water", &material);
+  Node_Index memewater = scene->add_mesh("water",&mesh, &material);
   scene->nodes[memewater].scale = scale;
   scene->nodes[memewater].position = pos;
 }
@@ -248,13 +252,15 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
+  spawn_water(&scene, vec3(25, 25, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
   spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   spawn_test_triangle(&scene);
   spawn_compass(&scene);
+
+
   // spawn_map(&scene);
 
   // scene.particle_emitters.push_back({});
@@ -653,6 +659,17 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 }
 void Render_Test_State::update()
 {
+
+
+  if(painter.textures.size() && painter.textures[0].texture != nullptr)
+  {
+    Node_Index water_node = scene.find_by_name(NODE_NULL,"water");
+    Flat_Scene_Graph_Node* node = &scene.nodes[water_node];
+    Material_Index mi = node->model[0].second;
+    Material* mat = &scene.resource_manager->material_pool[mi];
+    mat->displacement = painter.textures[painter.selected_texture];
+  }
+
 
   // update_grabbyarm(&scene, current_time);
   update_planets(&scene, current_time);

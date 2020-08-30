@@ -59,12 +59,16 @@ extern std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACH
 
 std::vector<Mesh_Handle> DEFERRED_MESH_DELETIONS;
 std::vector<Texture_Handle> DEFERRED_TEXTURE_DELETIONS;
+
+// all unsuccessful texture binds will bind white instead of default black
+// this means we need default values for the mod value of the textures
 Texture WHITE_TEXTURE;
 const vec4 DEFAULT_ALBEDO = vec4(1);
 const vec4 DEFAULT_NORMAL = vec4(0.5, 0.5, 1.0, 0.0);
 const vec4 DEFAULT_ROUGHNESS = vec4(0.3);
 const vec4 DEFAULT_METALNESS = vec4(0);
 const vec4 DEFAULT_EMISSIVE = vec4(0);
+const vec4 DEFAULT_DISPLACEMENT = vec4(0);
 const vec4 DEFAULT_AMBIENT_OCCLUSION = vec4(1);
 const std::string DEFAULT_VERTEX_SHADER = "vertex_shader.vert";
 const std::string DEFAULT_FRAG_SHADER = "fragment_shader.frag";
@@ -973,6 +977,7 @@ Material::Material(Material_Descriptor &m)
   descriptor.roughness.format = GL_R8;
   descriptor.metalness.format = GL_R8;
   descriptor.ambient_occlusion.format = GL_R8;
+  descriptor.displacement.format = GL_R8;
 
   albedo = Texture(descriptor.albedo);
   normal = Texture(descriptor.normal);
@@ -980,6 +985,7 @@ Material::Material(Material_Descriptor &m)
   roughness = Texture(descriptor.roughness);
   metalness = Texture(descriptor.metalness);
   ambient_occlusion = Texture(descriptor.ambient_occlusion);
+  displacement = Texture(descriptor.displacement);
 
   if (normal.t.source == "default")
   {
@@ -1003,6 +1009,12 @@ Material::Material(Material_Descriptor &m)
   {
     emissive.t.mod = DEFAULT_EMISSIVE;
     descriptor.emissive.mod = DEFAULT_EMISSIVE;
+  }
+
+  if (displacement.t.source == "default")
+  {
+    displacement.t.mod = DEFAULT_DISPLACEMENT;
+    descriptor.displacement.mod = DEFAULT_DISPLACEMENT;
   }
 
   if (descriptor.vertex_shader == "")
@@ -1028,6 +1040,7 @@ void Material::load()
   descriptor.roughness.format = GL_R8;
   descriptor.metalness.format = GL_R8;
   descriptor.ambient_occlusion.format = GL_R8;
+  descriptor.displacement.format = GL_R8;
 
   Texture newalbedo(descriptor.albedo);
   newalbedo.load();
@@ -1053,6 +1066,10 @@ void Material::load()
   newambient_occlusion.load();
   ambient_occlusion = newambient_occlusion;
 
+  Texture newdisplacement(descriptor.displacement);
+  newdisplacement.load();
+  displacement = newdisplacement;
+
   if (normal.t.source == "default")
   {
     normal.t.mod = DEFAULT_NORMAL;
@@ -1075,6 +1092,12 @@ void Material::load()
   {
     emissive.t.mod = DEFAULT_EMISSIVE;
     descriptor.emissive.mod = DEFAULT_EMISSIVE;
+  }
+
+  if (displacement.t.source == "default")
+  {
+    displacement.t.mod = DEFAULT_DISPLACEMENT;
+    descriptor.displacement.mod = DEFAULT_DISPLACEMENT;
   }
 
   if (descriptor.vertex_shader == "")
@@ -1133,6 +1156,13 @@ void Material::bind()
   if (!success)
   {
     shader.set_uniform("texture4_mod", DEFAULT_METALNESS);
+  }
+
+  success = displacement.bind(Texture_Location::displacement);
+  shader.set_uniform("texture11_mod", displacement.t.mod);
+  if (!success)
+  {
+    shader.set_uniform("texture11_mod", DEFAULT_DISPLACEMENT);
   }
 
   success = ambient_occlusion.bind(Texture_Location::ambient_occlusion);
@@ -1258,7 +1288,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 
 void Renderer::bind_white_to_all_textures()
 {
-  for (uint32 i = 0; i < Texture_Location::t11; ++i)
+  for (uint32 i = 0; i <= Texture_Location::displacement; ++i)
   {
     WHITE_TEXTURE.bind(Texture_Location(i));
   }
@@ -1605,7 +1635,6 @@ void Renderer::opaque_pass(float32 time)
   bind_white_to_all_textures();
   for (Render_Entity &entity : render_entities)
   {
-
     bind_white_to_all_textures();
     environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
     brdf_integration_lut.bind(brdf_ibl_lut);
@@ -3666,7 +3695,7 @@ Texture Texture_Paint::create_new_texture(const char *name)
   {
     tname = name;
   }
-  Texture t = Texture(tname, vec2(2048), 1, GL_RGBA32F, GL_LINEAR, GL_LINEAR);
+  Texture t = Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR_MIPMAP_LINEAR,GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }
@@ -3701,6 +3730,8 @@ void Texture_Paint::iterate(Texture *t, float32 current_time)
 
   liquid.run(current_time);
 }
+
+
 
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 {
@@ -3772,7 +3803,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::SameLine();
   ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
   ImGui::InputFloat("Zoom", &zoom, 0.01);
-
+  ImGui::InputInt("Water Iterations", &liquid.iterations);
+  liquid.iterations = max(liquid.iterations,0);
   char *selected_blendmode = "";
   if (blendmode == 0)
     selected_blendmode = "Mix";
@@ -3907,7 +3939,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     selected_texture = 0;
     surface = &textures[selected_texture];
     liquid.set_heightmap(*surface);
-    
   }
 
   for (uint32 i = 0; i < textures.size(); ++i)
@@ -4042,6 +4073,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   const ImVec2 imgui_draw_cursor_pos = ImGui::GetCursorPos();
   ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
   glGenerateTextureMipmap(display_surface.texture->texture);
+  
   put_imgui_texture(&display_surface, texture_size);
 
   ImGui::SameLine();
@@ -4104,7 +4136,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     intermediate = surface->t;
     intermediate.load();
   }
-
 
   while (sim_time + dt < time)
   {
@@ -4372,8 +4403,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   postprocessing_shader.set_uniform("mouse_pos", draw_cursor ? ndc_cursor : vec2(-9999999));
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
-
   
+  glGenerateTextureMipmap(surface->texture->texture);
   liquid.run(time);
 
   ImGui::EndChild();
@@ -4383,21 +4414,21 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
 void Liquid_Surface::zero_velocity()
 {
-    // zero velocity?
-    copy_fbo.color_attachments[0] = velocity;
-    copy_fbo.init();
-    copy_fbo.bind_for_drawing_dst();
-    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    glClearColor(0,0,0,0);
-    glClear(GL_COLOR_BUFFER_BIT);
+  // zero velocity?
+  copy_fbo.color_attachments[0] = velocity;
+  copy_fbo.init();
+  copy_fbo.bind_for_drawing_dst();
+  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  glClearColor(0, 0, 0, 0);
+  glClear(GL_COLOR_BUFFER_BIT);
 
-    // zero velocity?
-    copy_fbo.color_attachments[0] = velocity_copy;
-    copy_fbo.init();
-    copy_fbo.bind_for_drawing_dst();
-    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    glClearColor(0,0,0,0);
-    glClear(GL_COLOR_BUFFER_BIT);
+  // zero velocity?
+  copy_fbo.color_attachments[0] = velocity_copy;
+  copy_fbo.init();
+  copy_fbo.bind_for_drawing_dst();
+  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  glClearColor(0, 0, 0, 0);
+  glClear(GL_COLOR_BUFFER_BIT);
 }
 void Liquid_Surface::run(float32 current_time)
 {
@@ -4425,8 +4456,8 @@ void Liquid_Surface::run(float32 current_time)
     velocity_copy.t = heightmap.t;
 
     heightmap_copy.t.name = "heightmap_copy";
-    velocity.t.name  = "velocity";
-    velocity_copy.t.name ="velocity_copy";
+    velocity.t.name = "velocity";
+    velocity_copy.t.name = "velocity_copy";
 
     heightmap_copy.load();
     velocity.load();
@@ -4440,47 +4471,43 @@ void Liquid_Surface::run(float32 current_time)
     liquid_shader_fbo.color_attachments[1] = velocity;
     liquid_shader_fbo.init();
 
-
     zero_velocity();
-
 
     invalidated = false;
   }
 
-  for (uint32 i = 0; i < 5; ++i)
+  for (uint32 i = 0; i < iterations; ++i)
   {
 
+    glDisable(GL_BLEND);
+    // copy heightmap
+    copy_fbo.color_attachments[0] = heightmap_copy;
+    copy_fbo.init();
+    copy_fbo.bind_for_drawing_dst();
+    glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
+    heightmap.bind(0);
+    copy.use();
+    copy.set_uniform("transform", fullscreen_quad());
+    quad.draw();
 
-  glDisable(GL_BLEND);
-  // copy heightmap
-  copy_fbo.color_attachments[0] = heightmap_copy;
-  copy_fbo.init();
-  copy_fbo.bind_for_drawing_dst();
-  glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
-  heightmap.bind(0);
-  copy.use();
-  copy.set_uniform("transform", fullscreen_quad());
-  quad.draw();
+    // copy velocity
+    copy_fbo.color_attachments[0] = velocity_copy;
+    copy_fbo.init();
+    copy_fbo.bind_for_drawing_dst();
+    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+    velocity.bind(0);
+    copy.use();
+    copy.set_uniform("transform", fullscreen_quad());
+    quad.draw();
 
-  // copy velocity
-  copy_fbo.color_attachments[0] = velocity_copy;
-  copy_fbo.init();
-  copy_fbo.bind_for_drawing_dst();
-  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-  velocity.bind(0);
-  copy.use();
-  copy.set_uniform("transform", fullscreen_quad());
-  quad.draw();
-
-  // draw shader
-  liquid_shader_fbo.bind_for_drawing_dst();
-  heightmap_copy.bind(0);
-  velocity_copy.bind(1);
-  liquid_shader.use();
-  liquid_shader.set_uniform("transform", fullscreen_quad());
-  liquid_shader.set_uniform("time", current_time);
-  quad.draw();
-    
+    // draw shader
+    liquid_shader_fbo.bind_for_drawing_dst();
+    heightmap_copy.bind(0);
+    velocity_copy.bind(1);
+    liquid_shader.use();
+    liquid_shader.set_uniform("transform", fullscreen_quad());
+    liquid_shader.set_uniform("time", current_time);
+    quad.draw();
   }
 }
 

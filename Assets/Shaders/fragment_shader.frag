@@ -12,6 +12,9 @@ uniform sampler2D texture8;   // brdf_ibl_lut
 
 uniform sampler2D texture10; // refraction
 
+uniform sampler2D texture11;//displacement
+uniform vec4 texture11_mod;
+
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
 uniform vec4 texture2_mod;
@@ -53,6 +56,7 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
+in float blocking_terrain;
 
 layout(location = 0) out vec4 out0;
 
@@ -496,6 +500,7 @@ void main()
   //result = vec3(gl_FragCoord.x/1920);
   //result = 0.05f*vec3(length(frag_world_position));
   //result = m.albedo;
+
   //result = pow(result,vec3(2.2));
   //result = clamp(result,vec3(0),vec3(1));
   //result = prefilteredColor;
@@ -516,5 +521,13 @@ void main()
   //result = textureLod(texture6,r,4).rgb;
   //result = pow(result,vec3(2.2));
    //result = 1*result;
+
+  if(blocking_terrain > 0.0f)// 0.015f)
+  {
+  float epsilon = 0.00001;
+   bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
+    float value = float(tile_light);
+    result = vec3(0,value,0);
+  }
   out0 = vec4(result, premultiply_alpha);
 }

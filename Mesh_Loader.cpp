@@ -6,39 +6,37 @@
 Mesh_Data generate_grid(ivec2 tile_count)
 {
   Mesh_Data data;
-  data.positions.push_back(vec3(0));
-  data.normals.push_back(vec3(0, 0, 1));
-  data.tangents.push_back(vec3(1, 0, 0));
-  data.bitangents.push_back(vec3(0, 1, 0));
+
+  for (uint32 y = 0; y < tile_count.y + 1; ++y)
+  {
+
+    for (uint32 x = 0; x < tile_count.x + 1; ++x)
+    {
+      data.positions.push_back(vec3(vec2(x, y), 0));
+      data.normals.push_back(vec3(0, 0, 1));
+      data.tangents.push_back(vec3(1, 0, 0));
+      data.bitangents.push_back(vec3(0, 1, 0));
+      data.texture_coordinates.push_back(vec2(x, y) / vec2(tile_count));
+    }
+  }
 
   for (uint32 y = 0; y < tile_count.y; ++y)
   {
-    data.positions.push_back(vec3(vec2(0, y), 0));
-    data.normals.push_back(vec3(0, 0, 1));
-    data.tangents.push_back(vec3(1, 0, 0));
-    data.bitangents.push_back(vec3(0, 1, 0));
+
     for (uint32 x = 0; x < tile_count.x; ++x)
     {
+      uint32 lower_left = y * (tile_count.x+1) + x;
+      uint32 lower_right = lower_left + 1;
+      uint32 upper_left = lower_left + (tile_count.x+1);
+      uint32 upper_right = upper_left + 1;
 
-      data.positions.push_back(vec3(vec2(x + 1, y), 0));
-      data.normals.push_back(vec3(0, 0, 1));
-      data.tangents.push_back(vec3(1, 0, 0));
-      data.bitangents.push_back(vec3(0, 1, 0));
+      data.indices.push_back(upper_left);
+      data.indices.push_back(lower_left);
+      data.indices.push_back(lower_right);
 
-      data.positions.push_back(vec3(vec2(x + 1, y + 1), 0));
-      data.normals.push_back(vec3(0, 0, 1));
-      data.tangents.push_back(vec3(1, 0, 0));
-      data.bitangents.push_back(vec3(0, 1, 0));
-
-      uint32 index = data.positions.size() - 1;
-
-      data.indices.push_back(index - 3);
-      data.indices.push_back(index - 2);
-      data.indices.push_back(index - 1);
-
-      data.indices.push_back(index - 2);
-      data.indices.push_back(index - 0);
-      data.indices.push_back(index - 1);
+      data.indices.push_back(upper_left);
+      data.indices.push_back(lower_right);
+      data.indices.push_back(upper_right);
     }
   }
 
@@ -46,8 +44,8 @@ Mesh_Data generate_grid(ivec2 tile_count)
   vec2 offset = vec2(-0.5f);
   for (uint32 i = 0; i < data.positions.size(); ++i)
   {
-    data.positions[i] = vec3(tile_size,1)*data.positions[i];
-    data.positions[i] = data.positions[i] + vec3(offset,0);
+    data.positions[i] = vec3(tile_size, 1) * data.positions[i];
+    data.positions[i] = data.positions[i] + vec3(offset, 0);
   }
   return data;
 }
