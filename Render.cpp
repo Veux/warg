@@ -4507,6 +4507,7 @@ void Liquid_Surface::run(float32 current_time)
     liquid_shader.use();
     liquid_shader.set_uniform("transform", fullscreen_quad());
     liquid_shader.set_uniform("time", current_time);
+    liquid_shader.set_uniform("size", heightmap.t.size);
     quad.draw();
   }
 }
