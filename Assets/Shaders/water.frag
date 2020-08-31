@@ -72,6 +72,8 @@ in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
 
+in float blocking_terrain;
+
 layout(location = 0) out vec4 out0;
 
 const float PI = 3.14159265358979f;
@@ -811,5 +813,13 @@ void main()
 
  // result = vec3(waterheight(wateruv,  water_time1f));
  
+   if(blocking_terrain != 0.0f)// 0.015f)
+  {
+  float epsilon = 0.00001;
+   bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
+    float value = float(tile_light);
+    result = vec3(0,value,0);
+  }
+
   out0 = vec4(result, premultiply_alpha);
 }

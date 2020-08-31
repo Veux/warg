@@ -71,12 +71,12 @@ void main()
   float terrain_height = texture11_mod.r*texture2D(texture11, uv).g;
   blocking_terrain = 0.f;
 
-  if(terrain_height == height)
+  if(terrain_height >= height)
   {
     blocking_terrain = height = terrain_height;
   }
  
-  gl_Position = txaa_jitter* MVP * vec4(position+ (texture11_mod.r*5.f*height*displacement_vector), 1);
+  gl_Position = txaa_jitter* MVP * vec4(position+ (texture11_mod.r*1.f*height*displacement_vector), 1);
   
   //gl_Position = txaa_jitter* MVP * vec4(position, 1);
 }

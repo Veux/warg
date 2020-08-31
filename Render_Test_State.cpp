@@ -74,14 +74,14 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 
   Mesh_Descriptor mesh;
   mesh.name = "generated water grid";
-  mesh.mesh_data = generate_grid(ivec2(256));
+  mesh.mesh_data = generate_grid(ivec2(2048));
   Material_Descriptor material;
- // material.emissive.mod = vec4(0, 0, 0.005, 1);
-  //material.albedo.mod = vec4(.054, .135, .159, .998);
+  material.emissive.mod = vec4(0, 0, 0.005, 1);
+  material.albedo.mod = vec4(.054, .135, .159, .998);
   //material.uses_transparency = true;
   material.uv_scale = vec2(1);
-  //material.roughness.mod = vec4(0.25);
- // material.metalness.mod = vec4(0.84);
+  material.roughness.mod = vec4(0.25);
+  material.metalness.mod = vec4(0.84);
   //material.frag_shader = "water.frag";
   world_water_settings(&material.uniform_set);
   Node_Index memewater = scene->add_mesh("water",&mesh, &material);
