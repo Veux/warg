@@ -3955,6 +3955,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     if (put_imgui_texture_button(this_texture, vec2(160), false))
     {
       selected_texture = i;
+      liquid.set_heightmap(textures[selected_texture]);
     }
     if (green)
     {
@@ -4478,7 +4479,6 @@ void Liquid_Surface::run(float32 current_time)
 
   for (uint32 i = 0; i < iterations; ++i)
   {
-
     glDisable(GL_BLEND);
     // copy heightmap
     copy_fbo.color_attachments[0] = heightmap_copy;
@@ -4508,6 +4508,7 @@ void Liquid_Surface::run(float32 current_time)
     liquid_shader.set_uniform("transform", fullscreen_quad());
     liquid_shader.set_uniform("time", current_time);
     liquid_shader.set_uniform("size", heightmap.t.size);
+    liquid_shader.set_uniform("dt", dt);
     quad.draw();
   }
 }

@@ -68,11 +68,12 @@ void main()
     frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position, 1);
   }
 
-  blocking_terrain = texture11_mod.r*texture2D(texture11, uv).g;
+  float terrain_height = texture11_mod.r*texture2D(texture11, uv).g;
+  blocking_terrain = 0.f;
 
-  if(texture2D(texture11, uv).g > 0.0f)
+  if(terrain_height == height)
   {
-    height = texture2D(texture11, uv).g;
+    blocking_terrain = height = terrain_height;
   }
  
   gl_Position = txaa_jitter* MVP * vec4(position+ (texture11_mod.r*5.f*height*displacement_vector), 1);

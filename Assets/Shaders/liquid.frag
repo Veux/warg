@@ -3,69 +3,157 @@ uniform sampler2D texture0;//height_copy
 uniform sampler2D texture1;//velocity_copy
 uniform float time;
 uniform vec2 size;
+uniform float dt;
 in vec2 frag_uv;
 
 layout(location = 0) out vec4 out0;//height
 layout(location = 1) out vec4 out1;//velocity
 
-float dt = .0301f;
+
+
+vec4 calc_contribution2(float ground_height, float water_height, float other_ground_height,float other_water_height ,float velocity_into_this_pixel)
+{
+    
+    float water_depth = water_height - ground_height;
+    float other_water_depth = other_water_height - other_ground_height;
+
+    const float viscosity = 151.01f;
+    const float gravity = -1.0;
+    const float water_pillar_edge_size = 1.0f;//used for resolution scaling
+    const float water_pillar_area = water_pillar_edge_size*water_pillar_edge_size;
+
+    //force = mass * accel;
+    //
+
+    float highest_ground = max(other_ground_height,ground_height);
+
+    
+    //outward
+    float mass_of_water_above_both_ground = max(water_height-highest_ground,0);
+    float force_out = mass_of_water_above_both_ground;
+
+
+
+    //inward
+    float mass_of_other_above_my_ground = max(other_water_height-highest_ground,0);
+    float force_in = mass_of_other_above_my_ground;
+
+
+    if(other_water_height <= other_ground_height)
+    {
+       velocity_into_this_pixel = min(velocity_into_this_pixel,0);
+    }
+
+    float total_force_out = water_pillar_area*(force_out - force_in);
+
+
+   float water_acceleration = gravity*viscosity*dt*total_force_out;
+    float updated_velocity = 0.995f*velocity_into_this_pixel + water_acceleration;
+    float delta_height = dt*updated_velocity;
+    return vec4(delta_height,updated_velocity,0,0);
+
+}
+
+void newmain()
+{
+  ivec2 p = clamp(ivec2(gl_FragCoord.xy),ivec2(0),ivec2(size-vec2(1)));
+  vec4 heightmap = texelFetch(texture0,p,0).rgba;
+  vec4 velocity = texelFetch(texture1,p,0).rgba;
+
+
+  
+  float water_height = heightmap.r; 
+  float ground_height = heightmap.g;
+
+
+  if(water_height < ground_height)
+  {//this does not conserve water:
+  //maybe it works properly when the other is uncommented
+    water_height = ground_height;
+    velocity = max(velocity,vec4(0));
+  }
+
+
+
+
+  //left
+  ivec2 sample_pixel = ivec2(p.x-1,p.y);
+  sample_pixel = clamp(sample_pixel,ivec2(0),ivec2(size-vec2(1)));
+  vec4 other_sample = texelFetch(texture0,sample_pixel,0).rgba;
+  float other_water_height = other_sample.r;
+  float other_ground_height = other_sample.g;
+  float velocity_into_this_pixel_from_other = velocity.r;
+  vec4 left = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+  
+  //right
+  sample_pixel = ivec2(p.x+1,p.y);
+  sample_pixel = clamp(sample_pixel,ivec2(0),ivec2(size-vec2(1)));
+  other_sample = texelFetch(texture0,sample_pixel,0).rgba;
+  other_water_height = other_sample.r;
+  other_ground_height = other_sample.g;
+  velocity_into_this_pixel_from_other = velocity.g;
+  vec4 right = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+  
+  
+  //down
+  sample_pixel = ivec2(p.x,p.y-1);
+  sample_pixel = clamp(sample_pixel,ivec2(0),ivec2(size-vec2(1)));
+  other_sample = texelFetch(texture0,sample_pixel,0).rgba;
+  other_water_height = other_sample.r;
+  other_ground_height = other_sample.g;
+  velocity_into_this_pixel_from_other = velocity.b;
+  vec4 down = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+
+ 
+  //up
+  sample_pixel = ivec2(p.x,p.y+1);
+  sample_pixel = clamp(sample_pixel,ivec2(0),ivec2(size-vec2(1)));
+  other_sample = texelFetch(texture0,sample_pixel,0).rgba;
+  other_water_height = other_sample.r;
+  other_ground_height = other_sample.g;
+  velocity_into_this_pixel_from_other = velocity.a;
+  vec4 up = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+
+
+
+  float delta_height_sum = (left.r + right.r + down.r + up.r);
+  float updated_water_height = water_height+delta_height_sum;
+  vec4 velocity_into_this_pixel_from_others = vec4(left.g, right.g, down.g, up.g);
+
+  if(updated_water_height < ground_height)
+  {
+    //velocity_into_this_pixel_from_others = max(velocity_into_this_pixel_from_others,vec4(0));
+  }
+
+  //out0 = vec4(updated_water_height,ground_height,0,1);
+  out0 = vec4(updated_water_height,ground_height,0,1);
+  out1 = velocity_into_this_pixel_from_others;
+
+
+
+
+
+
+}
+
+
 
 vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_between_pixels)
 {
     ivec2 sample_loc = clamp(samp_loc,ivec2(0),ivec2(size-vec2(1)));
     float height_other = texelFetch(texture0,sample_loc,0).r;
-    
     float block = texelFetch(texture0,sample_loc,0).g;
-
     if(block > 0.0f)
     {
-    vec2 p = gl_FragCoord.xy;
-    
-    ivec2 sample_loc = clamp(ivec2(p),ivec2(0),ivec2(size-vec2(1)));
+      vec2 p = gl_FragCoord.xy;
+      ivec2 sample_loc = clamp(ivec2(p),ivec2(0),ivec2(size-vec2(1)));
       height_other = texelFetch(texture0,sample_loc,0).r;
-      //return vec4(0,velocity_between_pixels,0,0);
     }
-
-
     float height_difference = height_other-h;
     float acceleration = dt*height_difference;
     float updated_velocity = 0.9995f*velocity_between_pixels + acceleration;
     float delta_height = dt*updated_velocity;
     return vec4(delta_height,updated_velocity,0,0);
-    
-    //return vec4(delta_height,updated_velocity,0,0);
-
-    //h = 0
-    //velocity_other = 0
-    //height_other = 1
-    //height_diff = 1
-    //acceleration is 0.01;
-    //updated velocity is 0 + 0.01
-    //delta height is 0.001
-   //we return vec2(0.001,0.01)
-
-    //other pixel:
-    //h = 1
-    //velocity_other = 0
-    //height_other = 0
-    //height_diff = -1
-    //acceleration is -0.01
-    //updated velocity = -0.01
-    //delta_height = -0.001
-
-    //return vec2(-0.001,-0.01)
-
-
-    //if h is 0 for both pixels, and velocity is 0
-    //height_difference = 0;
-    //acceleration = 0;
-    //updated_velocity = 0
-    //delta_height = 0;
-    //return vec2(0,0)
-
-    
-
-
 }
 
 
@@ -73,7 +161,8 @@ vec4 calc_contribution(float h, ivec2 samp_loc,float velocity_between_pixels)
 //calculate contribution from adjacent pixels flowint into this one
 void main()
 {
-  
+  newmain();
+  return;
   //one problem: velocity between pixels should be stored once, not twice
   //currently each pixel stores a velocity value for each edge between pixels
   //this means we can diverge over time as error accumulates
@@ -101,18 +190,6 @@ void main()
   //delta_height_sum = 4.f*delta_height_sum;
   float height_result = height+delta_height_sum;
   vec4 velocity_pack = vec4(left.g, right.g, down.g, up.g);
-  
-
-  //dampens and converges to mean
-  //need a better way to do this so that it works on terrain
-//  height_result = mix(height_result,0.5f,0.000f);
-//  velocity_pack = mix(velocity_pack,vec4(0),0.008f);
-
-
-
-  //velocity_pack = vec4(0);
   out0 = vec4(height_result,block,0,1);
-  //out0 = velocity;
-  //out0 = vec4(p/2048,0,1);
   out1 = velocity_pack;
 }

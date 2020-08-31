@@ -522,12 +522,13 @@ void main()
   //result = pow(result,vec3(2.2));
    //result = 1*result;
 
-  if(blocking_terrain > 0.0f)// 0.015f)
+  if(blocking_terrain != 0.0f)// 0.015f)
   {
   float epsilon = 0.00001;
    bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
     float value = float(tile_light);
     result = vec3(0,value,0);
   }
+  //result = vec3(blocking_terrain);
   out0 = vec4(result, premultiply_alpha);
 }
