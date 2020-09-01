@@ -3695,7 +3695,7 @@ Texture Texture_Paint::create_new_texture(const char *name)
   {
     tname = name;
   }
-  Texture t = Texture(tname, vec2(1024), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR_MIPMAP_LINEAR,GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
+  Texture t = Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR,GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }
@@ -4415,7 +4415,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
 void Liquid_Surface::zero_velocity()
 {
-  // zero velocity?
   copy_fbo.color_attachments[0] = velocity;
   copy_fbo.init();
   copy_fbo.bind_for_drawing_dst();
@@ -4423,7 +4422,6 @@ void Liquid_Surface::zero_velocity()
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  // zero velocity?
   copy_fbo.color_attachments[0] = velocity_copy;
   copy_fbo.init();
   copy_fbo.bind_for_drawing_dst();

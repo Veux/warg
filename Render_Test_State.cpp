@@ -74,7 +74,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 
   Mesh_Descriptor mesh;
   mesh.name = "generated water grid";
-  mesh.mesh_data = generate_grid(ivec2(2048));
+  mesh.mesh_data = generate_grid(ivec2(256));
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.054, .135, .159, .998);

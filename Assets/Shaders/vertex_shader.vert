@@ -26,10 +26,13 @@ out vec2 frag_uv;
 out vec2 frag_normal_uv;
 out vec4 frag_in_shadow_space[MAX_LIGHTS];
 out float blocking_terrain;
+out float ground_height;
+out float water_depth;
+out vec4 indebug;
 void main()
 {
   float height = texture2D(texture11, uv).r;  
-  float offset = 0.001505;  
+  float offset = 0.0005505;  
   float height_offsetx = texture2D(texture11, uv+vec2(offset,0)).r;
   float height_offsety = texture2D(texture11, uv+vec2(0,offset)).r;
   float dhx = height_offsetx - height;
@@ -39,28 +42,18 @@ void main()
   vec3 displacement_normal = normalize(cross(displacement_tangent,displacement_bitangent));
   mat3 displacement_TBN = mat3(displacement_tangent, displacement_bitangent, displacement_normal);
 
+
   vec3 displacement_vector = normal;
 
-//  float epsilon = 0.000000000;
-//  if(height == 0 && (dhx == 0 || dhy == 0))
-//  {
-//    height = 0.f;
-//    displacement_TBN = mat3(1);
-//    displacement_vector = normal;
-//  }
 
+ vec3 t = displacement_TBN*normalize(Model * normalize(vec4(tangent, 0))).xyz;
+ vec3 b = displacement_TBN*normalize(Model * normalize(vec4(bitangent, 0))).xyz;
+ vec3 n = displacement_TBN*normalize(Model * normalize(vec4(normal,0))).xyz;
 
-  //vec3 t = normalize(Model * normalize(vec4(tangent, 0))).xyz;
-  //vec3 b = normalize(Model * normalize(vec4(bitangent, 0))).xyz;
-  //vec3 n = normalize(Model * normalize(vec4(normal, 0))).xyz;
-
- vec3 t = normalize(Model * normalize(vec4(displacement_TBN*tangent, 0))).xyz;
- vec3 b = normalize(Model * normalize(vec4(displacement_TBN*bitangent, 0))).xyz;
- vec3 n = normalize(Model * normalize(vec4(displacement_TBN*normal,0))).xyz;
-
+  vec3 displacement_offset = (texture11_mod.r*1.f*height*displacement_vector);
 
   frag_TBN = mat3(t, b, n);
-  frag_world_position = (Model * vec4(position, 1)).xyz;
+  frag_world_position = (Model * vec4(position+ displacement_offset, 1)).xyz;
   frag_uv = uv_scale *vec2(uv.x, -uv.y);
   frag_normal_uv = normal_uv_scale * frag_uv;
   for(int i = 0; i < MAX_LIGHTS; ++i)
@@ -68,15 +61,17 @@ void main()
     frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position, 1);
   }
 
-  float terrain_height = texture11_mod.r*texture2D(texture11, uv).g;
+  ground_height = texture11_mod.r*texture2D(texture11, uv).g;
   blocking_terrain = 0.f;
-
-  if(terrain_height >= height)
+  
+  water_depth = max(height-ground_height,0);
+  
+  //indebug = vec4(displacement_normal,0);
+  if(ground_height >= height)
   {
-    blocking_terrain = height = terrain_height;
+    blocking_terrain = height = ground_height;
   }
  
-  gl_Position = txaa_jitter* MVP * vec4(position+ (texture11_mod.r*1.f*height*displacement_vector), 1);
+  gl_Position = txaa_jitter* MVP * vec4(position+ displacement_offset, 1);
   
-  //gl_Position = txaa_jitter* MVP * vec4(position, 1);
 }

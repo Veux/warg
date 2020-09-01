@@ -13,31 +13,20 @@ layout(location = 1) out vec4 out1;//velocity
 
 vec4 calc_contribution2(float ground_height, float water_height, float other_ground_height,float other_water_height ,float velocity_into_this_pixel)
 {
-    
     float water_depth = water_height - ground_height;
     float other_water_depth = other_water_height - other_ground_height;
-
-    const float viscosity = 151.01f;
+    const float viscosity = 51.01f;
     const float gravity = -1.0;
     const float water_pillar_edge_size = 1.0f;//used for resolution scaling
     const float water_pillar_area = water_pillar_edge_size*water_pillar_edge_size;
-
-    //force = mass * accel;
-    //
-
     float highest_ground = max(other_ground_height,ground_height);
 
-    
     //outward
     float mass_of_water_above_both_ground = max(water_height-highest_ground,0);
     float force_out = mass_of_water_above_both_ground;
-
-
-
     //inward
     float mass_of_other_above_my_ground = max(other_water_height-highest_ground,0);
     float force_in = mass_of_other_above_my_ground;
-
 
     if(other_water_height <= other_ground_height)
     {
@@ -45,32 +34,36 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
     }
 
     float total_force_out = (force_out - force_in);
+    float water_acceleration = water_pillar_area*gravity*viscosity*dt*total_force_out;
 
 
-   float water_acceleration = water_pillar_area*gravity*viscosity*dt*total_force_out;
-   
-
-   float ground_absorbtion_threshold = 10.0001f;
-   float sintime = 0.5f+0.5f*sin(time);
-   float sintimerand = float(sin(gl_FragCoord.x+gl_FragCoord.y*0.1234*time)<-0.99999f);
-   float ground_absorbtion_rate = 0.000001f * sintime;
-   float ground_absorbtion = 0.0f;
-   float surface_tension_factor = 0.00003f + 0.00016f*sintimerand;
-   if(abs(water_acceleration) < surface_tension_factor)
-   {
+    float ground_absorbtion_threshold = 0.0001f;
+    float sintime = 0.5f+0.5f*sin(time);
+    float sintimerand = float(sin(gl_FragCoord.x+gl_FragCoord.y*0.1234*time)<-0.99999f);
+    float ground_absorbtion_rate = 0.000011f;
+    float ground_absorbtion = 0.0f;
+    float surface_tension_factor = 0.000000f;
+    if(abs(water_acceleration) < surface_tension_factor)
+    {
      //only absorb on negative slopes or else we absorb at shores
-     if(water_depth < ground_absorbtion_threshold)// && ground_height >= other_ground_height)
-     {
-      ground_absorbtion = sintimerand*ground_absorbtion_rate;
-     }
-    water_acceleration = 0.f;
-   }
+      if(water_depth < ground_absorbtion_threshold)// && ground_height >= other_ground_height)
+      {
+       ground_absorbtion = ground_absorbtion_rate;
+      }
+     water_acceleration = 0.f;
+    }
 
-   //not energy conserving
-   //need a way to limit downward acceleration by gravity, but upward unlimited while conserving energy
-   // water_acceleration = max(water_acceleration,-9.8);
+    //not energy conserving
+    //need a way to limit downward acceleration by gravity, but upward unlimited while conserving energy
+    // water_acceleration = max(water_acceleration,-9.8);
 
-    float updated_velocity = 0.9991f*velocity_into_this_pixel + water_acceleration;
+
+    float slope = water_height / max((abs(water_height - max(other_water_height,other_ground_height))),0.000001);
+    float vel_dampening = 1.f - (0.01+.000*1./slope);
+    
+    float updated_velocity = .991f*(velocity_into_this_pixel) + water_acceleration;
+    
+     //updated_velocity = (velocity_into_this_pixel) + water_acceleration;
     float delta_height = dt*updated_velocity;
     return vec4(delta_height-ground_absorbtion,updated_velocity,0,0);
 
@@ -94,9 +87,6 @@ void newmain()
     water_height = ground_height;
     velocity = max(velocity,vec4(0));
   }
-
-
-
 
   //left
   ivec2 sample_pixel = ivec2(p.x-1,p.y);
