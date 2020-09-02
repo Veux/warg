@@ -21,6 +21,25 @@ float in_range(float x ,float min_edge, float max_edge)
     return step(x,min_edge)*step(0,-(max_edge-x));
 }
 
+
+
+float resolve_biome(vec4 biome_pack)
+{
+    float biome = 0.f;
+
+    //only way we could have come out with fire on any sample is if we arent underwater so it must be valid
+    //so prioritize fire
+
+
+    
+
+    float fire1 = in_range(biome_pack.r,4.f,5.f);
+
+
+
+    return biome;
+}
+
 vec4 calc_contribution2(vec4 this_pixel,vec4 other_pixel, float velocity_into_this_pixel)
 {
     float water_height = this_pixel.r;
@@ -31,88 +50,6 @@ vec4 calc_contribution2(vec4 this_pixel,vec4 other_pixel, float velocity_into_th
 
 
 
-    //char to dirt [0,1] // very slowly fades to dirt over time
-    //dry dirt to wet dirt[1,2] //fades to dry over time
-    //light grass to heavy grass[2,3] //grows fairly quickly, spreads only into wet dirt > 1.5f
-    //3-4 left blank for boundary
-    //light fire to heavy fire[4,5] //
-    //heavy fire to char [5,6]
-
-    //dirt values control color
-    //grass values control grass coverage/color
-    //grass slowly grows from 1 to 2 by default
-    //if a dirt pixel is adjacent to a grass pixel, dirt will slowly progress from .5 to 1 and become grass itself
-
-    //progress to catching fire needs to be stored somehow...
-    //maybe once a pixel is within fire range, it slowly rng progresses from 3 to 4    
-    //grass tile will only catch fire if fire is > 3.5 on the other pixel
-
-    float biome = this_pixel.b;
-    float other_biome = other_pixel.b;
-
-
-    
-
-    //used to mask biome iteration steps
-    float is_char_to_dirt = in_range(biome,0.f,1.f);
-    float is_soil = in_range(biome,1.f,2.f);
-    float is_very_wet_soil = in_range(biome,1.5f,2.f);
-    float is_grass = in_range(biome,2.f,3.f);
-    float is_heavy_grass = in_range(biome,2.25f,3.f);
-    float on_fire = in_range(biome,4.f,5.f);
-    float fire_is_fading = in_range(biome,5.f,6.f);
-
-    //other pixel value
-    float other_grass_heavy = in_range(other_biome,2.3f,3.f);
-    float other_fire_heavy = in_range(other_biome,4.25f,5.f);
-    //static iterations:
-
-    float fade_char_to_dirt = 0.01f*is_char_to_dirt;//adder
-    float fade_to_dry_soil = -0.01f*is_soil;//adder
-    float my_grass_grow = 0.01f*is_grass + 0.001f*is_very_wet_soil;//adder
-    float fire_intensify = 0.01f*on_fire;//adder
-    float fire_fade = 0.01f*fire_is_fading;//adder
-
-
-
-    //currently we are limited only to grass growing if the soil is 'very wet'
-    //and as we are in the recieve seeds range, the soil gets wetter automatically and only shows grass once it passes the 2.f threshold 
-    float grass_seed_spread = 0.01f*is_very_wet_soil * other_grass_heavy;//adder
-    
-    //fire propagation:
-    float low_chance_true = float(random(vec2(time))<0.001f);
-    float fire_want_spread =  low_chance_true * other_fire_heavy * is_heavy_grass;
-    float delta_to_fire_range = 4.f - biome;
-    float fire_spread = fire_want_spread * delta_to_fire_range;//adder
-
-    //if the fire has faded, reset to 0 char
-    float want_reset_to_char = float(biome>6.f);
-    float delta_to_char = biome;
-    float char_reset = want_reset_to_char*delta_to_char;//adder
-
-
-    //water over ground:
-
-    float is_underwater = float(water_height > ground_height);
-    
-    //
-    float delta_to_wet_soil = 2.f-biome;
-    float reset_max_wet_soil = is_underwater*is_soil*delta_to_wet_soil;//adder
-
-    //
-    float delta_to_min_grass = 2.f-biome;
-    float erode_grass = is_underwater * is_grass * abs(velocity_into_this_pixel) * delta_to_min_grass * -0.01f;//adder
-
-    //
-    float delta_to_dirt = 1.f-biome;    
-    float erode_char_to_dirt = is_underwater * is_char_to_dirt * abs(velocity_into_this_pixel) * delta_to_dirt * 0.01f;//adder
-
-    //
-    float current_fire_intensity = clamp(biome-4.f,0.f,1.f);
-    float delta_to_extinguished_destination = delta_to_char + (0.25f*(1.f-current_fire_intensity));
-    float extinguish_flames = is_underwater* on_fire * delta_to_extinguished_destination;//adder
-
-    float extinguish_fading_flames = is_underwater*fire_is_fading*(-biome);//adder
 
 
 
@@ -174,7 +111,7 @@ vec4 calc_contribution2(vec4 this_pixel,vec4 other_pixel, float velocity_into_th
 
    
 
-    return vec4(delta_height-ground_absorbtion,updated_velocity,biome_result,0);
+    return vec4(delta_height-ground_absorbtion,updated_velocity,0,0);
 
 }
 
@@ -198,6 +135,70 @@ void newmain()
     velocity = max(velocity,vec4(0));
   }
 
+
+    float biome = heightmap.b;
+
+
+    
+
+
+
+
+        //char to dirt [0,1] // very slowly fades to dirt over time
+    //dry dirt to wet dirt[1,2] //fades to dry over time
+    //light grass to heavy grass[2,3] //grows fairly quickly, spreads only into wet dirt > 1.5f
+    //3-4 left blank for boundary
+    //light fire to heavy fire[4,5] //
+    //heavy fire to char [5,6]
+
+    //dirt values control color
+    //grass values control grass coverage/color
+    //grass slowly grows from 1 to 2 by default
+    //if a dirt pixel is adjacent to a grass pixel, dirt will slowly progress from .5 to 1 and become grass itself
+
+    //progress to catching fire needs to be stored somehow...
+    //maybe once a pixel is within fire range, it slowly rng progresses from 3 to 4    
+    //grass tile will only catch fire if fire is > 3.5 on the other pixel
+
+    //currently we are limited only to grass growing if the soil is 'very wet'
+    //and as we are in the recieve seeds range, the soil gets wetter automatically and only shows grass once it passes the 2.f threshold
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    //used to mask biome iteration steps
+    float is_char_to_dirt = in_range(biome,0.f,1.f);
+    float is_soil = in_range(biome,1.f,2.f);
+    float is_very_wet_soil = in_range(biome,1.5f,2.f);
+    float is_grass = in_range(biome,2.f,3.f);
+    float is_heavy_grass = in_range(biome,2.25f,3.f);
+    float on_fire = in_range(biome,4.f,5.f);
+    float fire_is_fading = in_range(biome,5.f,6.f);
+  float low_chance_true = float(random(vec2(time))<0.001f);
+
   //left
   ivec2 sample_pixel = ivec2(p.x-1,p.y);
   sample_pixel = clamp(sample_pixel,ivec2(0),ivec2(size-vec2(1)));
@@ -205,8 +206,30 @@ void newmain()
   float other_water_height = other_sample.r;
   float other_ground_height = other_sample.g;
   float velocity_into_this_pixel_from_other = velocity.r;
-  vec4 left = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+  vec4 left = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
   
+  
+  float other_biome = other_sample.b;
+  float other_grass_heavy = in_range(other_biome,2.3f,3.f);
+  float other_fire_heavy = in_range(other_biome,4.25f,5.f);
+  float grass_seed_spread = 0.01f*is_very_wet_soil * other_grass_heavy;//adder
+
+  biome = biome + grass_seed_spread;
+    
+  //fire propagation:
+  float fire_want_spread =  low_chance_true * other_fire_heavy * is_heavy_grass;
+  float delta_to_fire_range = 4.f - biome;
+  float fire_spread = fire_want_spread * delta_to_fire_range;//adder
+  
+  biome = biome + fire_spread;
+
+  is_grass = in_range(biome,2.f,3.f);
+  is_heavy_grass = in_range(biome,2.25f,3.f);
+  on_fire = in_range(biome,4.f,5.f);
+
+
+
+
 
 
   //right
@@ -216,9 +239,36 @@ void newmain()
   other_water_height = other_sample.r;
   other_ground_height = other_sample.g;
   velocity_into_this_pixel_from_other = velocity.g;
-  vec4 right = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+  vec4 right = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
   
   
+
+    
+  other_biome = other_sample.b;
+  other_grass_heavy = in_range(other_biome,2.3f,3.f);
+  other_fire_heavy = in_range(other_biome,4.25f,5.f);
+  grass_seed_spread = 0.01f*is_very_wet_soil * other_grass_heavy;//adder
+
+  biome = biome + grass_seed_spread;
+    
+  //fire propagation:
+  fire_want_spread =  low_chance_true * other_fire_heavy * is_heavy_grass;
+  delta_to_fire_range = 4.f - biome;
+  fire_spread = fire_want_spread * delta_to_fire_range;//adder
+  
+  biome = biome + fire_spread;
+
+  is_grass = in_range(biome,2.f,3.f);
+  is_heavy_grass = in_range(biome,2.25f,3.f);
+  on_fire = in_range(biome,4.f,5.f);
+
+
+
+
+
+
+
+
   //down
   sample_pixel = ivec2(p.x,p.y-1);
   sample_pixel = clamp(sample_pixel,ivec2(0),ivec2(size-vec2(1)));
@@ -226,8 +276,25 @@ void newmain()
   other_water_height = other_sample.r;
   other_ground_height = other_sample.g;
   velocity_into_this_pixel_from_other = velocity.b;
-  vec4 down = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+  vec4 down = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
 
+    other_biome = other_sample.b;
+  other_grass_heavy = in_range(other_biome,2.3f,3.f);
+  other_fire_heavy = in_range(other_biome,4.25f,5.f);
+  grass_seed_spread = 0.01f*is_very_wet_soil * other_grass_heavy;//adder
+
+  biome = biome + grass_seed_spread;
+    
+  //fire propagation:
+  fire_want_spread =  low_chance_true * other_fire_heavy * is_heavy_grass;
+  delta_to_fire_range = 4.f - biome;
+  fire_spread = fire_want_spread * delta_to_fire_range;//adder
+  
+  biome = biome + fire_spread;
+
+  is_grass = in_range(biome,2.f,3.f);
+  is_heavy_grass = in_range(biome,2.25f,3.f);
+  on_fire = in_range(biome,4.f,5.f);
  
   //up
   sample_pixel = ivec2(p.x,p.y+1);
@@ -236,7 +303,81 @@ void newmain()
   other_water_height = other_sample.r;
   other_ground_height = other_sample.g;
   velocity_into_this_pixel_from_other = velocity.a;
-  vec4 up = calc_contribution2(ground_height,water_height,other_ground_height,other_water_height,velocity_into_this_pixel_from_other);
+  vec4 up = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
+
+    other_biome = other_sample.b;
+  other_grass_heavy = in_range(other_biome,2.3f,3.f);
+  other_fire_heavy = in_range(other_biome,4.25f,5.f);
+  grass_seed_spread = 0.01f*is_very_wet_soil * other_grass_heavy;//adder
+
+  biome = biome + grass_seed_spread;
+    
+  //fire propagation:
+  fire_want_spread =  low_chance_true * other_fire_heavy * is_heavy_grass;
+  delta_to_fire_range = 4.f - biome;
+  fire_spread = fire_want_spread * delta_to_fire_range;//adder
+  
+  biome = biome + fire_spread;
+
+  is_grass = in_range(biome,2.f,3.f);
+  is_heavy_grass = in_range(biome,2.25f,3.f);
+  on_fire = in_range(biome,4.f,5.f);
+
+
+      //static iterations:
+
+    float fade_char_to_dirt = 0.01f*is_char_to_dirt;//adder
+    float fade_to_dry_soil = -0.01f*is_soil;//adder
+    float my_grass_grow = 0.01f*is_grass + 0.001f*is_very_wet_soil;//adder
+    float fire_intensify = 0.01f*on_fire;//adder
+    float fire_fade = 0.01f*fire_is_fading;//adder
+
+  
+    //if the fire has faded, reset to 0 char
+    float want_reset_to_char = float(biome>6.f);
+    float delta_to_char = biome;
+    float char_reset = want_reset_to_char*delta_to_char;//adder
+
+
+
+      //water over ground:
+
+    float is_underwater = float(water_height > ground_height);
+    float velocity_sum = velocity.r+velocity.g+velocity.b+velocity.a;
+    
+    //
+    float delta_to_wet_soil = 2.f-biome;
+    float reset_max_wet_soil = is_underwater*is_soil*delta_to_wet_soil;//adder
+
+    //
+    float delta_to_min_grass = 2.f-biome;
+    float erode_grass = is_underwater * is_grass * abs(velocity_sum) * delta_to_min_grass * -0.01f;//adder
+
+    //
+    float delta_to_dirt = 1.f-biome;    
+    float erode_char_to_dirt = is_underwater * is_char_to_dirt * abs(velocity_sum) * delta_to_dirt * 0.01f;//adder
+
+    //
+    float current_fire_intensity = clamp(biome-4.f,0.f,1.f);
+    float delta_to_extinguished_destination = delta_to_char + (0.25f*(1.f-current_fire_intensity));
+    float extinguish_flames = is_underwater* on_fire * delta_to_extinguished_destination;//adder
+
+    float extinguish_fading_flames = is_underwater*fire_is_fading*(-biome);//adder
+
+
+
+
+
+    float biome_result = biome + fade_char_to_dirt + fade_to_dry_soil + my_grass_grow + fire_intensify + fire_fade + 
+                          char_reset + reset_max_wet_soil + erode_grass + erode_char_to_dirt + extinguish_flames + 
+                          extinguish_fading_flames;
+
+
+
+
+
+
+
 
 
 
@@ -250,7 +391,7 @@ void newmain()
   }
 
   //out0 = vec4(updated_water_height,ground_height,0,1);
-  out0 = vec4(updated_water_height,ground_height,0,1);
+  out0 = vec4(updated_water_height,ground_height,biome_result,1);
   out1 = velocity_into_this_pixel_from_others;
 
 
