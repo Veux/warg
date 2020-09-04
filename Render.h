@@ -890,7 +890,7 @@ struct Liquid_Surface
   void zero_velocity();
 
   int32 iterations = 1;
-
+  float32 my_time = 0.f;
 private:
   Texture heightmap;
   Shader liquid_shader;

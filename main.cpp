@@ -390,7 +390,6 @@ int main(int argc, char *argv[])
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/Roboto-Medium.ttf", 16.0f);
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 16.0f);
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 18.0f);
-  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 18.0f);
 
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/spleen-8x16.psfu", 18.0f);
   ImFontConfig font_cfg;
@@ -639,6 +638,7 @@ int main(int argc, char *argv[])
       {
         show_freetype_window = !show_freetype_window;
       }
+      ImGui::SetNextItemWidth(20.f);
       std::string messages = get_messages();
       ImGui::Text("%s", messages.c_str());
 

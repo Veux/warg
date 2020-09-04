@@ -257,8 +257,8 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_gun(&scene, vec3(0));
   spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
-  spawn_test_triangle(&scene);
-  spawn_compass(&scene);
+ // spawn_test_triangle(&scene);
+ // spawn_compass(&scene);
 
 
   // spawn_map(&scene);
@@ -672,10 +672,10 @@ void Render_Test_State::update()
 
 
   // update_grabbyarm(&scene, current_time);
-  update_planets(&scene, current_time);
+  //update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
-  update_test_triangle(&scene);
+  //update_test_triangle(&scene);
 
   // static vec3 wind_dir;
   // if (fract(sin(current_time)) > .5)

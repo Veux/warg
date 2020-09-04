@@ -28,6 +28,7 @@ out vec4 frag_in_shadow_space[MAX_LIGHTS];
 out float blocking_terrain;
 out float ground_height;
 out float water_depth;
+flat out float biome;
 out vec4 indebug;
 void main()
 {
@@ -62,11 +63,17 @@ void main()
   }
 
   ground_height = texture11_mod.r*texture2D(texture11, uv).g;
+  biome = texture11_mod.r*texelFetch(texture11, ivec2((uv*256)-vec2(0.25f)),0).b;
+  if(biome >= 3.f && biome < 4.1f)
+  {
+   biome = 3.f;
+  }
+
   blocking_terrain = 0.f;
   
   water_depth = max(height-ground_height,0);
   
-  //indebug = vec4(displacement_normal,0);
+  indebug = vec4(texture2D(texture11, uv).a);
   if(ground_height >= height)
   {
     blocking_terrain = height = ground_height;
