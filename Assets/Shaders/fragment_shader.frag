@@ -333,7 +333,7 @@ float noise (vec2 st) {
             (d - b) * u.x * u.y;
 }
 #define NUM_OCTAVES2 3
-float fbm2 (vec2 uv) {
+float fbm (vec2 uv) {
     float v = 0.0;
     float a = 0.5;
     vec2 shift = vec2(100.0);
@@ -348,6 +348,38 @@ float fbm2 (vec2 uv) {
     return v;
 
 
+}
+
+float waterheight(vec2 uv, float time)
+{
+  vec2 q = vec2(0.);
+  q.x = fbm( uv + .00*time);
+  q.y = fbm( uv + vec2(1.0));
+
+  vec2 r = vec2(0.);
+  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+ 0.15*time );
+  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+ 0.126*time);
+  float f = fbm(uv+r);
+  
+  //vec3 partial_d = dFdx(frag_world_position);
+  vec3 partial_d = dFdy(frag_world_position);
+  float lenpd = length(partial_d);
+  
+  float divisor =  65.1f*lenpd;
+
+  divisor = max(1,divisor);
+  f = f/divisor;
+  //f = 0.2*f;
+
+  float scale = 0.151f;
+  uv = scale*uv;
+  q.x = fbm( uv + .00*time);
+  q.y = fbm( uv + vec2(1.0));
+  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+  scale*.3515*time );
+  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+  scale*.35126*time);
+  f = f + 1.f*fbm(uv+3.f*r);
+
+  return f;
 }
 
 vec3 spherical_to_euclidean(float theta, float phi)
@@ -603,12 +635,14 @@ void main()
   float is_heavy_grass = in_range(biome,2.25f,3.1f);
   float on_fire = in_range(biome,4.f,5.f); //timenoise mod red color
   //float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
-
-  vec3 fire = rrt*vec3(2.5,2.1,.1);
-  vec3 grass = rr2*vec3(0.013,.433,.0136);
-  vec3 soil = rr3*0.845f*vec3(0.3,.13,.036);
-  vec3 wet_soil = 0.12f*soil;
-  vec3 charred = rr2*vec3(0.0001);
+  
+  float terrain_ao = pow(ground_height,1.2);
+  vec3 fire = rrt*vec3(4.5,2.1,.1);
+  vec3 grass = terrain_ao*rr2*vec3(0.013,.433,.0136);
+  vec3 soil = terrain_ao*rr3*0.845f*vec3(0.3,.13,.036);
+  vec3 wet_soil = terrain_ao*0.12f*soil;
+  vec3 flowers = terrain_ao*vec3(rr,rr2,rr3);
+  vec3 charred = terrain_ao*0.015f*vec3(fbm(11.f*frag_world_position.xy)+fbm(frag_world_position.xy));
 
   //only one of these will be nonzero
   float char_to_dirt_t = saturate(biome);
@@ -617,34 +651,40 @@ void main()
   float fire_t = saturate(biome-4.f);
   //float fading_fire_t = saturate(biome-5.f);
   
- float fire_visual_intensity = sin(3.14*pow(fire_t,2));
+  float fire_visual_intensity = sin(3.14*pow(fire_t,2));
   //extra effects:
   float vert_wet_soil_t = 2.f*clamp(biome-1.5f,0,0.5f);//idk?
   float heavy_grass_t = 2.f*clamp(biome-2.65f,0,0.5f);//add flowers
-
+  //char_to_dirt_t = 0.55f;
+  char_to_dirt_t = pow(char_to_dirt_t,5.f);
+  //is_char_to_dirt = 1.f;
   vec3 charr_contribution = is_char_to_dirt*mix(charred,soil,char_to_dirt_t);
   vec3 soil_contribution = is_soil*mix(soil,wet_soil,soil_t);
   vec3 grass_contribution = is_grass*mix(wet_soil,grass,grass_t);
   vec3 fire_contribution =  fire_visual_intensity*on_fire*fire;
+  float smoke = pow(waterheight(10.f*frag_world_position.xy,20.f*time),1.0);
+  fire_contribution = 1.f*mix(vec3(0),fire_contribution,1.f-smoke);
+
   //vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
-  vec3 flowers_contribution = is_heavy_grass*step(rr,0.3f*heavy_grass_t) * vec3(rr,rr2,rr3);
+  vec3 flowers_contribution = is_heavy_grass*step(rr,0.3f*heavy_grass_t) *flowers ;
 
   vec3 ground_result = charr_contribution + soil_contribution + grass_contribution + fire_contribution +flowers_contribution;
   
   vec3 water = result;
-  float depth_t = clamp(pow(2.1f*water_depth,1.f),0,1);
+  float depth_t = clamp(pow(12.1f*water_depth,1.f),0,1);
   result = mix(ground_result,water,depth_t);
-  // result = vec3(float(biome >= 2.f && biome < 3.f));
  
+  // result = vec3(float(biome >= 2.f && biome < 3.f));
+ //result = vec3(charr_contribution);
  //
  //result = vec3(is_char_to_dirt).rgb;
  //result = vec3(is_soil).rgb;
  //result = vec3(is_very_wet_soil).rgb;
- //result = vec3(is_grass).rgb;
+ //result = vec3(grass_t).rgb;
  //result = vec3(is_heavy_grass).rgb;
  //result = vec3(on_fire).rgb;
  //result = vec3(fire_is_fading).rgb;
- 
+ //result = vec3(smoke);
  //result = vec3(fire_visual_intensity);
  //result = vec3(in_range(biome,3.8,3.9));
  //result = vec3(indebug);

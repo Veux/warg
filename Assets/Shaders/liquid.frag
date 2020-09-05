@@ -119,10 +119,10 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
 
 void main()
 {
+  float debug = 1;
   ivec2 p = clamp(ivec2(gl_FragCoord.xy),ivec2(0),ivec2(size-vec2(1)));
   vec4 heightmap = texelFetch(texture0,p,0).rgba;
   vec4 velocity = texelFetch(texture1,p,0).rgba;
-
 
   
   float water_height = heightmap.r; 
@@ -133,42 +133,68 @@ void main()
   {
     water_height = ground_height;
     velocity = max(velocity,vec4(0));
+  } 
+  
+  float sqrtdt = sqrt(dt);
+  float cubertdt = pow(dt,0.333);
+  float fourthrootdt = pow(dt,.25);
+  float sintime = sin(fract(time)*2.f*3.14159);
+
+    
+  float vvlow_chance_true = float(random(vec2(p)+vec2(sin(time)))<fourthrootdt*0.001f && random(vec2(p)+vec2(cos(2.1f*time)))<fourthrootdt*0.01f && random(vec2(p)+vec2(cos(1.11f*time)))<fourthrootdt*0.1f&& random(vec2(p)+vec2(cos(1.31f*time)) ) < fourthrootdt*0.5111f);
+  float vlow_chance_true = float(random(vec2(p)+vec2(sin(time))) <    cubertdt*0.12f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.04f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.2f);
+  float low_chance_true = float(random(vec2(p)+vec2(sin(time))) <     cubertdt*0.23f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.08f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.3f);
+  float lowmed_chance_true = float(random(vec2(p)+vec2(sin(time))) <  cubertdt*0.34f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.16f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.4f);
+  float med_chance_true = float(random(vec2(p)+vec2(sin(time))) <     cubertdt*0.45f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.32f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.5f);
+  float high_chance_true = float(random(vec2(p)+vec2(sin(time))) <          dt*1.f);
+
+  float biome = heightmap.b;
+  
+  debug = 1;
+  //lightning starts a fire
+  if(biome>7.f)
+  {
+    biome = 4.5f;
+  }
+
+    //rain on water
+  if(low_chance_true!=0)
+  {
+      water_height = water_height + .00035f;//raindrops
+  }
+
+  
+    //fewer rain on ground because it kills fire too fast
+  if(vlow_chance_true!=0)
+  {
+    if(water_height < ground_height)
+      water_height = water_height + .0031f;//raindrops
   }
 
 
-  float biome = heightmap.b;
-  //used to mask biome iteration steps
+
   float is_char_to_dirt = in_range(biome,0.f,1.f);
   float is_soil = in_range(biome,1.f,2.f);
   float is_very_wet_soil = in_range(biome,1.5f,2.f);
   float is_grass = in_range(biome,2.f,3.f);
-  //float is_heavy_grass = in_range(biome,2.25f,3.f);
   float on_fire = in_range(biome,4.f,5.f);
-  //float fire_is_fading = in_range(biome,5.f,6.f);
-
-  float sqrtdt = sqrt(dt);
-  float cubertdt = pow(dt,0.333);
-  float low_chance_true = float(random(vec2(p)+vec2(sin(time))) <  cubertdt*0.05f && random(vec2(p)+vec2(cos(2.1f*time)) ) < cubertdt*0.1f && random(vec2(p)+vec2(cos(1.1f*time)) ) < cubertdt*0.51f);
-  float med_chance_true = float(random(vec2(p)+vec2(sin(time))) <  cubertdt*0.353f && random(vec2(p)+vec2(cos(2.1f*time)) ) < cubertdt*0.321f && random(vec2(p)+vec2(cos(1.1f*time)) ) < cubertdt*0.851f);
-  float high_chance_true = float(random(vec2(p)+vec2(sin(time))) < dt*1.f);
-
-
 
 
   //turn soil into grass:
   float grass_seed_spread_chance = med_chance_true;
 
+  float grass_seed_char_to_grass = low_chance_true;
   float fire_spread_chance = high_chance_true;
-  float char_grass_spawn_chance = 0;
-  float soil_grass_spawn_chance = 0;
-  float wet_soil_grass_spawn_chance = 0;
+  float char_grass_spawn_chance = vlow_chance_true;
+  float soil_grass_spawn_chance = low_chance_true;
+  float wet_soil_grass_spawn_chance = lowmed_chance_true;
   
   
   float grass_seed_spread_speed = .5f;
-  float fade_char_to_dirt_rate = 0.00005f;
+  float fade_char_to_dirt_rate = 0.00001f;
   float fade_to_dry_rate = 0.0f; //sponge disabled, grass will never grow on dry soil and if this 
   //is greater than the grass wetter delta then it will stay dry forever
-  float grass_grow_speed = 0.110011f*med_chance_true;
+  float grass_grow_speed = 0.010f*med_chance_true;
   
 
 
@@ -196,6 +222,12 @@ void main()
   float other_fire_heavy = in_range(other_biome,4.05f,5.f);
   float grass_seed_spread = grass_seed_spread_speed *is_soil*other_grass_heavy*grass_seed_spread_chance;//adder
   biome = biome + grass_seed_spread;
+
+  if(bool(grass_seed_char_to_grass)&&bool(is_char_to_dirt))
+  {
+    biome = 2.1;
+  }
+
   //fire propagation:
   float other_fire_fading = in_range(other_biome,5.,5.5);
   //float fire_want_spread =  other_fire_heavy * is_grass + other_fire_fading*is_grass;
@@ -206,7 +238,7 @@ void main()
       biome = 4.f;    
     }
   }
-  is_grass = in_range(biome,2.f,3.f);
+  is_grass = in_range(biome,2.f,3.5f);
   on_fire = in_range(biome,4.f,5.f);
   
   ///////////////////////////////////////////////////////////////////////////////////
@@ -229,7 +261,10 @@ void main()
   other_grass_heavy = in_range(other_biome,2.3f,3.f);
   grass_seed_spread = grass_seed_spread_speed * is_soil*other_grass_heavy*grass_seed_spread_chance;
   biome = biome + grass_seed_spread;
- 
+  if(bool(grass_seed_char_to_grass)&&bool(is_char_to_dirt))
+  {
+    biome = 2.1;
+  }
     
   //fire propagation:
   other_fire_heavy = in_range(other_biome,4.05f,5.f);
@@ -242,8 +277,8 @@ void main()
       biome = 4.f;    
     }
   }
-
-  is_grass = in_range(biome,2.f,3.f);
+  
+  is_grass = in_range(biome,2.f,3.5f);
   //is_heavy_grass = in_range(biome,2.25f,3.f);
   on_fire = in_range(biome,4.f,5.f);
   ///////////////////////////////////////////////////////////////////////////////////
@@ -266,7 +301,10 @@ void main()
   other_grass_heavy = in_range(other_biome,2.3f,3.f);
   grass_seed_spread = grass_seed_spread_speed* is_soil*other_grass_heavy*grass_seed_spread_chance;//adder
   biome = biome + grass_seed_spread;
-    
+  if(bool(grass_seed_char_to_grass)&&bool(is_char_to_dirt))
+  {
+    biome = 2.1;
+  }
   //fire propagation:
   other_fire_heavy = in_range(other_biome,4.05f,5.f);
   other_fire_fading = in_range(other_biome,5.,5.5);
@@ -278,8 +316,8 @@ void main()
       biome = 4.f;    
     }
   }
-
-  is_grass = in_range(biome,2.f,3.f);
+  
+  is_grass = in_range(biome,2.f,3.5f);
   on_fire = in_range(biome,4.f,5.f);  
   ///////////////////////////////////////////////////////////////////////////////////
  
@@ -300,7 +338,10 @@ void main()
   other_grass_heavy = in_range(other_biome,2.3f,3.f);
   grass_seed_spread = grass_seed_spread_speed * is_soil * other_grass_heavy*grass_seed_spread_chance;//adder
   biome = biome + grass_seed_spread;
-
+  if(bool(grass_seed_char_to_grass)&&bool(is_char_to_dirt))
+  {
+    biome = 2.1;
+  }
   
 
   //fire propagation:
@@ -318,12 +359,13 @@ void main()
   }
 
 
-  is_grass = in_range(biome,2.f,3.f);
-  //is_heavy_grass = in_range(biome,2.25f,3.f);
-  on_fire = in_range(biome,4.f,5.f);
   ///////////////////////////////////////////////////////////////////////////////////
   
-
+  is_char_to_dirt = in_range(biome,0.f,1.f);
+  is_soil = in_range(biome,1.f,2.f);
+  is_very_wet_soil = in_range(biome,1.5f,2.f);
+  is_grass = in_range(biome,2.f,3.f);
+  on_fire = in_range(biome,4.f,5.f);
   
   //static iterations:
   if(bool(is_char_to_dirt))
@@ -332,20 +374,21 @@ void main()
   }
   if(bool(is_grass))
   {
-   biome = clamp(biome+grass_grow_speed,2.f,3.f);
+   biome = clamp(biome+grass_grow_speed,2.f,3.9f);
+
   }
   if(bool(is_very_wet_soil))
   {
     if(bool(wet_soil_grass_spawn_chance))
     {
-      biome = 2.f;
+      biome = 2.01f;
     }
   }
   if(bool(is_soil))
   {
     if(bool(soil_grass_spawn_chance))
     {
-      biome = 2.f;
+      biome = 2.01f;
     }
   }
 
@@ -353,13 +396,13 @@ void main()
   {
     if(bool(char_grass_spawn_chance))
     {
-      biome = 2.f;
+      biome = 2.01f;
     }
   }
 
   if(bool(on_fire))
   {
-    float fire_intensify = 0.3f;//adder
+    float fire_intensify = 0.3f*high_chance_true;//adder
     if(biome > 4.2)
     {
       fire_intensify = 0.00071;
@@ -367,64 +410,59 @@ void main()
     biome = biome + fire_intensify;
   }
   
-  float delta_to_char = biome;
 
 
-
+  float velocity_sum = left.g+ right.g+down.g+ up.g;
   //water over ground:
-
-  float is_underwater = float(water_height > ground_height);
-  float velocity_sum = velocity.r+velocity.g+velocity.b+velocity.a;
-  //
-  float delta_to_wet_soil = 2.f-biome;
-  float reset_max_wet_soil = is_underwater*is_soil*delta_to_wet_soil;//adder
-  //
-  float delta_to_min_grass = 2.f-biome;
-  float erode_grass = is_underwater * is_grass * abs(velocity_sum) * delta_to_min_grass * -0.01f;//adder
-  //
-  float delta_to_dirt = 1.f-biome;    
-  float erode_char_to_dirt = is_underwater * is_char_to_dirt * abs(velocity_sum) * delta_to_dirt * 0.01f;//adder
-  //
-  float current_fire_intensity = clamp(biome-4.f,0.f,1.f);
-  float delta_to_extinguished_destination = delta_to_char + (0.25f*(1.f-current_fire_intensity));
-  float extinguish_flames = is_underwater* on_fire * delta_to_extinguished_destination;//adder
-  //
-  //float extinguish_fading_flames = is_underwater*fire_is_fading*(-biome);//adder
-
-
-
-  //probably shouldnt actually erode grass at all
-  float biome_result = biome;
-  //biome_result += fade_char_to_dirt;
-  //biome_result += fade_to_dry_soil;//not currently on
-  //biome_result += my_grass_grow;
-  //biome_result += fire_intensify;
-  //biome_result += fire_fade;
-  //biome_result += reset_max_wet_soil;
-  //biome_result += erode_grass;
-  //biome_result += erode_char_to_dirt;
-  //biome_result += extinguish_flames;
-  //biome_result += extinguish_fading_flames;
-
-
-  if(!bool(in_range(biome_result,0.f,5.f)))
+  if(water_height > ground_height)
   {
-    biome_result = 0.f;
-  }
-  if(bool(in_range(biome_result,3.f,3.99999f)))
-  {
-    biome_result = 3.f;
+  
+    is_soil = in_range(biome,1.f,2.f);
+    is_grass = float(biome > 2.f && biome < 4.f);
+    is_char_to_dirt = in_range(biome,0.f,1.f);
+    on_fire = in_range(biome,4.f,5.f); 
+    if(bool(is_soil))
+    {
+      biome = 1.99f;
+    }
+
+    if(bool(is_grass))
+    {
+      biome = biome - dt*0.001f*abs(velocity_sum);//erode if fast
+      biome = biome + dt*0.001f;//grow grass
+      biome = clamp(biome,2.f,4.f);
+    }
+
+    if(bool(is_char_to_dirt))
+    {
+      
+    }
+
+    if(bool(on_fire))
+    {
+      if(water_height - ground_height > 0.01f)
+      {
+      float current_fire_intensity = biome-4.f;
+      biome = 1.f-current_fire_intensity - 0.5f;
+      biome = clamp(biome,0.f,1.f);
+      }
+    }
   }
 
-
-
-  float debug = 1;
-
+  if(!bool(in_range(biome,0.f,5.f)))
+  {
+    biome = 0.f;
+  }
+  if(bool(in_range(biome,3.f,3.99999f)))
+  {
+    biome = 3.f;
+  }
+ 
 
   float delta_height_sum = (left.r + right.r + down.r + up.r);
   float updated_water_height = water_height+delta_height_sum;
   vec4 velocity_into_this_pixel_from_others = vec4(left.g, right.g, down.g, up.g);
   //could also do ground height erosion based on velocity^2 here
-  out0 = vec4(updated_water_height,ground_height,biome_result,debug);
+  out0 = vec4(updated_water_height,ground_height,biome,debug);
   out1 = velocity_into_this_pixel_from_others;
   }

@@ -4478,6 +4478,7 @@ void Liquid_Surface::run(float32 current_time)
   for (uint32 i = 0; i < iterations; ++i)
   {
     my_time = my_time + dt;
+    
     glDisable(GL_BLEND);
     // copy heightmap
     copy_fbo.color_attachments[0] = heightmap_copy;
@@ -4505,7 +4506,7 @@ void Liquid_Surface::run(float32 current_time)
     velocity_copy.bind(1);
     liquid_shader.use();
     liquid_shader.set_uniform("transform", fullscreen_quad());
-    liquid_shader.set_uniform("time", my_time);
+    liquid_shader.set_uniform("time", float32(my_time));
     liquid_shader.set_uniform("size", heightmap.t.size);
     liquid_shader.set_uniform("dt", dt);
     quad.draw();
