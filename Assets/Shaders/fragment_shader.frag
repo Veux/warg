@@ -103,7 +103,7 @@ float chebyshevUpperBound(vec2 moments, float distance, float max_variance)
 
 float in_range(float x ,float min_edge, float max_edge)
 {
-    return float((x>=min_edge)&&(x<=max_edge));
+    return float((x>=min_edge)&&(x<max_edge));
 }
 
 
@@ -631,19 +631,19 @@ void main()
   float is_char_to_dirt = in_range(biome,0.f,1.f);
   float is_soil = in_range(biome,1.f,2.f);
   float is_very_wet_soil = in_range(biome,1.5f,2.f);
-  float is_grass = float(biome >= 2.f && biome < 4.f);
-  float is_heavy_grass = in_range(biome,2.25f,3.1f);
+  float is_grass = in_range(biome,2.f,4.f);
+  float is_heavy_grass = in_range(biome,2.5f,4.f);
   float on_fire = in_range(biome,4.f,5.f); //timenoise mod red color
   //float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
   
-  float terrain_ao = pow(ground_height,1.2);
-  vec3 fire = rrt*vec3(4.5,2.1,.1);
+  float terrain_ao = pow(.1+ground_height,1.2);
+  vec3 fire = 3.f*rrt*vec3(4.5,2.1,.1);
   vec3 grass = terrain_ao*rr2*vec3(0.013,.433,.0136);
   vec3 soil = terrain_ao*rr3*0.845f*vec3(0.3,.13,.036);
-  vec3 wet_soil = terrain_ao*0.12f*soil;
+  vec3 wet_soil = terrain_ao*0.32f*soil;
   vec3 flowers = terrain_ao*vec3(rr,rr2,rr3);
   vec3 charred = terrain_ao*0.015f*vec3(fbm(11.f*frag_world_position.xy)+fbm(frag_world_position.xy));
-
+  vec3 grass_variance = vec3(fbm(frag_world_position.xy));
   //only one of these will be nonzero
   float char_to_dirt_t = saturate(biome);
   float soil_t = saturate(biome-1.0f);
@@ -660,7 +660,7 @@ void main()
   //is_char_to_dirt = 1.f;
   vec3 charr_contribution = is_char_to_dirt*mix(charred,soil,char_to_dirt_t);
   vec3 soil_contribution = is_soil*mix(soil,wet_soil,soil_t);
-  vec3 grass_contribution = is_grass*mix(wet_soil,grass,grass_t);
+  vec3 grass_contribution = grass_variance*is_grass*mix(wet_soil,grass,grass_t);
   vec3 fire_contribution =  fire_visual_intensity*on_fire*fire;
   float smoke = pow(waterheight(10.f*frag_world_position.xy,20.f*time),1.0);
   fire_contribution = 1.f*mix(vec3(0),fire_contribution,1.f-smoke);
@@ -673,9 +673,9 @@ void main()
   vec3 water = result;
   float depth_t = clamp(pow(12.1f*water_depth,1.f),0,1);
   result = mix(ground_result,water,depth_t);
- 
+ //result = vec3(is_very_wet_soil);
   // result = vec3(float(biome >= 2.f && biome < 3.f));
- //result = vec3(charr_contribution);
+ //result = vec3(grass_variance);
  //
  //result = vec3(is_char_to_dirt).rgb;
  //result = vec3(is_soil).rgb;
