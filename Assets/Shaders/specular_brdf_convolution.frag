@@ -1,6 +1,7 @@
 #version 330
 uniform samplerCube texture6; // environment
 in vec3 direction;
+uniform float size;
 uniform float roughness;
 
 layout(location = 0) out vec4 out0;
@@ -67,7 +68,7 @@ void main()
     float D = D_ggx(roughness, ndoth);
     float hdotv = dot(h, v);
     float pdf = (D * ndoth / (4.0 * hdotv)) + 0.0001;
-    float resolution = 2048.0; // resolution of source cubemap
+    float resolution = size; // resolution of source cubemap
     float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
     float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 

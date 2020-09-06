@@ -155,7 +155,7 @@ struct Texture_Descriptor
   std::string name = "default";
   std::string source = "default";
   std::string key;
-  uint8 levels = 6;
+  uint8 levels = 1;
   GLenum format = 0;
   glm::ivec2 size = ivec2(0);
   glm::vec4 mod = vec4(1);

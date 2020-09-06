@@ -42,10 +42,14 @@ void SDL_Imgui_State::render()
   GLenum last_active_texture;
   glGetIntegerv(GL_ACTIVE_TEXTURE, (GLint *)&last_active_texture);
   glActiveTexture(GL_TEXTURE0);
+  GLint last_texture0;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture0);
+  glActiveTexture(GL_TEXTURE1);
+  GLint last_texture1;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture1);
+
   GLint last_program;
   glGetIntegerv(GL_CURRENT_PROGRAM, &last_program);
-  GLint last_texture;
-  glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
   GLint last_sampler;
   glGetIntegerv(GL_SAMPLER_BINDING, &last_sampler);
   GLint last_array_buffer;
@@ -97,10 +101,11 @@ void SDL_Imgui_State::render()
   };
   glUseProgram(shader_handle);
   glUniform1i(texture_location, 0);
+  glUniform1i(cubemap_location, 1);
   glUniformMatrix4fv(projection_location, 1, GL_FALSE, &ortho_projection[0][0]);
   GLuint time_loc = glGetUniformLocation(shader_handle, "time");
   float32 realtime = get_real_time();
-  glUniform1f(time_loc,realtime);
+  glUniform1f(time_loc, realtime);
   glBindVertexArray(vao);
   glBindSampler(0, 0); // Rely on combined texture/sampler state.
 
@@ -144,38 +149,58 @@ void SDL_Imgui_State::render()
         bool warg_texture_flag_set = (tex & 0xf0000000) == 0xf0000000;
         GLuint texture = tex & 0x0000ffff;
 
+        const GLuint index = texture;
+        Imgui_Texture_Descriptor itd;
+
+        glUniform1i(is_cubemap_location, 0);
         if (warg_texture_flag_set)
         {
-
-          const GLuint index = texture;
+          itd = IMGUI_TEXTURE_DRAWS[index];
           if ((int32(IMGUI_TEXTURE_DRAWS.size()) - 1) < int32(index))
             continue;
-          Imgui_Texture_Descriptor itd = IMGUI_TEXTURE_DRAWS[index];
-          if (itd.is_cubemap || itd.ptr == nullptr)
+
+          if (itd.gamma_encode)
           {
-            glBindTexture(GL_TEXTURE_2D, 0);
+            glEnable(GL_FRAMEBUFFER_SRGB);
           }
           else
           {
-            if (itd.gamma_encode)
-            {
-              glEnable(GL_FRAMEBUFFER_SRGB);
-            }
-            else
-            {
-              glDisable(GL_FRAMEBUFFER_SRGB);
-            }
-            // glUniform1i(gamma_location, itd.gamma_encode);
-            glUniform1i(gamma_location, false);
-            glUniform1f(mip_location, itd.mip_lod_to_draw);
-            glBindTexture(GL_TEXTURE_2D, itd.ptr->texture);
-            glUniform1i(sample_lod_location, 1);
+            glDisable(GL_FRAMEBUFFER_SRGB);
+          }
 
-            if (itd.is_mipmap_list_command)
-            {
-              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            }
+          glActiveTexture(GL_TEXTURE0);
+          if (itd.ptr)
+            glBindTexture(GL_TEXTURE_2D, itd.ptr->texture);
+          else
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+          glUniform1i(gamma_location, 0);
+          // glUniform1i(gamma_location, itd.gamma_encode);
+
+          glUniform1f(mip_location, itd.mip_lod_to_draw);
+          glUniform1i(sample_lod_location, 1);
+
+          if (itd.is_mipmap_list_command)
+          {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+          }
+
+          if (itd.is_cubemap)
+          {
+            static const mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
+            vec3 dir = vec3(glm::sin(float32(get_real_time())), glm::cos(float32(get_real_time())), -1);
+            // dir = vec3(0,0,-1);
+            mat4 camera = lookAt(vec3(0), dir, vec3(0, 1, 0));
+            float32 t = wrap_to_range(0.2f*float32(get_real_time()),0.f,glm::two_pi<float32>());
+            mat4 transform = projection * glm::rotate(t, vec3(0, 0, 1));
+            ;
+            glUniform1i(is_cubemap_location, 1);
+            glUniformMatrix4fv(cubemap_matrix_location, 1, GL_FALSE, &transform[0][0]);
+            // glActiveTexture(GL_TEXTURE0);
+            // glBindTexture(GL_TEXTURE_2D, 0);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, itd.ptr->texture);
           }
         }
         else
@@ -183,6 +208,7 @@ void SDL_Imgui_State::render()
           glUniform1i(gamma_location, false);
           glUniform1f(mip_location, 0);
           glUniform1i(sample_lod_location, 0);
+          glActiveTexture(GL_TEXTURE0);
           glBindTexture(GL_TEXTURE_2D, texture);
         }
 
@@ -191,18 +217,20 @@ void SDL_Imgui_State::render()
         glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount,
             sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset);
         glDisable(GL_FRAMEBUFFER_SRGB);
+
         if (warg_texture_flag_set)
         {
-          const GLuint index = texture;
-          Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
-          if (!tex.is_cubemap)
+          if (itd.is_cubemap)
           {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+            glBindTexture(GL_TEXTURE_2D, last_texture1);
+          }
 
-            if (tex.is_mipmap_list_command)
-            {
-              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tex.ptr->minification_filter);
-              glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, tex.ptr->magnification_filter);
-            }
+          if (itd.is_mipmap_list_command)
+          {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, itd.ptr->minification_filter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, itd.ptr->magnification_filter);
           }
         }
       }
@@ -212,7 +240,12 @@ void SDL_Imgui_State::render()
 
   // Restore modified GL state
   glUseProgram(last_program);
-  glBindTexture(GL_TEXTURE_2D, last_texture);
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, last_texture0);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  glBindTexture(GL_TEXTURE_2D, last_texture1);
   glBindSampler(0, last_sampler);
   glActiveTexture(last_active_texture);
   glBindVertexArray(last_vertex_array);
@@ -339,7 +372,7 @@ void SDL_Imgui_State::create_fonts_texture()
   glGenTextures(1, &font_texture);
   glBindTexture(GL_TEXTURE_2D, font_texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);//sponge linear
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); // sponge linear
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
@@ -360,42 +393,116 @@ bool SDL_Imgui_State::create_device_objects()
   glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &last_array_buffer);
   glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &last_vertex_array);
 
-  const GLchar *vertex_shader = "#version 330\n"
-                                "uniform mat4 ProjMtx;\n"
-                                "in vec2 Position;\n"
-                                "in vec2 UV;\n"
-                                "in vec4 Color;\n"
-    
-                                "uniform float time;\n"//sponge
-                                "out vec2 Frag_UV;\n"
-                                "out vec4 Frag_Color;\n"
-                                "void main()\n"
-                                "{\n"
-                                "	Frag_UV = UV;\n"
-                                "	Frag_Color = Color;\n"
-                                "	gl_Position =  ProjMtx * vec4((Position.xy),0,1);\n"
-                                "}\n";
+  const GLchar *vertex_shader =
+      "#version 330\n"
+      "uniform mat4 ProjMtx;\n"
+      "uniform mat4 cubemap_matrix;\n"
+      "uniform int is_cubemap;\n"
+      "in vec2 Position;\n"
+      "in vec2 UV;\n"
+      "in vec4 Color;\n"
 
-  const GLchar *fragment_shader = "#version 330\n"
-                                  "uniform sampler2D Texture;\n"
-                                  "uniform bool gamma_encode;\n"
-                                  "uniform float lod;\n"
-                                  "uniform int sample_lod;\n"
-                                  "in vec2 Frag_UV;\n"
-                                  "in vec4 Frag_Color;\n"
-                                  "out vec4 Out_Color;\n"
-                                  "void main()\n"
-                                  "{\n"
-                                  "vec4 result;\n"
-                                  "if (sample_lod == 1){\n"
-                                  "result = Frag_Color * textureLod(Texture, Frag_UV.st,lod);}\n"
-                                  "else{ result = Frag_Color * texture2D(Texture, Frag_UV.st);}\n"
-                                  "if (gamma_encode)\n"
-                                  "{\n"
-                                  "  result.rgb = pow(result.rgb, vec3(1.0f / 2.2f)); \n"
-                                  "}\n"
-                                  "	Out_Color = result;\n"
-                                  "}\n";
+      "uniform float time;\n" // sponge
+      "out vec2 Frag_UV;\n"
+      "out vec3 cubemap_dir;\n"
+      "out vec4 Frag_Color;\n"
+      "void main()\n"
+      "{\n"
+      "	Frag_UV = UV;\n"
+      "	Frag_Color = Color;\n"
+      "	if(is_cubemap == 1)\n"
+      "	{\n"
+      " float up = 2.f*(UV.y-0.5f);                                                       \n"
+      " float right = 2.f*(UV.x-0.5f);                                                       \n"
+      "	cubemap_dir = (cubemap_matrix*normalize(vec4(right,1,up,0))).xyz;\n"
+      "	}\n"
+      "	gl_Position =  ProjMtx * vec4((Position.xy),0,1);\n"
+      "}\n";
+
+  const GLchar *vertex_shader_old = "#version 330\n"
+                                    "uniform mat4 ProjMtx;\n"
+                                    "in vec2 Position;\n"
+                                    "in vec2 UV;\n"
+                                    "in vec4 Color;\n"
+
+                                    "uniform float time;\n" // sponge
+                                    "out vec2 Frag_UV;\n"
+                                    "out vec4 Frag_Color;\n"
+                                    "void main()\n"
+                                    "{\n"
+                                    "	Frag_UV = UV;\n"
+                                    "	Frag_Color = Color;\n"
+                                    "	gl_Position =  ProjMtx * vec4((Position.xy),0,1);\n"
+                                    "}\n";
+
+  const GLchar *fragment_shader =
+      "#version 330\n"
+      "uniform sampler2D Texture;\n"
+      "uniform samplerCube TextureCube;\n"
+      "uniform bool gamma_encode;\n"
+      "uniform float lod;\n"
+      "uniform int sample_lod;\n"
+      "uniform int is_cubemap;\n"
+      "in vec2 Frag_UV;\n"
+      "in vec4 Frag_Color;\n"
+      "in vec3 cubemap_dir;\n"
+      "out vec4 Out_Color;\n"
+      "void main()\n"
+      "{                                                                                 \n"
+      "  vec4 result;                                                                      \n"
+      "  if (sample_lod == 1){                                                           \n"
+      "    result = Frag_Color * textureLod(Texture, Frag_UV.st,lod);                     \n"
+      "    if (is_cubemap==1){                                                              \n"
+      "      result = Frag_Color* textureLod(TextureCube,cubemap_dir,lod);              \n"
+      "    }                                                                               \n"
+      "  }                                                                                  \n"
+      "  else{ result = Frag_Color * texture2D(Texture, Frag_UV.st);                         \n"
+      "        if (is_cubemap==1){                                                          \n"
+      "          result = Frag_Color* textureLod(TextureCube,cubemap_dir,0);                \n"
+      "        }                                                                          \n"
+      "      }                                                                           \n"
+      "  if (gamma_encode)                                                             \n"
+      "  {                                                                       \n"
+      "    result.rgb = pow(result.rgb, vec3(1.0f / 2.2f));                      \n"
+      "  }                                                                      \n"
+      "	 Out_Color = result;                                                    \n"
+      "}                                                                              \n";
+
+  const GLchar *fragment_shaderold =
+      "#version 330\n"
+      "uniform sampler2D Texture;\n"
+      "uniform samplerCube TextureCube;\n"
+      "uniform bool gamma_encode;\n"
+      "uniform float lod;\n"
+      "uniform int sample_lod;\n"
+      "uniform int is_cubemap;\n"
+      "uniform vec3 cubemap_vector;\n"
+      "in vec2 Frag_UV;\n"
+      "in vec4 Frag_Color;\n"
+      "out vec4 Out_Color;\n"
+      "void main()\n"
+      "{                                                                                 \n"
+      "  vec4 result;                                                                      \n"
+      "  float up = 2.f*(-Frag_UV.y+0.5f);                                                       \n"
+      "  float right = 2.f*(Frag_UV.x-0.5f);                                                       \n"
+      "  vec3 cubemap_sample_v = cubemap_vector + vec3(right,0,up);                  \n"
+      "  if (sample_lod == 1){                                                           \n"
+      "    result = Frag_Color * textureLod(Texture, Frag_UV.st,lod);                     \n"
+      "    if (is_cubemap==1){                                                              \n"
+      "      result = Frag_Color* textureLod(TextureCube,cubemap_sample_v,lod);              \n"
+      "    }                                                                               \n"
+      "  }                                                                                  \n"
+      "  else{ result = Frag_Color * texture2D(Texture, Frag_UV.st);                         \n"
+      "        if (is_cubemap==1){                                                          \n"
+      "          result = Frag_Color* textureLod(TextureCube,cubemap_sample_v,0);                \n"
+      "        }                                                                          \n"
+      "      }                                                                           \n"
+      "  if (gamma_encode)                                                             \n"
+      "  {                                                                       \n"
+      "    result.rgb = pow(result.rgb, vec3(1.0f / 2.2f));                      \n"
+      "  }                                                                      \n"
+      "	 Out_Color = result;                                                    \n"
+      "}                                                                              \n";
 
   shader_handle = glCreateProgram();
   vert_handle = glCreateShader(GL_VERTEX_SHADER);
@@ -408,6 +515,7 @@ bool SDL_Imgui_State::create_device_objects()
   glAttachShader(shader_handle, frag_handle);
   glLinkProgram(shader_handle);
   texture_location = glGetUniformLocation(shader_handle, "Texture");
+  cubemap_location = glGetUniformLocation(shader_handle, "TextureCube");
   projection_location = glGetUniformLocation(shader_handle, "ProjMtx");
   position_location = glGetAttribLocation(shader_handle, "Position");
   uv_location = glGetAttribLocation(shader_handle, "UV");
@@ -415,6 +523,8 @@ bool SDL_Imgui_State::create_device_objects()
   gamma_location = glGetUniformLocation(shader_handle, "gamma_encode");
   mip_location = glGetUniformLocation(shader_handle, "lod");
   sample_lod_location = glGetUniformLocation(shader_handle, "sample_lod");
+  is_cubemap_location = glGetUniformLocation(shader_handle, "is_cubemap");
+  cubemap_matrix_location = glGetUniformLocation(shader_handle, "cubemap_matrix");
 
   glGenBuffers(1, &vbo);
   glGenBuffers(1, &element_buffer);

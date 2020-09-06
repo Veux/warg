@@ -59,9 +59,12 @@ private:
   int shader_handle = 0, vert_handle = 0, frag_handle = 0;
   int texture_location = 0, projection_location = 0;
   int position_location = 0, uv_location = 0, color_location = 0;
+  int cubemap_location = 0;
   int gamma_location = 0;
   int mip_location = 0;
   int sample_lod_location = 0;
+  int is_cubemap_location = 0;
+  int cubemap_matrix_location = 0;
   GLuint vbo = 0, vao = 0, element_buffer = 0;
   SDL_Cursor *sdl_cursors[ImGuiMouseCursor_Count_] = {0};
 };

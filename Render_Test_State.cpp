@@ -243,8 +243,12 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
     : State(name, window, window_size)
 {
 
-  scene.initialize_lighting(
-      "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+  //scene.initialize_lighting(
+  //    "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+
+    scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
+      "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+
   // scene.initialize_lighting("Assets/Textures/black.png",
   //  "Assets/Textures/black.png");
 
@@ -259,7 +263,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_grabbyarm(&scene,vec3(0,0,1));
  // spawn_test_triangle(&scene);
  // spawn_compass(&scene);
-
+  spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -778,7 +782,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
   material.roughness.source = "white";
   material.metalness.source = "white";
   uint32 kcount = 2;
-  uint32 icount = 15;
+  uint32 icount = 10;
   uint32 jcount = 4;
 
   for (uint32 i = 0; i < icount; ++i)

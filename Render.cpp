@@ -47,7 +47,7 @@ const vec4 Conductor_Reflectivity::copper = vec4(0.95, 0.64, 0.54, 1.0f);
 const vec4 Conductor_Reflectivity::gold = vec4(1.0, 0.71, 0.29, 1.0f);
 const vec4 Conductor_Reflectivity::aluminum = vec4(0.91, 0.92, 0.92, 1.0f);
 const vec4 Conductor_Reflectivity::silver = vec4(0.95, 0.93, 0.88, 1.0f);
-const uint32 ENV_MAP_MIP_LEVELS = 6;
+const uint32 ENV_MAP_MIP_LEVELS = 10;
 static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
@@ -534,7 +534,7 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glDepthFunc(GL_LESS);
-  // glEnable(GL_FRAMEBUFFER_SRGB);
+  glEnable(GL_FRAMEBUFFER_SRGB);
   glEnable(GL_SCISSOR_TEST);
 
   for (uint32 mip_level = 0; mip_level < ENV_MAP_MIP_LEVELS; ++mip_level)
@@ -557,6 +557,7 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glScissor(x - 15, y - 15, draw_width + 33, draw_height + 33);
     float roughness = (float)mip_level / (float)(ENV_MAP_MIP_LEVELS - 1);
     specular_filter.set_uniform("roughness", roughness);
+    specular_filter.set_uniform("size", size.x);
     for (unsigned int i = 0; i < 6; ++i)
     {
       specular_filter.set_uniform("camera", cameras[i]);
@@ -623,6 +624,8 @@ void Texture::load()
         {
           glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
+          
+          
           glTextureStorage2D(texture->texture, t.levels, texture->internalformat, texture->size.x, texture->size.y);
           glTextureSubImage2D(
               texture->texture, 0, 0, 0, texture->size.x, texture->size.y, GL_RGBA, texture->datatype, 0);
@@ -724,11 +727,12 @@ void Texture::load()
     texture.get()->file_mod_t = attr.st_mtime;
 
     t.size = texture->size = ivec2(imgdata.x, imgdata.y);
+    t.levels = 1 + floor(glm::log2(float32(glm::max(texture->size.x, texture->size.y))));
+    texture->levels = t.levels;
     texture->filename = t.name;
 
     texture->internalformat = t.format;
     texture->border_color = t.border_color;
-    texture->levels = t.levels;
 
     set_message(s("Texture load cache miss. Texture from disk: ", t.name,
                     "\nInternal_Format: ", texture_format_to_string(texture->internalformat)),
@@ -1138,7 +1142,7 @@ void Material::bind()
   }
 
   success = roughness.bind(Texture_Location::roughness);
-  shader.set_uniform("texture2_mod", roughness.t.mod * roughness.t.mod);
+  shader.set_uniform("texture2_mod", roughness.t.mod );
   if (!success)
   {
     shader.set_uniform("texture2_mod", DEFAULT_ROUGHNESS);
@@ -2816,7 +2820,10 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   glNamedFramebufferRenderbuffer(fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
   glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &handle->texture);
-  glTextureStorage2D(handle->texture, ENV_MAP_MIP_LEVELS, GL_RGB16F, size.x, size.y);
+
+  uint32 level_count = 1 + floor(glm::log2(float32(glm::max(size.x, size.y))));
+
+  glTextureStorage2D(handle->texture,level_count , GL_RGB16F, size.x, size.y);
   // glBindTextureUnit(6, handle->texture);
   // glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   for (uint32 i = 0; i < 6; ++i)

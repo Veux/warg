@@ -551,10 +551,10 @@ void main()
   // ambient light
 
   // ambient specular
-  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness*m.roughness);
   
-  const float MAX_REFLECTION_LOD = 5.0;
-  vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
+  const float MAX_REFLECTION_LOD = 9.0;
+  vec3 prefilteredColor = textureLod(texture6, r, m.roughness*m.roughness*MAX_REFLECTION_LOD).rgb;
   
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
   vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);

@@ -367,6 +367,7 @@ std::string get_messages()
 
 void push_log_to_disk()
 {
+  return;
   static bool first = true;
   if (first)
   {
