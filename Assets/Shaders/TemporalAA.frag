@@ -1,6 +1,6 @@
 #version 330
-uniform sampler2D texture0;//current;
-uniform sampler2D texture1;//previous;
+uniform sampler2D texture0; // current;
+uniform sampler2D texture1; // previous;
 
 in vec2 frag_uv;
 layout(location = 0) out vec4 out0;

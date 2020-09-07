@@ -12,7 +12,7 @@ uniform sampler2D texture8;   // brdf_ibl_lut
 
 uniform sampler2D texture10; // refraction
 
-uniform sampler2D texture11;//displacement
+uniform sampler2D texture11; // displacement
 uniform vec4 texture11_mod;
 
 uniform vec4 texture0_mod;
@@ -24,6 +24,7 @@ uniform vec4 texture5_mod;
 uniform vec4 texture6_mod;
 uniform vec4 texture10_mod;
 
+#define xor ^^
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
@@ -78,7 +79,10 @@ float linearize_depth(float z)
   return (2.0 * near * far) / (far + near - depth * (far - near));
 }
 
-float saturate(float x) { return clamp(x, 0, 1); }
+float saturate(float x)
+{
+  return clamp(x, 0, 1);
+}
 struct Material
 {
   vec3 albedo;
@@ -101,54 +105,33 @@ float chebyshevUpperBound(vec2 moments, float distance, float max_variance)
   return p_max;
 }
 
-float in_range(float x ,float min_edge, float max_edge)
+float in_range(float x, float min_edge, float max_edge)
 {
-    return float((x>=min_edge)&&(x<max_edge));
+  return float((x >= min_edge) && (x < max_edge));
 }
-
 
 void gather_shadow_moments()
 {
-  frag_in_shadow_space_postw[0] =
-      vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
-  variance_depth[0] =
-      texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
-  frag_in_shadow_space_postw[1] =
-      vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
-  variance_depth[1] =
-      texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
-  frag_in_shadow_space_postw[2] =
-      vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
-  variance_depth[2] =
-      texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
-  frag_in_shadow_space_postw[3] =
-      vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
-  variance_depth[3] =
-      texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
-  frag_in_shadow_space_postw[4] =
-      vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
-  variance_depth[4] =
-      texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
-  frag_in_shadow_space_postw[5] =
-      vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
-  variance_depth[5] =
-      texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
-  frag_in_shadow_space_postw[6] =
-      vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
-  variance_depth[6] =
-      texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
-  frag_in_shadow_space_postw[7] =
-      vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
-  variance_depth[7] =
-      texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
-  frag_in_shadow_space_postw[8] =
-      vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
-  variance_depth[8] =
-      texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
-  frag_in_shadow_space_postw[9] =
-      vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
-  variance_depth[9] =
-      texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
+  frag_in_shadow_space_postw[0] = vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
+  variance_depth[0] = texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
+  frag_in_shadow_space_postw[1] = vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
+  variance_depth[1] = texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
+  frag_in_shadow_space_postw[2] = vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
+  variance_depth[2] = texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
+  frag_in_shadow_space_postw[3] = vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
+  variance_depth[3] = texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
+  frag_in_shadow_space_postw[4] = vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
+  variance_depth[4] = texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
+  frag_in_shadow_space_postw[5] = vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
+  variance_depth[5] = texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
+  frag_in_shadow_space_postw[6] = vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
+  variance_depth[6] = texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
+  frag_in_shadow_space_postw[7] = vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
+  variance_depth[7] = texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
+  frag_in_shadow_space_postw[8] = vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
+  variance_depth[8] = texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
+  frag_in_shadow_space_postw[9] = vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
+  variance_depth[9] = texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
 }
 
 /*
@@ -285,7 +268,6 @@ float D_GGX(float a, float ndoth)
   return a2 / (PI * x * x);
 }
 
-
 // Microfacet Models for Refraction through Rough Surfaces
 // Walter et al.
 // http://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.html
@@ -310,74 +292,71 @@ float rand(vec2 p)
   return fract(sin(dot(p.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-float random ( vec2 st) {
-    return fract(sin(dot(st.xy,
-                         vec2(12.9898,78.233)))*
-        43758.5453123);
+float random(vec2 st)
+{
+  return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
 }
 
-float noise (vec2 st) {
-    vec2 i = floor(st);
-    vec2 f = fract(st);
+float noise(vec2 st)
+{
+  vec2 i = floor(st);
+  vec2 f = fract(st);
 
-    // Four corners in 2D of a tile
-    float a = random(i);
-    float b = random(i + vec2(1.0, 0.0));
-    float c = random(i + vec2(0.0, 1.0));
-    float d = random(i + vec2(1.0, 1.0));
+  // Four corners in 2D of a tile
+  float a = random(i);
+  float b = random(i + vec2(1.0, 0.0));
+  float c = random(i + vec2(0.0, 1.0));
+  float d = random(i + vec2(1.0, 1.0));
 
-    vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 u = f * f * (3.0 - 2.0 * f);
 
-    return mix(a, b, u.x) +
-            (c - a)* u.y * (1.0 - u.x) +
-            (d - b) * u.x * u.y;
+  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 #define NUM_OCTAVES2 3
-float fbm (vec2 uv) {
-    float v = 0.0;
-    float a = 0.5;
-    vec2 shift = vec2(100.0);
-    // Rotate to reduce axial bias
-    mat2 rot = mat2(cos(0.5), sin(0.5),
-                    -sin(0.5), cos(0.50));
-    for (int i = 0; i < NUM_OCTAVES2; ++i) {
-        v += a * noise(uv);
-        uv = rot * uv * 2.0 + shift;
-        a *= 0.5;
-    }
-    return v;
-
-
+float fbm(vec2 uv)
+{
+  float v = 0.0;
+  float a = 0.5;
+  vec2 shift = vec2(100.0);
+  // Rotate to reduce axial bias
+  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
+  for (int i = 0; i < NUM_OCTAVES2; ++i)
+  {
+    v += a * noise(uv);
+    uv = rot * uv * 2.0 + shift;
+    a *= 0.5;
+  }
+  return v;
 }
 
 float waterheight(vec2 uv, float time)
 {
   vec2 q = vec2(0.);
-  q.x = fbm( uv + .00*time);
-  q.y = fbm( uv + vec2(1.0));
+  q.x = fbm(uv + .00 * time);
+  q.y = fbm(uv + vec2(1.0));
 
   vec2 r = vec2(0.);
-  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+ 0.15*time );
-  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+ 0.126*time);
-  float f = fbm(uv+r);
-  
-  //vec3 partial_d = dFdx(frag_world_position);
+  r.x = fbm(uv + 1.0 * q + vec2(1.7, 9.2) + 0.15 * time);
+  r.y = fbm(uv + 1.0 * q + vec2(8.3, 2.8) + 0.126 * time);
+  float f = fbm(uv + r);
+
+  // vec3 partial_d = dFdx(frag_world_position);
   vec3 partial_d = dFdy(frag_world_position);
   float lenpd = length(partial_d);
-  
-  float divisor =  65.1f*lenpd;
 
-  divisor = max(1,divisor);
-  f = f/divisor;
-  //f = 0.2*f;
+  float divisor = 65.1f * lenpd;
+
+  divisor = max(1, divisor);
+  f = f / divisor;
+  // f = 0.2*f;
 
   float scale = 0.151f;
-  uv = scale*uv;
-  q.x = fbm( uv + .00*time);
-  q.y = fbm( uv + vec2(1.0));
-  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+  scale*.3515*time );
-  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+  scale*.35126*time);
-  f = f + 1.f*fbm(uv+3.f*r);
+  uv = scale * uv;
+  q.x = fbm(uv + .00 * time);
+  q.y = fbm(uv + vec2(1.0));
+  r.x = fbm(uv + 1.0 * q + vec2(1.7, 9.2) + scale * .3515 * time);
+  r.y = fbm(uv + 1.0 * q + vec2(8.3, 2.8) + scale * .35126 * time);
+  f = f + 1.f * fbm(uv + 3.f * r);
 
   return f;
 }
@@ -408,8 +387,8 @@ vec2 hammersley2d(uint i, uint N)
 
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
-} 
+  return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+}
 void main()
 {
   vec3 result = vec3(0);
@@ -418,8 +397,8 @@ void main()
   vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
   if (discard_on_alpha)
   {
-    //if (texture0_mod.a*albedo_tex.a < 0.3)
-     // discard;
+    // if (texture0_mod.a*albedo_tex.a < 0.3)
+    // discard;
   }
   gather_shadow_moments();
 
@@ -443,8 +422,9 @@ void main()
     a low diffuse value won't affect the specularity at all on nonconductors, and transparent conductors
     don't exist irl
 
-    so the diffuse component can be thought of as 'the amount of the (non-specular) light that is reflected back out to see' 
-    and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or reflected back out
+    so the diffuse component can be thought of as 'the amount of the (non-specular) light that is reflected back out to
+    see' and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or
+    reflected back out
   */
   float premultiply_alpha = albedo_tex.a;
   if (alpha_albedo_override != -1.0f)
@@ -454,12 +434,12 @@ void main()
   premultiply_alpha *= texture0_mod.a;
 
   m.albedo = texture0_mod.rgb * albedo_tex.rgb;
-  //m.albedo = pow(m.albedo,vec3(1/2.2));
-  m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
+  // m.albedo = pow(m.albedo,vec3(1/2.2));
+  m.normal = TBN * normalize(texture3_mod.rgb * texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
-  
+
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
@@ -467,11 +447,11 @@ void main()
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
   vec3 F0 = vec3(0.04); // default dielectrics
-  //todo: could put dielectric reflectivity in a uniform
-  //this would let us specify more light absorbant materials
+  // todo: could put dielectric reflectivity in a uniform
+  // this would let us specify more light absorbant materials
   F0 = mix(F0, m.albedo, m.metalness);
 
-  float ndotv = clamp(dot(m.normal, v),0,1);
+  float ndotv = clamp(dot(m.normal, v), 0, 1);
 
   float roughnessclamp = clamp(m.roughness, 0.01, 1);
 
@@ -518,8 +498,7 @@ void main()
       }
       if (shadow_map_enabled)
       {
-        float light_visibility = chebyshevUpperBound(
-            shadow_moments, shadow_space_postw.z, max_variance[i]);
+        float light_visibility = chebyshevUpperBound(shadow_moments, shadow_space_postw.z, max_variance[i]);
         visibility = visibility * light_visibility;
       }
     }
@@ -544,143 +523,143 @@ void main()
   vec3 directonly = result;
 
   // ambient specular
-  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);  
+  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
   const float MAX_REFLECTION_LOD = 6.0;
-  vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;  
+  vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
-  vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
+  vec3 ambient_specular =
+      mix(vec3(1), F0, m.metalness) * prefilteredColor * (mix(vec3(1), Ks, 1 - m.metalness) * envBRDF.x + envBRDF.y);
 
   // ambient diffuse
   vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
   vec3 irradiance = texture(texture7, -m.normal).rgb;
-  vec3 ambient_diffuse = Kd * irradiance * m.albedo ;/// PI; //appears to be correct without dividing by pi as in direct lighting, as it seems to be baked in to the irradiance map
+  vec3 ambient_diffuse = Kd * irradiance * m.albedo; /// PI; //appears to be correct without dividing by pi as in direct
+                                                     /// lighting, as it seems to be baked in to the irradiance map
   vec3 ambient = (ambient_specular + ambient_diffuse);
-
-
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
-  //result = m.emissive;
-//  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
-//  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
-//  result = vec3(brdfc ,0);
- // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
-  //result = (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
-  //result = vec3(ndotv);
-  //result = vec3(m.metalness);
-  //result = vec3(m.roughness);
-  //result = mix(vec3(1),F0,m.metalness)*prefilteredColor;
- // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
-  //result = vec3(gl_FragCoord.x/1920);
-  //result = 0.05f*vec3(length(frag_world_position));
-  //result = m.albedo;
+  // result = m.emissive;
+  //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
+  //  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
+  //  result = vec3(brdfc ,0);
+  // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
+  // result = (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
+  // result = vec3(ndotv);
+  // result = vec3(m.metalness);
+  // result = vec3(m.roughness);
+  // result = mix(vec3(1),F0,m.metalness)*prefilteredColor;
+  // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
+  // result = vec3(gl_FragCoord.x/1920);
+  // result = 0.05f*vec3(length(frag_world_position));
+  // result = m.albedo;
 
-  //result = pow(result,vec3(2.2));
-  //result = clamp(result,vec3(0),vec3(1));
-  //result = prefilteredColor;
-  //result = vec3(texture2D(texture2, frag_uv).r);
-  //result = vec3(texture2_mod.r);
-  //result = directonly;
-  //result = vec3(Ks);
-  //result = textureLod(texture6, r, .8).rgb;
-  //result = vec3(texture2D(texture4, frag_uv).r);
-  //result = irradiance;
-  //result = m.albedo;
-  //result = m.emissive;
-  //result = texture3_mod.rgb;
-  //result = vec3(frag_normal_uv,0);
-  //result = texture2D(texture3, frag_normal_uv).rgb;
-  //result = vec3(albedo_tex.a);
-  //result = clamp(result,vec3(0),vec3(1));
-  //result = textureLod(texture6,r,4).rgb;
-  //result = pow(result,vec3(2.2));
-   //result = 1*result;
+  // result = pow(result,vec3(2.2));
+  // result = clamp(result,vec3(0),vec3(1));
+  // result = prefilteredColor;
+  // result = vec3(texture2D(texture2, frag_uv).r);
+  // result = vec3(texture2_mod.r);
+  // result = directonly;
+  // result = vec3(Ks);
+  // result = textureLod(texture6, r, .8).rgb;
+  // result = vec3(texture2D(texture4, frag_uv).r);
+  // result = irradiance;
+  // result = m.albedo;
+  // result = m.emissive;
+  // result = texture3_mod.rgb;
+  // result = vec3(frag_normal_uv,0);
+  // result = texture2D(texture3, frag_normal_uv).rgb;
+  // result = vec3(albedo_tex.a);
+  // result = clamp(result,vec3(0),vec3(1));
+  // result = textureLod(texture6,r,4).rgb;
+  // result = pow(result,vec3(2.2));
+  // result = 1*result;
 
-   
-  //if(blocking_terrain != 0.0f)// 0.015f)
+  // if(blocking_terrain != 0.0f)// 0.015f)
   //{
   float epsilon = 0.00001;
-  bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
+  bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor (mod(frag_world_position.y + epsilon, 1) < 0.5) xor (mod(frag_world_position.z + epsilon, 1) < 0.5);
   float value = float(tile_light);
 
-  float r1 = noise(50.1f*frag_world_position.xy);
-  float r2 = noise(50.1f*frag_world_position.xz);
-  float r3 = noise(50.1f*frag_world_position.yz);
-  float rr = 0.333f*(r1 + r2+ r3);
+  float r1 = noise(50.1f * frag_world_position.xy);
+  float r2 = noise(50.1f * frag_world_position.xz);
+  float r3 = noise(50.1f * frag_world_position.yz);
+  float rr = 0.333f * (r1 + r2 + r3);
 
-  float r12 = noise(52.1f*frag_world_position.xy);
-  float r22 = noise(52.1f*frag_world_position.xz);
-  float r32= noise(52.1f*frag_world_position.yz);
-  float rr2 = 0.333f*(r12 + r22+ r32);
+  float r12 = noise(52.1f * frag_world_position.xy);
+  float r22 = noise(52.1f * frag_world_position.xz);
+  float r32 = noise(52.1f * frag_world_position.yz);
+  float rr2 = 0.333f * (r12 + r22 + r32);
 
-  float r13 = noise(55.1f*frag_world_position.xy);
-  float r23 = noise(55.1f*frag_world_position.xz);
-  float r33 = noise(55.1f*frag_world_position.yz);
-  float rr3 = 0.333f*(r13 + r23+ r33);
+  float r13 = noise(55.1f * frag_world_position.xy);
+  float r23 = noise(55.1f * frag_world_position.xz);
+  float r33 = noise(55.1f * frag_world_position.yz);
+  float rr3 = 0.333f * (r13 + r23 + r33);
 
-  float rrt = random(vec2(rr+time,rr2+time));
+  float rrt = random(vec2(rr + time, rr2 + time));
 
-  float is_char_to_dirt = in_range(biome,0.f,1.f);
-  float is_soil = in_range(biome,1.f,2.f);
-  float is_very_wet_soil = in_range(biome,1.5f,2.f);
-  float is_grass = in_range(biome,2.f,4.f);
-  float is_heavy_grass = in_range(biome,2.5f,4.f);
-  float on_fire = in_range(biome,4.f,5.f); //timenoise mod red color
-  //float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
-  
-  float terrain_ao = pow(.1+ground_height,1.2);
-  vec3 fire = 3.f*rrt*vec3(4.5,2.1,.1);
-  vec3 grass = terrain_ao*rr2*vec3(0.013,.433,.0136);
-  vec3 soil = terrain_ao*rr3*0.845f*vec3(0.3,.13,.036);
-  vec3 wet_soil = terrain_ao*0.32f*soil;
-  vec3 flowers = terrain_ao*vec3(rr,rr2,rr3);
-  vec3 charred = terrain_ao*0.015f*vec3(fbm(11.f*frag_world_position.xy)+fbm(frag_world_position.xy));
+  float is_char_to_dirt = in_range(biome, 0.f, 1.f);
+  float is_soil = in_range(biome, 1.f, 2.f);
+  float is_very_wet_soil = in_range(biome, 1.5f, 2.f);
+  float is_grass = in_range(biome, 2.f, 4.f);
+  float is_heavy_grass = in_range(biome, 2.5f, 4.f);
+  float on_fire = in_range(biome, 4.f, 5.f); // timenoise mod red color
+  // float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
+
+  float terrain_ao = pow(.1 + ground_height, 1.2);
+  vec3 fire = 3.f * rrt * vec3(4.5, 2.1, .1);
+  vec3 grass = terrain_ao * rr2 * vec3(0.013, .433, .0136);
+  vec3 soil = terrain_ao * rr3 * 0.845f * vec3(0.3, .13, .036);
+  vec3 wet_soil = terrain_ao * 0.32f * soil;
+  vec3 flowers = terrain_ao * vec3(rr, rr2, rr3);
+  vec3 charred = terrain_ao * 0.015f * vec3(fbm(11.f * frag_world_position.xy) + fbm(frag_world_position.xy));
   vec3 grass_variance = vec3(fbm(frag_world_position.xy));
-  //only one of these will be nonzero
+  // only one of these will be nonzero
   float char_to_dirt_t = saturate(biome);
-  float soil_t = saturate(biome-1.0f);
-  float grass_t = saturate(biome-2.f);
-  float fire_t = saturate(biome-4.f);
-  //float fading_fire_t = saturate(biome-5.f);
-  
-  float fire_visual_intensity = sin(3.14*pow(fire_t,2));
-  //extra effects:
-  float vert_wet_soil_t = 2.f*clamp(biome-1.5f,0,0.5f);//idk?
-  float heavy_grass_t = 2.f*clamp(biome-2.65f,0,0.5f);//add flowers
-  //char_to_dirt_t = 0.55f;
-  char_to_dirt_t = pow(char_to_dirt_t,5.f);
-  //is_char_to_dirt = 1.f;
-  vec3 charr_contribution = is_char_to_dirt*mix(charred,soil,char_to_dirt_t);
-  vec3 soil_contribution = is_soil*mix(soil,wet_soil,soil_t);
-  vec3 grass_contribution = grass_variance*is_grass*mix(wet_soil,grass,grass_t);
-  vec3 fire_contribution =  fire_visual_intensity*on_fire*fire;
-  float smoke = pow(waterheight(10.f*frag_world_position.xy,20.f*time),1.0);
-  fire_contribution = 1.f*mix(vec3(0),fire_contribution,1.f-smoke);
+  float soil_t = saturate(biome - 1.0f);
+  float grass_t = saturate(biome - 2.f);
+  float fire_t = saturate(biome - 4.f);
+  // float fading_fire_t = saturate(biome-5.f);
 
-  //vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
-  vec3 flowers_contribution = is_heavy_grass*step(rr,0.3f*heavy_grass_t) *flowers ;
+  float fire_visual_intensity = sin(3.14 * pow(fire_t, 2));
+  // extra effects:
+  float vert_wet_soil_t = 2.f * clamp(biome - 1.5f, 0, 0.5f); // idk?
+  float heavy_grass_t = 2.f * clamp(biome - 2.65f, 0, 0.5f);  // add flowers
+  // char_to_dirt_t = 0.55f;
+  char_to_dirt_t = pow(char_to_dirt_t, 5.f);
+  // is_char_to_dirt = 1.f;
+  vec3 charr_contribution = is_char_to_dirt * mix(charred, soil, char_to_dirt_t);
+  vec3 soil_contribution = is_soil * mix(soil, wet_soil, soil_t);
+  vec3 grass_contribution = grass_variance * is_grass * mix(wet_soil, grass, grass_t);
+  vec3 fire_contribution = fire_visual_intensity * on_fire * fire;
+  float smoke = pow(waterheight(10.f * frag_world_position.xy, 20.f * time), 1.0);
+  fire_contribution = 1.f * mix(vec3(0), fire_contribution, 1.f - smoke);
 
-  vec3 ground_result = charr_contribution + soil_contribution + grass_contribution + fire_contribution +flowers_contribution;
-  
+  // vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
+  vec3 flowers_contribution = is_heavy_grass * step(rr, 0.3f * heavy_grass_t) * flowers;
+
+  vec3 ground_result =
+      charr_contribution + soil_contribution + grass_contribution + fire_contribution + flowers_contribution;
+
   vec3 water = result;
-  float depth_t = clamp(pow(12.1f*water_depth,1.f),0,1);
-  result = mix(ground_result,water,depth_t);
- //result = vec3(is_very_wet_soil);
+  float depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
+  result = mix(ground_result, water, depth_t);
+  // result = vec3(is_very_wet_soil);
   // result = vec3(float(biome >= 2.f && biome < 3.f));
- //result = vec3(grass_variance);
- //
- //result = vec3(is_char_to_dirt).rgb;
- //result = vec3(is_soil).rgb;
- //result = vec3(is_very_wet_soil).rgb;
- //result = vec3(grass_t).rgb;
- //result = vec3(is_heavy_grass).rgb;
- //result = vec3(on_fire).rgb;
- //result = vec3(fire_is_fading).rgb;
- //result = vec3(smoke);
- //result = vec3(fire_visual_intensity);
- //result = vec3(in_range(biome,3.8,3.9));
- //result = vec3(indebug);
- //result = vec3(is_heavy_grass).rgb;
- // result = vec3(step(0.f,-2.f),0,.1);
+  // result = vec3(grass_variance);
+  //
+  // result = vec3(is_char_to_dirt).rgb;
+  // result = vec3(is_soil).rgb;
+  // result = vec3(is_very_wet_soil).rgb;
+  // result = vec3(grass_t).rgb;
+  // result = vec3(is_heavy_grass).rgb;
+  // result = vec3(on_fire).rgb;
+  // result = vec3(fire_is_fading).rgb;
+  // result = vec3(smoke);
+  // result = vec3(fire_visual_intensity);
+  // result = vec3(in_range(biome,3.8,3.9));
+  // result = vec3(indebug);
+  // result = vec3(is_heavy_grass).rgb;
+  // result = vec3(step(0.f,-2.f),0,.1);
   out0 = vec4(result, premultiply_alpha);
 }

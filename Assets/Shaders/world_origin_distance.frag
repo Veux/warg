@@ -16,6 +16,7 @@ struct Light
   float cone_angle;
   uint type;
 };
+#define xor ^^
 #define MAX_LIGHTS 10
 uniform Light lights[MAX_LIGHTS];
 uniform uint number_of_lights;
@@ -35,18 +36,19 @@ float linearize_depth(float depth)
 
 float epsilon = 0.00001;
 void main()
-{   
-  bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
+{
+  bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor
+                    (mod(frag_world_position.y + epsilon, 1) < 0.5) xor (mod(frag_world_position.z + epsilon, 1) < 0.5);
   vec3 color = vec3(0);
   if (tile_light)
   {
-   color = frag_world_position / 12;
+    color = frag_world_position / 12;
   }
 
   float dist = length(frag_world_position);
-  if(dist < 1)
+  if (dist < 1)
   {
-    color += 0.5f*vec3(1.000f+sin(time*10)*dist);
+    color += 0.5f * vec3(1.000f + sin(time * 10) * dist);
   }
 
   out0 = vec4(color, 1);

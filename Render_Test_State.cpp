@@ -78,14 +78,14 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.054, .135, .159, .998);
-  //material.uses_transparency = true;
+  // material.uses_transparency = true;
   material.uv_scale = vec2(1);
   material.roughness.mod = vec4(0.25);
   material.metalness.mod = vec4(0.84);
   material.vertex_shader = "displacement.vert";
   material.frag_shader = "terrain.frag";
-  //world_water_settings(&material.uniform_set);
-  Node_Index memewater = scene->add_mesh("water",&mesh, &material);
+  // world_water_settings(&material.uniform_set);
+  Node_Index memewater = scene->add_mesh("water", &mesh, &material);
   scene->nodes[memewater].scale = scale;
   scene->nodes[memewater].position = pos;
 }
@@ -247,8 +247,8 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   scene.initialize_lighting(
       "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
 
-    //scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
-    //  "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+  // scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
+  //  "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
   // scene.initialize_lighting("Assets/Textures/black.png",
   //  "Assets/Textures/black.png");
@@ -262,9 +262,9 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_gun(&scene, vec3(0));
   spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
- // spawn_test_triangle(&scene);
- // spawn_compass(&scene);
-  //spawn_test_spheres(scene);
+  // spawn_test_triangle(&scene);
+  // spawn_compass(&scene);
+  // spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -665,22 +665,20 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 void Render_Test_State::update()
 {
 
-
-  if(painter.textures.size() && painter.textures[0].texture != nullptr)
+  if (painter.textures.size() && painter.textures[0].texture != nullptr)
   {
-    Node_Index water_node = scene.find_by_name(NODE_NULL,"water");
-    Flat_Scene_Graph_Node* node = &scene.nodes[water_node];
+    Node_Index water_node = scene.find_by_name(NODE_NULL, "water");
+    Flat_Scene_Graph_Node *node = &scene.nodes[water_node];
     Material_Index mi = node->model[0].second;
-    Material* mat = &scene.resource_manager->material_pool[mi];
+    Material *mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
   }
 
-
   // update_grabbyarm(&scene, current_time);
-  //update_planets(&scene, current_time);
+  // update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
-  //update_test_triangle(&scene);
+  // update_test_triangle(&scene);
 
   // static vec3 wind_dir;
   // if (fract(sin(current_time)) > .5)
@@ -756,10 +754,10 @@ void Render_Test_State::draw_gui()
     }
     painter.run(imgui_event_accumulator);
 
-    //static std::vector<char> buf = {};
-    //uint32 size = buf.size();
-    //ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
-    //ImGui::InputTextMultiline("blah",&buf[0],size,ImVec2(512,512),flags);
+    // static std::vector<char> buf = {};
+    // uint32 size = buf.size();
+    // ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
+    // ImGui::InputTextMultiline("blah",&buf[0],size,ImVec2(512,512),flags);
   }
 }
 

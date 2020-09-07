@@ -13,11 +13,11 @@ uniform float SUBPIXEL_QUALITY;
 
 layout(location = 0) out vec3 out0;
 
-//encodes the linear texture input into gamma space
+// encodes the linear texture input into gamma space
 float rgb2luma(vec3 rgb)
 {
-  return pow(dot(rgb, vec3(0.299, 0.587, 0.114)),1.0f/2.22f);
-  //return dot(rgb, vec3(0.299, 0.587, 0.114));
+  return pow(dot(rgb, vec3(0.299, 0.587, 0.114)), 1.0f / 2.22f);
+  // return dot(rgb, vec3(0.299, 0.587, 0.114));
 }
 
 void main()
@@ -34,10 +34,8 @@ void main()
   float lumaRight = rgb2luma(textureOffset(texture0, frag_uv, ivec2(1, 0)).rgb);
 
   // Find the maximum and minimum luma around the current fragment.
-  float lumaMin =
-      min(lumaCenter, min(min(lumaDown, lumaUp), min(lumaLeft, lumaRight)));
-  float lumaMax =
-      max(lumaCenter, max(max(lumaDown, lumaUp), max(lumaLeft, lumaRight)));
+  float lumaMin = min(lumaCenter, min(min(lumaDown, lumaUp), min(lumaLeft, lumaRight)));
+  float lumaMax = max(lumaCenter, max(max(lumaDown, lumaUp), max(lumaLeft, lumaRight)));
 
   // Compute the delta.
   float lumaRange = lumaMax - lumaMin;
@@ -51,14 +49,10 @@ void main()
   }
 
   // Query the 4 remaining corners lumas.
-  float lumaDownLeft =
-      rgb2luma(textureOffset(texture0, frag_uv, ivec2(-1, -1)).rgb);
-  float lumaUpRight =
-      rgb2luma(textureOffset(texture0, frag_uv, ivec2(1, 1)).rgb);
-  float lumaUpLeft =
-      rgb2luma(textureOffset(texture0, frag_uv, ivec2(-1, 1)).rgb);
-  float lumaDownRight =
-      rgb2luma(textureOffset(texture0, frag_uv, ivec2(1, -1)).rgb);
+  float lumaDownLeft = rgb2luma(textureOffset(texture0, frag_uv, ivec2(-1, -1)).rgb);
+  float lumaUpRight = rgb2luma(textureOffset(texture0, frag_uv, ivec2(1, 1)).rgb);
+  float lumaUpLeft = rgb2luma(textureOffset(texture0, frag_uv, ivec2(-1, 1)).rgb);
+  float lumaDownRight = rgb2luma(textureOffset(texture0, frag_uv, ivec2(1, -1)).rgb);
 
   // Combine the four edges lumas (using intermediary variables for future
   // computations with the same values).
@@ -73,11 +67,9 @@ void main()
 
   // Compute an estimation of the gradient along the horizontal and vertical
   // axis.
-  float edgeHorizontal = abs(-2.0 * lumaLeft + lumaLeftCorners) +
-                         abs(-2.0 * lumaCenter + lumaDownUp) * 2.0 +
+  float edgeHorizontal = abs(-2.0 * lumaLeft + lumaLeftCorners) + abs(-2.0 * lumaCenter + lumaDownUp) * 2.0 +
                          abs(-2.0 * lumaRight + lumaRightCorners);
-  float edgeVertical = abs(-2.0 * lumaUp + lumaUpCorners) +
-                       abs(-2.0 * lumaCenter + lumaLeftRight) * 2.0 +
+  float edgeVertical = abs(-2.0 * lumaUp + lumaUpCorners) + abs(-2.0 * lumaCenter + lumaLeftRight) * 2.0 +
                        abs(-2.0 * lumaDown + lumaDownCorners);
 
   // Is the local edge horizontal or vertical ?
@@ -126,8 +118,7 @@ void main()
   }
 
   // Compute offset (for each iteration step) in the right direction.
-  vec2 offset = isHorizontal ? vec2(inverseScreenSize.x, 0.0)
-                             : vec2(0.0, inverseScreenSize.y);
+  vec2 offset = isHorizontal ? vec2(inverseScreenSize.x, 0.0) : vec2(0.0, inverseScreenSize.y);
   // Compute UVs to explore on each side of the edge, orthogonally. The QUALITY
   // allows us to step faster.
   vec2 uv1 = currentUv - offset;
@@ -219,25 +210,20 @@ void main()
   // If the luma at center is smaller than at its neighbour, the delta luma at
   // each end should be positive (same variation). (in the direction of the
   // closer side of the edge.)
-  bool correctVariation =
-      ((isDirection1 ? lumaEnd1 : lumaEnd2) < 0.0) != isLumaCenterSmaller;
+  bool correctVariation = ((isDirection1 ? lumaEnd1 : lumaEnd2) < 0.0) != isLumaCenterSmaller;
 
   // If the luma variation is incorrect, do not offset.
   float finalOffset = correctVariation ? pixelOffset : 0.0;
 
   // Sub-pixel shifting
   // Full weighted average of the luma over the 3x3 neighborhood.
-  float lumaAverage = (1.0 / 12.0) * (2.0 * (lumaDownUp + lumaLeftRight) +
-                                         lumaLeftCorners + lumaRightCorners);
+  float lumaAverage = (1.0 / 12.0) * (2.0 * (lumaDownUp + lumaLeftRight) + lumaLeftCorners + lumaRightCorners);
   // Ratio of the delta between the global average and the center luma, over the
   // luma range in the 3x3 neighborhood.
-  float subPixelOffset1 =
-      clamp(abs(lumaAverage - lumaCenter) / lumaRange, 0.0, 1.0);
-  float subPixelOffset2 =
-      (-2.0 * subPixelOffset1 + 3.0) * subPixelOffset1 * subPixelOffset1;
+  float subPixelOffset1 = clamp(abs(lumaAverage - lumaCenter) / lumaRange, 0.0, 1.0);
+  float subPixelOffset2 = (-2.0 * subPixelOffset1 + 3.0) * subPixelOffset1 * subPixelOffset1;
   // Compute a sub-pixel offset based on this delta.
-  float subPixelOffsetFinal =
-      subPixelOffset2 * subPixelOffset2 * SUBPIXEL_QUALITY;
+  float subPixelOffsetFinal = subPixelOffset2 * subPixelOffset2 * SUBPIXEL_QUALITY;
 
   // Pick the biggest of the two offsets.
   finalOffset = max(finalOffset, subPixelOffsetFinal);
@@ -255,6 +241,6 @@ void main()
 
   // Read the color at the new UV coordinates, and use it.
   vec3 finalColor = texture(texture0, finalUv).rgb;
-  //out0 = finalColor;
+  // out0 = finalColor;
   out0 = colorCenter;
 }

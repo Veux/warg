@@ -23,7 +23,7 @@ vec2 hammersley2d(uint i, uint N)
 vec3 ImportanceSampleGGX(vec2 Xi, vec3 n, float roughness)
 {
   float a = roughness * roughness;
-  
+
   float phi = 2.0 * PI * Xi.x;
   float c = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
   float s = sqrt(1.0 - c * c);
@@ -73,7 +73,7 @@ void main()
     float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 
     float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
-    //mipLevel = 0;
+    // mipLevel = 0;
     float ndotl = max(dot(n, l), 0.0);
     if (ndotl > 0.0)
     {

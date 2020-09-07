@@ -31,8 +31,6 @@ void main()
   vec3 b = normalize(Model * normalize(vec4(bitangent, 0))).xyz;
   vec3 n = normalize(Model * normalize(vec4(normal, 0))).xyz;
 
-  vec4 derps = vec4(0);
-
   frag_world_position = (Model * vec4(position, 1)).xyz;
   frag_TBN = mat3(t, b, n);
   frag_uv = uv_scale * vec2(uv.x, -uv.y);

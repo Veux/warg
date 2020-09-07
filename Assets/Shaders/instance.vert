@@ -12,7 +12,7 @@ layout(location = 3) in vec3 tangent;
 layout(location = 4) in vec3 bitangent;
 layout(location = 5) in mat4 instanced_MVP;
 layout(location = 9) in mat4 instanced_model;
-layout(location = 13) in vec4 attribute0;//generic per-instance attributes
+layout(location = 13) in vec4 attribute0; // generic per-instance attributes
 layout(location = 14) in vec4 attribute1;
 layout(location = 15) in vec4 attribute2;
 
@@ -30,6 +30,6 @@ void main()
   frag_uv = uv_scale * vec2(uv.x, uv.y);
   frag_normal_uv = normal_uv_scale * frag_uv;
   float s = sin(time);
-  gl_Position = txaa_jitter*instanced_MVP * vec4(position, 1);
-  //gl_Position = instanced_MVP * vec4(position, 1);
+  gl_Position = txaa_jitter * instanced_MVP * vec4(position, 1);
+  // gl_Position = instanced_MVP * vec4(position, 1);
 }
