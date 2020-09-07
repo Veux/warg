@@ -16,9 +16,6 @@ vec2 polar_to_uv(vec2 polar)
   return (polar*scale) + 0.5f;
 }
 
-
-
-
 void main()
 {
   vec2 polar = direction_to_polar(normalize(-direction));
@@ -29,7 +26,6 @@ void main()
   {
     result = pow(result,vec4(2.2));
     result = 1.*result;
-    //result = Tonemap_ACES(result);
   }
   out0 = result;
   

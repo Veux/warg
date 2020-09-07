@@ -54,7 +54,7 @@ void main()
   vec3 r = n;
   vec3 v = r;
 
-  const uint SAMPLE_COUNT = 2000u;
+  const uint SAMPLE_COUNT = 256u;
   float weight = 0.0;
   vec3 result = vec3(0.0);
   for (uint i = 0u; i < SAMPLE_COUNT; ++i)
@@ -68,12 +68,12 @@ void main()
     float D = D_ggx(roughness, ndoth);
     float hdotv = dot(h, v);
     float pdf = (D * ndoth / (4.0 * hdotv)) + 0.0001;
-    float resolution = size; // resolution of source cubemap
+    float resolution = size; // mip 0 resolution of source cubemap
     float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
     float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 
     float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
-
+    //mipLevel = 0;
     float ndotl = max(dot(n, l), 0.0);
     if (ndotl > 0.0)
     {

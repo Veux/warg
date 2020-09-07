@@ -141,7 +141,7 @@ void main()
   float sintime = sin(fract(time)*2.f*3.14159);
 
     
-  float vvlow_chance_true = float(random(vec2(p)+vec2(sin(time)))<fourthrootdt*0.001f && random(vec2(p)+vec2(cos(2.1f*time)))<fourthrootdt*0.001f && random(vec2(p)+vec2(cos(1.11f*time)))<fourthrootdt*0.1f&& random(vec2(p)+vec2(cos(1.31f*time)) ) < fourthrootdt*0.5111f);
+  float vvlow_chance_true = float(random(vec2(p)+vec2(sin(time)))<fourthrootdt*0.001f && random(vec2(p)+vec2(cos(2.1f*time)))<fourthrootdt*0.001f && random(vec2(p)+vec2(cos(1.11f*time)))<fourthrootdt*0.1f&& random(vec2(p)+vec2(cos(1.31f*time)) ) < fourthrootdt*0.1111f);
   float vlow_chance_true = float(random(vec2(p)+vec2(sin(time))) <    cubertdt*0.12f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.04f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.2f);
   float low_chance_true = float(random(vec2(p)+vec2(sin(time))) <     cubertdt*0.23f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.08f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.3f);
   float lowmed_chance_true = float(random(vec2(p)+vec2(sin(time))) <  cubertdt*0.34f && random(vec2(p)+vec2(cos(2.1f*time)) ) <  cubertdt*0.16f && random(vec2(p)+vec2(cos(1.1f*time)) ) <   cubertdt*0.4f);
@@ -159,7 +159,7 @@ void main()
     //lightning starts a fire
   if(bool(vvlow_chance_true))
   {
-    biome = 4.5f;
+    //biome = 4.5f;
   }
     //rain on water
   if(lowmed_chance_true!=0)
@@ -193,8 +193,8 @@ void main()
   float grass_seed_char_to_grass = lowmed_chance_true;
 
   //spawns grass:
-  float char_grass_spawn_chance = lowmed_chance_true;//vvlow_chance_true;
-  float soil_grass_spawn_chance = lowmed_chance_true;//vlow_chance_true;
+  float char_grass_spawn_chance = vvlow_chance_true;//vvlow_chance_true;
+  float soil_grass_spawn_chance = vlow_chance_true;//vlow_chance_true;
   float wet_soil_grass_spawn_chance = lowmed_chance_true;
   
   

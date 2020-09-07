@@ -73,7 +73,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 {
 
   Mesh_Descriptor mesh;
-  mesh.name = "generated water grid";
+  mesh.name = "generated water terrain grid";
   mesh.mesh_data = generate_grid(ivec2(256));
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
@@ -82,8 +82,9 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   material.uv_scale = vec2(1);
   material.roughness.mod = vec4(0.25);
   material.metalness.mod = vec4(0.84);
-  //material.frag_shader = "water.frag";
-  world_water_settings(&material.uniform_set);
+  material.vertex_shader = "displacement.vert";
+  material.frag_shader = "terrain.frag";
+  //world_water_settings(&material.uniform_set);
   Node_Index memewater = scene->add_mesh("water",&mesh, &material);
   scene->nodes[memewater].scale = scale;
   scene->nodes[memewater].position = pos;
@@ -243,11 +244,11 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
     : State(name, window, window_size)
 {
 
-  //scene.initialize_lighting(
-  //    "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+  scene.initialize_lighting(
+      "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
 
-    scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
-      "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+    //scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
+    //  "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
   // scene.initialize_lighting("Assets/Textures/black.png",
   //  "Assets/Textures/black.png");
@@ -263,7 +264,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_grabbyarm(&scene,vec3(0,0,1));
  // spawn_test_triangle(&scene);
  // spawn_compass(&scene);
-  spawn_test_spheres(scene);
+  //spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -782,7 +783,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
   material.roughness.source = "white";
   material.metalness.source = "white";
   uint32 kcount = 2;
-  uint32 icount = 10;
+  uint32 icount = 7;
   uint32 jcount = 4;
 
   for (uint32 i = 0; i < icount; ++i)

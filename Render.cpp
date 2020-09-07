@@ -47,7 +47,7 @@ const vec4 Conductor_Reflectivity::copper = vec4(0.95, 0.64, 0.54, 1.0f);
 const vec4 Conductor_Reflectivity::gold = vec4(1.0, 0.71, 0.29, 1.0f);
 const vec4 Conductor_Reflectivity::aluminum = vec4(0.91, 0.92, 0.92, 1.0f);
 const vec4 Conductor_Reflectivity::silver = vec4(0.95, 0.93, 0.88, 1.0f);
-const uint32 ENV_MAP_MIP_LEVELS = 10;
+const uint32 ENV_MAP_MIP_LEVELS = 7;
 static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
@@ -557,7 +557,7 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glScissor(x - 15, y - 15, draw_width + 33, draw_height + 33);
     float roughness = (float)mip_level / (float)(ENV_MAP_MIP_LEVELS - 1);
     specular_filter.set_uniform("roughness", roughness);
-    specular_filter.set_uniform("size", size.x);
+    specular_filter.set_uniform("size", float32(size.x));
     for (unsigned int i = 0; i < 6; ++i)
     {
       specular_filter.set_uniform("camera", cameras[i]);
@@ -1266,6 +1266,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   uvtd.name = "uvgrid.png";
   uv_map_grid = uvtd;
 
+
   const ivec2 brdf_lut_size = ivec2(512, 512);
   Shader brdf_lut_generator = Shader("passthrough.vert", "brdf_lut_generator.frag");
   brdf_integration_lut = Texture("brdf_lut", brdf_lut_size, 1, GL_RG16F, GL_LINEAR);
@@ -1278,7 +1279,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   brdf_lut_generator.set_uniform("transform", mat);
   set_message("drawing brdf lut..", "", 1.0f);
   quad.draw();
-  // save_and_log_texture(brdf_integration_lut.texture->texture);
+  save_texture(&brdf_integration_lut,"brdflut");
 
   Texture_Descriptor white_td;
 
@@ -2792,6 +2793,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
 
   handle->internalformat = GL_RGB16F;
   size = CONFIG.use_low_quality_specular ? ivec2(1024, 1024) : ivec2(2048, 2048);
+  size = ivec2(2048);
   handle->size = size;
 
   static Shader equi_to_cube("equi_to_cube.vert", "equi_to_cube.frag");
@@ -2820,16 +2822,9 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   glNamedFramebufferRenderbuffer(fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
   glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &handle->texture);
-
   uint32 level_count = 1 + floor(glm::log2(float32(glm::max(size.x, size.y))));
-
   glTextureStorage2D(handle->texture,level_count , GL_RGB16F, size.x, size.y);
-  // glBindTextureUnit(6, handle->texture);
-  // glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
-  for (uint32 i = 0; i < 6; ++i)
-  {
-    // glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size.x, size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-  }
+
 
   mat4 rot = toMat4(quat(1, 0, 0, radians(0.f)));
   glViewport(0, 0, size.x, size.y);
