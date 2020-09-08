@@ -1866,7 +1866,7 @@ void Renderer::instance_pass(float32 time)
 
 void Renderer::translucent_pass(float32 time)
 {
-  return;
+  
   // ivec2 current_size = size;
   // bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
   // const uint32 min_width = 40;
@@ -1931,8 +1931,7 @@ void Renderer::translucent_pass(float32 time)
 
   draw_target.bind_for_drawing_dst();
   translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
-  glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
+  translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth);
   for (Render_Entity &entity : translucent_entities)
   {
     bind_white_to_all_textures();
