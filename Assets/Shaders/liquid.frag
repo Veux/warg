@@ -160,7 +160,7 @@ void main()
   {
 
     if (water_height > ground_height)
-      water_height = water_height + .00135f; // raindrops
+      water_height = water_height + .00435f; // raindrops
   }
 
   // fewer rain on ground because it kills fire too fast

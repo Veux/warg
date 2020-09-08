@@ -1748,11 +1748,11 @@ void Warg_State::update_icons()
     {
       for (size_t i = 0; i < num_spells; i++)
       {
-        if (!sources[i].bind(0))
+        if (!sources[i].bind_for_sampling_at(0))
         {
           all_textures_ready = false;
         }
-        if (!interface_state.action_bar_textures[i].bind(0))
+        if (!interface_state.action_bar_textures[i].bind_for_sampling_at(0))
         {
           all_textures_ready = false;
         }
@@ -1776,11 +1776,11 @@ void Warg_State::update_icons()
         texture_descriptor.name = s("duration-spiral-", i);
         interface_state.action_bar_textures[i] = Texture(texture_descriptor);
         sources[i] = formula->icon;
-        if (!sources[i].bind(0))
+        if (!sources[i].bind_for_sampling_at(0))
         {
           all_textures_ready = false;
         }
-        if (!interface_state.action_bar_textures[i].bind(0))
+        if (!interface_state.action_bar_textures[i].bind_for_sampling_at(0))
         {
           all_textures_ready = false;
         }

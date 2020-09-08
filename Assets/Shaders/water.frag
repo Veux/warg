@@ -767,7 +767,9 @@ void main()
   if (blocking_terrain != 0.0f) // 0.015f)
   {
     float epsilon = 0.00001;
-    bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor (mod(frag_world_position.y + epsilon, 1) < 0.5) xor (mod(frag_world_position.z + epsilon, 1) < 0.5);
+    bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor
+                      (mod(frag_world_position.y + epsilon, 1) < 0.5) xor
+                      (mod(frag_world_position.z + epsilon, 1) < 0.5);
     float value = float(tile_light);
     result = vec3(0, value, 0);
   }

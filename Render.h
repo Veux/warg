@@ -30,11 +30,11 @@ enum Texture_Location
   ambient_occlusion,
   environment,
   irradiance,
-
   brdf_ibl_lut,
   refraction,
-  t10,
+  depth,
   displacement,
+  t12,
   uv_grid,
 
   s0, // shadow maps
@@ -179,7 +179,7 @@ struct Texture
   // a call to load guarantees we will have a Texture_Handle after it returns
   // but the texture will start loading asynchronously and may not yet be ready
   void load();
-  bool bind(GLuint texture_unit);
+  bool bind_for_sampling_at(GLuint texture_unit);
   bool is_ready() {}
   void check_set_parameters();
   GLuint get_handle();
@@ -607,9 +607,11 @@ struct Framebuffer
   std::shared_ptr<Framebuffer_Handle> fbo;
   std::vector<Texture> color_attachments = {Texture()};
   std::shared_ptr<Renderbuffer_Handle> depth;
+  Texture depth_texture;
   glm::ivec2 depth_size = glm::ivec2(0);
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
+  bool use_renderbuffer_depth = true;
 };
 
 struct Gaussian_Blur
@@ -891,14 +893,15 @@ struct Liquid_Surface
 
   int32 iterations = 1;
   float64 my_time = 0.f;
+
 private:
   Texture heightmap;
   Shader liquid_shader;
   Texture heightmap_copy;
-  //Texture previous_heightmap;
+  // Texture previous_heightmap;
   Texture velocity;
   Texture velocity_copy;
-  
+
   Framebuffer liquid_shader_fbo;
   Framebuffer copy_fbo;
   Shader copy;
@@ -907,42 +910,30 @@ private:
   bool invalidated = true;
   bool initialized = false;
 
-  //my algo:
-  //bind current heightmap as input, and heightmap intermediate as output
+  // my algo:
+  // bind current heightmap as input, and heightmap intermediate as output
 
-  //spill height data into adjacent pixels:
-  //use height difference to determine a delta velocity to add to a velocity texture for each pixel side
+  // spill height data into adjacent pixels:
+  // use height difference to determine a delta velocity to add to a velocity texture for each pixel side
 
-  //the amount of height to spill away from this pixel in each direction is determined by the velocity texture
-  //this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
+  // the amount of height to spill away from this pixel in each direction is determined by the velocity texture
+  // this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
 
-  //we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means
-  //we will add a negative - subtracting our height
+  // we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how
+  // much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means we
+  // will add a negative - subtracting our height
 
-  //this means that a wave can only propagate at a max speed of 1 pixel per draw..
-  //i think this is what the convolution was trying to do
+  // this means that a wave can only propagate at a max speed of 1 pixel per draw..
+  // i think this is what the convolution was trying to do
 
-  
-
-
-  //if we define a height level that is to be considered the underlying hard ground
-  //water added can flow on terrain easily
-
-
-
-
-
-
-
-
-
+  // if we define a height level that is to be considered the underlying hard ground
+  // water added can flow on terrain easily
 
   // lets store height information in alpha channel and color info in the rgb
   // we will modify the painter to be able to paint the alpha channel too directly
   // instead of using it as a blend operator
 
   // when we iterate on velocity, we can also spread color along those vectors
-
 };
 
 struct Texture_Paint
@@ -958,7 +949,7 @@ struct Texture_Paint
   void preset_pen();
   void preset_pen2();
   Liquid_Surface liquid;
-//private:
+  // private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
   Framebuffer fbo_preview;
@@ -1079,6 +1070,8 @@ struct Renderer
   Shader water = Shader("vertex_shader.vert", "water.frag");
   void bind_white_to_all_textures();
 
+  
+
   Texture uv_map_grid;
   Texture brdf_integration_lut;
 
@@ -1098,6 +1091,7 @@ struct Renderer
   void postprocess_pass(float32 time);
   void skybox_pass(float32 time);
   void copy_to_primary_framebuffer_and_txaa(float32 time);
+  void use_fxaa_shader(float32 state_time);
   Texture bloom_target;
   Texture bloom_result;
   Texture bloom_intermediate;
@@ -1109,7 +1103,7 @@ struct Renderer
   mat4 get_next_TXAA_sample();
   float32 render_scale = CONFIG.render_scale;
   ivec2 window_size; // actual window size
-  ivec2 size;        // render target size
+  ivec2 render_target_size;        // render target size
   float32 vfov = CONFIG.fov;
   mat4 camera;
   mat4 previous_camera;
@@ -1126,9 +1120,10 @@ struct Renderer
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:
-  Framebuffer draw_target;              // full render scaled, float linear
-  Framebuffer tonemapping_target_srgb8; // full render scaled, srgb
-  Framebuffer fxaa_target_srgb8;        // full render scaled. srgb
+  Framebuffer draw_target;              
+  Framebuffer tonemapping_target_srgb8; 
+  Framebuffer fxaa_target_srgb8;        
+  Framebuffer translucent_sample_source; 
 
   // instance attribute buffers
   // GLuint instance_mvp_buffer = 0;

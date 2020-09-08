@@ -73,7 +73,7 @@ const vec4 DEFAULT_AMBIENT_OCCLUSION = vec4(1);
 const std::string DEFAULT_VERTEX_SHADER = "vertex_shader.vert";
 const std::string DEFAULT_FRAG_SHADER = "fragment_shader.frag";
 
-void check_FBO_status();
+void check_FBO_status(GLuint fbo);
 uint32 mip_levels_for_resolution(ivec2 resolution)
 {
   uint count = 0;
@@ -95,33 +95,46 @@ void Framebuffer::init()
   if (!fbo)
   {
     fbo = make_shared<Framebuffer_Handle>();
-    glGenFramebuffers(1, &fbo->fbo);
+    //glGenFramebuffers(1, &fbo->fbo);
+    glCreateFramebuffers(1, &fbo->fbo);
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
 
   std::vector<GLenum> draw_buffers;
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
+    glNamedFramebufferTexture(fbo->fbo, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
+    
     ASSERT(color_attachments[i].texture->size != ivec2(0));
     draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
-  glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
-  // check_FBO_status();
+  glNamedFramebufferDrawBuffers(fbo->fbo, draw_buffers.size(), &draw_buffers[0]);
   if (depth_enabled)
   {
-    depth = make_shared<Renderbuffer_Handle>();
-    glGenRenderbuffers(1, &depth->rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
-
-    glRenderbufferStorage(GL_RENDERBUFFER, depth_format, depth_size.x, depth_size.y);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
-    depth->format = depth_format;
-    depth->size = depth_size;
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    if (use_renderbuffer_depth && depth == nullptr)
+    {
+      depth = make_shared<Renderbuffer_Handle>();
+      glGenRenderbuffers(1, &depth->rbo);
+      // glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
+      glNamedRenderbufferStorage(depth->rbo, GL_DEPTH_COMPONENT, depth_size.x, depth_size.y);
+      glNamedFramebufferRenderbuffer(fbo->fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
+      depth->format = depth_format;
+      depth->size = depth_size;
+    }
+    else
+    {
+      if (!depth_texture.texture)
+      {
+        depth_texture.t.size = depth_size;
+        depth_texture.t.format = GL_DEPTH_COMPONENT32F;
+        if (depth_texture.t.name == "default")
+          depth_texture.t.name = "some unnamed depth texture";
+        depth_texture.t.source = "generate";
+        depth_texture.load();
+        glNamedFramebufferTexture(fbo->fbo, GL_DEPTH_ATTACHMENT, depth_texture.get_handle(), 0);
+      }
+    }
   }
-  check_FBO_status();
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  check_FBO_status(fbo->fbo);
 }
 
 void Framebuffer::bind_for_drawing_dst()
@@ -129,7 +142,7 @@ void Framebuffer::bind_for_drawing_dst()
   ASSERT(fbo);
   ASSERT(fbo->fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-  check_FBO_status();
+  // check_FBO_status();
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
@@ -179,7 +192,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform("lod", uint32(1));
   gaussian_blur_shader.set_uniform("transform", fullscreen_quad());
-  src->bind(0);
+  src->bind_for_sampling_at(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -189,7 +202,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
 
-  intermediate_fbo.color_attachments[0].bind(0);
+  intermediate_fbo.color_attachments[0].bind_for_sampling_at(0);
 
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
@@ -200,13 +213,13 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
     glBindFramebuffer(GL_FRAMEBUFFER, intermediate_fbo.fbo->fbo);
     vec2 gaus_scale = vec2(aspect_ratio_factor * radius / dst_size->x, 0.0);
     gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
-    target.color_attachments[0].bind(0);
+    target.color_attachments[0].bind_for_sampling_at(0);
     glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
     gaus_scale.y = radius / dst_size->x;
     gaus_scale.x = 0;
     gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
     glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
-    intermediate_fbo.color_attachments[0].bind(0);
+    intermediate_fbo.color_attachments[0].bind_for_sampling_at(0);
     glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
   }
 
@@ -624,8 +637,7 @@ void Texture::load()
         {
           glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
-          
-          
+
           glTextureStorage2D(texture->texture, t.levels, texture->internalformat, texture->size.x, texture->size.y);
           glTextureSubImage2D(
               texture->texture, 0, 0, 0, texture->size.x, texture->size.y, GL_RGBA, texture->datatype, 0);
@@ -780,17 +792,17 @@ void Texture::check_set_parameters()
   }
 }
 
-bool Texture::bind(GLuint binding)
+bool Texture::bind_for_sampling_at(GLuint binding)
 {
   load();
   if (!texture)
   {
-    WHITE_TEXTURE.bind(binding);
+    WHITE_TEXTURE.bind_for_sampling_at(binding);
     return false;
   }
   if (texture->texture == 0)
   {
-    WHITE_TEXTURE.bind(binding);
+    WHITE_TEXTURE.bind_for_sampling_at(binding);
     return false;
   }
 
@@ -806,7 +818,7 @@ bool Texture::bind(GLuint binding)
     }
     else
     {
-      WHITE_TEXTURE.bind(binding);
+      WHITE_TEXTURE.bind_for_sampling_at(binding);
       return false;
     }
   }
@@ -1131,45 +1143,45 @@ void Material::bind()
 
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
-  bool success = albedo.bind(Texture_Location::albedo);
+  bool success = albedo.bind_for_sampling_at(Texture_Location::albedo);
   shader.set_uniform("texture0_mod", albedo.t.mod * albedo.t.mod);
 
-  success = emissive.bind(Texture_Location::emissive);
+  success = emissive.bind_for_sampling_at(Texture_Location::emissive);
   shader.set_uniform("texture1_mod", emissive.t.mod * emissive.t.mod);
   if (!success)
   {
     shader.set_uniform("texture1_mod", DEFAULT_EMISSIVE);
   }
 
-  success = roughness.bind(Texture_Location::roughness);
-  shader.set_uniform("texture2_mod", roughness.t.mod );
+  success = roughness.bind_for_sampling_at(Texture_Location::roughness);
+  shader.set_uniform("texture2_mod", roughness.t.mod);
   if (!success)
   {
     shader.set_uniform("texture2_mod", DEFAULT_ROUGHNESS);
   }
 
-  success = normal.bind(Texture_Location::normal);
+  success = normal.bind_for_sampling_at(Texture_Location::normal);
   shader.set_uniform("texture3_mod", normal.t.mod);
   if (!success)
   {
     shader.set_uniform("texture3_mod", DEFAULT_NORMAL);
   }
 
-  success = metalness.bind(Texture_Location::metalness);
+  success = metalness.bind_for_sampling_at(Texture_Location::metalness);
   shader.set_uniform("texture4_mod", metalness.t.mod * metalness.t.mod);
   if (!success)
   {
     shader.set_uniform("texture4_mod", DEFAULT_METALNESS);
   }
 
-  success = displacement.bind(Texture_Location::displacement);
+  success = displacement.bind_for_sampling_at(Texture_Location::displacement);
   shader.set_uniform("texture11_mod", displacement.t.mod);
   if (!success)
   {
     shader.set_uniform("texture11_mod", DEFAULT_DISPLACEMENT);
   }
 
-  success = ambient_occlusion.bind(Texture_Location::ambient_occlusion);
+  success = ambient_occlusion.bind_for_sampling_at(Texture_Location::ambient_occlusion);
   shader.set_uniform("texture5_mod", ambient_occlusion.t.mod);
 
   for (auto &uniform : descriptor.uniform_set.float32_uniforms)
@@ -1266,7 +1278,6 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   uvtd.name = "uvgrid.png";
   uv_map_grid = uvtd;
 
-
   const ivec2 brdf_lut_size = ivec2(512, 512);
   Shader brdf_lut_generator = Shader("passthrough.vert", "brdf_lut_generator.frag");
   brdf_integration_lut = Texture("brdf_lut", brdf_lut_size, 1, GL_RG16F, GL_LINEAR);
@@ -1279,7 +1290,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   brdf_lut_generator.set_uniform("transform", mat);
   set_message("drawing brdf lut..", "", 1.0f);
   quad.draw();
-  save_texture(&brdf_integration_lut,"brdflut");
+  save_texture(&brdf_integration_lut, "brdflut");
 
   Texture_Descriptor white_td;
 
@@ -1295,7 +1306,7 @@ void Renderer::bind_white_to_all_textures()
 {
   for (uint32 i = 0; i <= Texture_Location::displacement; ++i)
   {
-    WHITE_TEXTURE.bind(Texture_Location(i));
+    WHITE_TEXTURE.bind_for_sampling_at(Texture_Location(i));
   }
 }
 
@@ -1311,7 +1322,7 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
     if (shadow_map->enabled)
-      spotlight_shadow_maps[i].blur.target.color_attachments[0].bind(Texture_Location::s0 + i);
+      spotlight_shadow_maps[i].blur.target.color_attachments[0].bind_for_sampling_at(Texture_Location::s0 + i);
 
     const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.5, 0.5, 0.5, 1.0);
     const mat4 shadow_map_transform = offset * shadow_map->projection_camera;
@@ -1518,7 +1529,7 @@ void Renderer::build_shadow_maps()
     shadow_map->enabled = true;
     ivec2 shadow_map_size = CONFIG.shadow_map_scale * vec2(light->shadow_map_resolution);
     shadow_map->init(shadow_map_size);
-    shadow_map->blur.target.color_attachments[0].bind(0);
+    shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
     // glEnable(GL_CULL_FACE);
@@ -1549,7 +1560,7 @@ void Renderer::build_shadow_maps()
     shadow_map->blur.draw(
         this, &shadow_map->pre_blur.color_attachments[0], light->shadow_blur_radius, light->shadow_blur_iterations);
 
-    shadow_map->blur.target.color_attachments[0].bind(0);
+    shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1591,7 +1602,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {
-    (*src_textures)[i]->bind(i);
+    (*src_textures)[i]->bind_for_sampling_at(i);
   }
   ivec2 viewport_size = dst->color_attachments[0].t.size;
   glViewport(0, 0, viewport_size.x, viewport_size.y);
@@ -1641,8 +1652,8 @@ void Renderer::opaque_pass(float32 time)
   for (Render_Entity &entity : render_entities)
   {
     bind_white_to_all_textures();
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
-    brdf_integration_lut.bind(brdf_ibl_lut);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+    brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
     ASSERT(entity.mesh);
     entity.material->bind();
     if (entity.material->descriptor.wireframe)
@@ -1674,8 +1685,8 @@ void Renderer::opaque_pass(float32 time)
 #endif
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
-    glViewport(0, 0, size.x, size.y);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+    glViewport(0, 0, render_target_size.x, render_target_size.y);
     // bind_white_to_all_textures();
     entity.mesh->draw();
     if (entity.material->descriptor.wireframe)
@@ -1700,11 +1711,11 @@ void Renderer::instance_pass(float32 time)
   {
     previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
-    previous_draw_target.color_attachments[0].bind(0); // will set the wraps
+    previous_draw_target.color_attachments[0].bind_for_sampling_at(0); // will set the wraps
     previous_draw_target.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
+    glViewport(0, 0, render_target_size.x, render_target_size.y);
     passthrough.use();
-    draw_target.color_attachments[0].bind(0);
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
     passthrough.set_uniform("transform", fullscreen_quad());
     quad.draw();
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
@@ -1736,14 +1747,14 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
     shader.set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
-    shader.set_uniform("viewport_size", vec2(size));
-    shader.set_uniform("aspect_ratio", size.x / size.y);
+    shader.set_uniform("viewport_size", vec2(render_target_size));
+    shader.set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
     shader.set_uniform("camera_forward", forward_v);
     shader.set_uniform("camera_right", right_v);
     shader.set_uniform("camera_up", up_v);
 
     lights.bind(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
     entity.mesh->load();
 
     if (entity.material->descriptor.uses_transparency)
@@ -1855,7 +1866,7 @@ void Renderer::instance_pass(float32 time)
 
 void Renderer::translucent_pass(float32 time)
 {
-
+  return;
   // ivec2 current_size = size;
   // bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
   // const uint32 min_width = 40;
@@ -1888,8 +1899,8 @@ void Renderer::translucent_pass(float32 time)
   // store
   // sample accumulated roughness for each
 
-  brdf_integration_lut.bind(brdf_ibl_lut);
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+  brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
 
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
@@ -1899,35 +1910,32 @@ void Renderer::translucent_pass(float32 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
-  // if txaa isnt being used, then we need to copy the frame into its buffer
-  // because itll be blank
-  // if txaa is used we can just sample from the last frame, the lag doesnt really matter
-  if (!use_txaa)
-  {
-    previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
-    previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
-    previous_draw_target.color_attachments[0].bind(0); // will set the wraps
-    previous_draw_target.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
-    passthrough.use();
-    draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", fullscreen_quad());
-    quad.draw();
-    // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    draw_target.bind_for_drawing_dst();
-  }
+  glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
+      render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+      GL_NEAREST);
+
+
+  //translucent_sample_source.bind_for_drawing_dst();
+  //glViewport(0, 0, render_target_size.x, render_target_size.y);
+  //passthrough.use();
+  //draw_target.color_attachments[0].bind_for_sampling_at(0);
+  //draw_target.depth_texture.bind_for_sampling_at(1);
+  //passthrough.set_uniform("transform", fullscreen_quad());
+  //quad.draw();
 
   // we can do two passes!
   // for each object, render the backfaces only and depth test for furthest
   // so a sphere renders to a bowl
   // 2nd pass renders the front only, and then we can use the depth difference between them
   // to absorb light based on thiccness
+
+  draw_target.bind_for_drawing_dst();
+  translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
   for (Render_Entity &entity : translucent_entities)
   {
+    bind_white_to_all_textures();
     if (CONFIG.render_simple)
     { // not implemented here
       ASSERT(0);
@@ -1955,8 +1963,8 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader->set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
     shader->set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
-    shader->set_uniform("viewport_size", vec2(size));
-    shader->set_uniform("aspect_ratio", size.x / size.y);
+    shader->set_uniform("viewport_size", vec2(render_target_size));
+    shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
 
     // bool is_default = shader->fs == "fragment_shader.frag";
     if (entity.material->descriptor.blending)
@@ -1983,9 +1991,8 @@ void Renderer::translucent_pass(float32 time)
       glDepthMask(GL_TRUE);
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
-
-    bind_white_to_all_textures();
   }
+  bind_white_to_all_textures();
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, 0);
   glEnable(GL_CULL_FACE);
@@ -2013,9 +2020,9 @@ void Renderer::postprocess_pass(float32 time)
 
   // bloom:
   bool need_to_allocate_textures = bloom_target.texture == nullptr;
-  const float32 scale_relative_to_1080p = this->size.x / 1920.f;
+  const float32 scale_relative_to_1080p = this->render_target_size.x / 1920.f;
   const int32 min_width = (int32)(80.f * scale_relative_to_1080p);
-  vector<ivec2> resolutions = {size};
+  vector<ivec2> resolutions = {render_target_size};
   while (resolutions.back().x / 2 > min_width)
   {
     resolutions.push_back(resolutions.back() / 2);
@@ -2026,10 +2033,11 @@ void Renderer::postprocess_pass(float32 time)
 
   if (need_to_allocate_textures)
   {
-    bloom_intermediate = Texture(name + s("'s Bloom Intermediate"), size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
-    bloom_target = Texture(name + s("'s Bloom Target"), size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
-    bloom_result =
-        Texture(name + "'s bloom_result", size, 1, GL_RGB16F, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+    bloom_intermediate =
+        Texture(name + s("'s Bloom Intermediate"), render_target_size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_target = Texture(name + s("'s Bloom Target"), render_target_size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_result = Texture(name + "'s bloom_result", render_target_size, 1, GL_RGB16F, GL_LINEAR, GL_LINEAR,
+        GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
     // glTextureParameteri(bloom_intermediate.texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     // glTextureParameteri(bloom_target.texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -2055,8 +2063,8 @@ void Renderer::postprocess_pass(float32 time)
   bloom_fbo.bind_for_drawing_dst();
   high_pass_shader.use();
   high_pass_shader.set_uniform("transform", fullscreen_quad());
-  glViewport(0, 0, size.x, size.y);
-  draw_target.color_attachments[0].bind(0);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
+  draw_target.color_attachments[0].bind_for_sampling_at(0);
   quad.draw();
 
   static bool enabled = true;
@@ -2082,7 +2090,7 @@ void Renderer::postprocess_pass(float32 time)
     gaussian_blur_15x.use();
     glViewport(0, 0, resolution.x, resolution.y);
 
-    bloom_target.bind(0);
+    bloom_target.bind_for_sampling_at(0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_intermediate.get_handle(), i + 1);
     float32 aspect_ratio_factor = (float32)resolution.y / (float32)resolution.x;
     vec2 gaus_scale = vec2(aspect_ratio_factor * blur_radius, 0.0);
@@ -2093,7 +2101,7 @@ void Renderer::postprocess_pass(float32 time)
 
     gaus_scale = vec2(0.0f, blur_radius);
     gaussian_blur_15x.set_uniform("gauss_axis_scale", gaus_scale);
-    bloom_intermediate.bind(0);
+    bloom_intermediate.bind_for_sampling_at(0);
     gaussian_blur_15x.set_uniform("lod", i + 1);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_target.get_handle(), i + 1);
     quad.draw();
@@ -2107,7 +2115,7 @@ void Renderer::postprocess_pass(float32 time)
 
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_result.get_handle(), 0);
   bloom_mix.use();
-  bloom_target.bind(0);
+  bloom_target.bind_for_sampling_at(0);
   glViewport(0, 0, bloom_result.t.size.x, bloom_result.t.size.y);
   bloom_mix.set_uniform("transform", fullscreen_quad());
   bloom_mix.set_uniform("mip_count", levels);
@@ -2118,8 +2126,8 @@ void Renderer::postprocess_pass(float32 time)
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE);
   draw_target.bind_for_drawing_dst();
-  bloom_result.bind(0);
-  glViewport(0, 0, size.x, size.y);
+  bloom_result.bind_for_sampling_at(0);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
   passthrough.use();
   passthrough.set_uniform("transform", fullscreen_quad());
   if (enabled)
@@ -2137,8 +2145,8 @@ void Renderer::skybox_pass(float32 time)
   mat4 S = scale(scalev);
   mat4 transformation = T * S;
 
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
-  glViewport(0, 0, size.x, size.y);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
   glBindVertexArray(cube.get_vao());
   skybox.use();
   skybox.set_uniform("time", time);
@@ -2159,6 +2167,81 @@ void Renderer::skybox_pass(float32 time)
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
+void Renderer::copy_to_primary_framebuffer_and_txaa(float32 time)
+{
+  txaa_jitter = get_next_TXAA_sample();
+  // TODO: implement motion vector vertex attribute
+
+  // 1: blend draw_target with previous_draw_target, store in draw_target_srgb8
+  // 2: copy draw_target to previous_draw_target
+  // 3: run fxaa on draw_target_srgb8, drawing to screen
+
+  tonemapping_target_srgb8.bind_for_drawing_dst();
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  temporalaa.use();
+
+  // blend draw_target with previous_draw_target, store in draw_target_srgb8
+  if (previous_color_target_missing)
+  {
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
+    draw_target.color_attachments[0].bind_for_sampling_at(1);
+  }
+  else
+  {
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
+    previous_draw_target.color_attachments[0].bind_for_sampling_at(1);
+  }
+
+  temporalaa.set_uniform("transform", fullscreen_quad());
+  quad.draw();
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  // copy draw_target to previous_draw_target
+  previous_draw_target.bind_for_drawing_dst();
+  passthrough.use();
+  draw_target.color_attachments[0].bind_for_sampling_at(0);
+  passthrough.set_uniform("transform", fullscreen_quad());
+  quad.draw();
+
+  previous_color_target_missing = false;
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Renderer::use_fxaa_shader(float32 state_time)
+{
+  static float EDGE_THRESHOLD_MIN = 0.0312;
+  static float EDGE_THRESHOLD_MAX = 0.125;
+  static float SUBPIXEL_QUALITY = 0.75f;
+  static int ITERATIONS = 8;
+  static int QUALITY = 1;
+
+  if (imgui_this_tick && show_imgui_fxaa)
+  {
+    ImGui::Begin("fxaa adjustment", &show_imgui_fxaa);
+    ImGui::SetWindowSize(ImVec2(300, 160));
+    ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
+    ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
+    ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
+    ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
+    ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
+    ImGui::End();
+  }
+
+  fxaa.use();
+  fxaa.set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
+  fxaa.set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
+  fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
+  fxaa.set_uniform("ITERATIONS", ITERATIONS);
+  fxaa.set_uniform("QUALITY", QUALITY);
+  fxaa.set_uniform("transform", fullscreen_quad());
+  fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
+  fxaa.set_uniform("time", (float32)state_time);
+}
+
 void Renderer::render(float64 state_time)
 {
   DEFERRED_MESH_DELETIONS.clear();
@@ -2172,9 +2255,6 @@ void Renderer::render(float64 state_time)
 #endif
 #if DYNAMIC_TEXTURE_RELOADING
   check_and_clear_expired_textures();
-#endif
-#if SHOW_UV_TEST_GRID
-  uv_map_grid.t.mod = vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
 #endif
   if (imgui_this_tick)
   {
@@ -2199,179 +2279,60 @@ void Renderer::render(float64 state_time)
   translucent_pass(time);
   postprocess_pass(time);
 
-  // debug draw to screen
-
-  if (true)
-  {
-    glEnable(GL_FRAMEBUFFER_SRGB);
-    glViewport(0, 0, window_size.x, window_size.y);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    passthrough.use();
-    passthrough.set_uniform("transform", fullscreen_quad());
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    draw_target.color_attachments[0].bind(0);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-    FRAME_TIMER.stop();
-    SWAP_TIMER.start();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_FRAMEBUFFER_SRGB);
-    glBindVertexArray(0);
-
-    frame_count += 1;
-    return;
-  }
-  // end debug draw to screen
-
   // all pixel data is now in draw_target in 16f linear space
 
   glDisable(GL_DEPTH_TEST);
 
   if (use_txaa && previous_camera == camera)
   {
-    txaa_jitter = get_next_TXAA_sample();
-    // TODO: implement motion vector vertex attribute
-
-    // 1: blend draw_target with previous_draw_target, store in draw_target_srgb8
-    // 2: copy draw_target to previous_draw_target
-    // 3: run fxaa on draw_target_srgb8, drawing to screen
-
-    glBindVertexArray(quad.get_vao());
-    tonemapping_target_srgb8.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    temporalaa.use();
-
-    // blend draw_target with previous_draw_target, store in draw_target_srgb8
-    if (previous_color_target_missing)
-    {
-      draw_target.color_attachments[0].bind(0);
-      draw_target.color_attachments[0].bind(1);
-    }
-    else
-    {
-      draw_target.color_attachments[0].bind(0);
-      previous_draw_target.color_attachments[0].bind(1);
-    }
-
-    temporalaa.set_uniform("transform", fullscreen_quad());
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // copy draw_target to previous_draw_target
-    previous_draw_target.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
-    passthrough.use();
-    draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", fullscreen_quad());
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-    previous_color_target_missing = false;
-    glBindTexture(GL_TEXTURE_2D, 0);
+    copy_to_primary_framebuffer_and_txaa(state_time);
+    previous_camera = camera;
   }
   else
   {
     ///////////////////////////////////////
-    ///////////////////////////////////////
-    // HERE IS DRAWING TO TONEMAPPER FRAMEBUFFER
+    // DRAWING TO TONEMAPPER FRAMEBUFFER
     ////////////////////////////////////////
-    ////////////////////////////////////////
-    glDisable(GL_FRAMEBUFFER_SRGB);
-
-    glViewport(0, 0, size.x, size.y);
-    glBindVertexArray(quad.get_vao());
+    glEnable(GL_FRAMEBUFFER_SRGB);
+    glViewport(0, 0, render_target_size.x, render_target_size.y);
     tonemapping_target_srgb8.bind_for_drawing_dst();
     tonemapping.use();
     tonemapping.set_uniform("transform", fullscreen_quad());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    draw_target.color_attachments[0].bind(0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
+    quad.draw();
   }
 
   if (use_fxaa)
-    previous_camera = camera;
-
-  if (use_fxaa)
   {
-    static float EDGE_THRESHOLD_MIN = 0.0312;
-    static float EDGE_THRESHOLD_MAX = 0.125;
-    static float SUBPIXEL_QUALITY = 0.75f;
-    static int ITERATIONS = 8;
-    static int QUALITY = 1;
-
-    if (imgui_this_tick && show_imgui_fxaa)
-    {
-      ImGui::Begin("fxaa adjustment", &show_imgui_fxaa);
-      ImGui::SetWindowSize(ImVec2(300, 160));
-      ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
-      ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
-      ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
-      ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
-      ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
-      ImGui::End();
-    }
-
-    fxaa.use();
-    fxaa.set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
-    fxaa.set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
-    fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
-    fxaa.set_uniform("ITERATIONS", ITERATIONS);
-    fxaa.set_uniform("QUALITY", QUALITY);
-    fxaa.set_uniform("transform", fullscreen_quad());
-    fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
-    fxaa.set_uniform("time", (float32)state_time);
-    // glDisable(GL_FRAMEBUFFER_SRGB);
+    use_fxaa_shader(state_time);
   }
   else
   {
     passthrough.use();
     passthrough.set_uniform("transform", fullscreen_quad());
-
-    // glDisable(GL_FRAMEBUFFER_SRGB);
   }
 
   ///////////////////////////////////////
-  ///////////////////////////////////////
-  // HERE IS DRAWING TO FXAA FRAMEBUFFER
-  ////////////////////////////////////////
+  // DRAWING TO FXAA FRAMEBUFFER
   ////////////////////////////////////////
   glEnable(GL_FRAMEBUFFER_SRGB);
-
   fxaa_target_srgb8.bind_for_drawing_dst();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  tonemapping_target_srgb8.color_attachments[0].bind(0);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-  glViewport(0, 0, window_size.x, window_size.y);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  tonemapping_target_srgb8.color_attachments[0].bind_for_sampling_at(0);
+  quad.draw();
 
   ///////////////////////////////////////
-  ///////////////////////////////////////
-  // HERE IS DRAWING TO DEFAULT FRAMEBUFFER
-  ////////////////////////////////////////
+  // DRAWING TO DEFAULT FRAMEBUFFER
   ////////////////////////////////////////
   glEnable(GL_FRAMEBUFFER_SRGB);
-
+  glViewport(0, 0, window_size.x, window_size.y);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   passthrough.use();
   passthrough.set_uniform("transform", fullscreen_quad());
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  fxaa_target_srgb8.color_attachments[0].bind(0);
-
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  fxaa_target_srgb8.color_attachments[0].bind_for_sampling_at(0);
+  quad.draw();
 
   FRAME_TIMER.stop();
   SWAP_TIMER.start();
@@ -2379,7 +2340,6 @@ void Renderer::render(float64 state_time)
   glBindTexture(GL_TEXTURE_2D, 0);
   glDisable(GL_FRAMEBUFFER_SRGB);
   glBindVertexArray(0);
-
   frame_count += 1;
 }
 
@@ -2486,9 +2446,11 @@ Distance 	Constant 	Linear 	Quadratic
 
 */
 
-void check_FBO_status()
+void check_FBO_status(GLuint fbo)
 {
+  glBindFramebuffer(GL_FRAMEBUFFER,fbo);
   auto result = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  //auto result = glCheckNamedFramebufferStatus(fbo,GL_FRAMEBUFFER);
   string str;
   switch (result)
   {
@@ -2532,7 +2494,7 @@ void Renderer::init_render_targets()
 {
   set_message("init_render_targets()");
 
-  size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
+  render_target_size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
 
   // these are setup in the bloom function itself
   bloom_result = Texture();
@@ -2543,14 +2505,17 @@ void Renderer::init_render_targets()
   Texture_Descriptor td;
   td.source = "generate";
   td.name = name + " Renderer::draw_target.color[0]";
-  td.size = size;
+  td.size = render_target_size;
   td.levels = 1;
   td.format = FRAMEBUFFER_FORMAT;
   td.minification_filter = GL_LINEAR;
   draw_target.color_attachments[0] = Texture(td);
   draw_target.color_attachments[0].load();
   draw_target.depth_enabled = true;
-  draw_target.depth_size = size;
+  td.name = name + " Renderer::draw_target.depth_texture";
+  draw_target.depth_texture.t.name = td.name;
+  draw_target.use_renderbuffer_depth = false;
+  draw_target.depth_size = render_target_size;
   draw_target.init();
 
   td.name = name + " Renderer::previous_frame.color[0]";
@@ -2558,13 +2523,25 @@ void Renderer::init_render_targets()
   previous_draw_target.color_attachments[0].load();
   previous_draw_target.init();
 
+  td.name = name + " Renderer::translucent_sample_source.color[0]";
+  translucent_sample_source.color_attachments[0] = Texture(td);
+  translucent_sample_source.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
+  translucent_sample_source.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
+  translucent_sample_source.color_attachments[0].load();
+  translucent_sample_source.depth_enabled = true;
+  translucent_sample_source.use_renderbuffer_depth = false;
+  translucent_sample_source.depth_size = render_target_size;
+  td.name = name + " Renderer::translucent_sample_source.depth_texture";
+  translucent_sample_source.depth_texture.t.name = td.name;
+  translucent_sample_source.init();
+
   // full render scaled, clamped and encoded srgb
   Texture_Descriptor srgb8;
   srgb8.source = "generate";
   srgb8.name = name + " Renderer::draw_target_srgb8.color[0]";
-  srgb8.size = size;
+  srgb8.size = render_target_size;
   srgb8.levels = 1;
-  srgb8.format = GL_RGB16F;
+  srgb8.format = GL_SRGB8;
   srgb8.minification_filter = GL_LINEAR;
   tonemapping_target_srgb8.color_attachments[0] = Texture(srgb8);
   tonemapping_target_srgb8.color_attachments[0].load();
@@ -2574,9 +2551,9 @@ void Renderer::init_render_targets()
   Texture_Descriptor fxaa;
   fxaa.source = "generate";
   fxaa.name = name + " Renderer::draw_target_post_fxaa.color[0]";
-  fxaa.size = size;
+  fxaa.size = render_target_size;
   fxaa.levels = 1;
-  fxaa.format = GL_RGB8;
+  fxaa.format = GL_SRGB8;
   fxaa.minification_filter = GL_LINEAR;
   fxaa_target_srgb8.color_attachments[0] = Texture(fxaa);
   fxaa_target_srgb8.color_attachments[0].load();
@@ -2673,7 +2650,7 @@ mat4 Renderer::get_next_TXAA_sample()
   else
     translation = vec2(-0.5, -0.5);
 
-  mat4 result = translate(vec3(translation / vec2(size), 0));
+  mat4 result = translate(vec3(translation / vec2(render_target_size), 0));
   jitter_switch = !jitter_switch;
   return result;
 }
@@ -2726,7 +2703,7 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   pre_blur_td.format = format;
   pre_blur_td.minification_filter = GL_LINEAR;
   pre_blur.color_attachments[0] = Texture(pre_blur_td);
-  pre_blur.color_attachments[0].bind(0);
+  pre_blur.color_attachments[0].bind_for_sampling_at(0);
   pre_blur.init();
 
   ASSERT(pre_blur.color_attachments.size() == 1);
@@ -2760,7 +2737,7 @@ void Cubemap::bind(GLuint texture_unit)
     {
       if (source.texture && source.texture->texture != 0)
       {
-        if (!source.bind(0)) // attempting to bind the texture will check the transfer sync
+        if (!source.bind_for_sampling_at(0)) // attempting to bind the texture will check the transfer sync
         {
           return;
         }
@@ -2823,8 +2800,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
 
   glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &handle->texture);
   uint32 level_count = 1 + floor(glm::log2(float32(glm::max(size.x, size.y))));
-  glTextureStorage2D(handle->texture,level_count , GL_RGB16F, size.x, size.y);
-
+  glTextureStorage2D(handle->texture, level_count, GL_RGB16F, size.x, size.y);
 
   mat4 rot = toMat4(quat(1, 0, 0, radians(0.f)));
   glViewport(0, 0, size.x, size.y);
@@ -2833,7 +2809,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   equi_to_cube.set_uniform("rotation", rot);
   equi_to_cube.set_uniform("gamma_encoded", is_gamma_encoded);
   ASSERT(source.texture->texture != 0);
-  source.bind(0);
+  source.bind_for_sampling_at(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
@@ -3697,7 +3673,8 @@ Texture Texture_Paint::create_new_texture(const char *name)
   {
     tname = name;
   }
-  Texture t = Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR,GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
+  Texture t =
+      Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }
@@ -3732,8 +3709,6 @@ void Texture_Paint::iterate(Texture *t, float32 current_time)
 
   liquid.run(current_time);
 }
-
-
 
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 {
@@ -3778,7 +3753,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   window_cursor_pos = clamp(window_cursor_pos, ivec2(0), ivec2(window_size.x, window_size.y));
   Texture *surface = &textures[selected_texture];
 
-  if (!surface->texture || !surface->bind(0))
+  if (!surface->texture || !surface->bind_for_sampling_at(0))
   {
     ImGui::Text("Surface not ready");
     ImGui::End();
@@ -3806,7 +3781,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
   ImGui::InputFloat("Zoom", &zoom, 0.01);
   ImGui::InputInt("Water Iterations", &liquid.iterations);
-  liquid.iterations = max(liquid.iterations,0);
+  liquid.iterations = max(liquid.iterations, 0);
   char *selected_blendmode = "";
   if (blendmode == 0)
     selected_blendmode = "Mix";
@@ -3922,7 +3897,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     fbo_intermediate.init();
     fbo_intermediate.bind_for_drawing_dst();
     glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-    surface->bind(0);
+    surface->bind_for_sampling_at(0);
     copy.use();
     copy.set_uniform("texture0_mod", vec4(1));
     copy.set_uniform("transform", fullscreen_quad());
@@ -4076,7 +4051,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   const ImVec2 imgui_draw_cursor_pos = ImGui::GetCursorPos();
   ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
   glGenerateTextureMipmap(display_surface.texture->texture);
-  
+
   put_imgui_texture(&display_surface, texture_size);
 
   ImGui::SameLine();
@@ -4159,14 +4134,14 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   fbo_intermediate.bind_for_drawing_dst();
   glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
   mat4 mat = fullscreen_quad();
-  surface->bind(0);
+  surface->bind_for_sampling_at(0);
   copy.use();
   copy.set_uniform("texture0_mod", vec4(1));
   copy.set_uniform("transform", mat);
   quad.draw();
 
   fbo_drawing.bind_for_drawing_dst();
-  intermediate.bind(0);
+  intermediate.bind_for_sampling_at(0);
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", vec4(1));
   drawing_shader.set_uniform("transform", fullscreen_quad());
@@ -4233,7 +4208,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
         if (!is_new_click && !constant_density)
         {
           fbo_drawing.bind_for_drawing_dst();
-          intermediate.bind(0);
+          intermediate.bind_for_sampling_at(0);
 
           uint32 smoothing_iterations = float32(smoothing_count) * d_curve;
           smoothing_iterations = glm::max(smoothing_iterations, (uint32)1);
@@ -4244,7 +4219,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
               break;
 
             vec2 p = mix(last_drawn_ndc, ndc_cursor, float32(i + 1) / smoothing_iterations);
-            intermediate.bind(0);
+            intermediate.bind_for_sampling_at(0);
             fbo_drawing.bind_for_drawing_dst();
             drawing_shader.use();
             drawing_shader.set_uniform("mouse_pos", p);
@@ -4274,7 +4249,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
             {
               fbo_intermediate.bind_for_drawing_dst();
               glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-              surface->bind(0);
+              surface->bind_for_sampling_at(0);
               copy.use();
               quad.draw();
             }
@@ -4324,7 +4299,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
               break;
             }
             fbo_drawing.bind_for_drawing_dst();
-            intermediate.bind(0);
+            intermediate.bind_for_sampling_at(0);
             drawing_shader.use();
             // drawing_shader.set_uniform("brush_color", 4.f * accumulator * vec4(0, 1., 0, 1));
             drawing_shader.set_uniform("mouse_pos", draw_pos);
@@ -4344,7 +4319,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
             {
               fbo_intermediate.bind_for_drawing_dst();
               glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-              surface->bind(0);
+              surface->bind_for_sampling_at(0);
               copy.use();
               quad.draw();
             }
@@ -4383,7 +4358,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   }
 
   glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);
-  WHITE_TEXTURE.bind(0);
+  WHITE_TEXTURE.bind_for_sampling_at(0);
   fbo_preview.bind_for_drawing_dst();
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", clear_color);
@@ -4395,7 +4370,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   quad.draw();
 
   glViewport(0, 0, display_surface.texture->size.x, display_surface.texture->size.y);
-  surface->bind(0);
+  surface->bind_for_sampling_at(0);
   fbo_display.bind_for_drawing_dst();
   postprocessing_shader.use();
   postprocessing_shader.set_uniform("transform", mat);
@@ -4406,7 +4381,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   postprocessing_shader.set_uniform("mouse_pos", draw_cursor ? ndc_cursor : vec2(-9999999));
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
-  
+
   glGenerateTextureMipmap(surface->texture->texture);
   liquid.run(time);
 
@@ -4480,14 +4455,14 @@ void Liquid_Surface::run(float32 current_time)
   for (uint32 i = 0; i < iterations; ++i)
   {
     my_time = my_time + dt;
-    
+
     glDisable(GL_BLEND);
     // copy heightmap
     copy_fbo.color_attachments[0] = heightmap_copy;
     copy_fbo.init();
     copy_fbo.bind_for_drawing_dst();
     glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
-    heightmap.bind(0);
+    heightmap.bind_for_sampling_at(0);
     copy.use();
     copy.set_uniform("transform", fullscreen_quad());
     quad.draw();
@@ -4497,15 +4472,15 @@ void Liquid_Surface::run(float32 current_time)
     copy_fbo.init();
     copy_fbo.bind_for_drawing_dst();
     glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    velocity.bind(0);
+    velocity.bind_for_sampling_at(0);
     copy.use();
     copy.set_uniform("transform", fullscreen_quad());
     quad.draw();
 
     // draw shader
     liquid_shader_fbo.bind_for_drawing_dst();
-    heightmap_copy.bind(0);
-    velocity_copy.bind(1);
+    heightmap_copy.bind_for_sampling_at(0);
+    velocity_copy.bind_for_sampling_at(1);
     liquid_shader.use();
     liquid_shader.set_uniform("transform", fullscreen_quad());
     liquid_shader.set_uniform("time", float32(my_time));
@@ -4591,7 +4566,8 @@ for(uint32 n = 0; n < 10000;++n)
 convolution:
 
 just as with the gaussian shader, we will have a look up table of values that are calculated
-and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and offsety
+and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and
+offsety
 
 where p is this pixels position:
 vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
@@ -4599,8 +4575,8 @@ vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
 the number of iterations on the offsets, which is the width of the kernel, affects the quality
 
 
-however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to save
-work
+however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to
+save work
 
 
 

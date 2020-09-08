@@ -57,7 +57,7 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
-in float blocking_terrain;
+uniform bool ground;
 in float water_depth;
 in float ground_height;
 flat in float biome;
@@ -578,7 +578,8 @@ void main()
   // if(blocking_terrain != 0.0f)// 0.015f)
   //{
   float epsilon = 0.00001;
-  bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor (mod(frag_world_position.y + epsilon, 1) < 0.5) xor (mod(frag_world_position.z + epsilon, 1) < 0.5);
+  bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor
+                    (mod(frag_world_position.y + epsilon, 1) < 0.5) xor (mod(frag_world_position.z + epsilon, 1) < 0.5);
   float value = float(tile_light);
 
   float r1 = noise(50.1f * frag_world_position.xy);
@@ -638,12 +639,23 @@ void main()
   // vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
   vec3 flowers_contribution = is_heavy_grass * step(rr, 0.3f * heavy_grass_t) * flowers;
 
-  vec3 ground_result =
+  vec3 terrain_result =
       charr_contribution + soil_contribution + grass_contribution + fire_contribution + flowers_contribution;
 
   vec3 water = result;
-  float depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
-  result = mix(ground_result, water, depth_t);
+  // water depth should change the color of the water instead to be more green at shore and more blue at high depth
+  float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
+  const float LOG2 = 1.442695;
+  float z = gl_FragCoord.z / gl_FragCoord.w;
+  float camera_relative_depth = linearize_depth(gl_FragCoord.z);
+  float fogFactor = exp2(-.0031f * z * z * LOG2);
+  fogFactor = clamp(fogFactor, 0.0, 1.0);
+  camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
+  result = mix(water, terrain_result, float(ground));
+  float opacity = max(float(ground), .93f);
+  // result = mix(result,vec3(1,1,1),camera_relative_depth);
+  // result = mix(vec3(1,1,1),result,fogFactor);
+
   // result = vec3(is_very_wet_soil);
   // result = vec3(float(biome >= 2.f && biome < 3.f));
   // result = vec3(grass_variance);
@@ -661,5 +673,5 @@ void main()
   // result = vec3(indebug);
   // result = vec3(is_heavy_grass).rgb;
   // result = vec3(step(0.f,-2.f),0,.1);
-  out0 = vec4(result, premultiply_alpha);
+  out0 = vec4(result, opacity);
 }

@@ -13,6 +13,7 @@ uniform mat4 txaa_jitter;
 uniform mat4 MVP;
 uniform mat4 Model;
 uniform mat4 shadow_map_transform[MAX_LIGHTS];
+uniform bool ground;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -25,17 +26,26 @@ out mat3 frag_TBN;
 out vec2 frag_uv;
 out vec2 frag_normal_uv;
 out vec4 frag_in_shadow_space[MAX_LIGHTS];
-out float blocking_terrain;
 out float ground_height;
 out float water_depth;
 flat out float biome;
 out vec4 indebug;
 void main()
 {
+
+  // need to apply a curvature by sampling adjacent pixels with textureOffset
   float height = texture2D(texture11, uv).r;
   float offset = 0.0005505;
   float height_offsetx = texture2D(texture11, uv + vec2(offset, 0)).r;
   float height_offsety = texture2D(texture11, uv + vec2(0, offset)).r;
+
+  if (ground)
+  {
+    height = texture2D(texture11, uv).g;
+    height_offsetx = texture2D(texture11, uv + vec2(offset, 0)).g;
+    height_offsety = texture2D(texture11, uv + vec2(0, offset)).g;
+  }
+
   float dhx = height_offsetx - height;
   float dhy = height_offsety - height;
   vec3 displacement_tangent = normalize(vec3(offset, 0, dhx));
@@ -67,15 +77,9 @@ void main()
     biome = 3.f;
   }
 
-  blocking_terrain = 0.f;
-
   water_depth = max(height - ground_height, 0);
 
   indebug = vec4(texture2D(texture11, uv).a);
-  if (ground_height >= height)
-  {
-    blocking_terrain = height = ground_height;
-  }
 
   gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
 }

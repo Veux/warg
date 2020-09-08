@@ -9,11 +9,10 @@ uniform sampler2D texture5; // ambient occlusion
 uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
-
-uniform sampler2D texture10; // refraction
-
-uniform sampler2D texture11; // displacement
-uniform vec4 texture11_mod;
+uniform sampler2D texture9;   // refraction
+uniform sampler2D texture10;  // depth
+// uniform sampler2D texture11; // displacement
+// uniform vec4 texture11_mod;
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;

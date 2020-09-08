@@ -156,7 +156,8 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
     ImGui::Text("No material selected");
     return;
   }
-  Material_Descriptor *ptr = resource_manager->material_pool[material_index].get_modifiable_descriptor();
+
+  Material *ptr = &resource_manager->material_pool[material_index];
   draw_imgui_texture_element("Albedo", &ptr->albedo, 0);
   // ImGui::Separator();
   draw_imgui_texture_element("Emissive", &ptr->emissive, 1);
@@ -170,21 +171,28 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   draw_imgui_texture_element("Ambient Occlusion", &ptr->ambient_occlusion, 5);
   // ImGui::Separator();
   ImGui::PushItemWidth(200);
-  Array_String str = ptr->vertex_shader;
-  ImGui::InputText("Vertex Shader", &str.str[0], str.str.size());
-  ptr->vertex_shader = s(str);
-  Array_String str2 = ptr->frag_shader;
-  ImGui::InputText("Fragment Shader", &str2.str[0], str2.str.size());
-  ptr->frag_shader = s(str2);
-  ImGui::DragFloat2("UV Scale", &ptr->uv_scale[0]);
-  ImGui::DragFloat2("Normal UV Scale", &ptr->normal_uv_scale[0]);
-  ImGui::DragFloat("Albedo Alpha Override", &ptr->albedo_alpha_override);
-  ImGui::Checkbox("Backface Culling", &ptr->backface_culling);
-  ImGui::Checkbox("Uses Transparency", &ptr->uses_transparency);
-  ImGui::Checkbox("Wireframe", &ptr->wireframe);
-  ImGui::Checkbox("Discard On Alpha", &ptr->discard_on_alpha);
-  ImGui::Checkbox("Casts Shadows", &ptr->casts_shadows);
-  ImGui::Checkbox("Blending", &ptr->blending);
+  Array_String str = ptr->descriptor.vertex_shader;
+  bool reload_shader = ImGui::InputText("Vertex Shader", &str.str[0], str.str.size());
+  ptr->descriptor.vertex_shader = s(str);
+  Array_String str2 = ptr->descriptor.frag_shader;
+  reload_shader = reload_shader || ImGui::InputText("Fragment Shader", &str2.str[0], str2.str.size());
+  ptr->descriptor.frag_shader = s(str2);
+
+  if (reload_shader)
+  {
+    Shader temp = ptr->shader;
+    ptr->shader = Shader(ptr->descriptor.vertex_shader, ptr->descriptor.frag_shader);
+  }
+
+  ImGui::DragFloat2("UV Scale", &ptr->descriptor.uv_scale[0]);
+  ImGui::DragFloat2("Normal UV Scale", &ptr->descriptor.normal_uv_scale[0]);
+  ImGui::DragFloat("Albedo Alpha Override", &ptr->descriptor.albedo_alpha_override);
+  ImGui::Checkbox("Backface Culling", &ptr->descriptor.backface_culling);
+  ImGui::Checkbox("Uses Transparency", &ptr->descriptor.uses_transparency);
+  ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
+  ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
+  ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
+  ImGui::Checkbox("Blending", &ptr->descriptor.blending);
   ImGui::PopItemWidth();
 }
 
@@ -636,9 +644,11 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture_Descriptor *ptr, uint32 slot)
+bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr, uint32 slot)
 {
-  Array_String str = ptr->name;
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  false;
+  Array_String str = ptr->t.name;
   ImGui::PushID(int(name));
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollWithMouse;
   ImGui::BeginChild("Texture Stuff", ImVec2(160, 140), false, flags);
@@ -664,25 +674,28 @@ void Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture_Desc
     }
   }
 
-  // if (ImGui::TreeNode(name))
-  //{
-
   ImGui::InputText("Name", &str.str[0], str.str.size());
 
-  ptr->name = s(str);
-  ptr->source = ptr->name;
-  ImGui::DragFloat("mod_r", &ptr->mod[0], 0.001f, 0.0f);
-  ImGui::DragFloat("mod_g", &ptr->mod[1], 0.001f, 0.0f);
-  ImGui::DragFloat("mod_b", &ptr->mod[2], 0.001f, 0.0f);
-  ImGui::DragFloat("mod_a", &ptr->mod[3], 0.001f, 0.0f);
+  bool reload = s(str) != ptr->t.name;
+  if (reload)
+  {
+    ptr->t.name = s(str);
+    ptr->t.source = ptr->t.name;
+    Texture nu(ptr->t);
+    *ptr = nu;
+  }
+
+  ImGui::DragFloat("mod_r", &ptr->t.mod[0], 0.001f, 0.0f);
+  ImGui::DragFloat("mod_g", &ptr->t.mod[1], 0.001f, 0.0f);
+  ImGui::DragFloat("mod_b", &ptr->t.mod[2], 0.001f, 0.0f);
+  ImGui::DragFloat("mod_a", &ptr->t.mod[3], 0.001f, 0.0f);
   ImGui::EndChild();
   ImGui::SameLine();
   put_imgui_texture(ptr, vec2(140, 140));
 
-  // ImGui::TreePop();
   ImGui::PopID();
   ImGui::NewLine();
-  //}
+  return reload;
 }
 
 void Flat_Scene_Graph::draw_imgui_const_texture_element(const char *name, Texture_Descriptor *ptr)

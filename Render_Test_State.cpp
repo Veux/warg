@@ -78,14 +78,22 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.054, .135, .159, .998);
-  // material.uses_transparency = true;
   material.uv_scale = vec2(1);
   material.roughness.mod = vec4(0.25);
   material.metalness.mod = vec4(0.84);
   material.vertex_shader = "displacement.vert";
   material.frag_shader = "terrain.frag";
-  // world_water_settings(&material.uniform_set);
+  material.backface_culling = false;
+
+  material.uniform_set.bool_uniforms["ground"] = false;
   Node_Index memewater = scene->add_mesh("water", &mesh, &material);
+  scene->nodes[memewater].scale = scale;
+  scene->nodes[memewater].position = pos;
+  scene->nodes[memewater].position = pos-vec3(0,0,0.001);
+  
+  material.uses_transparency = true;
+  material.uniform_set.bool_uniforms["ground"] = true;
+  memewater = scene->add_mesh("ground", &mesh, &material);
   scene->nodes[memewater].scale = scale;
   scene->nodes[memewater].position = pos;
 }
@@ -264,7 +272,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
   // spawn_compass(&scene);
-  // spawn_test_spheres(scene);
+   spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -671,6 +679,12 @@ void Render_Test_State::update()
     Flat_Scene_Graph_Node *node = &scene.nodes[water_node];
     Material_Index mi = node->model[0].second;
     Material *mat = &scene.resource_manager->material_pool[mi];
+    mat->displacement = painter.textures[painter.selected_texture];
+
+    Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
+    node = &scene.nodes[ground_node];
+    mi = node->model[0].second;
+    mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
   }
 

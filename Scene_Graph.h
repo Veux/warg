@@ -401,7 +401,7 @@ private:
   void draw_imgui_command_interface();
   void draw_imgui_specific_node(Node_Index node_index);
   void draw_imgui_tree_node(Node_Index node_index);
-  void draw_imgui_texture_element(const char *name, Texture_Descriptor *ptr, uint32 slot);
+  bool draw_imgui_texture_element(const char *name, Texture *ptr, uint32 slot);
   void draw_imgui_const_texture_element(const char *name, Texture_Descriptor *ptr);
   void draw_imgui_resource_manager();
   void draw_imgui_particle_emitter();
