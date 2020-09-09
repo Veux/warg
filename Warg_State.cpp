@@ -535,7 +535,7 @@ void Warg_State::update_prediction_ghost()
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
-  material.uses_transparency = true;
+  material.translucent_pass = true;
   material.albedo.mod = vec4(1, 1, 1, 0.5);
 
   static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);

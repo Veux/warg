@@ -351,11 +351,11 @@ struct Material_Descriptor
   vec2 normal_uv_scale = vec2(1);
   float albedo_alpha_override = -1.f;
   bool backface_culling = true;
-  bool uses_transparency = false;
+  bool translucent_pass = false;
   bool discard_on_alpha = true;
   bool casts_shadows = true;
   bool wireframe = false;
-  bool blending = false;
+  bool blends_onto_dst = false;
 
   /*
 
@@ -612,6 +612,7 @@ struct Framebuffer
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
   bool use_renderbuffer_depth = true;
+  std::vector<GLenum> draw_buffers;
 };
 
 struct Gaussian_Blur

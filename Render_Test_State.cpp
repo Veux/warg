@@ -91,7 +91,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   scene->nodes[memewater].position = pos;
   scene->nodes[memewater].position = pos-vec3(0,0,0.001);
   
-  material.uses_transparency = true;
+  material.translucent_pass = true;
   material.uniform_set.bool_uniforms["ground"] = true;
   memewater = scene->add_mesh("ground", &mesh, &material);
   scene->nodes[memewater].scale = scale;
@@ -238,8 +238,8 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   material.albedo.source = "white";
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
-  material2.uses_transparency = true;
-  material2.blending = true;
+  material2.translucent_pass = true;
+  material2.blends_onto_dst = true;
   material2.backface_culling = false;
   Node_Index triangle = scene->add_mesh("triangle", &md, &material2);
 
@@ -648,8 +648,8 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   material->albedo.source = "white";
   material->emissive.source = "white";
   material->albedo.mod = vec4(.3, .3, .3, .3);
-  material->uses_transparency = true;
-  material->blending = true;
+  material->translucent_pass = true;
+  material->blends_onto_dst = true;
   material->backface_culling = false;
 
   scene->collision_octree.clear();
@@ -811,14 +811,14 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         material.albedo.mod = vec4(color, 1, 1, 1.0);
         material.roughness.mod = vec4(roughness);
         material.metalness.mod = vec4(metalness);
-        material.uses_transparency = false;
+        material.translucent_pass = false;
         material.casts_shadows = true;
 
         material.frag_shader = "fragment_shader.frag";
         if (j == 1)
         {
           material.casts_shadows = false;
-          material.uses_transparency = true;
+          material.translucent_pass = true;
           material.albedo.mod.a = mix(0.0f, 0.8f, float(k) / float(kcount - 1));
           material.roughness.mod = vec4(0);
           material.frag_shader = "refraction.frag";
@@ -829,7 +829,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         if (j == 2)
         {
           material.casts_shadows = false;
-          material.uses_transparency = true;
+          material.translucent_pass = true;
           material.albedo.mod.a = roughness;
           small_object_water_settings(&material.uniform_set);
           material.uniform_set.float32_uniforms["water_scale"] = mix(3.5f, 10.f, roughness);

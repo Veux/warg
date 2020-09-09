@@ -198,7 +198,7 @@ void to_json(json &result, const Material_Descriptor &p)
   j["UV Scale"] = p.uv_scale;
   j["Albedo Alpha Override"] = p.albedo_alpha_override;
   j["Backface Culling"] = p.backface_culling;
-  j["Uses Transparency"] = p.uses_transparency;
+  j["Uses Transparency"] = p.translucent_pass;
   j["Casts Shadows"] = p.casts_shadows;
   result = j;
 }
@@ -218,7 +218,7 @@ void from_json(const json &j, Material_Descriptor &p)
   result.uv_scale = j.at("UV Scale");
   result.albedo_alpha_override = j.at("Albedo Alpha Override");
   result.backface_culling = j.at("Backface Culling");
-  result.uses_transparency = j.at("Uses Transparency");
+  result.translucent_pass = j.at("Uses Transparency");
   result.casts_shadows = j.at("Casts Shadows");
   p = result;
 }

@@ -9,8 +9,8 @@ uniform sampler2D texture5; // ambient occlusion
 uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
-uniform sampler2D texture9;   // refraction source
-uniform sampler2D texture10;  // uv map grid
+uniform sampler2D texture9;   // refraction
+uniform sampler2D texture10;  // depth
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
@@ -52,6 +52,7 @@ uniform float height_scale2;
 uniform float water_time2;
 uniform float surfdotv_exp;
 uniform bool water_use_uv;
+uniform bool do_depth_processing;
 
 struct Light
 {
@@ -598,8 +599,8 @@ void main()
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
   vec3 F0 = vec3(0.02); // 0.02 F0 for water
-  F0 = vec3(0.12);
-  float ndotv = clamp(dot(m.normal, v), 0, 1);
+  //F0 = vec3(0.9512);
+  float ndotv = max(dot(m.normal, v), 0);
 
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
 
@@ -693,35 +694,29 @@ void main()
   // m.metalness = 0.;
   // ambient specular
 
-  m.roughness = 0.131051;
-  m.metalness = 0.f;
 
-  // vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
-  vec3 Ks = fresnelSchlickRoughness(1.f, F0, m.roughness);
+  F0 = vec3(0.02);
+  m.roughness = 0.0231051;
+  m.metalness = 0.99f;
+  vec3 Ks = fresnelSchlickRoughness(1.31, F0, m.roughness);
   // Ks = vec3(0.);
   // Ks = vec3(0);
   // vec3 Ks = F_schlick(F0, ndotv);
   // Ks = vec3(0.1);
-  const float MAX_REFLECTION_LOD = 5.0;
+  const float MAX_REFLECTION_LOD = 6.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
 
   vec3 ambient_specular =
       mix(vec3(1), F0, m.metalness) * prefilteredColor * (mix(vec3(1), Ks, 1 - m.metalness) * envBRDF.x + envBRDF.y);
-  ambient_specular = mix(ambient_specular, m.albedo * ambient_specular, 0.25f);
+  //ambient_specular = mix(ambient_specular, m.albedo * ambient_specular, 0.25f);
   // ambient diffuse
 
-  // as with direct diffuse, we want to let it bleed through
-  // and we want to keep conservation of energy
-  // lets sample both sides of the normal into the cubemap
-  // and average them
+  
   vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
   // Kd = vec3(1.0f);
   vec3 irradiance = texture(texture7, -m.normal).rgb;
-  // vec3 irradiance2 = texture(texture7, m.normal).rgb;
-  // vec3 irradiance = 0.5f*(irradiance1 + irradiance2);
-  // vec3 irradiance = irradiance2;
-  vec3 ambient_diffuse = Kd * irradiance * m.albedo / PI;
+  vec3 ambient_diffuse = Kd * irradiance * m.albedo;
   // ambient result;
   vec3 ambient = (ambient_specular + ambient_diffuse);
 
@@ -750,29 +745,28 @@ void main()
     // result = vec3(1,0,0);
   }
 
+  //result = vec3(0);
+  float depth_sample = texture2D(texture10, this_pixel).r;
+  vec3 color_behind = texture2D(texture9, this_pixel).rgb;
+  float density = 115511.f;
+  float depth_of_object = linearize_depth(depth_sample) - linearize_depth(gl_FragCoord.z);
+  float transmission =  1-density*pow(depth_of_object,.5);
+  transmission = clamp(transmission,0.f,1.f);
+  vec3 absorbing_color = vec3(1) - m.albedo;
   vec4 refraction_src = texture2D(texture9, ref_sample_loc);
   if (length(offset) > 0.00001)
   {
-    result = result + ((1.0 - premultiply_alpha) * refraction_src.rgb);
+   //result = result + ((1.0 - premultiply_alpha) * refraction_src.rgb);
+   //result = result + (transmission* refraction_src.rgb);
+   //result = mix(result,color_behind,transmission);
   }
-  else
+ // else
   {
     // result = vec3(1,0,0);
   }
-  // float thet = 1.0-dot(waternormal,vec3(0,0,1));
-  // result = ambient_specular;
-
-  // result = vec3(waterheight(wateruv,  water_time1f));
-
-  if (blocking_terrain != 0.0f) // 0.015f)
-  {
-    float epsilon = 0.00001;
-    bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor
-                      (mod(frag_world_position.y + epsilon, 1) < 0.5) xor
-                      (mod(frag_world_position.z + epsilon, 1) < 0.5);
-    float value = float(tile_light);
-    result = vec3(0, value, 0);
-  }
-
-  out0 = vec4(result, premultiply_alpha);
+  float aa = 1.f/max((density*pow(depth_of_object,2.2f)),1);
+  result =  (aa)*color_behind + result;
+  //result = vec3(depth_of_object);
+  // out0 = vec4(result, premultiply_alpha);
+  out0 = vec4(result, 1);
 }

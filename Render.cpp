@@ -95,15 +95,14 @@ void Framebuffer::init()
   if (!fbo)
   {
     fbo = make_shared<Framebuffer_Handle>();
-    //glGenFramebuffers(1, &fbo->fbo);
+    // glGenFramebuffers(1, &fbo->fbo);
     glCreateFramebuffers(1, &fbo->fbo);
   }
 
-  std::vector<GLenum> draw_buffers;
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
     glNamedFramebufferTexture(fbo->fbo, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
-    
+
     ASSERT(color_attachments[i].texture->size != ivec2(0));
     draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
@@ -1757,11 +1756,11 @@ void Renderer::instance_pass(float32 time)
     environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
     entity.mesh->load();
 
-    if (entity.material->descriptor.uses_transparency)
+    if (entity.material->descriptor.translucent_pass)
     {
       glEnable(GL_BLEND);
       glDepthMask(GL_FALSE);
-      if (entity.material->descriptor.blending)
+      if (entity.material->descriptor.blends_onto_dst)
       {
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
       }
@@ -1866,7 +1865,7 @@ void Renderer::instance_pass(float32 time)
 
 void Renderer::translucent_pass(float32 time)
 {
-  
+
   // ivec2 current_size = size;
   // bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
   // const uint32 min_width = 40;
@@ -1910,18 +1909,19 @@ void Renderer::translucent_pass(float32 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
+  
+  glNamedFramebufferDrawBuffers(translucent_sample_source.fbo->fbo, translucent_sample_source.draw_buffers.size(), &translucent_sample_source.draw_buffers[0]);
   glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
       render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
       GL_NEAREST);
 
-
-  //translucent_sample_source.bind_for_drawing_dst();
-  //glViewport(0, 0, render_target_size.x, render_target_size.y);
-  //passthrough.use();
-  //draw_target.color_attachments[0].bind_for_sampling_at(0);
-  //draw_target.depth_texture.bind_for_sampling_at(1);
-  //passthrough.set_uniform("transform", fullscreen_quad());
-  //quad.draw();
+  // translucent_sample_source.bind_for_drawing_dst();
+  // glViewport(0, 0, render_target_size.x, render_target_size.y);
+  // passthrough.use();
+  // draw_target.color_attachments[0].bind_for_sampling_at(0);
+  // draw_target.depth_texture.bind_for_sampling_at(1);
+  // passthrough.set_uniform("transform", fullscreen_quad());
+  // quad.draw();
 
   // we can do two passes!
   // for each object, render the backfaces only and depth test for furthest
@@ -1929,12 +1929,12 @@ void Renderer::translucent_pass(float32 time)
   // 2nd pass renders the front only, and then we can use the depth difference between them
   // to absorb light based on thiccness
 
+  bind_white_to_all_textures();
   draw_target.bind_for_drawing_dst();
   translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
   translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth);
   for (Render_Entity &entity : translucent_entities)
   {
-    bind_white_to_all_textures();
     if (CONFIG.render_simple)
     { // not implemented here
       ASSERT(0);
@@ -1948,6 +1948,7 @@ void Renderer::translucent_pass(float32 time)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+    
     Shader *shader = &entity.material->shader;
     shader->set_uniform("camera_forward", forward_v);
     shader->set_uniform("camera_right", right_v);
@@ -1964,9 +1965,9 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
     shader->set_uniform("viewport_size", vec2(render_target_size));
     shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
-
+    
     // bool is_default = shader->fs == "fragment_shader.frag";
-    if (entity.material->descriptor.blending)
+    if (entity.material->descriptor.blends_onto_dst)
     {
       // glDisable(GL_DEPTH_TEST);
       // glDisable(GL_CULL_FACE);
@@ -1976,10 +1977,25 @@ void Renderer::translucent_pass(float32 time)
     }
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
-
-    // glDisable(GL_CULL_FACE);
+    
+    
+     // glDisable(GL_BLEND);
+    translucent_sample_source.bind_for_drawing_dst();
+    glCullFace(GL_FRONT);
+    shader->set_uniform("do_depth_processing", false);
+    glDrawBuffer(GL_NONE);
     entity.mesh->draw();
-    if (entity.material->descriptor.blending)
+
+    
+    draw_target.bind_for_drawing_dst();
+    translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
+    translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth);
+    glNamedFramebufferDrawBuffers(draw_target.fbo->fbo, draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
+    glCullFace(GL_BACK);
+    shader->set_uniform("do_depth_processing", true);
+    entity.mesh->draw();
+
+    if (entity.material->descriptor.blends_onto_dst)
     {
       glDepthMask(GL_TRUE);
       glDisable(GL_BLEND);
@@ -2401,7 +2417,7 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
     vec3 translation = vec3((*m)[3][0], (*m)[3][1], (*m)[3][2]);
 
     float32 dist = length(translation - camera_position);
-    bool is_transparent = entity->material->descriptor.uses_transparency;
+    bool is_transparent = entity->material->descriptor.translucent_pass;
     if (is_transparent)
     {
       index_distances.push_back({i, dist});
@@ -2447,9 +2463,9 @@ Distance 	Constant 	Linear 	Quadratic
 
 void check_FBO_status(GLuint fbo)
 {
-  glBindFramebuffer(GL_FRAMEBUFFER,fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   auto result = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-  //auto result = glCheckNamedFramebufferStatus(fbo,GL_FRAMEBUFFER);
+  // auto result = glCheckNamedFramebufferStatus(fbo,GL_FRAMEBUFFER);
   string str;
   switch (result)
   {
@@ -3075,7 +3091,7 @@ void Material_Descriptor::mod_by(const Material_Descriptor *override)
     frag_shader = override->frag_shader;
     backface_culling = override->backface_culling;
     uv_scale = override->uv_scale;
-    uses_transparency = override->uses_transparency;
+    translucent_pass = override->translucent_pass;
     casts_shadows = override->casts_shadows;
     albedo_alpha_override = override->albedo_alpha_override;
     discard_on_alpha = override->discard_on_alpha;

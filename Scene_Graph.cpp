@@ -188,11 +188,11 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::DragFloat2("Normal UV Scale", &ptr->descriptor.normal_uv_scale[0]);
   ImGui::DragFloat("Albedo Alpha Override", &ptr->descriptor.albedo_alpha_override);
   ImGui::Checkbox("Backface Culling", &ptr->descriptor.backface_culling);
-  ImGui::Checkbox("Uses Transparency", &ptr->descriptor.uses_transparency);
+  ImGui::Checkbox("Uses Transparency", &ptr->descriptor.translucent_pass);
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
-  ImGui::Checkbox("Blending", &ptr->descriptor.blending);
+  ImGui::Checkbox("Blending", &ptr->descriptor.blends_onto_dst);
   ImGui::PopItemWidth();
 }
 
@@ -2156,8 +2156,8 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
       material.frag_shader = "emission.frag";
       material.wireframe = true;
       material.backface_culling = true;
-      material.uses_transparency = false;
-      material.blending = true;
+      material.translucent_pass = false;
+      material.blends_onto_dst = true;
 
       material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
       mat1 = scene->resource_manager->push_custom_material(&material);
@@ -2166,8 +2166,8 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
       material.emissive.mod = vec4(0.0f, 0.0f, .10f, .10f);
       mat3 = scene->resource_manager->push_custom_material(&material);
 
-      material.uses_transparency = false;
-      material.blending = false;
+      material.translucent_pass = false;
+      material.blends_onto_dst = false;
       material.frag_shader = "";
       material.emissive.mod = vec4(2.0f, 0.0f, 0.0f, 1.0f);
       mat_triangles = scene->resource_manager->push_custom_material(&material);
