@@ -1143,10 +1143,10 @@ void Material::bind()
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
   bool success = albedo.bind_for_sampling_at(Texture_Location::albedo);
-  shader.set_uniform("texture0_mod", albedo.t.mod * albedo.t.mod);
+  shader.set_uniform("texture0_mod", albedo.t.mod);
 
   success = emissive.bind_for_sampling_at(Texture_Location::emissive);
-  shader.set_uniform("texture1_mod", emissive.t.mod * emissive.t.mod);
+  shader.set_uniform("texture1_mod", emissive.t.mod);
   if (!success)
   {
     shader.set_uniform("texture1_mod", DEFAULT_EMISSIVE);
@@ -1396,6 +1396,19 @@ void Renderer::draw_imgui()
         glUseProgram(program);
         ptr->set_location_cache();
       }
+    }
+
+    if (ImGui::Button("Tonemapping"))
+    {
+      show_tonemap = !show_tonemap;
+    }
+    if (show_tonemap)
+    {
+      ImGui::Begin("Tonemapping", &show_tonemap);
+      ImGui::DragFloat("Exposure", &exposure, 0.0001f, 0.f, 20.f, "%.3f", 2.5f);
+      ImGui::ColorPicker3("Exposure Color", &exposure_color[0]);
+
+      ImGui::End();
     }
 
     if (ImGui::CollapsingHeader("GPU Textures"))
@@ -1760,7 +1773,7 @@ void Renderer::instance_pass(float32 time)
     {
       glEnable(GL_BLEND);
       glDepthMask(GL_FALSE);
-      if (entity.material->descriptor.blends_onto_dst)
+      if (entity.material->descriptor.fixed_function_blending)
       {
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
       }
@@ -1866,6 +1879,12 @@ void Renderer::instance_pass(float32 time)
 void Renderer::translucent_pass(float32 time)
 {
 
+  // pseudocode for gaussian blur for textured roughness translucent object surfaces
+  // such as foggy glass windows
+
+  // possible to jitter sample based on roughness and average refraction map instead - slower
+
+  //
   // ivec2 current_size = size;
   // bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
   // const uint32 min_width = 40;
@@ -1909,25 +1928,11 @@ void Renderer::translucent_pass(float32 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
-  
-  glNamedFramebufferDrawBuffers(translucent_sample_source.fbo->fbo, translucent_sample_source.draw_buffers.size(), &translucent_sample_source.draw_buffers[0]);
+  glNamedFramebufferDrawBuffers(translucent_sample_source.fbo->fbo, translucent_sample_source.draw_buffers.size(),
+      &translucent_sample_source.draw_buffers[0]);
   glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
       render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
       GL_NEAREST);
-
-  // translucent_sample_source.bind_for_drawing_dst();
-  // glViewport(0, 0, render_target_size.x, render_target_size.y);
-  // passthrough.use();
-  // draw_target.color_attachments[0].bind_for_sampling_at(0);
-  // draw_target.depth_texture.bind_for_sampling_at(1);
-  // passthrough.set_uniform("transform", fullscreen_quad());
-  // quad.draw();
-
-  // we can do two passes!
-  // for each object, render the backfaces only and depth test for furthest
-  // so a sphere renders to a bowl
-  // 2nd pass renders the front only, and then we can use the depth difference between them
-  // to absorb light based on thiccness
 
   bind_white_to_all_textures();
   draw_target.bind_for_drawing_dst();
@@ -1948,7 +1953,7 @@ void Renderer::translucent_pass(float32 time)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
-    
+
     Shader *shader = &entity.material->shader;
     shader->set_uniform("camera_forward", forward_v);
     shader->set_uniform("camera_right", right_v);
@@ -1965,9 +1970,9 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
     shader->set_uniform("viewport_size", vec2(render_target_size));
     shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
-    
+
     // bool is_default = shader->fs == "fragment_shader.frag";
-    if (entity.material->descriptor.blends_onto_dst)
+    if (entity.material->descriptor.fixed_function_blending)
     {
       // glDisable(GL_DEPTH_TEST);
       // glDisable(GL_CULL_FACE);
@@ -1977,25 +1982,21 @@ void Renderer::translucent_pass(float32 time)
     }
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
-    
-    
-     // glDisable(GL_BLEND);
+
+    // glDisable(GL_BLEND);
     translucent_sample_source.bind_for_drawing_dst();
     glCullFace(GL_FRONT);
-    shader->set_uniform("do_depth_processing", false);
     glDrawBuffer(GL_NONE);
     entity.mesh->draw();
 
-    
     draw_target.bind_for_drawing_dst();
     translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
     translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth);
     glNamedFramebufferDrawBuffers(draw_target.fbo->fbo, draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
     glCullFace(GL_BACK);
-    shader->set_uniform("do_depth_processing", true);
     entity.mesh->draw();
 
-    if (entity.material->descriptor.blends_onto_dst)
+    if (entity.material->descriptor.fixed_function_blending)
     {
       glDepthMask(GL_TRUE);
       glDisable(GL_BLEND);
@@ -2313,6 +2314,7 @@ void Renderer::render(float64 state_time)
     tonemapping_target_srgb8.bind_for_drawing_dst();
     tonemapping.use();
     tonemapping.set_uniform("transform", fullscreen_quad());
+    tonemapping.set_uniform("texture0_mod", vec4(exposure*exposure_color,1));
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind_for_sampling_at(0);
     quad.draw();

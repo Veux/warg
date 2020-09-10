@@ -192,7 +192,7 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
-  ImGui::Checkbox("Blending", &ptr->descriptor.blends_onto_dst);
+  ImGui::Checkbox("Fixed Function Blending", &ptr->descriptor.fixed_function_blending);
   ImGui::PopItemWidth();
 }
 
@@ -651,7 +651,7 @@ bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr
   Array_String str = ptr->t.name;
   ImGui::PushID(int(name));
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollWithMouse;
-  ImGui::BeginChild("Texture Stuff", ImVec2(160, 140), false, flags);
+  ImGui::BeginChild("Texture Stuff", ImVec2(160, 160), false, flags);
   ImGui::Text(name);
   ImGui::SameLine();
   if (ImGui::Button("Browse"))
@@ -2157,7 +2157,7 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
       material.wireframe = true;
       material.backface_culling = true;
       material.translucent_pass = false;
-      material.blends_onto_dst = true;
+      material.fixed_function_blending = true;
 
       material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
       mat1 = scene->resource_manager->push_custom_material(&material);
@@ -2167,7 +2167,7 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
       mat3 = scene->resource_manager->push_custom_material(&material);
 
       material.translucent_pass = false;
-      material.blends_onto_dst = false;
+      material.fixed_function_blending = false;
       material.frag_shader = "";
       material.emissive.mod = vec4(2.0f, 0.0f, 0.0f, 1.0f);
       mat_triangles = scene->resource_manager->push_custom_material(&material);

@@ -52,7 +52,6 @@ uniform float height_scale2;
 uniform float water_time2;
 uniform float surfdotv_exp;
 uniform bool water_use_uv;
-uniform bool do_depth_processing;
 
 struct Light
 {
@@ -526,8 +525,8 @@ void main()
   {
     premultiply_alpha = alpha_albedo_override;
   }
-  premultiply_alpha *= texture0_mod.a;
-
+  premultiply_alpha = premultiply_alpha * max(texture0_mod.a, 0);
+  premultiply_alpha = clamp(premultiply_alpha, 0, 1);
   m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
 
   float dist_to_pixel = length(camera_position - frag_world_position);
@@ -579,9 +578,9 @@ void main()
   float lenpd = length(partial_d);
   // vec3 vertical_scale_normal = vec3(0,0,0.1) + vec3(0,0,730.5*lenpd);
   vec3 vertical_scale_normal = vec3(0, 0, 3.1); //+ vec3(0,0,1.5*lenpd);
-  // waternormal = normalize(waternormal+waternormal2+vertical_scale_normal);
-  vec3 waternormal = normalize(vertical_scale_normal + water(wateruv, water_scale, 1.f, water_time1f));
 
+  vec3 waternormal = normalize(vertical_scale_normal + water(wateruv, water_scale, 1.f, water_time1f));
+  //waternormal = vec3(0, 0, 1);
   // float dy = nestedNoise(scale*vec2(waterp.x,waterp.y+eps));
 
   // vec3 p2dy = p + vec3(waterp.x,waterp.y+dy,0);
@@ -589,21 +588,22 @@ void main()
   // waternormal = 1400.*waternormal;
   // waternormal = normalize(waternormal);
 
-  m.normal = TBN * waternormal;
+  m.normal = normalize(TBN * waternormal);
 
-  m.roughness = 0.03;
-
+  m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
+  m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.02); // 0.02 F0 for water
-  //F0 = vec3(0.9512);
-  float ndotv = max(dot(m.normal, v), 0);
+  vec3 F0 = vec3(0.00002); // 0.02 F0 for water
+  F0 = mix(F0, m.albedo, m.metalness);
+  // F0 = vec3(0.9512);
+  float ndotv = clamp(dot(m.normal, v), 0, 1); // allowing the backface ndotv to contribute for water
 
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
-
+  vec3 debug = vec3(-9);
   vec3 direct_ambient = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -656,14 +656,16 @@ void main()
     float vdoth = saturate(dot(v, h));
     // float G = G_smith_GGX_denom(a,ndotv,ndotl);
     // specular brdf
-    vec3 F = F_schlick(F0, ndoth);
-    F = F_schlick(F0, 0.5f);
+
+    vec3 F = F_schlick(F0, ndoth); // sponge
+    //    F = F_schlick(F0, 0.5f);
     if (dot(m.normal, l) < 0.0)
     {
       // F = 0.1 + (F*0.9);
     }
-
+    // vec3 F = fresnelSchlickRoughness(clamp(ndotv,0,1), F0, m.roughness);
     float G = G_smith_schlick_GGX_direct(m.roughness, ndotv, ndotl);
+    // float G = clamp(G_smith_GGX(m.roughness, vdoth, ndotl),0,1);
     float D = D_ggx(m.roughness, ndoth);
     float denominator = max(4.0f * ndotl * ndotv, 0.000001);
     vec3 specular = (F * G * D) / denominator;
@@ -685,36 +687,31 @@ void main()
     // result += (specular_result + diffuse_result) * visibility * ndotl;
 
     direct_ambient += lights[i].ambient * at;
+    float G2 = G_smith_GGX(m.roughness, ndotv, ndotl);
+    if (false)
+    {
+      // debug = vec3(G2);
+      // break;
+    }
   }
 
   // ambient light
-  // m.roughness = mix(0,1,0.031*pow(dist_to_pixel,1.0/3.1));
-  // m.roughness = 0.1;
-  // F0 = vec3(0.333);
-  // m.metalness = 0.;
   // ambient specular
 
-
-  F0 = vec3(0.02);
-  m.roughness = 0.0231051;
-  m.metalness = 0.99f;
-  vec3 Ks = fresnelSchlickRoughness(1.31, F0, m.roughness);
-  // Ks = vec3(0.);
-  // Ks = vec3(0);
-  // vec3 Ks = F_schlick(F0, ndotv);
-  // Ks = vec3(0.1);
+  // F0 = vec3(0.02);
+  // m.roughness = 0.0931051;
+  // m.metalness = 0.0f;
+  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
   const float MAX_REFLECTION_LOD = 6.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
 
   vec3 ambient_specular =
       mix(vec3(1), F0, m.metalness) * prefilteredColor * (mix(vec3(1), Ks, 1 - m.metalness) * envBRDF.x + envBRDF.y);
-  //ambient_specular = mix(ambient_specular, m.albedo * ambient_specular, 0.25f);
+
   // ambient diffuse
 
-  
   vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
-  // Kd = vec3(1.0f);
   vec3 irradiance = texture(texture7, -m.normal).rgb;
   vec3 ambient_diffuse = Kd * irradiance * m.albedo;
   // ambient result;
@@ -725,7 +722,6 @@ void main()
 
   // refraction sampling
   vec3 refracted_view = normalize(refract(v, m.normal, index_of_refraction).xyz);
-
   vec2 offset = vec2(dot(refracted_view, camera_right), dot(refracted_view, camera_up));
   float inv_aspect = viewport_size.y / viewport_size.x;
   offset.x = offset.x * inv_aspect;
@@ -744,29 +740,39 @@ void main()
     ref_sample_loc.y = this_pixel.y;
     // result = vec3(1,0,0);
   }
-
-  //result = vec3(0);
-  float depth_sample = texture2D(texture10, this_pixel).r;
-  vec3 color_behind = texture2D(texture9, this_pixel).rgb;
-  float density = 115511.f;
-  float depth_of_object = linearize_depth(depth_sample) - linearize_depth(gl_FragCoord.z);
-  float transmission =  1-density*pow(depth_of_object,.5);
-  transmission = clamp(transmission,0.f,1.f);
-  vec3 absorbing_color = vec3(1) - m.albedo;
   vec4 refraction_src = texture2D(texture9, ref_sample_loc);
-  if (length(offset) > 0.00001)
+
+  // volumetric absorb
+  vec3 reflective_result = result;
+  vec3 transmissive_result = vec3(0);
+  float depth_sample = texture2D(texture10, ref_sample_loc).r; // texture2D(texture10, this_pixel).r;
+  vec3 color_behind = refraction_src.rgb;                      // texture2D(texture9, this_pixel).rgb;
+  // roughly world space but not exact, frustrum values differ in the linearize_depth function from the projection
+  // matrix
+  float depth_of_object = linearize_depth(depth_sample) - linearize_depth(gl_FragCoord.z);
+  depth_of_object = 215.1f * depth_of_object;
+  float density = pow(premultiply_alpha, 1);
+  float A = pow(1 - density, depth_of_object);
+
+  //if (length(offset) > 0.00001)
   {
-   //result = result + ((1.0 - premultiply_alpha) * refraction_src.rgb);
-   //result = result + (transmission* refraction_src.rgb);
-   //result = mix(result,color_behind,transmission);
+    float rndotv = clamp(dot(-m.normal, -refracted_view), 0, 1);
+    vec3 rKs = vec3(1.f); // fresnelSchlickRoughness(rndotv, F0, m.roughness);
+    transmissive_result = rKs * A * color_behind;
+    result = transmissive_result + (1-A)*max(reflective_result, vec3(0));
+    //result = 1.f*transmissive_result;
   }
- // else
+  // else
   {
     // result = vec3(1,0,0);
+    // result = reflective_result; //already is
   }
-  float aa = 1.f/max((density*pow(depth_of_object,2.2f)),1);
-  result =  (aa)*color_behind + result;
-  //result = vec3(depth_of_object);
-  // out0 = vec4(result, premultiply_alpha);
+
+
+  if (debug != vec3(-9))
+  {
+    result = debug;
+  }
+
   out0 = vec4(result, 1);
 }

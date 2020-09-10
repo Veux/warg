@@ -84,6 +84,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   material.vertex_shader = "displacement.vert";
   material.frag_shader = "terrain.frag";
   material.backface_culling = false;
+  material.translucent_pass = true;
 
   material.uniform_set.bool_uniforms["ground"] = false;
   Node_Index memewater = scene->add_mesh("water", &mesh, &material);
@@ -91,7 +92,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   scene->nodes[memewater].position = pos;
   scene->nodes[memewater].position = pos-vec3(0,0,0.001);
   
-  material.translucent_pass = true;
+  material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;
   memewater = scene->add_mesh("ground", &mesh, &material);
   scene->nodes[memewater].scale = scale;
@@ -239,7 +240,7 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
   material2.translucent_pass = true;
-  material2.blends_onto_dst = true;
+  material2.fixed_function_blending = true;
   material2.backface_culling = false;
   Node_Index triangle = scene->add_mesh("triangle", &md, &material2);
 
@@ -272,7 +273,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
   // spawn_compass(&scene);
-   spawn_test_spheres(scene);
+   //spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -649,7 +650,7 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   material->emissive.source = "white";
   material->albedo.mod = vec4(.3, .3, .3, .3);
   material->translucent_pass = true;
-  material->blends_onto_dst = true;
+  material->fixed_function_blending = true;
   material->backface_culling = false;
 
   scene->collision_octree.clear();
@@ -819,7 +820,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         {
           material.casts_shadows = false;
           material.translucent_pass = true;
-          material.albedo.mod.a = mix(0.0f, 0.8f, float(k) / float(kcount - 1));
+          material.albedo.mod.a = mix(0.0f, 0.4f, float(k) / float(kcount - 1));
           material.roughness.mod = vec4(0);
           material.frag_shader = "refraction.frag";
           small_object_refraction_settings(&material.uniform_set);
@@ -831,11 +832,12 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
           material.casts_shadows = false;
           material.translucent_pass = true;
           material.albedo.mod.a = roughness;
+          material.metalness.mod.a = 0.8f;
           small_object_water_settings(&material.uniform_set);
           material.uniform_set.float32_uniforms["water_scale"] = mix(3.5f, 10.f, roughness);
           material.uniform_set.float32_uniforms["water_scale2"] = mix(0.5f, 3.f, roughness);
           // mix(1.5f, 10.f, roughness);
-          material.roughness.mod = vec4(0);
+          material.roughness.mod = vec4(roughness);
           material.frag_shader = "water.frag";
         }
 

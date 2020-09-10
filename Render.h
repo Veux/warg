@@ -355,7 +355,7 @@ struct Material_Descriptor
   bool discard_on_alpha = true;
   bool casts_shadows = true;
   bool wireframe = false;
-  bool blends_onto_dst = false;
+  bool fixed_function_blending = false;
 
   /*
 
@@ -1043,6 +1043,9 @@ struct Renderer
   vec3 clear_color = vec3(1, 0, 0);
   float32 blur_radius = 0.0021;
   float32 blur_factor = 2.12f;
+  bool show_tonemap = false;
+  float exposure = 1.0f;
+  vec3 exposure_color = vec3(1);
   uint32 draw_calls_last_frame = 0;
 
   Environment_Map environment;

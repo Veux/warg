@@ -648,13 +648,13 @@ void main()
   const float LOG2 = 1.442695;
   float z = gl_FragCoord.z / gl_FragCoord.w;
   float camera_relative_depth = linearize_depth(gl_FragCoord.z);
-  float fogFactor = exp2(-.0031f * z * z * LOG2);
+  float fogFactor = exp2(-.0131f * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
   result = mix(water, terrain_result, float(ground));
   float opacity = max(float(ground), .93f);
   // result = mix(result,vec3(1,1,1),camera_relative_depth);
-  // result = mix(vec3(1,1,1),result,fogFactor);
+  // q result = mix(vec3(.02,.25,.21),result,fogFactor);
 
   // result = vec3(is_very_wet_soil);
   // result = vec3(float(biome >= 2.f && biome < 3.f));

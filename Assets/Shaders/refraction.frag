@@ -479,7 +479,7 @@ void main()
   // ambient light
 
   // ambient specular
-  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  vec3 Ks = fresnelSchlickRoughness(clamp(ndotv, 0, 1), F0, m.roughness);
   const float MAX_REFLECTION_LOD = 5.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
