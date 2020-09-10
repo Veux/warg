@@ -653,6 +653,8 @@ void main()
   camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
   result = mix(water, terrain_result, float(ground));
   float opacity = max(float(ground), .93f);
+
+  result = max(result,0);
   // result = mix(result,vec3(1,1,1),camera_relative_depth);
   // q result = mix(vec3(.02,.25,.21),result,fogFactor);
 

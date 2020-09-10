@@ -153,14 +153,14 @@ void main()
   // lightning starts a fire
   if (bool(vvlow_chance_true))
   {
-    // biome = 4.5f;
+     biome = 4.5f;
   }
   // rain on water
   if (lowmed_chance_true != 0)
   {
 
     if (water_height > ground_height)
-      water_height = water_height + .00435f; // raindrops
+      water_height = water_height + .100435f; // raindrops
   }
 
   // fewer rain on ground because it kills fire too fast
