@@ -319,6 +319,7 @@ struct Uniform_Set_Descriptor
   std::unordered_map<std::string, glm::vec3> vec3_uniforms;
   std::unordered_map<std::string, glm::vec4> vec4_uniforms;
   std::unordered_map<std::string, glm::mat4> mat4_uniforms;
+  std::unordered_map<GLint,Texture> texture_uniforms;
   void clear()
   {
     float32_uniforms.clear();
@@ -329,6 +330,7 @@ struct Uniform_Set_Descriptor
     vec3_uniforms.clear();
     vec4_uniforms.clear();
     mat4_uniforms.clear();
+    texture_uniforms.clear();
   }
 };
 
@@ -889,6 +891,10 @@ struct Liquid_Surface
     heightmap = texture;
     invalidated = true;
   }
+  Texture* get_velocity()
+  {
+    return &velocity_copy;
+  }
 
   void zero_velocity();
 
@@ -1002,9 +1008,17 @@ struct Renderer
 {
   // todo: irradiance map generation
   // todo: skeletal animation
-  // todo: deferred rendering
   // todo: screen space reflections
   // todo: parallax mapping
+  // todo: procedural raymarched volumetric effects
+  // todo: godrays
+  // todo: pbr terrain
+  // todo: fbm noise in water depth
+  // todo: mix water to noisy white on high velocity
+  // todo: rain particles
+  // todo: spawn object gui - manual entry for new node and its resource indices
+  // todo: dithering in tonemapper
+  // todo: instanced grass, use same heightmap to displace - can resize biome to 1/2 res and draw jittered grass at each grass pixel
   Renderer() {}
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();

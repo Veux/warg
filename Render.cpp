@@ -1215,6 +1215,10 @@ void Material::bind()
   {
     shader.set_uniform(uniform.first.c_str(), uniform.second);
   }
+  for (auto &uniform : descriptor.uniform_set.texture_uniforms)
+  {
+    uniform.second.bind_for_sampling_at(uniform.first);
+  }
 }
 
 //
@@ -2314,7 +2318,7 @@ void Renderer::render(float64 state_time)
     tonemapping_target_srgb8.bind_for_drawing_dst();
     tonemapping.use();
     tonemapping.set_uniform("transform", fullscreen_quad());
-    tonemapping.set_uniform("texture0_mod", vec4(exposure*exposure_color,1));
+    tonemapping.set_uniform("texture0_mod", vec4(exposure * exposure_color, 1));
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind_for_sampling_at(0);
     quad.draw();

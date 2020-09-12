@@ -71,27 +71,27 @@ void small_object_refraction_settings(Uniform_Set_Descriptor *dst)
 
 void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 {
-
   Mesh_Descriptor mesh;
   mesh.name = "generated water terrain grid";
-  mesh.mesh_data = generate_grid(ivec2(256));
+  mesh.mesh_data = generate_grid(ivec2(512));
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
-  material.albedo.mod = vec4(.054, .135, .159, .998);
+  material.albedo.mod = vec4(.054, .135, .159, .45);
   material.uv_scale = vec2(1);
-  material.roughness.mod = vec4(0.25);
-  material.metalness.mod = vec4(0.84);
+  material.roughness.mod = vec4(0.04);
+  material.metalness.mod = vec4(1);
   material.vertex_shader = "displacement.vert";
-  material.frag_shader = "terrain.frag";
-  material.backface_culling = false;
+  material.frag_shader = "water.frag";
+  material.backface_culling = true;
   material.translucent_pass = true;
-
+  world_water_settings(&material.uniform_set);
   material.uniform_set.bool_uniforms["ground"] = false;
   Node_Index memewater = scene->add_mesh("water", &mesh, &material);
   scene->nodes[memewater].scale = scale;
-  scene->nodes[memewater].position = pos;
   scene->nodes[memewater].position = pos-vec3(0,0,0.001);
   
+  
+  material.frag_shader = "terrain.frag";
   material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;
   memewater = scene->add_mesh("ground", &mesh, &material);
@@ -681,12 +681,16 @@ void Render_Test_State::update()
     Material_Index mi = node->model[0].second;
     Material *mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
+    mat->descriptor.uniform_set.texture_uniforms[12] = *painter.liquid.get_velocity();
+
+    
 
     Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
     node = &scene.nodes[ground_node];
     mi = node->model[0].second;
     mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
+
   }
 
   // update_grabbyarm(&scene, current_time);

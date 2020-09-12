@@ -30,20 +30,49 @@ out float ground_height;
 out float water_depth;
 flat out float biome;
 out vec4 indebug;
+
+vec4 get_height_sample(vec2 uv)
+{
+  vec2 plane_size = vec2(1024);
+  vec2 texture_size = vec2(256);
+  ivec2 p = ivec2((uv * texture_size) - vec2(0.25f));
+
+  // return texture(texture11, uv, 0);
+  float o = 1. / 1024;
+  vec4 height = texture(texture11, uv, 0);
+  vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
+  vec4 height_right = texture(texture11, uv + vec2(o, 0), 0);
+  vec4 height_down = texture(texture11, uv + vec2(0, -o), 0);
+  vec4 height_up = texture(texture11, uv + vec2(0, o), 0);
+
+  // return height;
+  vec4 height_all = height + height_left + height_right + height_down + height_up;
+
+  return .2f * height_all;
+}
+
 void main()
 {
 
-  // need to apply a curvature by sampling adjacent pixels with textureOffset
-  float height = texture2D(texture11, uv).r;
   float offset = 0.0005505;
-  float height_offsetx = texture2D(texture11, uv + vec2(offset, 0)).r;
-  float height_offsety = texture2D(texture11, uv + vec2(0, offset)).r;
+  // need to apply a curvature by sampling adjacent pixels with textureOffset
+  // vec4 height_sample = texture2D(texture11, uv);
+  // vec4 vheight_offsetx = texture2D(texture11, uv + vec2(offset, 0));
+  // vec4 vheight_offsety = texture2D(texture11, uv + vec2(0, offset));
 
+  vec4 height_sample = get_height_sample(uv);
+  vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
+  vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
+
+  float height = height_sample.r;
+  float height_offsetx = vheight_offsetx.r;
+  float height_offsety = vheight_offsety.r;
   if (ground)
   {
-    height = texture2D(texture11, uv).g;
-    height_offsetx = texture2D(texture11, uv + vec2(offset, 0)).g;
-    height_offsety = texture2D(texture11, uv + vec2(0, offset)).g;
+    // height = texture2D(texture11, uv).g;
+    height = height_sample.g;
+    height_offsetx = vheight_offsetx.g;
+    height_offsety = vheight_offsety.g;
   }
 
   float dhx = height_offsetx - height;
@@ -63,23 +92,23 @@ void main()
 
   frag_TBN = mat3(t, b, n);
   frag_world_position = (Model * vec4(position + displacement_offset, 1)).xyz;
-  frag_uv = uv_scale * vec2(uv.x, -uv.y);
+  frag_uv = uv_scale * vec2(uv.x, uv.y);
   frag_normal_uv = normal_uv_scale * frag_uv;
   for (int i = 0; i < MAX_LIGHTS; ++i)
   {
     frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position, 1);
   }
 
-  ground_height = texture11_mod.r * texture2D(texture11, uv).g;
+  ground_height = texture11_mod.r * height;
   biome = texture11_mod.r * texelFetch(texture11, ivec2((uv * 256) - vec2(0.25f)), 0).b;
   if (biome >= 3.f && biome < 4.1f)
   {
     biome = 3.f;
   }
 
-  water_depth = max(height - ground_height, 0);
+  water_depth = max(height - height_sample.g, 0);
 
-  indebug = vec4(texture2D(texture11, uv).a);
+  // indebug = vec4(texture2D(texture11, uv).a);
 
   gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
 }

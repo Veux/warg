@@ -51,7 +51,7 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
 
   float water_depth = water_height - ground_height;
   float other_water_depth = other_water_height - other_ground_height;
-  const float viscosity = 55.01f;
+  const float viscosity = 3.01f;
   const float gravity = -1.0;
   const float water_pillar_edge_size = 1.0f; // used for resolution scaling
   const float water_pillar_area = water_pillar_edge_size * water_pillar_edge_size;
@@ -95,7 +95,7 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float updated_velocity = .991f * (velocity_into_this_pixel) + water_acceleration;
+  float updated_velocity = .998f * (velocity_into_this_pixel) + water_acceleration;
 
   // updated_velocity = (velocity_into_this_pixel) + water_acceleration;
   float delta_height = dt * updated_velocity;
@@ -153,21 +153,25 @@ void main()
   // lightning starts a fire
   if (bool(vvlow_chance_true))
   {
-     biome = 4.5f;
+    biome = 4.5f;
   }
   // rain on water
   if (lowmed_chance_true != 0)
   {
 
     if (water_height > ground_height)
-      water_height = water_height + .100435f; // raindrops
+    {
+      water_height = water_height + .0051000435f; // raindrops
+    }
   }
 
   // fewer rain on ground because it kills fire too fast
   if (vlow_chance_true != 0)
   {
     if (water_height < ground_height)
+    {
       water_height = water_height + .001131f; // raindrops
+    }
   }
 
   float is_char_to_dirt = in_range(biome, 0.f, 1.f);
@@ -464,8 +468,10 @@ void main()
 
   float delta_height_sum = (left.r + right.r + down.r + up.r);
   float updated_water_height = water_height + delta_height_sum;
+
   vec4 velocity_into_this_pixel_from_others = vec4(left.g, right.g, down.g, up.g);
   // could also do ground height erosion based on velocity^2 here
+
   out0 = vec4(updated_water_height, ground_height, biome, debug);
   out1 = velocity_into_this_pixel_from_others;
 }
