@@ -1411,7 +1411,7 @@ Node_Index Flat_Scene_Graph::find_by_name(Node_Index parent, const char *name)
   bool warned = false;
   if (parent == NODE_NULL)
   {
-    for (uint32 i = 0; i < highest_allocated_node; ++i)
+    for (uint32 i = 0; i <= highest_allocated_node; ++i)
     {
       if ((i > 300) && (!warned))
       {

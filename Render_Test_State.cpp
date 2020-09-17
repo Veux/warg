@@ -78,6 +78,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.054, .135, .159, .45);
   material.uv_scale = vec2(1);
+  //material.roughness.source = "white";
   material.roughness.mod = vec4(0.04);
   material.metalness.mod = vec4(1);
   material.vertex_shader = "displacement.vert";
@@ -269,7 +270,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   spawn_water(&scene, vec3(25, 25, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  spawn_planets(&scene, vec3(12, 6, 3));
+  //spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
   // spawn_compass(&scene);
@@ -340,6 +341,11 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   light1->max_variance = 0.00000;
   light1->shadow_fov = 1.57080;
   light1->shadow_map_resolution = ivec2(1024, 1024);
+
+
+
+
+
 }
 
 void Render_Test_State::handle_input_events()
@@ -681,7 +687,7 @@ void Render_Test_State::update()
     Material_Index mi = node->model[0].second;
     Material *mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
-    mat->descriptor.uniform_set.texture_uniforms[12] = *painter.liquid.get_velocity();
+    mat->descriptor.uniform_set.texture_uniforms[water_velocity] = *painter.liquid.get_velocity();
 
     
 

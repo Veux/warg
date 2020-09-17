@@ -32,9 +32,11 @@ enum Texture_Location
   irradiance,
   brdf_ibl_lut,
   refraction,
-  depth,
+  depth_of_scene,
   displacement,
-  t12,
+  water_velocity,
+  depth_of_self,
+  t13,
   uv_grid,
 
   s0, // shadow maps
@@ -1075,6 +1077,7 @@ struct Renderer
   Shader passthrough = Shader("passthrough.vert", "passthrough.frag");
   Shader tonemapping = Shader("passthrough.vert", "tonemapping.frag");
   Shader variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
+  Shader variance_shadow_map_displacement = Shader("passthrough_displacement.vert", "variance_shadow_map.frag");
   Shader gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
   Shader fxaa = Shader("passthrough.vert", "fxaa.frag");
   Shader equi_to_cube = Shader("equi_to_cube.vert", "equi_to_cube.frag");
@@ -1141,7 +1144,9 @@ struct Renderer
   Framebuffer draw_target;              
   Framebuffer tonemapping_target_srgb8; 
   Framebuffer fxaa_target_srgb8;        
-  Framebuffer translucent_sample_source; 
+  Framebuffer translucent_sample_source;
+  Framebuffer self_object_depth;
+  
 
   // instance attribute buffers
   // GLuint instance_mvp_buffer = 0;

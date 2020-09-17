@@ -54,7 +54,7 @@ vec4 get_height_sample(vec2 uv)
 void main()
 {
 
-  float offset = 0.0005505;
+  float offset = 0.005505;
   // need to apply a curvature by sampling adjacent pixels with textureOffset
   // vec4 height_sample = texture2D(texture11, uv);
   // vec4 vheight_offsetx = texture2D(texture11, uv + vec2(offset, 0));
@@ -74,6 +74,7 @@ void main()
     height_offsetx = vheight_offsetx.g;
     height_offsety = vheight_offsety.g;
   }
+
 
   float dhx = height_offsetx - height;
   float dhy = height_offsety - height;
@@ -96,7 +97,7 @@ void main()
   frag_normal_uv = normal_uv_scale * frag_uv;
   for (int i = 0; i < MAX_LIGHTS; ++i)
   {
-    frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position, 1);
+    frag_in_shadow_space[i] = shadow_map_transform[i] * Model * vec4(position + displacement_offset, 1);
   }
 
   ground_height = texture11_mod.r * height;

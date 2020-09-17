@@ -33,6 +33,7 @@ void main()
 
   frag_world_position = (Model * vec4(position, 1)).xyz;
   frag_TBN = mat3(t, b, n);
+
   frag_uv = uv_scale * vec2(uv.x, -uv.y);
   frag_normal_uv = normal_uv_scale * frag_uv;
   for (int i = 0; i < MAX_LIGHTS; ++i)

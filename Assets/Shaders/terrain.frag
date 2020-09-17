@@ -389,6 +389,40 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
   return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
 }
+
+float DistributionGGX(vec3 N, vec3 H, float roughness)
+{
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float NdotH = max(dot(N, H), 0.0);
+  float NdotH2 = NdotH * NdotH;
+
+  float num = a2;
+  float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+  denom = PI * denom * denom;
+
+  return num / denom;
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
+  float r = (roughness + 1.0);
+  float k = (r * r) / 8.0;
+
+  float num = NdotV;
+  float denom = NdotV * (1.0 - k) + k;
+
+  return num / denom;
+}
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
+  float NdotV = max(dot(N, V), 0.0);
+  float NdotL = max(dot(N, L), 0.0);
+  float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+  float ggx1 = GeometrySchlickGGX(NdotL, roughness);
+
+  return ggx1 * ggx2;
+}
 void main()
 {
   vec3 result = vec3(0);
@@ -443,26 +477,101 @@ void main()
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
+  float r1 = noise(50.1f * frag_world_position.xy);
+  float r2 = noise(50.1f * frag_world_position.xz);
+  float r3 = noise(50.1f * frag_world_position.yz);
+  float rr = 0.333f * (r1 + r2 + r3);
+
+  float r12 = noise(52.1f * frag_world_position.xy);
+  float r22 = noise(52.1f * frag_world_position.xz);
+  float r32 = noise(52.1f * frag_world_position.yz);
+  float rr2 = 0.333f * (r12 + r22 + r32);
+
+  float r13 = noise(55.1f * frag_world_position.xy);
+  float r23 = noise(55.1f * frag_world_position.xz);
+  float r33 = noise(55.1f * frag_world_position.yz);
+  float rr3 = 0.333f * (r13 + r23 + r33);
+
+  float rrt = random(vec2(rr + time, rr2 + time));
+
+  float is_char_to_dirt = in_range(biome, 0.f, 1.f);
+  float is_soil = in_range(biome, 1.f, 2.f);
+  float is_very_wet_soil = in_range(biome, 1.5f, 2.f);
+  float is_grass = in_range(biome, 2.f, 4.f);
+  float is_heavy_grass = in_range(biome, 2.5f, 4.f);
+  float on_fire = in_range(biome, 4.f, 5.f); // timenoise mod red color
+  // float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
+
+  float terrain_ao = pow(.1 + ground_height, 1.2);
+  vec3 fire = 3.f * rrt * vec3(4.5, 2.1, .1);
+  vec3 grass = rr2 * vec3(0.013, .433, .0136);
+  vec3 soil = rr3 * 0.845f * vec3(0.3, .13, .036);
+  vec3 wet_soil = 0.32f * soil;
+  vec3 flowers = vec3(rr, rr2, rr3);
+  vec3 charred = 0.015f * vec3(fbm(11.f * frag_world_position.xy) + fbm(frag_world_position.xy));
+  vec3 grass_variance = vec3(fbm(frag_world_position.xy));
+  // only one of these will be nonzero
+  float char_to_dirt_t = saturate(biome);
+  float soil_t = saturate(biome - 1.0f);
+  float grass_t = saturate(biome - 2.f);
+  float fire_t = saturate(biome - 4.f);
+  // float fading_fire_t = saturate(biome-5.f);
+
+  float fire_visual_intensity = sin(3.14 * pow(fire_t, 2));
+  // extra effects:
+  float vert_wet_soil_t = 2.f * clamp(biome - 1.5f, 0, 0.5f); // idk?
+  float heavy_grass_t = 2.f * clamp(biome - 2.65f, 0, 0.5f);  // add flowers
+  // char_to_dirt_t = 0.55f;
+  char_to_dirt_t = pow(char_to_dirt_t, 5.f);
+  // is_char_to_dirt = 1.f;
+  vec3 charr_contribution = is_char_to_dirt * mix(charred, soil, char_to_dirt_t);
+  vec3 soil_contribution = is_soil * mix(soil, wet_soil, soil_t);
+  vec3 grass_contribution = grass_variance * is_grass * mix(wet_soil, grass, grass_t);
+  vec3 fire_contribution = fire_visual_intensity * on_fire * fire;
+  float smoke = pow(waterheight(10.f * frag_world_position.xy, 20.f * time), 1.0);
+  fire_contribution = 1.f * mix(vec3(0), fire_contribution, 1.f - smoke);
+
+  // vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
+  vec3 flowers_contribution = is_heavy_grass * step(rr, 0.3f * heavy_grass_t) * flowers;
+
+  vec3 water = result;
+  // water depth should change the color of the water instead to be more green at shore and more blue at high depth
+  float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
+  const float LOG2 = 1.442695;
+  float z = gl_FragCoord.z / gl_FragCoord.w;
+  float camera_relative_depth = linearize_depth(gl_FragCoord.z);
+  float fogFactor = exp2(-.0131f * z * z * LOG2);
+  fogFactor = clamp(fogFactor, 0.0, 1.0);
+  camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
+  // result = mix(water, terrain_result, float(ground));
+  float opacity = max(float(ground), .93f);
+
+  // result = max(result, 0);
+  m.albedo = max(charr_contribution + soil_contribution + grass_contribution + flowers_contribution, 0);
+  m.emissive = fire_contribution;
+  m.roughness = 1.0f-(is_soil*soil_t);
+  // m.metalness = 0.f;
+  m.ambient_occlusion = clamp(terrain_ao,0.1,1);
+
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.04); // default dielectrics
+  vec3 F0 = vec3(0.001); // default dielectrics
   // todo: could put dielectric reflectivity in a uniform
   // this would let us specify more light absorbant materials
   F0 = mix(F0, m.albedo, m.metalness);
 
-  float ndotv = clamp(dot(m.normal, v), 0, 1);
+  float ndotv = saturate(dot(m.normal, v));
 
-  float roughnessclamp = clamp(m.roughness, 0.01, 1);
+  float roughnessclamp = clamp(m.roughness, 0.001, 1);
 
   /*
   metal should mul specular by albedo because albedo map means F0
-
   plastic should not mul specular by albedo
-
-
   */
 
+  ///////////////////////////////////////////////////////////////////
+  // LIGHTING:
   vec3 direct_ambient = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -505,19 +614,29 @@ void main()
     float ndotl = saturate(dot(m.normal, l));
     float ndoth = saturate(dot(m.normal, h));
     float vdoth = saturate(dot(v, h));
-    // float G = G_smith_GGX_denom(a,ndotv,ndotl);
-    // specular brdf
-    vec3 F = F_schlick(F0, ndoth);
-    float G = G_smith_GGX(roughnessclamp, ndotv, ndotl);
-    float D = D_ggx(roughnessclamp, ndoth);
-    float denominator = max(4.0f * ndotl * ndotv, 0.000001);
-    vec3 specular = (F * G * D) / denominator;
     vec3 radiance = lights[i].flux * at;
+    // specular brdf
+    // smith ggx denom seems to get rid of the weird banding artifacting at high roughness
+    vec3 F = F_schlick(F0, ndoth);
+    float G = G_smith_GGX_denom(roughnessclamp, ndotv, ndotl);
+    G = G_smith_GGX(roughnessclamp, ndotv, ndotl);
+    float D = D_ggx(roughnessclamp, ndoth);
+    D = DistributionGGX(m.normal, h, roughnessclamp); // these are different, not sure why
+    vec3 specular = (F * G * D);
+
+    float denominator = max(4.0f * ndotl * ndotv, 0.000001);
+
+    // these both have banding artifacts at high roughness
+    // G =  GeometrySmith(m.normal, v, l, roughnessclamp);
+    // G =  GeometrySchlickGGX(ndotv, roughnessclamp);
+
     vec3 specular_result = radiance * specular;
     vec3 Kd = (1.0f - F) * (1 - m.metalness); // Ks = F
     vec3 diffuse = Kd * m.albedo / PI;
     vec3 diffuse_result = radiance * diffuse;
     result += (specular_result + diffuse_result) * visibility * ndotl;
+    // debug.rgb = vec3((specular_result)  * ndotl);
+    // debug.rgb = vec3(G);
     direct_ambient += lights[i].ambient * at * m.albedo;
   }
   vec3 directonly = result;
@@ -539,6 +658,13 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
+
+  if (debug != vec4(-1))
+  {
+    result = debug.rgb;
+  }
+  //result = m.albedo+m.emissive;
+  //result = vec3(is_soil*soil_t);
   // result = m.emissive;
   //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
   //  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
@@ -553,6 +679,7 @@ void main()
   // result = vec3(gl_FragCoord.x/1920);
   // result = 0.05f*vec3(length(frag_world_position));
   // result = m.albedo;
+  // result = max(m.normal,vec3(0));
 
   // result = pow(result,vec3(2.2));
   // result = clamp(result,vec3(0),vec3(1));
@@ -575,105 +702,5 @@ void main()
   // result = pow(result,vec3(2.2));
   // result = 1*result;
 
-  // if(blocking_terrain != 0.0f)// 0.015f)
-  //{
-  float epsilon = 0.00001;
-  bool tile_light = (mod(frag_world_position.x + epsilon, 1) < 0.5) xor
-                    (mod(frag_world_position.y + epsilon, 1) < 0.5) xor (mod(frag_world_position.z + epsilon, 1) < 0.5);
-  float value = float(tile_light);
-
-  float r1 = noise(50.1f * frag_world_position.xy);
-  float r2 = noise(50.1f * frag_world_position.xz);
-  float r3 = noise(50.1f * frag_world_position.yz);
-  float rr = 0.333f * (r1 + r2 + r3);
-
-  float r12 = noise(52.1f * frag_world_position.xy);
-  float r22 = noise(52.1f * frag_world_position.xz);
-  float r32 = noise(52.1f * frag_world_position.yz);
-  float rr2 = 0.333f * (r12 + r22 + r32);
-
-  float r13 = noise(55.1f * frag_world_position.xy);
-  float r23 = noise(55.1f * frag_world_position.xz);
-  float r33 = noise(55.1f * frag_world_position.yz);
-  float rr3 = 0.333f * (r13 + r23 + r33);
-
-  float rrt = random(vec2(rr + time, rr2 + time));
-
-  float is_char_to_dirt = in_range(biome, 0.f, 1.f);
-  float is_soil = in_range(biome, 1.f, 2.f);
-  float is_very_wet_soil = in_range(biome, 1.5f, 2.f);
-  float is_grass = in_range(biome, 2.f, 4.f);
-  float is_heavy_grass = in_range(biome, 2.5f, 4.f);
-  float on_fire = in_range(biome, 4.f, 5.f); // timenoise mod red color
-  // float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
-
-  float terrain_ao = pow(.1 + ground_height, 1.2);
-  vec3 fire = 3.f * rrt * vec3(4.5, 2.1, .1);
-  vec3 grass = terrain_ao * rr2 * vec3(0.013, .433, .0136);
-  vec3 soil = terrain_ao * rr3 * 0.845f * vec3(0.3, .13, .036);
-  vec3 wet_soil = terrain_ao * 0.32f * soil;
-  vec3 flowers = terrain_ao * vec3(rr, rr2, rr3);
-  vec3 charred = terrain_ao * 0.015f * vec3(fbm(11.f * frag_world_position.xy) + fbm(frag_world_position.xy));
-  vec3 grass_variance = vec3(fbm(frag_world_position.xy));
-  // only one of these will be nonzero
-  float char_to_dirt_t = saturate(biome);
-  float soil_t = saturate(biome - 1.0f);
-  float grass_t = saturate(biome - 2.f);
-  float fire_t = saturate(biome - 4.f);
-  // float fading_fire_t = saturate(biome-5.f);
-
-  float fire_visual_intensity = sin(3.14 * pow(fire_t, 2));
-  // extra effects:
-  float vert_wet_soil_t = 2.f * clamp(biome - 1.5f, 0, 0.5f); // idk?
-  float heavy_grass_t = 2.f * clamp(biome - 2.65f, 0, 0.5f);  // add flowers
-  // char_to_dirt_t = 0.55f;
-  char_to_dirt_t = pow(char_to_dirt_t, 5.f);
-  // is_char_to_dirt = 1.f;
-  vec3 charr_contribution = is_char_to_dirt * mix(charred, soil, char_to_dirt_t);
-  vec3 soil_contribution = is_soil * mix(soil, wet_soil, soil_t);
-  vec3 grass_contribution = grass_variance * is_grass * mix(wet_soil, grass, grass_t);
-  vec3 fire_contribution = fire_visual_intensity * on_fire * fire;
-  float smoke = pow(waterheight(10.f * frag_world_position.xy, 20.f * time), 1.0);
-  fire_contribution = 1.f * mix(vec3(0), fire_contribution, 1.f - smoke);
-
-  // vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
-  vec3 flowers_contribution = is_heavy_grass * step(rr, 0.3f * heavy_grass_t) * flowers;
-
-  vec3 terrain_result =
-      charr_contribution + soil_contribution + grass_contribution + fire_contribution + flowers_contribution;
-
-  vec3 water = result;
-  // water depth should change the color of the water instead to be more green at shore and more blue at high depth
-  float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
-  const float LOG2 = 1.442695;
-  float z = gl_FragCoord.z / gl_FragCoord.w;
-  float camera_relative_depth = linearize_depth(gl_FragCoord.z);
-  float fogFactor = exp2(-.0131f * z * z * LOG2);
-  fogFactor = clamp(fogFactor, 0.0, 1.0);
-  camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
-  result = mix(water, terrain_result, float(ground));
-  float opacity = max(float(ground), .93f);
-
-  result = max(result, 0);
-  // result = mix(result,vec3(1,1,1),camera_relative_depth);
-  // q result = mix(vec3(.02,.25,.21),result,fogFactor);
-
-  // result = vec3(is_very_wet_soil);
-  // result = vec3(float(biome >= 2.f && biome < 3.f));
-  // result = vec3(grass_variance);
-  //
-  // result = vec3(is_char_to_dirt).rgb;
-  // result = vec3(is_soil).rgb;
-  // result = vec3(is_very_wet_soil).rgb;
-  // result = vec3(grass_t).rgb;
-  // result = vec3(is_heavy_grass).rgb;
-  // result = vec3(on_fire).rgb;
-  // result = vec3(fire_is_fading).rgb;
-  // result = vec3(smoke);
-  // result = vec3(fire_visual_intensity);
-  // result = vec3(in_range(biome,3.8,3.9));
-  // result = vec3(indebug);
-  // result = vec3(is_heavy_grass).rgb;
-  // result = vec3(step(0.f,-2.f),0,.1);
   out0 = vec4(result, opacity);
 }

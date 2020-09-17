@@ -113,8 +113,10 @@ void Framebuffer::init()
     {
       depth = make_shared<Renderbuffer_Handle>();
       glGenRenderbuffers(1, &depth->rbo);
-      // glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
-      glNamedRenderbufferStorage(depth->rbo, GL_DEPTH_COMPONENT, depth_size.x, depth_size.y);
+      glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
+      //glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT,depth_size.x,depth_size.y);
+      glNamedRenderbufferStorage(depth->rbo, depth_format, depth_size.x, depth_size.y);
+      //glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_COMPONENT,GL_RENDERBUFFER,depth->rbo);
       glNamedFramebufferRenderbuffer(fbo->fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
       depth->format = depth_format;
       depth->size = depth_size;
@@ -1548,12 +1550,13 @@ void Renderer::build_shadow_maps()
     shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
-    // glEnable(GL_CULL_FACE);
-    glDisable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
+    //glDisable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
-    glCullFace(GL_FRONT);
+    glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->pre_blur.fbo->fbo);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1566,6 +1569,20 @@ void Renderer::build_shadow_maps()
     {
       if (entity.material->descriptor.casts_shadows)
       {
+        if (entity.material->displacement.texture != nullptr)
+        {
+          variance_shadow_map_displacement.use();
+          variance_shadow_map_displacement.set_uniform(
+              "transform", shadow_map->projection_camera * entity.transformation);
+          // sponge: jank code specific to the world sim thing:
+          bool is_ground = entity.name == "ground";
+          variance_shadow_map_displacement.set_uniform("ground", is_ground);
+          variance_shadow_map_displacement.set_uniform("texture11_mod", entity.material->descriptor.displacement.mod);
+          entity.material->displacement.bind_for_sampling_at(displacement);
+          ASSERT(entity.mesh);
+          entity.mesh->draw();
+          continue;
+        }
         variance_shadow_map.use();
         variance_shadow_map.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
         ASSERT(entity.mesh);
@@ -1941,7 +1958,7 @@ void Renderer::translucent_pass(float32 time)
   bind_white_to_all_textures();
   draw_target.bind_for_drawing_dst();
   translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
-  translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth);
+  translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_scene);
   for (Render_Entity &entity : translucent_entities)
   {
     if (CONFIG.render_simple)
@@ -1987,15 +2004,27 @@ void Renderer::translucent_pass(float32 time)
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
 
-    // glDisable(GL_BLEND);
-    translucent_sample_source.bind_for_drawing_dst();
+    //// depth info for this object's front onto the geometry in the world
+    // translucent_sample_source.bind_for_drawing_dst();
+    // glCullFace(GL_BACK);
+    // glDrawBuffer(GL_NONE);
+    // entity.mesh->draw();
+
+    // depth info for this object's back faces
+    self_object_depth.bind_for_drawing_dst();
     glCullFace(GL_FRONT);
     glDrawBuffer(GL_NONE);
+    glClear(GL_DEPTH_BUFFER_BIT);
     entity.mesh->draw();
+
+    // depth of closest front face will be in the main rendering call below
+    // depth of the world will be in translucent sample source - dont need to render to it
+    // depth of closest back face is in self_object_depth
 
     draw_target.bind_for_drawing_dst();
     translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
-    translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth);
+    translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_scene);
+    self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
     glNamedFramebufferDrawBuffers(draw_target.fbo->fbo, draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
     glCullFace(GL_BACK);
     entity.mesh->draw();
@@ -2556,6 +2585,14 @@ void Renderer::init_render_targets()
   translucent_sample_source.depth_texture.t.name = td.name;
   translucent_sample_source.init();
 
+  td.name = name + "Renderer::self_object_depth";
+  self_object_depth.depth_enabled = true;
+  self_object_depth.use_renderbuffer_depth = false;
+  self_object_depth.depth_size = render_target_size;
+  self_object_depth.depth_texture.t.name = td.name;
+  self_object_depth.depth_texture.load();
+  self_object_depth.init();
+
   // full render scaled, clamped and encoded srgb
   Texture_Descriptor srgb8;
   srgb8.source = "generate";
@@ -2715,7 +2752,7 @@ void Spotlight_Shadow_Map::init(ivec2 size)
 
   pre_blur.depth_enabled = true;
   pre_blur.depth_size = size;
-  pre_blur.depth_format = GL_DEPTH_COMPONENT32;
+  pre_blur.depth_format = GL_DEPTH_COMPONENT32F;
 
   Texture_Descriptor pre_blur_td;
   pre_blur_td.source = "generate";
