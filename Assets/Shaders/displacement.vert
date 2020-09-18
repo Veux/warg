@@ -14,6 +14,7 @@ uniform mat4 MVP;
 uniform mat4 Model;
 uniform mat4 shadow_map_transform[MAX_LIGHTS];
 uniform bool ground;
+uniform float displacement_map_size;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -29,6 +30,7 @@ out vec4 frag_in_shadow_space[MAX_LIGHTS];
 out float ground_height;
 out float water_depth;
 flat out float biome;
+out float height_variance;
 out vec4 indebug;
 
 vec4 get_height_sample(vec2 uv)
@@ -37,7 +39,6 @@ vec4 get_height_sample(vec2 uv)
   vec2 texture_size = vec2(256);
   ivec2 p = ivec2((uv * texture_size) - vec2(0.25f));
 
-  // return texture(texture11, uv, 0);
   float o = 1. / 1024;
   vec4 height = texture(texture11, uv, 0);
   vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
@@ -45,10 +46,57 @@ vec4 get_height_sample(vec2 uv)
   vec4 height_down = texture(texture11, uv + vec2(0, -o), 0);
   vec4 height_up = texture(texture11, uv + vec2(0, o), 0);
 
-  // return height;
   vec4 height_all = height + height_left + height_right + height_down + height_up;
-
   return .2f * height_all;
+}
+
+vec4 get_height_sample_variance(vec2 uv)
+{
+  vec2 plane_size = vec2(1024);
+  vec2 texture_size = vec2(256);
+  ivec2 p = ivec2((uv * texture_size) - vec2(0.25f));
+
+  float o = 1. / 512;
+  vec4 height = texture(texture11, uv, 0);
+  vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
+  vec4 height_right = texture(texture11, uv + vec2(o, 0), 0);
+  vec4 height_down = texture(texture11, uv + vec2(0, -o), 0);
+  vec4 height_up = texture(texture11, uv + vec2(0, o), 0);
+
+  vec4 height_all = height + height_left + height_right + height_down + height_up;
+  vec4 height_all2 = height_left + height_right + height_down + height_up;
+  float minimum = min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r))));
+  float maximum = max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r))));
+
+  o = 2. / 512;
+  height = texture(texture11, uv, 0);
+  height_left = texture(texture11, uv + vec2(-o, 0), 0);
+  height_right = texture(texture11, uv + vec2(o, 0), 0);
+  height_down = texture(texture11, uv + vec2(0, -o), 0);
+  height_up = texture(texture11, uv + vec2(0, o), 0);
+
+  height_all2 = height_all2 + height_left + height_right + height_down + height_up;
+
+  minimum = min(minimum, min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r)))));
+  maximum = max(maximum, max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r)))));
+
+  o = 3. / 512;
+  height = texture(texture11, uv, 0);
+  height_left = texture(texture11, uv + vec2(-o, 0), 0);
+  height_right = texture(texture11, uv + vec2(o, 0), 0);
+  height_down = texture(texture11, uv + vec2(0, -o), 0);
+  height_up = texture(texture11, uv + vec2(0, o), 0);
+
+  height_all2 = height_all2 + height_left + height_right + height_down + height_up;
+  minimum = min(minimum, min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r)))));
+  maximum = max(maximum, max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r)))));
+
+  float avg = 1.f / 12.f * height_all2.r;
+  float avg_f = max(height.r - avg, 0);
+
+  float variance = avg_f * (maximum - minimum);
+
+  return vec4(.2f * height_all.xyz, variance);
 }
 
 void main()
@@ -60,11 +108,12 @@ void main()
   // vec4 vheight_offsetx = texture2D(texture11, uv + vec2(offset, 0));
   // vec4 vheight_offsety = texture2D(texture11, uv + vec2(0, offset));
 
-  vec4 height_sample = get_height_sample(uv);
+  vec4 height_sample = get_height_sample_variance(uv);
   vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
   vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
 
   float height = height_sample.r;
+  height_variance = get_height_sample_variance(uv).a;
   float height_offsetx = vheight_offsetx.r;
   float height_offsety = vheight_offsety.r;
   if (ground)
@@ -74,7 +123,6 @@ void main()
     height_offsetx = vheight_offsetx.g;
     height_offsety = vheight_offsety.g;
   }
-
 
   float dhx = height_offsetx - height;
   float dhy = height_offsety - height;
@@ -101,7 +149,7 @@ void main()
   }
 
   ground_height = texture11_mod.r * height;
-  biome = texture11_mod.r * texelFetch(texture11, ivec2((uv * 256) - vec2(0.25f)), 0).b;
+  biome = texture11_mod.r * texelFetch(texture11, ivec2((uv * displacement_map_size) - vec2(0.25f)), 0).b;
   if (biome >= 3.f && biome < 4.1f)
   {
     biome = 3.f;
@@ -109,7 +157,7 @@ void main()
 
   water_depth = max(height - height_sample.g, 0);
 
-  // indebug = vec4(texture2D(texture11, uv).a);
+  //indebug = vec4(texture2D(texture11, uv).a);
 
   gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
 }

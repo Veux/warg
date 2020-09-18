@@ -312,6 +312,36 @@ float noise(vec2 st)
 
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
+
+float fbm_n(vec2 uv, int n)
+{
+  float value = 0.0;
+  float amplitude = .5;
+  float frequency = 0.;
+  for (int i = 0; i < n; i++)
+  {
+    value += amplitude * noise(uv);
+    uv *= 2.;
+    amplitude *= .5;
+  }
+  return value;
+}
+
+float fbm_h_n(vec2 x, float H, int n)
+{
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    t += a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+
 #define NUM_OCTAVES2 3
 float fbm(vec2 uv)
 {
@@ -423,6 +453,14 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 
   return ggx1 * ggx2;
 }
+
+vec3 hsv2rgb(vec3 c)
+{
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
 void main()
 {
   vec3 result = vec3(0);
@@ -477,22 +515,7 @@ void main()
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
-  float r1 = noise(50.1f * frag_world_position.xy);
-  float r2 = noise(50.1f * frag_world_position.xz);
-  float r3 = noise(50.1f * frag_world_position.yz);
-  float rr = 0.333f * (r1 + r2 + r3);
-
-  float r12 = noise(52.1f * frag_world_position.xy);
-  float r22 = noise(52.1f * frag_world_position.xz);
-  float r32 = noise(52.1f * frag_world_position.yz);
-  float rr2 = 0.333f * (r12 + r22 + r32);
-
-  float r13 = noise(55.1f * frag_world_position.xy);
-  float r23 = noise(55.1f * frag_world_position.xz);
-  float r33 = noise(55.1f * frag_world_position.yz);
-  float rr3 = 0.333f * (r13 + r23 + r33);
-
-  float rrt = random(vec2(rr + time, rr2 + time));
+  float rrt = random(vec2(0.5f * time, time));
 
   float is_char_to_dirt = in_range(biome, 0.f, 1.f);
   float is_soil = in_range(biome, 1.f, 2.f);
@@ -502,56 +525,74 @@ void main()
   float on_fire = in_range(biome, 4.f, 5.f); // timenoise mod red color
   // float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
 
-  float terrain_ao = pow(.1 + ground_height, 1.2);
-  vec3 fire = 3.f * rrt * vec3(4.5, 2.1, .1);
-  vec3 grass = rr2 * vec3(0.013, .433, .0136);
-  vec3 soil = rr3 * 0.845f * vec3(0.3, .13, .036);
+  float fire_f = 1.0f;
+  vec3 fire = 3.f * fire_f * vec3(4.5, 2.1, .1);
+  vec3 grass = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(0.08, .433, .08);
+  vec3 soil = fbm_h_n(10.f * frag_world_position.xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);
+  float rock_t = fbm_h_n(20.f * frag_world_position.xy, .01f, 1);
+  float rock_t2 = fbm_h_n(50.f * frag_world_position.xy, .501f, 1);
+  float rock_t3 = fbm_h_n(660.f * frag_world_position.xy, .501f, 2);
+  vec3 rock_color =
+      rock_t3 * (mix(vec3(0), vec3(.3, .15, 0), 0.523f * rock_t) + mix(vec3(0), vec3(1), 0.12f * rock_t2));
+  soil = soil + (step(.9515, fbm_h_n(550.f * frag_world_position.xy, .01f, 1)) *
+                    fbm_h_n(55.f * frag_world_position.xy, .701f, 1) * grass);
+  // soil = soil + (smoothstep(4.155,4.156,fbm_h_n(50.f*frag_world_position.xy,.01f,7))*rock_color);
+  float rock_location = smoothstep(0.852871115814, .980f, fbm_h_n(15.f * frag_world_position.xy, .01f, 1));
+  soil = mix(soil, rock_color, rock_location);
+  // soil = vec3(rock_location);
   vec3 wet_soil = 0.32f * soil;
-  vec3 flowers = vec3(rr, rr2, rr3);
-  vec3 charred = 0.015f * vec3(fbm(11.f * frag_world_position.xy) + fbm(frag_world_position.xy));
-  vec3 grass_variance = vec3(fbm(frag_world_position.xy));
+
+  vec3 c = hsv2rgb(
+      vec3(saturate(noise(21.1f * frag_world_position.xy) * fbm_h_n(31.f * frag_world_position.xy, .501f, 4)), 1, 1));
+
+  vec3 flower_color = c;
+
+  float flower_location = (1 - 1.512f * fbm_h_n(2.7595f * frag_world_position.xy, .101f, 2)) +
+                          (1 - 1.12f * fbm_h_n(25.5f * frag_world_position.xy, .101f, 3));
+
+  vec3 charred = 0.135f * vec3(length(soil));
   // only one of these will be nonzero
   float char_to_dirt_t = saturate(biome);
   float soil_t = saturate(biome - 1.0f);
   float grass_t = saturate(biome - 2.f);
   float fire_t = saturate(biome - 4.f);
+
+
+
   // float fading_fire_t = saturate(biome-5.f);
 
   float fire_visual_intensity = sin(3.14 * pow(fire_t, 2));
   // extra effects:
   float vert_wet_soil_t = 2.f * clamp(biome - 1.5f, 0, 0.5f); // idk?
   float heavy_grass_t = 2.f * clamp(biome - 2.65f, 0, 0.5f);  // add flowers
-  // char_to_dirt_t = 0.55f;
   char_to_dirt_t = pow(char_to_dirt_t, 5.f);
   // is_char_to_dirt = 1.f;
   vec3 charr_contribution = is_char_to_dirt * mix(charred, soil, char_to_dirt_t);
   vec3 soil_contribution = is_soil * mix(soil, wet_soil, soil_t);
-  vec3 grass_contribution = grass_variance * is_grass * mix(wet_soil, grass, grass_t);
+
+  vec3 grass_contribution = is_grass * mix(wet_soil, grass, grass_t);
   vec3 fire_contribution = fire_visual_intensity * on_fire * fire;
-  float smoke = pow(waterheight(10.f * frag_world_position.xy, 20.f * time), 1.0);
+  float smoke = pow(waterheight(210.f * frag_world_position.xy, 20.f * time), 1.0);
   fire_contribution = 1.f * mix(vec3(0), fire_contribution, 1.f - smoke);
 
   // vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
-  vec3 flowers_contribution = is_heavy_grass * step(rr, 0.3f * heavy_grass_t) * flowers;
+  vec3 flowers_contribution = max(is_heavy_grass * flower_location * flower_color, 0);
 
+  // grass_contribution = mix(grass_contribution, flower_color, saturate(is_heavy_grass * 4.f * flower_location));
+  grass_contribution = mix(grass_contribution, rock_color, rock_location);
   vec3 water = result;
   // water depth should change the color of the water instead to be more green at shore and more blue at high depth
   float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
-  const float LOG2 = 1.442695;
-  float z = gl_FragCoord.z / gl_FragCoord.w;
-  float camera_relative_depth = linearize_depth(gl_FragCoord.z);
-  float fogFactor = exp2(-.0131f * z * z * LOG2);
-  fogFactor = clamp(fogFactor, 0.0, 1.0);
-  camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
-  // result = mix(water, terrain_result, float(ground));
-  float opacity = max(float(ground), .93f);
 
-  // result = max(result, 0);
-  m.albedo = max(charr_contribution + soil_contribution + grass_contribution + flowers_contribution, 0);
-  m.emissive = fire_contribution;
-  m.roughness = 1.0f-(is_soil*soil_t);
+
+  m.albedo = max(charr_contribution + soil_contribution + grass_contribution, 0);
+  // m.albedo = vec3(rock_location);
+  m.emissive = max(fire_contribution, vec3(0));
+  m.roughness = 1.0f - (is_soil * soil_t);
   // m.metalness = 0.f;
-  m.ambient_occlusion = clamp(terrain_ao,0.1,1);
+
+  float terrain_ao = pow(.1 + ground_height, 1.2);
+  m.ambient_occlusion = clamp(terrain_ao, 0.1, 1);
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
@@ -663,8 +704,17 @@ void main()
   {
     result = debug.rgb;
   }
-  //result = m.albedo+m.emissive;
-  //result = vec3(is_soil*soil_t);
+
+    const float LOG2 = 1.442695;
+  float z = gl_FragCoord.z / gl_FragCoord.w;
+  float camera_relative_depth = linearize_depth(gl_FragCoord.z);
+  float fogFactor = exp2(-.0131f * z * z * LOG2);
+  fogFactor = clamp(fogFactor, 0.0, 1.0);
+  camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
+  
+
+  // result = m.albedo+m.emissive;
+  // result = vec3(is_soil*soil_t);
   // result = m.emissive;
   //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
   //  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
@@ -680,6 +730,10 @@ void main()
   // result = 0.05f*vec3(length(frag_world_position));
   // result = m.albedo;
   // result = max(m.normal,vec3(0));
+
+  // float ff = float(indebug.r >= 1.f && indebug.r <= 1.01f);
+
+  // result = vec3(ff);
 
   // result = pow(result,vec3(2.2));
   // result = clamp(result,vec3(0),vec3(1));
@@ -702,5 +756,5 @@ void main()
   // result = pow(result,vec3(2.2));
   // result = 1*result;
 
-  out0 = vec4(result, opacity);
+  out0 = vec4(result, 1);
 }

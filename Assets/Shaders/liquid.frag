@@ -51,7 +51,7 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
 
   float water_depth = water_height - ground_height;
   float other_water_depth = other_water_height - other_ground_height;
-  const float viscosity = 3.01f;
+  const float viscosity = .201f;
   const float gravity = -1.0;
   const float water_pillar_edge_size = 1.0f; // used for resolution scaling
   const float water_pillar_area = water_pillar_edge_size * water_pillar_edge_size;
@@ -95,8 +95,8 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float energy_loss = .998f;
-  // energy_loss = 1.f;
+  float energy_loss = .9995f;
+  //energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 
   // updated_velocity = (velocity_into_this_pixel) + water_acceleration;
@@ -130,9 +130,9 @@ void main()
                                   random(vec2(p) + vec2(cos(2.1f * time))) < fourthrootdt * 0.001f &&
                                   random(vec2(p) + vec2(cos(1.11f * time))) < fourthrootdt * 0.1f &&
                                   random(vec2(p) + vec2(cos(1.31f * time))) < fourthrootdt * 0.1111f);
-  float vlow_chance_true = float(random(vec2(p) + vec2(sin(time))) < cubertdt * 0.12f &&
-                                 random(vec2(p) + vec2(cos(2.1f * time))) < cubertdt * 0.04f &&
-                                 random(vec2(p) + vec2(cos(1.1f * time))) < cubertdt * 0.2f);
+  float vlow_chance_true = float(random(vec2(p) + vec2(sin(time))) < cubertdt * 0.08f &&
+                                 random(vec2(p) + vec2(cos(2.1f * time))) < cubertdt * 0.02f &&
+                                 random(vec2(p) + vec2(cos(1.1f * time))) < cubertdt * 0.04f);
   float low_chance_true = float(random(vec2(p) + vec2(sin(time))) < cubertdt * 0.23f &&
                                 random(vec2(p) + vec2(cos(2.1f * time))) < cubertdt * 0.08f &&
                                 random(vec2(p) + vec2(cos(1.1f * time))) < cubertdt * 0.3f);
@@ -150,7 +150,7 @@ void main()
   // high brush starts a fire
   if (biome > 7.f)
   {
-    biome = 4.5f;
+    // biome = 4.5f;
   }
   // lightning starts a fire
   if (bool(vvlow_chance_true))
@@ -158,12 +158,20 @@ void main()
     biome = 4.5f;
   }
   // rain on water
-  if (lowmed_chance_true != 0)
+  if (vlow_chance_true != 0)
   {
 
     if (water_height > ground_height)
     {
-       water_height = water_height + .0021000435f; // raindrops
+      float dropheight = .0071000435f;
+      if (sin(20.f * time) > 0.f)
+      {
+         water_height = water_height + dropheight; // raindrops
+      }
+      else
+      {
+         water_height = water_height - dropheight; // raindrops
+      }
     }
   }
 
@@ -172,7 +180,7 @@ void main()
   {
     if (water_height < ground_height)
     {
-     //water_height = water_height + .001131f; // raindrops
+      // water_height = water_height + .001131f; // raindrops
     }
   }
 
@@ -448,7 +456,7 @@ void main()
     {
     }
 
-    if (bool(on_fire))
+    if (biome >= 4.f && biome <= 5.f)
     {
       if (water_height - ground_height > 0.01f)
       {
@@ -457,6 +465,7 @@ void main()
         biome = clamp(biome, 0.f, 1.f);
       }
     }
+
   }
 
   if (!bool(in_range(biome, 0.f, 5.f)))

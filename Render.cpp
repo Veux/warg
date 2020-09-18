@@ -3732,7 +3732,7 @@ Texture Texture_Paint::create_new_texture(const char *name)
     tname = name;
   }
   Texture t =
-      Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+      Texture(tname, vec2(512), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }

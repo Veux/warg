@@ -78,20 +78,19 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.054, .135, .159, .45);
   material.uv_scale = vec2(1);
-  //material.roughness.source = "white";
-  material.roughness.mod = vec4(0.04);
+  material.roughness.source = "white";
+  material.roughness.mod = vec4(0.02);
   material.metalness.mod = vec4(1);
   material.vertex_shader = "displacement.vert";
   material.frag_shader = "water.frag";
   material.backface_culling = true;
   material.translucent_pass = true;
-  world_water_settings(&material.uniform_set);
+  // world_water_settings(&material.uniform_set);
   material.uniform_set.bool_uniforms["ground"] = false;
   Node_Index memewater = scene->add_mesh("water", &mesh, &material);
   scene->nodes[memewater].scale = scale;
-  scene->nodes[memewater].position = pos-vec3(0,0,0.001);
-  
-  
+  scene->nodes[memewater].position = pos - vec3(0, 0, 0.001);
+
   material.frag_shader = "terrain.frag";
   material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;
@@ -270,11 +269,11 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   spawn_water(&scene, vec3(25, 25, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  //spawn_planets(&scene, vec3(12, 6, 3));
+  // spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
   // spawn_compass(&scene);
-   //spawn_test_spheres(scene);
+  // spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -319,15 +318,15 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   light0->shadow_blur_radius = 0.30050;
   light0->shadow_near_plane = 963.00006;
   light0->shadow_far_plane = 1127.00000;
-  light0->max_variance = 0.00000;
+  light0->max_variance = 0.000003;
   light0->shadow_fov = 0.06230;
   light0->shadow_map_resolution = ivec2(2048, 2048);
 
   Light *light1 = &scene.lights.lights[1];
-  light1->position = vec3(-2.68201, 4.21981, 2.00000);
+  light1->position = vec3(-3.12653, 3.90190, 2.00000);
   light1->direction = vec3(0.00000, 0.00000, 0.00000);
   light1->brightness = 51.50000;
-  light1->color = vec3(1.00000, 1.00000, 1.00000);
+  light1->color = vec3(1.00000, 0.99999, 0.99999);
   light1->attenuation = vec3(1.00000, 0.22000, 0.00000);
   light1->ambient = 0.00000;
   light1->radius = 0.10000;
@@ -338,14 +337,9 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   light1->shadow_blur_radius = 2.12000;
   light1->shadow_near_plane = 0.50000;
   light1->shadow_far_plane = 200.00000;
-  light1->max_variance = 0.00000;
+  light1->max_variance = 0.000003;
   light1->shadow_fov = 1.57080;
   light1->shadow_map_resolution = ivec2(1024, 1024);
-
-
-
-
-
 }
 
 void Render_Test_State::handle_input_events()
@@ -688,15 +682,14 @@ void Render_Test_State::update()
     Material *mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
     mat->descriptor.uniform_set.texture_uniforms[water_velocity] = *painter.liquid.get_velocity();
-
-    
+    mat->descriptor.uniform_set.float32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
 
     Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
     node = &scene.nodes[ground_node];
     mi = node->model[0].second;
     mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
-
+    mat->descriptor.uniform_set.float32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
   }
 
   // update_grabbyarm(&scene, current_time);
