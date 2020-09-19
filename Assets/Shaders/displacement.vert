@@ -157,7 +157,7 @@ void main()
 
   water_depth = max(height - height_sample.g, 0);
 
-  //indebug = vec4(texture2D(texture11, uv).a);
+  // indebug = vec4(texture2D(texture11, uv).a);
 
   gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
 }

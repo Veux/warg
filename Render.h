@@ -1000,6 +1000,9 @@ struct Texture_Paint
   std::string filename;
   float32 sim_time = 0.f;
   bool draw_cursor = false;
+  uint32 terrain_gen_seed = 0.f;
+  bool generate_terrain = false;
+  bool generate_water = false;
 
   void iterate(Texture *t, float32 time);
 

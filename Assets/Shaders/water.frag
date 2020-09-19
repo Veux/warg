@@ -675,7 +675,7 @@ void main()
   vec3 normal = getNormal(25.5125151f * waterp, eps);
 
   // vec3 normal = vec3(0, 0, 1);
-   normal = vec3(0, 0, 1);
+  normal = vec3(0, 0, 1);
   // vec3 waternormal = normalize(vertical_scale_normal + normalize(normal));
   vec3 waternormal = normal;
 
@@ -921,7 +921,7 @@ void main()
   // mistf = .15f * (pow(mistf1, 1.1785f) * pow(mistf2, 1.1685f));
 
   vec3 mist_tint = mix(vec3(length(ambient_diffuse)), ambient_diffuse, 0.3f);
-  //mist_tint = vec3(1);
+  // mist_tint = vec3(1);
   result += clamp(vec3(mist_tint * mistf * mistlocation), vec3(0), mistmax);
   // result = vec3(depth_of_object);
   // result = vec3(depth_of_object);

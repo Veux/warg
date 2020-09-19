@@ -557,8 +557,6 @@ void main()
   float grass_t = saturate(biome - 2.f);
   float fire_t = saturate(biome - 4.f);
 
-
-
   // float fading_fire_t = saturate(biome-5.f);
 
   float fire_visual_intensity = sin(3.14 * pow(fire_t, 2));
@@ -583,7 +581,6 @@ void main()
   vec3 water = result;
   // water depth should change the color of the water instead to be more green at shore and more blue at high depth
   float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
-
 
   m.albedo = max(charr_contribution + soil_contribution + grass_contribution, 0);
   // m.albedo = vec3(rock_location);
@@ -705,13 +702,12 @@ void main()
     result = debug.rgb;
   }
 
-    const float LOG2 = 1.442695;
+  const float LOG2 = 1.442695;
   float z = gl_FragCoord.z / gl_FragCoord.w;
   float camera_relative_depth = linearize_depth(gl_FragCoord.z);
   float fogFactor = exp2(-.0131f * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
-  
 
   // result = m.albedo+m.emissive;
   // result = vec3(is_soil*soil_t);

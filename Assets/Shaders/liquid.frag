@@ -96,7 +96,7 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
   float energy_loss = .9995f;
-  //energy_loss = 1.f;
+  // energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 
   // updated_velocity = (velocity_into_this_pixel) + water_acceleration;
@@ -166,11 +166,11 @@ void main()
       float dropheight = .0071000435f;
       if (sin(20.f * time) > 0.f)
       {
-         water_height = water_height + dropheight; // raindrops
+        water_height = water_height + dropheight; // raindrops
       }
       else
       {
-         water_height = water_height - dropheight; // raindrops
+        water_height = water_height - dropheight; // raindrops
       }
     }
   }
@@ -465,7 +465,6 @@ void main()
         biome = clamp(biome, 0.f, 1.f);
       }
     }
-
   }
 
   if (!bool(in_range(biome, 0.f, 5.f)))

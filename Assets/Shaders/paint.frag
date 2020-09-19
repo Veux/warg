@@ -14,7 +14,6 @@ uniform float j;
 uniform float k;
 uniform float time;
 uniform float tonemap_pow;
-;
 uniform float tonemap_x;
 uniform vec4 brush_color = vec4(1, 1, 1, 1);
 in vec2 frag_uv;
@@ -110,6 +109,53 @@ vec4 Tonemap_ACES(vec4 x)
   const vec4 d = vec4(0.59);
   const vec4 e = vec4(0.14);
   return (x * (a * x + b)) / (x * (c * x + d) + e);
+}
+
+float random(vec2 st)
+{
+  return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+float noise(vec2 st)
+{
+  vec2 i = floor(st);
+  vec2 f = fract(st);
+
+  // Four corners in 2D of a tile
+  float a = random(i);
+  float b = random(i + vec2(1.0, 0.0));
+  float c = random(i + vec2(0.0, 1.0));
+  float d = random(i + vec2(1.0, 1.0));
+
+  vec2 u = f * f * (3.0 - 2.0 * f);
+
+  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
+
+float fbm_h_n(vec2 x, float H, int n)
+{
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    t += a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+vec4 generate_terrain(vec4 source)
+{
+    float terrain_height = fbm_h_n(vec2(time)+20.f*frag_uv,0.95f,5);
+    float biome = 1.1f;
+    return vec4(0,terrain_height,biome,0);
+}
+
+vec4 generate_water(vec4 source)
+{
+    float water_height = 0.4f*fbm_h_n(vec2(time)+frag_uv.yx,0.51f,25);
+    return vec4(water_height,source.g,source.b,0);
 }
 
 void main()
@@ -209,6 +255,14 @@ void main()
   if (mode == 7)
   {
     result = pow(source, vec4(tonemap_pow));
+  }
+  if (mode == 8)
+  {
+    result = generate_terrain(source);
+  }
+    if (mode == 9)
+  {
+    result = generate_water(source);
   }
 
   if (hdr == 0)

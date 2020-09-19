@@ -114,9 +114,9 @@ void Framebuffer::init()
       depth = make_shared<Renderbuffer_Handle>();
       glGenRenderbuffers(1, &depth->rbo);
       glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
-      //glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT,depth_size.x,depth_size.y);
+      // glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT,depth_size.x,depth_size.y);
       glNamedRenderbufferStorage(depth->rbo, depth_format, depth_size.x, depth_size.y);
-      //glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_COMPONENT,GL_RENDERBUFFER,depth->rbo);
+      // glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_COMPONENT,GL_RENDERBUFFER,depth->rbo);
       glNamedFramebufferRenderbuffer(fbo->fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
       depth->format = depth_format;
       depth->size = depth_size;
@@ -1551,7 +1551,7 @@ void Renderer::build_shadow_maps()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
     glEnable(GL_CULL_FACE);
-    //glDisable(GL_CULL_FACE);
+    // glDisable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
@@ -3862,6 +3862,16 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     }
     ImGui::EndCombo();
   }
+
+  if (ImGui::Button("Generate Terrain"))
+  {
+    generate_terrain = true;
+  }
+  if (ImGui::Button("Generate Water"))
+  {
+    generate_water = true;
+  }
+
   ImGui::PushID("blendmode");
   if (ImGui::BeginCombo("", selected_blendmode))
   {
@@ -4413,6 +4423,18 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     drawing_shader.set_uniform("mode", 7);
     quad.draw();
     apply_pow = 0;
+  }
+  if (generate_terrain)
+  {
+    drawing_shader.set_uniform("mode", 8);
+    quad.draw();
+    generate_terrain = false;
+  }
+    if (generate_water)
+  {
+    drawing_shader.set_uniform("mode", 9);
+    quad.draw();
+    generate_water = false;
   }
 
   glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);
