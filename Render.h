@@ -1003,6 +1003,7 @@ struct Texture_Paint
   uint32 terrain_gen_seed = 0.f;
   bool generate_terrain = false;
   bool generate_water = false;
+  bool clear_water = false;
 
   void iterate(Texture *t, float32 time);
 

@@ -147,15 +147,17 @@ float fbm_h_n(vec2 x, float H, int n)
 }
 vec4 generate_terrain(vec4 source)
 {
-    float terrain_height = fbm_h_n(vec2(time)+20.f*frag_uv,0.95f,5);
-    float biome = 1.1f;
-    return vec4(0,terrain_height,biome,0);
+  float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
+  float biome = 1.1f;
+  return vec4(0, source.g + terrain_height, biome, 0);
 }
 
 vec4 generate_water(vec4 source)
 {
-    float water_height = 0.4f*fbm_h_n(vec2(time)+frag_uv.yx,0.51f,25);
-    return vec4(water_height,source.g,source.b,0);
+  float water_height = .1215f * fbm_h_n(220.f * (vec2(time, time * 0.331f) + random(frag_uv.yx)), .58501f, 2);
+  float water_height2 = 0.16135f * fbm_h_n(10.1f * (vec2(time, time * 0.331f) + frag_uv.yx), .391f, 6);
+  water_height = 0.1f * random(frag_uv.yx) + water_height2;
+  return vec4(water_height + water_height2 * (source.r), source.g, source.b, 0);
 }
 
 void main()
@@ -260,9 +262,13 @@ void main()
   {
     result = generate_terrain(source);
   }
-    if (mode == 9)
+  if (mode == 9)
   {
     result = generate_water(source);
+  }
+  if (mode == 10)
+  {
+    result = vec4(0, source.g, source.b, 0);
   }
 
   if (hdr == 0)

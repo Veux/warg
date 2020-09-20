@@ -3871,6 +3871,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   {
     generate_water = true;
   }
+    if (ImGui::Button("Clear Water"))
+  {
+    clear_water = true;
+  }
 
   ImGui::PushID("blendmode");
   if (ImGui::BeginCombo("", selected_blendmode))
@@ -4430,11 +4434,18 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     quad.draw();
     generate_terrain = false;
   }
-    if (generate_water)
+  if (generate_water)
   {
     drawing_shader.set_uniform("mode", 9);
     quad.draw();
     generate_water = false;
+  }
+
+  if (clear_water)
+  {
+    drawing_shader.set_uniform("mode", 10);
+    quad.draw();
+    clear_water = false;
   }
 
   glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);

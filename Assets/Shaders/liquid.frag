@@ -95,7 +95,7 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float energy_loss = .9995f;
+  float energy_loss = .9998f;
   // energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 
@@ -150,12 +150,12 @@ void main()
   // high brush starts a fire
   if (biome > 7.f)
   {
-    // biome = 4.5f;
+    biome = 4.5f;
   }
   // lightning starts a fire
   if (bool(vvlow_chance_true))
   {
-    biome = 4.5f;
+     biome = 4.5f;
   }
   // rain on water
   if (vlow_chance_true != 0)

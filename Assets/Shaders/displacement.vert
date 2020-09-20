@@ -35,11 +35,9 @@ out vec4 indebug;
 
 vec4 get_height_sample(vec2 uv)
 {
-  vec2 plane_size = vec2(1024);
-  vec2 texture_size = vec2(256);
-  ivec2 p = ivec2((uv * texture_size) - vec2(0.25f));
+  ivec2 p = ivec2((uv * displacement_map_size) - vec2(0.25f));
 
-  float o = 1. / 1024;
+  float o = 1. / displacement_map_size;
   vec4 height = texture(texture11, uv, 0);
   vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
   vec4 height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -47,16 +45,15 @@ vec4 get_height_sample(vec2 uv)
   vec4 height_up = texture(texture11, uv + vec2(0, o), 0);
 
   vec4 height_all = height + height_left + height_right + height_down + height_up;
+  return height;
   return .2f * height_all;
 }
 
 vec4 get_height_sample_variance(vec2 uv)
 {
-  vec2 plane_size = vec2(1024);
-  vec2 texture_size = vec2(256);
-  ivec2 p = ivec2((uv * texture_size) - vec2(0.25f));
+  ivec2 p = ivec2((uv * displacement_map_size) - vec2(0.25f));
 
-  float o = 1. / 512;
+  float o = 1. / displacement_map_size;
   vec4 height = texture(texture11, uv, 0);
   vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
   vec4 height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -68,7 +65,7 @@ vec4 get_height_sample_variance(vec2 uv)
   float minimum = min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r))));
   float maximum = max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r))));
 
-  o = 2. / 512;
+  o = 2. / displacement_map_size;
   height = texture(texture11, uv, 0);
   height_left = texture(texture11, uv + vec2(-o, 0), 0);
   height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -80,7 +77,7 @@ vec4 get_height_sample_variance(vec2 uv)
   minimum = min(minimum, min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r)))));
   maximum = max(maximum, max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r)))));
 
-  o = 3. / 512;
+  o = 3. / displacement_map_size;
   height = texture(texture11, uv, 0);
   height_left = texture(texture11, uv + vec2(-o, 0), 0);
   height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -92,7 +89,7 @@ vec4 get_height_sample_variance(vec2 uv)
   maximum = max(maximum, max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r)))));
 
   float avg = 1.f / 12.f * height_all2.r;
-  float avg_f = max(height.r - avg, 0);
+  float avg_f = abs(height.r - avg);
 
   float variance = avg_f * (maximum - minimum);
 
