@@ -1004,6 +1004,7 @@ struct Texture_Paint
   bool generate_terrain = false;
   bool generate_water = false;
   bool clear_water = false;
+  ivec4 mask = ivec4(1);
 
   void iterate(Texture *t, float32 time);
 

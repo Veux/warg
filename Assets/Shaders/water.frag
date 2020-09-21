@@ -691,10 +691,10 @@ void main()
                   velocity_sample.b * vec3(0, -1, 0) + velocity_sample.a * vec3(0, 1, 0);
 
   vec2 fbmv = vec2(length(velocity) / min(water_depth, 0.001));
-  fbmv = smoothstep(55.1011f, 156.50f, fbmv + velocity.xy);
+  fbmv = smoothstep(65.1011f, 186.50f, fbmv + velocity.xy);
   float mistlocation = length(fbmv);
   mistlocation =
-      saturate(pow(151300.5125f * height_variance * smoothstep(.003, .085, pow(length(velocity), 0.8f)), 1.15));
+      saturate(pow(111300.5125f * height_variance * smoothstep(.004, .115, pow(length(velocity), 0.8f)), 1.15));
 
   float mistf1 =
       fbm_n(150.f * frag_uv - vec2(time, .5f * time), 3) * fbm_n(160.f * frag_uv + vec2(.5f * time, time), 3);
@@ -706,15 +706,27 @@ void main()
            fbm_h_n(1160.f * frag_uv + 0.21f * vec2(.5f * time, time), .120f, 5);
   mistf2 = fbm_h_n(140.f * frag_uv - 0.21f * vec2(time, .5f * time), .120f, 5) +
            fbm_h_n(150.f * frag_uv + 0.21f * vec2(.5f * time, time), .120f, 5);
+  // good:
   mistf = smoothstep(3, 55, mistf1 * mistf2);
-  // mistf = .15f * (pow(mistf1, 1.1785f) * pow(mistf2, 1.1685f));
 
-  vec3 mist_result = vec3(mistf * mistlocation);
 
-  m.albedo = mix(m.albedo,vec3(mistf),mistlocation);
+  float len_vel = pow(length(velocity.xy),.157f);
+  vec2 mistvel = len_vel*velocity.xy;
+
+
+  // good velocity varying mist:
+  mistf1 = fbm_h_n(750.f * frag_uv + 11.1f * mistvel * vec2(.003f * time), .120f, 5) *
+           fbm_h_n(760.f * frag_uv + 11.1f * mistvel * vec2(.003f * time), .120f, 5);
+  mistf2 = fbm_h_n(120.f * frag_uv + 11.1f * mistvel * vec2(.003f * time), .120f, 5) +
+           fbm_h_n(110.f * frag_uv + 11.1f * mistvel * vec2(.003f * time), .120f, 5);
+  mistf = smoothstep(3, 55, mistf1 * mistf2);
+  // mistf += 0.2f*fbm_h_n(120.f * frag_uv+.1f *velocity.xy*vec2(time)- vec2(.5f * time, time), .520f, 5);
+  mistf = saturate(mistf);
+
+  m.albedo = mix(m.albedo, vec3(mistf), mistlocation);
   m.normal = normalize(TBN * waternormal);
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
-  m.roughness = mix(m.roughness,.6,mistlocation);
+  m.roughness = mix(m.roughness, .6, mistlocation);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
 
@@ -845,7 +857,7 @@ void main()
   offset.x = offset.x * inv_aspect;
   // offset = refraction_offset_factor * offset; //sponge uniform offset factor
   offset = .03f * offset;
-
+  offset = smoothstep(.01, .1f, water_depth) * offset;
   // offset = vec2(0);
   vec2 this_pixel = gl_FragCoord.xy / viewport_size;
   vec2 ref_sample_loc = this_pixel + offset;
@@ -859,17 +871,24 @@ void main()
   }
 
   float len_offset = length(offset);
-  if (isinf(len_offset)||isnan(len_offset))
+  if (isinf(len_offset) || isnan(len_offset))
   {
     ref_sample_loc = this_pixel;
   }
   vec4 refraction_src = texture2D(texture9, ref_sample_loc);
   // volumetric absorb
   //
-  float depth_of_scene = texture2D(texture10, this_pixel).r; // texture2D(texture10, this_pixel).r;
-  float depth_of_self = texture2D(texture13, this_pixel).r;  // texture2D(texture10, this_pixel).r;
-                                                             // texture2D(texture9, this_pixel).rgb;
+  float depth_of_scene = texture2D(texture10, ref_sample_loc).r; // texture2D(texture10, this_pixel).r;
+  float depth_of_self = texture2D(texture13, this_pixel).r;      // texture2D(texture10, this_pixel).r;
+                                                                 // texture2D(texture9, this_pixel).rgb;
 
+  if (linearize_depth(depth_of_scene) < linearize_depth(gl_FragCoord.z) - 0.011f)
+  {
+    refraction_src = texture2D(texture9, this_pixel);
+    // refraction_src = vec4(1,0,0,1);
+    // depth_of_scene = texture2D(texture10, this_pixel).r;
+  }
+  depth_of_scene = texture2D(texture10, this_pixel).r;
   // roughly world space but not exact, frustrum values differ in the linearize_depth function from the projection
   // matrix
   float depth_of_object = linearize_depth(depth_of_scene) - linearize_depth(gl_FragCoord.z);
@@ -877,6 +896,13 @@ void main()
   float density = pow(premultiply_alpha, 1);
   float A = pow(1 - density, pow(depth_of_object, 0.85f));
   // A = saturate((1 * density)/depth_of_object);
+  float trim_very_thin_water = smoothstep(0.0005, 0.01, water_depth);
+  float trim_very_thin_water2 = smoothstep(0.0345, 0.045, water_depth);
+  float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
+  float shore_fbm2 =
+      pow(saturate(.755f * fbm_h_n(1.5f * frag_world_position.xy + .65f * vec2(sin(time)), 0.8125f, 2)), 2);
+  float shore_t = shore_fbm2 * shore_fbm * trim_very_thin_water2 * (1 - smoothstep(.00, 0.19f, water_depth));
+  // A = mix(A,0.9f,step(0.9,A));
 
   // light that reaches v from sea floor
   float rndotv = clamp(-dot(-m.normal, -refracted_view), 0, 1);
@@ -888,16 +914,17 @@ void main()
   vec3 total_specular = direct_specular + ambient_specular;
   vec3 total_diffuse = direct_diffuse + ambient_diffuse;
 
-  vec3 result = transmission + (1 - A) * max(total_diffuse + total_specular, vec3(0));
-  //result += (1 - A) * 2.f * mist_result * total_specular;
-  result += 1.f * mist_result * total_diffuse;
+  vec3 mist_result = vec3(mistf * saturate(shore_t + mistlocation));
+  vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
+  // result += (1 - A) * 2.f * mist_result * total_specular;
+  result += clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
   // result = (1 - A) *mist_result*Kd;
   vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
   // result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
   result += m.emissive; //+ transmission;
 
- // result = mist_result;
-
+  // result = vec3(Ks*smoothstep(0.01,0.1,water_depth));
+  // result = vec3(mistf * saturate(mistlocation));
   if (debug != vec3(-9))
   {
     result = debug;

@@ -16,6 +16,7 @@ uniform float time;
 uniform float tonemap_pow;
 uniform float tonemap_x;
 uniform vec4 brush_color = vec4(1, 1, 1, 1);
+uniform vec4 mask;
 in vec2 frag_uv;
 
 layout(location = 0) out vec4 out0;
@@ -149,7 +150,7 @@ vec4 generate_terrain(vec4 source)
 {
   float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
   float biome = 1.1f;
-  return vec4(0, source.g + terrain_height, biome, 0);
+  return vec4(source.r, source.g + terrain_height, biome, 0);
 }
 
 vec4 generate_water(vec4 source)
@@ -275,5 +276,7 @@ void main()
   {
     result = clamp(result, 0, 1);
   }
+
+  result = mix(source, result, mask);
   out0 = result;
 }

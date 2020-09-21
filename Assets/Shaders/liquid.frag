@@ -155,7 +155,7 @@ void main()
   // lightning starts a fire
   if (bool(vvlow_chance_true))
   {
-     biome = 4.5f;
+    // biome = 4.5f;
   }
   // rain on water
   if (vlow_chance_true != 0)

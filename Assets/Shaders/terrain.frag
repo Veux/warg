@@ -528,6 +528,15 @@ void main()
   float fire_f = 1.0f;
   vec3 fire = 30.f * fire_f * vec3(4.5, 2.1, .1);
   vec3 grass = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(0.08, .433, .08);
+
+  vec3 snow = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(1);
+  // grass =;
+
+  // i will be assigning the snow color to the grass variable because thats whats actually getting rendered, jank
+
+  float snow_top = smoothstep(1.5141, 1.8635, ground_height);
+  grass = grass * (1 - snow_top) + snow_top * vec3(1);
+
   vec3 soil = fbm_h_n(10.f * frag_world_position.xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);
   float rock_t = fbm_h_n(20.f * frag_world_position.xy, .01f, 1);
   float rock_t2 = fbm_h_n(50.f * frag_world_position.xy, .501f, 1);

@@ -3875,6 +3875,20 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   {
     clear_water = true;
   }
+    
+  ImGui::Text("Mask:");
+    ImGui::SameLine();
+    
+  ImGui::Checkbox("R", (bool*)&mask.r);
+  
+    ImGui::SameLine();
+  ImGui::Checkbox("G", (bool*)&mask.g);
+  
+    ImGui::SameLine();
+  ImGui::Checkbox("B", (bool*)&mask.b);
+  
+    ImGui::SameLine();
+  ImGui::Checkbox("A", (bool*)&mask.a);
 
   ImGui::PushID("blendmode");
   if (ImGui::BeginCombo("", selected_blendmode))
@@ -4227,6 +4241,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   drawing_shader.set_uniform("time", time);
   drawing_shader.set_uniform("blendmode", blendmode);
   drawing_shader.set_uniform("tonemap_pow", pow);
+  drawing_shader.set_uniform("mask", vec4(mask));
 
   if (clear)
   {
