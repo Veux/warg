@@ -896,7 +896,7 @@ void main()
   float density = pow(premultiply_alpha, 1);
   float A = pow(1 - density, pow(depth_of_object, 0.85f));
   // A = saturate((1 * density)/depth_of_object);
-  float trim_very_thin_water = smoothstep(0.0005, 0.01, water_depth);
+  float trim_very_thin_water = saturate(smoothstep(0.0015, 0.015, water_depth)+smoothstep(0.0015, 0.015, depth_of_object));
   float trim_very_thin_water2 = smoothstep(0.0345, 0.045, water_depth);
   float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
   float shore_fbm2 =
@@ -917,12 +917,13 @@ void main()
   vec3 mist_result = vec3(mistf * saturate(shore_t + mistlocation));
   vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
   // result += (1 - A) * 2.f * mist_result * total_specular;
-  result += clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
+  result += trim_very_thin_water *clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
   // result = (1 - A) *mist_result*Kd;
   vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
   // result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
   result += m.emissive; //+ transmission;
 
+  //result = vec3(smoothstep(0.000, 0.115, depth_of_object));
   // result = vec3(Ks*smoothstep(0.01,0.1,water_depth));
   // result = vec3(mistf * saturate(mistlocation));
   if (debug != vec3(-9))

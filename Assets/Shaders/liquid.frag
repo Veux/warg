@@ -40,6 +40,42 @@ bool is_between(float x, float min_edge, float max_edge)
   return (x >= min_edge) && (x <= max_edge);
 }
 
+float fbm_h_n(vec2 x, float H, int n)
+{
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    t += a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+
+float ambient_waves()
+{
+  float scale = 0.000503f;
+  float water_height = 0.5f*fbm_h_n(1.f*frag_uv.xy+.55f*vec2(time), .248501f, 5);
+  //water_height = water_height+0.5f*fbm_h_n(15.f*frag_uv.yx+.511*vec2((1.5f*time),(1.315f*time)), .248501f, 5);
+  //water_height = 0.1f * random(frag_uv.yx) + water_height2;
+  water_height = 0.5-water_height;
+  return (sin(.11f*time)*frag_uv.x)*max(scale*(water_height),0);
+}
+//good:
+float ambient_waves2()
+{
+  float scale = 0.0000503f;
+  float water_height = 0.5f*fbm_h_n(15.f*frag_uv.xy+55.f*vec2(time), .248501f, 5);
+  //water_height = water_height+0.5f*fbm_h_n(15.f*frag_uv.yx+.511*vec2((1.5f*time),(1.315f*time)), .248501f, 5);
+  //water_height = 0.1f * random(frag_uv.yx) + water_height2;
+  water_height = 0.5-water_height;
+  float f1 = float(sin(11.1f*time)<0.f);
+  return (f1-0.5f)*max(scale*(water_height),0);
+}
+
 vec4 calc_contribution2(float ground_height, float water_height, float other_ground_height, float other_water_height,
     float velocity_into_this_pixel)
 // vec4 calc_contribution2(vec4 this_pixel,vec4 other_pixel, float velocity_into_this_pixel)
@@ -95,13 +131,19 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float energy_loss = .9998f;
+  float energy_loss = .9999f;
   // energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 
   // updated_velocity = (velocity_into_this_pixel) + water_acceleration;
   float delta_height = dt * updated_velocity;
 
+  //this isnt water conserving
+  //if we nudge the height of this pixel just for the velocity calc then it should be water conserving
+  if(water_height-.01 > ground_height)
+  {
+  updated_velocity += ambient_waves();
+  }
   return vec4(delta_height - ground_absorbtion, updated_velocity, 0, 0);
 }
 
