@@ -55,35 +55,55 @@ float fbm_h_n(vec2 x, float H, int n)
   return t;
 }
 
-float ambient_waves()
+float ambient_waves(ivec2 p)
 {
-  float scale = 0.000503f;
-  float water_height = 0.5f*fbm_h_n(1.f*frag_uv.xy+.55f*vec2(time), .248501f, 5);
-  //water_height = water_height+0.5f*fbm_h_n(15.f*frag_uv.yx+.511*vec2((1.5f*time),(1.315f*time)), .248501f, 5);
-  //water_height = 0.1f * random(frag_uv.yx) + water_height2;
-  water_height = 0.5-water_height;
-  return (sin(.11f*time)*frag_uv.x)*max(scale*(water_height),0);
+  float scale = 0.00001003f;
+  float water_height = 1.75f * fbm_h_n(.015105f * p + .030f * vec2(.9*time,-.7*time), .25960248501f, 2);
+  water_height = water_height + 1.75f * fbm_h_n(.015105f * p + .023f * vec2(-.85*time,.8*time), .25930248501f, 2);
+
+  water_height = water_height + 0.515f * fbm_h_n(1.115105f * p + .030f * vec2(.9*time,-.7*time), .025960248501f, 2);
+  water_height = water_height + 0.515f * fbm_h_n(1.115105f * p + .023f * vec2(-.85*time,.8*time), .025930248501f, 2);
+  // water_height = 0.1f * random(frag_uv.yx) + water_height2;
+  //water_height = 0.5 - water_height;
+  return 0.10451f*water_height;
 }
-//good:
+// good:
 float ambient_waves2()
 {
   float scale = 0.0000503f;
-  float water_height = 0.5f*fbm_h_n(15.f*frag_uv.xy+55.f*vec2(time), .248501f, 5);
-  //water_height = water_height+0.5f*fbm_h_n(15.f*frag_uv.yx+.511*vec2((1.5f*time),(1.315f*time)), .248501f, 5);
-  //water_height = 0.1f * random(frag_uv.yx) + water_height2;
-  water_height = 0.5-water_height;
-  float f1 = float(sin(11.1f*time)<0.f);
-  return (f1-0.5f)*max(scale*(water_height),0);
+  float water_height = 0.5f * fbm_h_n(15.f * frag_uv.xy + 55.f * vec2(time), .248501f, 5);
+  // water_height = water_height+0.5f*fbm_h_n(15.f*frag_uv.yx+.511*vec2((1.5f*time),(1.315f*time)), .248501f, 5);
+  // water_height = 0.1f * random(frag_uv.yx) + water_height2;
+  water_height = 0.5 - water_height;
+  float f1 = float(sin(11.1f * time) < 0.f);
+  return (f1 - 0.5f) * max(scale * (water_height), 0);
 }
 
-vec4 calc_contribution2(float ground_height, float water_height, float other_ground_height, float other_water_height,
-    float velocity_into_this_pixel)
+vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float velocity_into_this_pixel)
 // vec4 calc_contribution2(vec4 this_pixel,vec4 other_pixel, float velocity_into_this_pixel)
 {
-  // float water_height = this_pixel.r;
-  // float ground_height = this_pixel.g;
-  // float other_water_height = other_pixel.r;
-  // float other_ground_height = other_pixel.g;
+
+  other_p = clamp(other_p, ivec2(0), ivec2(size - ivec2(1)));
+  vec4 other_pixel = texelFetch(texture0, other_p, 0).rgba;
+
+  float water_height = this_pixel.r;
+  float ground_height = this_pixel.g;
+  float other_water_height = other_pixel.r;
+  float other_ground_height = other_pixel.g;
+
+  float my_ambient = 0.f;
+  float other_ambient = 0.f;
+
+  if (water_height - .01 > ground_height)
+  {
+    if (other_water_height - .01 > other_ground_height)
+    {
+      my_ambient = ambient_waves(p);
+      other_ambient = ambient_waves(other_p);
+    }
+  }
+  water_height+=my_ambient;
+  other_water_height+=other_ambient;
 
   float water_depth = water_height - ground_height;
   float other_water_depth = other_water_height - other_ground_height;
@@ -138,15 +158,84 @@ vec4 calc_contribution2(float ground_height, float water_height, float other_gro
   // updated_velocity = (velocity_into_this_pixel) + water_acceleration;
   float delta_height = dt * updated_velocity;
 
-  //this isnt water conserving
-  //if we nudge the height of this pixel just for the velocity calc then it should be water conserving
-  if(water_height-.01 > ground_height)
-  {
-  updated_velocity += ambient_waves();
-  }
+  // this isnt water conserving
+  // if we nudge the height of this pixel just for the velocity calc then it should be water conserving
+
   return vec4(delta_height - ground_absorbtion, updated_velocity, 0, 0);
 }
 
+// vec4 calc_contribution2good(float ground_height, float water_height, float other_ground_height, float
+// other_water_height,
+//    float velocity_into_this_pixel)
+//// vec4 calc_contribution2(vec4 this_pixel,vec4 other_pixel, float velocity_into_this_pixel)
+//{
+//  // float water_height = this_pixel.r;
+//  // float ground_height = this_pixel.g;
+//  // float other_water_height = other_pixel.r;
+//  // float other_ground_height = other_pixel.g;
+//
+//  float water_depth = water_height - ground_height;
+//  float other_water_depth = other_water_height - other_ground_height;
+//  const float viscosity = .201f;
+//  const float gravity = -1.0;
+//  const float water_pillar_edge_size = 1.0f; // used for resolution scaling
+//  const float water_pillar_area = water_pillar_edge_size * water_pillar_edge_size;
+//  float highest_ground = max(other_ground_height, ground_height);
+//
+//  // outward
+//  float mass_of_water_above_both_ground = max(water_height - highest_ground, 0);
+//  float force_out = mass_of_water_above_both_ground;
+//  // inward
+//  float mass_of_other_above_my_ground = max(other_water_height - highest_ground, 0);
+//  float force_in = mass_of_other_above_my_ground;
+//
+//  if (other_water_height <= other_ground_height)
+//  {
+//    velocity_into_this_pixel = min(velocity_into_this_pixel, 0);
+//  }
+//
+//  float total_force_out = (force_out - force_in);
+//  float water_acceleration = water_pillar_area * gravity * viscosity * dt * total_force_out;
+//
+//  float ground_absorbtion_threshold = 0.0001f;
+//  float sintime = 0.5f + 0.5f * sin(time);
+//  float sintimerand = float(sin(gl_FragCoord.x + gl_FragCoord.y * 0.1234 * time) < -0.99999f);
+//  float ground_absorbtion_rate = 0.000011f;
+//  float ground_absorbtion = 0.0f;
+//  float surface_tension_factor = 0.000000f;
+//  if (abs(water_acceleration) < surface_tension_factor)
+//  {
+//    // only absorb on negative slopes or else we absorb at shores
+//    if (water_depth < ground_absorbtion_threshold) // && ground_height >= other_ground_height)
+//    {
+//      ground_absorbtion = ground_absorbtion_rate;
+//    }
+//    water_acceleration = 0.f;
+//  }
+//
+//  // not energy conserving
+//  // need a way to limit downward acceleration by gravity, but upward unlimited while conserving energy
+//  // water_acceleration = max(water_acceleration,-9.8);
+//
+//  float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
+//  float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
+//
+//  float energy_loss = .9999f;
+//  // energy_loss = 1.f;
+//  float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
+//
+//  // updated_velocity = (velocity_into_this_pixel) + water_acceleration;
+//  float delta_height = dt * updated_velocity;
+//
+//  //this isnt water conserving
+//  //if we nudge the height of this pixel just for the velocity calc then it should be water conserving
+//  if(water_height-.01 > ground_height)
+//  {
+//  updated_velocity += ambient_waves();
+//  }
+//  return vec4(delta_height - ground_absorbtion, updated_velocity, 0, 0);
+//}
+//
 void main()
 {
   float debug = 1;
@@ -208,11 +297,11 @@ void main()
       float dropheight = .0071000435f;
       if (sin(20.f * time) > 0.f)
       {
-        water_height = water_height + dropheight; // raindrops
+       // water_height = water_height + dropheight; // raindrops
       }
       else
       {
-        water_height = water_height - dropheight; // raindrops
+       // water_height = water_height - dropheight; // raindrops
       }
     }
   }
@@ -263,9 +352,9 @@ void main()
   float other_water_height = other_sample.r;
   float other_ground_height = other_sample.g;
   float velocity_into_this_pixel_from_other = velocity.r;
-  // vec4 left = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
-  vec4 left = calc_contribution2(
-      ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
+  vec4 left = calc_contribution_ambient(heightmap, p, ivec2(p.x - 1, p.y), velocity_into_this_pixel_from_other);
+  //  vec4 left = calc_contribution2(
+  //      ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
 
   ///////////////////////////////////////////////////////////////////////////////////
   float other_biome = other_sample.b;
@@ -306,8 +395,10 @@ void main()
   other_water_height = other_sample.r;
   other_ground_height = other_sample.g;
   velocity_into_this_pixel_from_other = velocity.g;
-  vec4 right = calc_contribution2(
-      ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
+
+  vec4 right = calc_contribution_ambient(heightmap, p, ivec2(p.x + 1, p.y), velocity_into_this_pixel_from_other);
+  // vec4 right = calc_contribution2(
+  //    ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
 
   ///////////////////////////////////////////////////////////////////////////////////
   other_biome = other_sample.b;
@@ -350,8 +441,9 @@ void main()
   other_ground_height = other_sample.g;
   velocity_into_this_pixel_from_other = velocity.b;
   // vec4 down = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
-  vec4 down = calc_contribution2(
-      ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
+  vec4 down = calc_contribution_ambient(heightmap, p, ivec2(p.x, p.y - 1), velocity_into_this_pixel_from_other);
+  // vec4 down = calc_contribution2(
+  //  ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
 
   ///////////////////////////////////////////////////////////////////////////////////
   other_biome = other_sample.b;
@@ -393,9 +485,10 @@ void main()
   other_water_height = other_sample.r;
   other_ground_height = other_sample.g;
   velocity_into_this_pixel_from_other = velocity.a;
-  // vec4 up = calc_contribution2(heightmap,other_sample,velocity_into_this_pixel_from_other);
-  vec4 up = calc_contribution2(
-      ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
+  vec4 up = calc_contribution_ambient(heightmap, p, ivec2(p.x, p.y + 1), velocity_into_this_pixel_from_other);
+
+  // vec4 up = calc_contribution2(
+  //     ground_height, water_height, other_ground_height, other_water_height, velocity_into_this_pixel_from_other);
 
   ///////////////////////////////////////////////////////////////////////////////////
   other_biome = other_sample.b;

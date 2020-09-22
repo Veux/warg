@@ -691,10 +691,10 @@ void main()
                   velocity_sample.b * vec3(0, -1, 0) + velocity_sample.a * vec3(0, 1, 0);
 
   vec2 fbmv = vec2(length(velocity) / min(water_depth, 0.001));
-  fbmv = smoothstep(65.1011f, 186.50f, fbmv + velocity.xy);
+  fbmv = smoothstep(75.1011f, 216.50f, fbmv + velocity.xy);
   float mistlocation = length(fbmv);
   mistlocation =
-      saturate(pow(111300.5125f * height_variance * smoothstep(.004, .115, pow(length(velocity), 0.8f)), 1.15));
+      saturate(pow(31300.5125f * height_variance * smoothstep(.004, .115, pow(length(velocity), 0.85f)), 1.15));
 
   float mistf1 =
       fbm_n(150.f * frag_uv - vec2(time, .5f * time), 3) * fbm_n(160.f * frag_uv + vec2(.5f * time, time), 3);
@@ -709,10 +709,8 @@ void main()
   // good:
   mistf = smoothstep(3, 55, mistf1 * mistf2);
 
-
-  float len_vel = pow(length(velocity.xy),.157f);
-  vec2 mistvel = len_vel*velocity.xy;
-
+  float len_vel = pow(length(velocity.xy), .157f);
+  vec2 mistvel = len_vel * velocity.xy;
 
   // good velocity varying mist:
   mistf1 = fbm_h_n(750.f * frag_uv + 11.1f * mistvel * vec2(.003f * time), .120f, 5) *
@@ -722,6 +720,7 @@ void main()
   mistf = smoothstep(3, 55, mistf1 * mistf2);
   // mistf += 0.2f*fbm_h_n(120.f * frag_uv+.1f *velocity.xy*vec2(time)- vec2(.5f * time, time), .520f, 5);
   mistf = saturate(mistf);
+  mistlocation = 0;//sponge
 
   m.albedo = mix(m.albedo, vec3(mistf), mistlocation);
   m.normal = normalize(TBN * waternormal);
@@ -896,7 +895,8 @@ void main()
   float density = pow(premultiply_alpha, 1);
   float A = pow(1 - density, pow(depth_of_object, 0.85f));
   // A = saturate((1 * density)/depth_of_object);
-  float trim_very_thin_water = saturate(smoothstep(0.0015, 0.015, water_depth)+smoothstep(0.0015, 0.015, depth_of_object));
+  float trim_very_thin_water =
+      saturate(smoothstep(0.0015, 0.015, water_depth) + smoothstep(0.0015, 0.015, depth_of_object));
   float trim_very_thin_water2 = smoothstep(0.0345, 0.045, water_depth);
   float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
   float shore_fbm2 =
@@ -915,15 +915,16 @@ void main()
   vec3 total_diffuse = direct_diffuse + ambient_diffuse;
 
   vec3 mist_result = vec3(mistf * saturate(shore_t + mistlocation));
+  mist_result = vec3(0);//sponge
   vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
   // result += (1 - A) * 2.f * mist_result * total_specular;
-  result += trim_very_thin_water *clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
+  result += trim_very_thin_water * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
   // result = (1 - A) *mist_result*Kd;
   vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
   // result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
   result += m.emissive; //+ transmission;
 
-  //result = vec3(smoothstep(0.000, 0.115, depth_of_object));
+  // result = vec3(smoothstep(0.000, 0.115, depth_of_object));
   // result = vec3(Ks*smoothstep(0.01,0.1,water_depth));
   // result = vec3(mistf * saturate(mistlocation));
   if (debug != vec3(-9))
