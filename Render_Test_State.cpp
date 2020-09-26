@@ -677,20 +677,26 @@ void Render_Test_State::update()
 
   if (painter.textures.size() && painter.textures[0].texture != nullptr)
   {
+
+    Texture* heightmap = &painter.liquid.heightmap_fbo.color_attachments[0];
+
+
     Node_Index water_node = scene.find_by_name(NODE_NULL, "water");
     Flat_Scene_Graph_Node *node = &scene.nodes[water_node];
     Material_Index mi = node->model[0].second;
     Material *mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
-    mat->descriptor.uniform_set.texture_uniforms[water_velocity] = *painter.liquid.get_velocity();
+    mat->descriptor.uniform_set.texture_uniforms[water_velocity] = painter.liquid.velocity_fbo.color_attachments[0];
     mat->descriptor.uniform_set.float32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
 
     Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
     node = &scene.nodes[ground_node];
     mi = node->model[0].second;
     mat = &scene.resource_manager->material_pool[mi];
-    mat->displacement = painter.textures[painter.selected_texture];
+    mat->displacement = *heightmap;
     mat->descriptor.uniform_set.float32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
+
+
   }
 
   // update_grabbyarm(&scene, current_time);

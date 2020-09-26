@@ -145,7 +145,13 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
   {
     if (e.window.event == SDL_WINDOWEVENT_RESIZED)
     {
-      // resize
+      for (auto& state : available_states)
+      {
+        ivec2 size;
+        SDL_GetWindowSize(state->window,&size.x,&size.y);
+        state->renderer.resize_window(size);
+        CONFIG.resolution = size;
+      }
       return;
     }
     else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e.window.event == SDL_WINDOWEVENT_ENTER)
@@ -326,13 +332,17 @@ int main(int argc, char *argv[])
     set_message(ss.str());
 
     window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
-    int32 flags = SDL_WINDOW_OPENGL;
+    int32 flags = SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE;
+    if(CONFIG.fullscreen)
+      flags = flags | SDL_WINDOW_FULLSCREEN;
+
     // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
     // SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     window = SDL_CreateWindow("Warg_Engine", 100, 130, window_size.x, window_size.y, flags);
+    
     SDL_RaiseWindow(window);
     context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, context);
@@ -351,6 +361,7 @@ int main(int argc, char *argv[])
     }
     // 1 vsync, 0 no vsync, -1 late-swap
     int32 swap = SDL_GL_SetSwapInterval(0);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 0);
     if (swap == -1)
     {
       swap = SDL_GL_SetSwapInterval(1);
@@ -375,8 +386,8 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-  // glad_set_pre_callback(glad_callback);
-  // glad_set_post_callback(glad_callback);
+   glad_set_pre_callback(glad_callback);
+   glad_set_post_callback(glad_callback);
   // Local_Session warg_session = Local_Session();
 
   IMGUI.init(window);
@@ -695,6 +706,7 @@ int main(int argc, char *argv[])
     //states[0]->renderer.passthrough.set_uniform("transform",  ortho_projection(texture_size_scaling));
    // states[0]->renderer.quad.draw();
     glDisable(GL_BLEND);
+    //glFinish();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

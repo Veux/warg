@@ -688,6 +688,9 @@ void Config::load(string filename)
 
   if ((i = j.find("Render Simple")) != j.end())
     render_simple = *i;
+
+    if ((i = j.find("Fullscreen")) != j.end())
+    fullscreen = *i;
 }
 
 void Config::save(string filename)
@@ -699,6 +702,7 @@ void Config::save(string filename)
   j["Shadow Map Scale"] = shadow_map_scale;
   j["Low Quality Specular Convolution"] = use_low_quality_specular;
   j["Render Simple"] = render_simple;
+  j["Fullscreen"] = fullscreen;
 
   string str = pretty_dump(j);
   fstream file(filename, ios::out);

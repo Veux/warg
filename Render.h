@@ -321,7 +321,7 @@ struct Uniform_Set_Descriptor
   std::unordered_map<std::string, glm::vec3> vec3_uniforms;
   std::unordered_map<std::string, glm::vec4> vec4_uniforms;
   std::unordered_map<std::string, glm::mat4> mat4_uniforms;
-  std::unordered_map<GLint,Texture> texture_uniforms;
+  std::unordered_map<GLint, Texture> texture_uniforms;
   void clear()
   {
     float32_uniforms.clear();
@@ -890,32 +890,52 @@ struct Liquid_Surface
 
   void set_heightmap(Texture texture)
   {
-    heightmap = texture;
+    heightmap = heightmap_fbo.color_attachments[0] = texture;
+    heightmap_fbo.init();
     invalidated = true;
-  }
-  Texture* get_velocity()
-  {
-    return &velocity_copy;
   }
 
   void zero_velocity();
 
+  void blit(Framebuffer &src, Framebuffer &dst)
+  {
+    glBlitNamedFramebuffer(src.fbo->fbo, dst.fbo->fbo, 0, 0, src.color_attachments[0].t.size.x,
+        src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
+        GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+  }
+
   int32 iterations = 1;
   float64 my_time = 0.f;
+  vec3 ambient_wave_scale = vec3(30.f, 3.f, 1.0f);
+  // private:
 
-private:
-  Texture heightmap;
+  GLuint heightmap_pbo = 0;
+  GLuint velocity_pbo = 0;
+  GLsync read_sync = 0;
+
+
+  float32 *heightmap_ptr = 0;
+  float32 *velocity_ptr = 0;
   Shader liquid_shader;
-  Texture heightmap_copy;
-  // Texture previous_heightmap;
-  Texture velocity;
-  Texture velocity_copy;
+
+  Framebuffer heightmap_fbo;
+  Framebuffer velocity_fbo;
+
+  Framebuffer copy_heightmap_fbo;
+  Framebuffer copy_velocity_fbo;
 
   Framebuffer liquid_shader_fbo;
-  Framebuffer copy_fbo;
+
+  Texture heightmap;
+  Texture velocity;
+  Texture velocity_copy;
+  Texture heightmap_copy;
+
   Shader copy;
   Mesh quad;
-
+  
+  GLint ready = 0;
+  uint32 frames_until_check = 33;
   bool invalidated = true;
   bool initialized = false;
 
@@ -929,8 +949,8 @@ private:
   // this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
 
   // we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how
-  // much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means we
-  // will add a negative - subtracting our height
+  // much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means
+  // we will add a negative - subtracting our height
 
   // this means that a wave can only propagate at a max speed of 1 pixel per draw..
   // i think this is what the convolution was trying to do
@@ -1025,7 +1045,8 @@ struct Renderer
   // todo: rain particles
   // todo: spawn object gui - manual entry for new node and its resource indices
   // todo: dithering in tonemapper
-  // todo: instanced grass, use same heightmap to displace - can resize biome to 1/2 res and draw jittered grass at each grass pixel
+  // todo: instanced grass, use same heightmap to displace - can resize biome to 1/2 res and draw jittered grass at each
+  // grass pixel
   Renderer() {}
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
@@ -1096,8 +1117,6 @@ struct Renderer
   Shader water = Shader("vertex_shader.vert", "water.frag");
   void bind_white_to_all_textures();
 
-  
-
   Texture uv_map_grid;
   Texture brdf_integration_lut;
 
@@ -1128,8 +1147,8 @@ struct Renderer
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
   float32 render_scale = CONFIG.render_scale;
-  ivec2 window_size; // actual window size
-  ivec2 render_target_size;        // render target size
+  ivec2 window_size;        // actual window size
+  ivec2 render_target_size; // render target size
   float32 vfov = CONFIG.fov;
   mat4 camera;
   mat4 previous_camera;
@@ -1146,12 +1165,11 @@ struct Renderer
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:
-  Framebuffer draw_target;              
-  Framebuffer tonemapping_target_srgb8; 
-  Framebuffer fxaa_target_srgb8;        
+  Framebuffer draw_target;
+  Framebuffer tonemapping_target_srgb8;
+  Framebuffer fxaa_target_srgb8;
   Framebuffer translucent_sample_source;
   Framebuffer self_object_depth;
-  
 
   // instance attribute buffers
   // GLuint instance_mvp_buffer = 0;

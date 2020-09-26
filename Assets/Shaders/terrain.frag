@@ -527,7 +527,7 @@ void main()
 
   float fire_f = 1.0f;
   vec3 fire = 30.f * fire_f * vec3(4.5, 2.1, .1);
-  vec3 grass = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(0.08, .433, .08);
+  vec3 grass = 0.55f * fbm_h_n(5.15101f * frag_world_position.xy, .41f, 9) * vec3(0.08, .433, .08);
 
   vec3 snow = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(1);
   // grass =;
@@ -566,36 +566,25 @@ void main()
   float grass_t = saturate(biome - 2.f);
   float fire_t = saturate(biome - 4.f);
 
-  // float fading_fire_t = saturate(biome-5.f);
-
   float fire_visual_intensity = sin(3.14 * pow(fire_t, 2));
   // extra effects:
-  float vert_wet_soil_t = 2.f * clamp(biome - 1.5f, 0, 0.5f); // idk?
-  float heavy_grass_t = 2.f * clamp(biome - 2.65f, 0, 0.5f);  // add flowers
+  float vert_wet_soil_t = 2.f * clamp(biome - 1.5f, 0, 0.5f);
+  float heavy_grass_t = 2.f * clamp(biome - 2.65f, 0, 0.5f);
   char_to_dirt_t = pow(char_to_dirt_t, 5.f);
-  // is_char_to_dirt = 1.f;
   vec3 charr_contribution = is_char_to_dirt * mix(charred, soil, char_to_dirt_t);
   vec3 soil_contribution = is_soil * mix(soil, wet_soil, soil_t);
-
   vec3 grass_contribution = is_grass * mix(wet_soil, grass, grass_t);
   vec3 fire_contribution = fire_visual_intensity * on_fire * fire;
   float smoke = pow(waterheight(210.f * frag_world_position.xy, 20.f * time), 1.0);
   fire_contribution = 1.f * mix(vec3(0), fire_contribution, 1.f - smoke);
-
-  // vec3 fire_fade_contribution = fire_is_fading*mix(fire,charred,fading_fire_t); //needs embers
   vec3 flowers_contribution = max(is_heavy_grass * flower_location * flower_color, 0);
 
-  // grass_contribution = mix(grass_contribution, flower_color, saturate(is_heavy_grass * 4.f * flower_location));
-  grass_contribution = mix(grass_contribution, rock_color, rock_location);
   vec3 water = result;
-  // water depth should change the color of the water instead to be more green at shore and more blue at high depth
   float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
 
   m.albedo = max(charr_contribution + soil_contribution + grass_contribution, 0);
-  // m.albedo = vec3(rock_location);
   m.emissive = max(fire_contribution, vec3(0));
   m.roughness = 1.0f - (is_soil * soil_t);
-  // m.metalness = 0.f;
 
   float terrain_ao = pow(.1 + ground_height, 1.2);
   m.ambient_occlusion = clamp(terrain_ao, 0.1, 1);
@@ -711,12 +700,14 @@ void main()
     result = debug.rgb;
   }
 
+  // basic fog:
   const float LOG2 = 1.442695;
   float z = gl_FragCoord.z / gl_FragCoord.w;
   float camera_relative_depth = linearize_depth(gl_FragCoord.z);
   float fogFactor = exp2(-.0131f * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
+  // result = mix(vec3(1),result,fogFactor);
 
   // result = m.albedo+m.emissive;
   // result = vec3(is_soil*soil_t);

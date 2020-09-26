@@ -357,6 +357,30 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 //  return result;
 //}
 
+vec2 hash(vec2 p)
+{
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+
+float noise_2(vec2 p, float level, float time)
+{
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float t = pow(2., level) * .4 * time;
+  mat2 R = mat2(cos(t), -sin(t), sin(t), cos(t));
+  if (mod(i.x + i.y, 2.) == 0.)
+    R = -R;
+  return 2. * mix(mix(dot(hash(i + vec2(0, 0)), (f - vec2(0, 0)) * R), dot(hash(i + vec2(1, 0)), -(f - vec2(1, 0)) * R),
+                      u.x),
+                  mix(dot(hash(i + vec2(0, 1)), -(f - vec2(0, 1)) * R), dot(hash(i + vec2(1, 1)), (f - vec2(1, 1)) * R),
+                      u.x),
+                  u.y);
+}
+
 float random(vec2 st)
 {
   return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
@@ -374,6 +398,65 @@ float noise(vec2 st)
   return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
+float Mnoise(vec2 uv, float level, float time)
+{
+  // return noise(4.*uv);
+  return noise_2(2.f * uv, level, time);
+  // return -1. + 2.* (1.-abs(noise(uv,time)));  // flame like
+  return -1. + 2. * (abs(noise_2(uv, level, time))); // cloud like
+}
+
+float turb_orig(vec2 uv, float time)
+{
+  float f = 0.0;
+
+  float level = 1.;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  f = 0.5000 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.2500 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.1250 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0625 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  // f += 0.0314 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  return f / .9375;
+}
+
+float turb(vec2 uv, float time)
+{
+  float f = 0.0;
+
+  float level = 1.;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  f = 0.5000 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.2500 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.1250 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0625 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0314 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0157 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  return 15 * f;
+}
+
 float fbm_h_n(vec2 x, float H, int n)
 {
   float G = exp2(-H);
@@ -383,6 +466,24 @@ float fbm_h_n(vec2 x, float H, int n)
   for (int i = 0; i < n; i++)
   {
     t += a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+
+float fbm_h_n_dist_fade(vec2 x, float H, int n)
+{
+  vec3 partial_d = dFdy(frag_world_position);
+  float lenpd = 1 - length(partial_d);
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    lenpd = pow(lenpd, 2.2500f);
+    t += lenpd * a * noise(f * x);
     f *= 2.0;
     a *= G;
   }
@@ -485,6 +586,18 @@ float waterheight(vec2 uv, float time)
   return f;
 }
 
+float ambient_waves(vec2 p, float timescale, int i)
+{
+  // turb style:
+  return turb(p, timescale * 11 * time);
+
+  // fbm style:
+  float water_height = 0.f;
+  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(.9 * time, -.7 * time), .825960248501f, i);
+  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(-.85 * time, .8 * time), .825930248501f, i);
+  return water_height;
+}
+
 // terribly slow
 float waterheightms(vec2 uv, float time)
 {
@@ -512,11 +625,11 @@ float waterheightms(vec2 uv, float time)
 }
 
 const int ITER_GEOMETRY = 3;
-const int ITER_FRAGMENT = 5;
-const float SEA_HEIGHT = 0.516;
-const float SEA_CHOPPY = 1.0;
-const float SEA_SPEED = .128;
-const float SEA_FREQ = 0.116;
+const int ITER_FRAGMENT = 1;
+const float SEA_HEIGHT = 1.5116;
+const float SEA_CHOPPY = .1000000100;
+const float SEA_SPEED = .31128;
+const float SEA_FREQ = .501010011015116;
 const vec3 SEA_BASE = vec3(0.0, 0.09, 0.18);
 const vec3 SEA_WATER_COLOR = vec3(0.8, 0.9, 0.6) * 0.6;
 #define SEA_TIME (1.0 + time * SEA_SPEED)
@@ -534,6 +647,7 @@ float sea_octave(vec2 uv, float choppy)
 
 float map(vec3 p)
 {
+
   float freq = SEA_FREQ;
   float amp = SEA_HEIGHT;
   float choppy = SEA_CHOPPY;
@@ -578,6 +692,7 @@ float map_detailed(vec3 p)
 // tracing
 vec3 getNormal(vec3 p, float eps)
 {
+  p = 111.f * p;
   vec3 n;
   n.z = map_detailed(p);
   n.x = map_detailed(vec3(p.x + eps, p.y, p.z)) - n.z;
@@ -594,6 +709,43 @@ vec3 getNormal2(vec3 p, float eps)
   n.y = map(vec3(p.x, p.y, p.z + eps)) - n.z;
   n.z = eps;
   return normalize(n);
+}
+
+vec3 get_water_normal()
+{
+  // newer not-really-working ambient waves:
+  float eps = 0.00004f;
+  vec3 partial_d = dFdx(frag_world_position);
+  float lenpd = length(partial_d);
+
+  vec2 waterp = 55.f * frag_world_position.xy;
+  float h = ambient_waves(waterp, 1.7310f, 4);
+  float hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), 1.7310f, 4);
+  float hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), 1.7310f, 4);
+  float dx = hdx - h;
+  float dy = hdy - h;
+  vec3 waternormalfine = normalize(vec3(dx, dy, lenpd * 5.f));
+
+  waterp = 3.1f * frag_world_position.xy;
+  h = ambient_waves(waterp, .2350f, 5);
+  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 5);
+  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .2350f, 5);
+  dx = hdx - h;
+  dy = hdy - h;
+  vec3 waternormallarge = normalize(vec3(dx, dy, lenpd * 3.75f));
+
+  vec3 waternormal = normalize(waternormalfine + waternormallarge);
+
+  waterp = 3.1f * frag_world_position.xy;
+
+  h = ambient_waves(waterp, .2350f, 11);
+  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 11);
+  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .2350f, 11);
+  dx = hdx - h;
+  dy = hdy - h;
+  vec3 waternormaltest = normalize(vec3(dx, dy, eps));
+  waternormaltest.z *= max(lenpd * 511121.f, .025251);
+  return normalize(waternormaltest);
 }
 
 void main()
@@ -660,31 +812,8 @@ void main()
 
   vec3 partial_d = dFdx(frag_world_position);
   float lenpd = length(partial_d);
-  // vec3 vertical_scale_normal = vec3(0,0,0.1) + vec3(0,0,730.5*lenpd);
-  vec3 vertical_scale_normal = vec3(0, 0, 3.1); //+ vec3(0,0,1.5*lenpd);
-
-  height_scale = 1.f;
-
-  // newer not-really-working ambient waves:
-  float eps = 0.02f;
-
-  float h = map(vec3(frag_world_position.xy, 0));
-  vec3 waterp = vec3(frag_world_position.xy, h);
-
-  vec3 normal = getNormal(25.5125151f * waterp, eps);
-
-  // vec3 normal = vec3(0, 0, 1);
-  normal = vec3(0, 0, 1);
-  // vec3 waternormal = normalize(vertical_scale_normal + normalize(normal));
-  vec3 waternormal = normal;
-
-  // waternormal = vec3(0, 0, 1);
-  // float dy = nestedNoise(scale*vec2(waterp.x,waterp.y+eps));
-
-  // vec3 p2dy = p + vec3(waterp.x,waterp.y+dy,0);
-  // vec3 waternormal = vec3(dx,dy,0);
-  // waternormal = 1400.*waternormal;
-  // waternormal = normalize(waternormal);
+  vec3 waternormal = get_water_normal();
+  // waternormal = vec3(0,0,1);
 
   vec4 velocity_sample = texture(texture12, frag_uv);
   vec3 velocity = velocity_sample.r * vec3(-1, 0, 0) + velocity_sample.g * vec3(1, 0, 0) +
@@ -709,7 +838,7 @@ void main()
   // good:
   mistf = smoothstep(3, 55, mistf1 * mistf2);
 
-  float len_vel = pow(length(velocity.xy), .157f);
+  float len_vel = pow(length(velocity.xy), .95157f);
   vec2 mistvel = len_vel * velocity.xy;
 
   // good velocity varying mist:
@@ -720,19 +849,18 @@ void main()
   mistf = smoothstep(3, 55, mistf1 * mistf2);
   // mistf += 0.2f*fbm_h_n(120.f * frag_uv+.1f *velocity.xy*vec2(time)- vec2(.5f * time, time), .520f, 5);
   mistf = saturate(mistf);
-  mistlocation = 0;//sponge
 
   m.albedo = mix(m.albedo, vec3(mistf), mistlocation);
   m.normal = normalize(TBN * waternormal);
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
-  m.roughness = mix(m.roughness, .6, mistlocation);
+  // m.roughness = mix(m.roughness, .6, mistlocation);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.0000002); // 0.02 F0 for water
+  vec3 F0 = vec3(0.02); // 0.02 F0 for water
   F0 = mix(F0, m.albedo, m.metalness);
   // F0 = vec3(0.9512);
   float ndotv = clamp(dot(m.normal, v), 0, 1); // allowing the backface ndotv to contribute for water
@@ -837,7 +965,7 @@ void main()
     r.z = -r.z;
   }
 
-  float diffuse_loss = 1; // lobe?
+  float diffuse_loss = .315f; // lobe?
   // ambient specular
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
@@ -915,7 +1043,6 @@ void main()
   vec3 total_diffuse = direct_diffuse + ambient_diffuse;
 
   vec3 mist_result = vec3(mistf * saturate(shore_t + mistlocation));
-  mist_result = vec3(0);//sponge
   vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
   // result += (1 - A) * 2.f * mist_result * total_specular;
   result += trim_very_thin_water * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
@@ -931,5 +1058,7 @@ void main()
   {
     result = debug;
   }
+  // float height_t =  1-smoothstep(0,.4141,pow(lenpd,.25f));
+  // result = vec3(height_t);
   out0 = vec4(result, 1);
 }

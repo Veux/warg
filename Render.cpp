@@ -98,7 +98,7 @@ void Framebuffer::init()
     // glGenFramebuffers(1, &fbo->fbo);
     glCreateFramebuffers(1, &fbo->fbo);
   }
-
+  draw_buffers.clear();
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
     glNamedFramebufferTexture(fbo->fbo, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
@@ -106,7 +106,11 @@ void Framebuffer::init()
     ASSERT(color_attachments[i].texture->size != ivec2(0));
     draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
-  glNamedFramebufferDrawBuffers(fbo->fbo, draw_buffers.size(), &draw_buffers[0]);
+  GLint current_fbo;
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
+  glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
   if (depth_enabled)
   {
     if (use_renderbuffer_depth && depth == nullptr)
@@ -1408,6 +1412,9 @@ void Renderer::draw_imgui()
     {
       show_tonemap = !show_tonemap;
     }
+    static float32 tempscale = render_scale;
+    ImGui::SliderFloat("scale",&tempscale,0.05f,2.f);
+    set_render_scale(tempscale);
     if (show_tonemap)
     {
       ImGui::Begin("Tonemapping", &show_tonemap);
@@ -2395,7 +2402,7 @@ void Renderer::render(float64 state_time)
 
 void Renderer::resize_window(ivec2 window_size)
 {
-  ASSERT(0);
+  //ASSERT(0);
   // todo: implement window resize, must notify imgui
   this->window_size = window_size;
   set_vfov(vfov);
@@ -2551,6 +2558,12 @@ void Renderer::init_render_targets()
   bloom_intermediate = Texture();
   bloom_target = Texture();
   bloom_fbo = Framebuffer();
+  draw_target = Framebuffer();
+  previous_draw_target = Framebuffer();
+  translucent_sample_source = Framebuffer();
+  self_object_depth = Framebuffer();
+  tonemapping_target_srgb8 = Framebuffer();
+  fxaa_target_srgb8 = Framebuffer();
 
   Texture_Descriptor td;
   td.source = "generate";
@@ -3732,7 +3745,7 @@ Texture Texture_Paint::create_new_texture(const char *name)
     tname = name;
   }
   Texture t =
-      Texture(tname, vec2(512), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+      Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }
@@ -3784,11 +3797,11 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     copy = Shader("passthrough.vert", "passthrough.frag");
     postprocessing_shader = Shader("passthrough.vert", "paint_postprocessing.frag");
 
-    textures.push_back(create_new_texture());
+    textures.push_back(create_new_texture("primary heightmap"));
 
     display_surface = create_new_texture("display_surface");
     intermediate = create_new_texture("texture_paint_intermediate");
-    preview = Texture("texture_paint_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    preview = Texture("texture_paint_brush_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
     preview.load();
 
     initialized = true;
@@ -3871,24 +3884,25 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   {
     generate_water = true;
   }
-    if (ImGui::Button("Clear Water"))
+  if (ImGui::Button("Clear Water"))
   {
     clear_water = true;
   }
-    
+  ImGui::DragFloat3("Ambient Waves", &liquid.ambient_wave_scale[0], 0.05f, 0.0f, 100.f, "%.3f", 1.5f);
+
   ImGui::Text("Mask:");
-    ImGui::SameLine();
-    
-  ImGui::Checkbox("R", (bool*)&mask.r);
-  
-    ImGui::SameLine();
-  ImGui::Checkbox("G", (bool*)&mask.g);
-  
-    ImGui::SameLine();
-  ImGui::Checkbox("B", (bool*)&mask.b);
-  
-    ImGui::SameLine();
-  ImGui::Checkbox("A", (bool*)&mask.a);
+  ImGui::SameLine();
+
+  ImGui::Checkbox("R", (bool *)&mask.r);
+
+  ImGui::SameLine();
+  ImGui::Checkbox("G", (bool *)&mask.g);
+
+  ImGui::SameLine();
+  ImGui::Checkbox("B", (bool *)&mask.b);
+
+  ImGui::SameLine();
+  ImGui::Checkbox("A", (bool *)&mask.a);
 
   ImGui::PushID("blendmode");
   if (ImGui::BeginCombo("", selected_blendmode))
@@ -4498,24 +4512,17 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
 void Liquid_Surface::zero_velocity()
 {
-  copy_fbo.color_attachments[0] = velocity;
-  copy_fbo.init();
-  copy_fbo.bind_for_drawing_dst();
-  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-  glClearColor(0, 0, 0, 0);
-  glClear(GL_COLOR_BUFFER_BIT);
-
-  copy_fbo.color_attachments[0] = velocity_copy;
-  copy_fbo.init();
-  copy_fbo.bind_for_drawing_dst();
-  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  velocity_fbo.init();
+  velocity_fbo.bind_for_drawing_dst();
+  glViewport(
+      0, 0, velocity_fbo.color_attachments[0].texture->size.x, velocity_fbo.color_attachments[0].texture->size.y);
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 }
 void Liquid_Surface::run(float32 current_time)
 {
 
-  if (!heightmap.texture || !heightmap.texture->texture)
+  if (!heightmap_fbo.color_attachments[0].texture || !heightmap_fbo.color_attachments[0].texture->texture)
   {
     return;
   }
@@ -4530,23 +4537,36 @@ void Liquid_Surface::run(float32 current_time)
 
   if (invalidated)
   {
-    if (!heightmap.texture)
+    if (!heightmap_fbo.color_attachments[0].texture)
       return;
 
-    heightmap_copy.t = heightmap.t;
+    glDeleteBuffers(1, &heightmap_pbo);
+    glDeleteBuffers(1, &velocity_pbo);
+
+    glCreateBuffers(1, &heightmap_pbo);
+    glCreateBuffers(1, &velocity_pbo);
+
+    heightmap.load();
+    heightmap_fbo.init();
+
     velocity.t = heightmap.t;
-    velocity_copy.t = heightmap.t;
-
-    heightmap_copy.t.name = "heightmap_copy";
     velocity.t.name = "velocity";
-    velocity_copy.t.name = "velocity_copy";
-
-    heightmap_copy.load();
     velocity.load();
-    velocity_copy.load();
+    velocity_fbo.color_attachments[0] = velocity;
+    velocity_fbo.init();
 
-    copy_fbo.color_attachments[0] = heightmap_copy;
-    copy_fbo.init();
+    heightmap_copy.t = heightmap.t;
+    heightmap_copy.t.name = "heightmap_copy";
+    heightmap_copy.load();
+    copy_heightmap_fbo.color_attachments[0] = heightmap_copy;
+    copy_heightmap_fbo.init();
+
+    velocity_copy.t = heightmap.t;
+    velocity_copy.t.name = "velocity_copy";
+    velocity_copy.load();
+    copy_velocity_fbo.color_attachments[0] = velocity_copy;
+    copy_velocity_fbo.init();
+
 
     liquid_shader_fbo.color_attachments.resize(2);
     liquid_shader_fbo.color_attachments[0] = heightmap;
@@ -4554,46 +4574,90 @@ void Liquid_Surface::run(float32 current_time)
     liquid_shader_fbo.init();
 
     zero_velocity();
+    blit(heightmap_fbo, copy_heightmap_fbo);
+    blit(velocity_fbo, copy_velocity_fbo);
 
+    uint32 buff_size = heightmap.t.size.x * heightmap.t.size.y * 4 * sizeof(float32);
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, heightmap_pbo);
+    glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+    glGetTextureImage(heightmap_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, velocity_pbo);
+    glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+    glGetTextureImage(velocity_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+
+    read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    frames_until_check = 33;
     invalidated = false;
   }
+  if (frames_until_check == 0)
+  {
+    glGetSynciv(read_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+    if (ready == GL_SIGNALED)
+    {
+      glDeleteSync(read_sync);
+      heightmap_ptr = (float32 *)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
+      velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
 
+      float test1 = 0.f;
+      float test2 = 0.f;
+      for (uint32 i = 0; i < 100; ++i)
+      {
+        test1 += heightmap_ptr[i];
+        test2 += velocity_ptr[i];
+      }
+      set_message("heightmaptest:", s(test1), 1.0f);
+      set_message("velocitymaptest:", s(test2), 1.0f);
+
+      glUnmapNamedBuffer(heightmap_pbo);
+      glUnmapNamedBuffer(velocity_pbo);
+    }
+  }
   for (uint32 i = 0; i < iterations; ++i)
   {
     my_time = my_time + dt;
 
-    glDisable(GL_BLEND);
-    // copy heightmap
-    copy_fbo.color_attachments[0] = heightmap_copy;
-    copy_fbo.init();
-    copy_fbo.bind_for_drawing_dst();
-    glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
-    heightmap.bind_for_sampling_at(0);
-    copy.use();
-    copy.set_uniform("transform", fullscreen_quad());
-    quad.draw();
+    blit(heightmap_fbo, copy_heightmap_fbo);
+    blit(velocity_fbo, copy_velocity_fbo);
 
-    // copy velocity
-    copy_fbo.color_attachments[0] = velocity_copy;
-    copy_fbo.init();
-    copy_fbo.bind_for_drawing_dst();
-    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    velocity.bind_for_sampling_at(0);
-    copy.use();
-    copy.set_uniform("transform", fullscreen_quad());
-    quad.draw();
-
-    // draw shader
     liquid_shader_fbo.bind_for_drawing_dst();
-    heightmap_copy.bind_for_sampling_at(0);
-    velocity_copy.bind_for_sampling_at(1);
+    copy_heightmap_fbo.color_attachments[0].bind_for_sampling_at(0);
+    copy_velocity_fbo.color_attachments[0].bind_for_sampling_at(1);
     liquid_shader.use();
     liquid_shader.set_uniform("transform", fullscreen_quad());
     liquid_shader.set_uniform("time", float32(my_time));
-    liquid_shader.set_uniform("size", heightmap.t.size);
+    liquid_shader.set_uniform("size", vec2(copy_heightmap_fbo.color_attachments[0].t.size));
     liquid_shader.set_uniform("dt", dt);
+    liquid_shader.set_uniform(
+        "ambient_wave_scale", 0.001f * ambient_wave_scale.z * vec2(ambient_wave_scale.x, ambient_wave_scale.y));
     quad.draw();
   }
+
+  if (frames_until_check == 0)
+  {
+    if (ready == GL_SIGNALED)
+    {
+      uint32 buff_size = heightmap_fbo.color_attachments[0].t.size.x * heightmap_fbo.color_attachments[0].t.size.y * 4 *
+                         sizeof(float32);
+      glPixelStorei(GL_PACK_ALIGNMENT, 1);
+      glBindBuffer(GL_PIXEL_PACK_BUFFER, heightmap_pbo);
+      glGetTextureImage(heightmap_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+      glBindBuffer(GL_PIXEL_PACK_BUFFER, velocity_pbo);
+      glGetTextureImage(velocity_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+      read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+      glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+      frames_until_check = 33;
+    }
+  }
+
+  if (frames_until_check != 0)
+  {
+    frames_until_check -= 1;
+  }
+
 }
 
 /*

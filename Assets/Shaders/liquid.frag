@@ -4,6 +4,7 @@ uniform sampler2D texture1; // velocity_copy
 uniform float time;
 uniform vec2 size;
 uniform float dt;
+uniform vec2 ambient_wave_scale;
 in vec2 frag_uv;
 
 layout(location = 0) out vec4 out0; // height
@@ -55,28 +56,79 @@ float fbm_h_n(vec2 x, float H, int n)
   return t;
 }
 
+vec2 hash(vec2 p)
+{
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+
+float noise_2(vec2 p, float level, float time)
+{
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float t = pow(2., level) * .4 * time;
+  mat2 R = mat2(cos(t), -sin(t), sin(t), cos(t));
+  if (mod(i.x + i.y, 2.) == 0.)
+    R = -R;
+  return 2. * mix(mix(dot(hash(i + vec2(0, 0)), (f - vec2(0, 0)) * R), dot(hash(i + vec2(1, 0)), -(f - vec2(1, 0)) * R),
+                      u.x),
+                  mix(dot(hash(i + vec2(0, 1)), -(f - vec2(0, 1)) * R), dot(hash(i + vec2(1, 1)), (f - vec2(1, 1)) * R),
+                      u.x),
+                  u.y);
+}
+
+float Mnoise(vec2 uv, float level, float time)
+{
+  // return noise(4.*uv);
+  return noise_2(2.f * uv, level, time);
+  // return -1. + 2.* (1.-abs(noise(uv,time)));  // flame like
+  return -1. + 2. * (abs(noise_2(uv, level, time))); // cloud like
+}
+
+float turb(vec2 uv, float time)
+{
+  float f = 0.0;
+
+  float level = 1.;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  f = 0.5000 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.2500 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  // f += 0.1250 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  // f += 0.0625 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  // f += 0.0314 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+
+  return abs(f) / .75;
+  return abs(f) / .9375;
+}
+
 float ambient_waves(ivec2 p)
 {
-  float scale = 0.00001003f;
-  float water_height = 1.75f * fbm_h_n(.015105f * p + .030f * vec2(.9*time,-.7*time), .25960248501f, 2);
-  water_height = water_height + 1.75f * fbm_h_n(.015105f * p + .023f * vec2(-.85*time,.8*time), .25930248501f, 2);
-
-  water_height = water_height + 0.515f * fbm_h_n(1.115105f * p + .030f * vec2(.9*time,-.7*time), .025960248501f, 2);
-  water_height = water_height + 0.515f * fbm_h_n(1.115105f * p + .023f * vec2(-.85*time,.8*time), .025930248501f, 2);
-  // water_height = 0.1f * random(frag_uv.yx) + water_height2;
-  //water_height = 0.5 - water_height;
-  return 0.10451f*water_height;
-}
-// good:
-float ambient_waves2()
-{
-  float scale = 0.0000503f;
-  float water_height = 0.5f * fbm_h_n(15.f * frag_uv.xy + 55.f * vec2(time), .248501f, 5);
-  // water_height = water_height+0.5f*fbm_h_n(15.f*frag_uv.yx+.511*vec2((1.5f*time),(1.315f*time)), .248501f, 5);
-  // water_height = 0.1f * random(frag_uv.yx) + water_height2;
-  water_height = 0.5 - water_height;
-  float f1 = float(sin(11.1f * time) < 0.f);
-  return (f1 - 0.5f) * max(scale * (water_height), 0);
+  float t1 = ambient_wave_scale.x * 2.5 * turb(0.005 * p, .025f * time);
+  float t2 = ambient_wave_scale.y * 1. * turb(.0415 * p, .15f * time);
+  return t1 + t2;
+  float water_height = 0.f;
+  water_height = water_height +
+                 ambient_wave_scale.x * fbm_h_n(.0175f * p + .030f * vec2(.9 * time, -.7 * time), .825960248501f, 3);
+  water_height = water_height +
+                 ambient_wave_scale.x * fbm_h_n(.0175f * p + .023f * vec2(-.85 * time, .8 * time), .825930248501f, 3);
+  // water_height = water_height + ambient_wave_scale.y * fbm_h_n(1.115105f * p + .030f * vec2(.9*time,-.7*time),
+  // .025960248501f, 3);
+  // water_height = water_height + ambient_wave_scale.y * fbm_h_n(1.115105f * p + .023f * vec2(-.85*time,.8*time),
+  // .025930248501f, 3);
+  return water_height;
 }
 
 vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float velocity_into_this_pixel)
@@ -102,12 +154,12 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
       other_ambient = ambient_waves(other_p);
     }
   }
-  water_height+=my_ambient;
-  other_water_height+=other_ambient;
+  water_height += my_ambient;
+  other_water_height += other_ambient;
 
   float water_depth = water_height - ground_height;
   float other_water_depth = other_water_height - other_ground_height;
-  const float viscosity = .201f;
+  const float viscosity = 1.201f;
   const float gravity = -1.0;
   const float water_pillar_edge_size = 1.0f; // used for resolution scaling
   const float water_pillar_area = water_pillar_edge_size * water_pillar_edge_size;
@@ -151,7 +203,7 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float energy_loss = .9999f;
+  float energy_loss = .9995f;
   // energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 
@@ -286,7 +338,7 @@ void main()
   // lightning starts a fire
   if (bool(vvlow_chance_true))
   {
-    // biome = 4.5f;
+    biome = 4.5f;
   }
   // rain on water
   if (vlow_chance_true != 0)
@@ -297,11 +349,11 @@ void main()
       float dropheight = .0071000435f;
       if (sin(20.f * time) > 0.f)
       {
-       // water_height = water_height + dropheight; // raindrops
+        // water_height = water_height + dropheight; // raindrops
       }
       else
       {
-       // water_height = water_height - dropheight; // raindrops
+        // water_height = water_height - dropheight; // raindrops
       }
     }
   }

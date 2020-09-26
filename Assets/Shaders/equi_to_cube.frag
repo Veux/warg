@@ -30,5 +30,14 @@ void main()
     result = pow(result, vec4(2.2));
     result = 1. * result;
   }
+  else
+  {
+    // pulls down > 1 to ~2.8
+    // vec3 dir = normalize(result.rgb);
+    // float b = clamp(length(result.rgb),0,2.8);
+    // float z = b + .1*pow(b,1.5) - .215*pow(b,2);
+    // result.rgb = z*dir.rgb;
+  }
+  result.a = 1;
   out0 = result;
 }
