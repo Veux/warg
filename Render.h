@@ -1161,7 +1161,7 @@ struct Renderer
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
-
+  bool do_depth_prepass = true;
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:

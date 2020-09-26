@@ -867,6 +867,10 @@ const char *imgui_pane_to_string(imgui_pane p)
   {
     return "Octree";
   }
+  if (p == console)
+  {
+    return "Console";
+  }
   if (p == blank)
   {
     return "Blank";
@@ -910,6 +914,44 @@ void Flat_Scene_Graph::draw_imgui_octree()
   Checkbox("Draw Normalss", &collision_octree.include_normals);
   Checkbox("Draw Velocity", &collision_octree.include_velocity);
   DragInt("Draw Depth", &collision_octree.depth_to_render, 1.0f, -1, MAX_OCTREE_DEPTH);
+}
+
+int console_callback(ImGuiInputTextCallbackData *data)
+{
+  set_message("current textbox state",data->Buf,5.);
+  return 1;
+}
+
+void handle_console_command(std::string cmd)
+{
+ set_message("console command:",cmd,15.0f);
+}
+
+
+void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
+{
+  ImGuiWindowFlags childflags = ImGuiWindowFlags_None;
+  ImGui::BeginChild("Console_Log:",ImVec2(section_size.x,120),true,childflags);
+  std::string str = get_messages();
+  ImGui::TextWrapped(str.c_str());
+  ImGui::SetScrollY(ImGui::GetScrollMaxY());
+  ImGui::EndChild();
+
+  
+  ImGui::BeginChild("Console_Cmd:");
+  static std::string buf;
+  buf.resize(512);
+  uint32 size = buf.size();
+  ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways|ImGuiInputTextFlags_EnterReturnsTrue;
+  // ImGui::InputTextMultiline("blah", &buf[0], size, section_size, flags);
+  if(ImGui::InputText("cmd", &buf[0], size, flags,console_callback))
+  {
+    
+    handle_console_command(buf);
+  }
+
+  ImGui::IsItemEdited();
+  ImGui::EndChild();
 }
 
 void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
@@ -971,6 +1013,12 @@ void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Octree:");
     ImGui::BeginChild("Octree:");
     draw_imgui_octree();
+    ImGui::EndChild();
+  }
+  if (p == console)
+  {
+    ImGui::BeginChild("Console:");
+    draw_imgui_console(ImVec2(horizontal_tile_size, vertical_tile_size));
     ImGui::EndChild();
   }
 

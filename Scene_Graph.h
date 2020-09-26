@@ -23,6 +23,7 @@ enum imgui_pane
   selected_mat,
   particle_emit,
   octree,
+  console,
   blank,
   end
 };
@@ -406,6 +407,7 @@ private:
   void draw_imgui_resource_manager();
   void draw_imgui_particle_emitter();
   void draw_imgui_octree();
+  void draw_imgui_console(ImVec2 section_size);
   void draw_active_nodes();
   void draw_imgui_pane_selection_button(imgui_pane *modifying);
   void draw_imgui_selected_pane(imgui_pane p);

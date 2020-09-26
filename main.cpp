@@ -145,10 +145,10 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
   {
     if (e.window.event == SDL_WINDOWEVENT_RESIZED)
     {
-      for (auto& state : available_states)
+      for (auto &state : available_states)
       {
         ivec2 size;
-        SDL_GetWindowSize(state->window,&size.x,&size.y);
+        SDL_GetWindowSize(state->window, &size.x, &size.y);
         state->renderer.resize_window(size);
         CONFIG.resolution = size;
       }
@@ -332,8 +332,8 @@ int main(int argc, char *argv[])
     set_message(ss.str());
 
     window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
-    int32 flags = SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE;
-    if(CONFIG.fullscreen)
+    int32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+    if (CONFIG.fullscreen)
       flags = flags | SDL_WINDOW_FULLSCREEN;
 
     // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
@@ -342,7 +342,7 @@ int main(int argc, char *argv[])
     // SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     window = SDL_CreateWindow("Warg_Engine", 100, 130, window_size.x, window_size.y, flags);
-    
+
     SDL_RaiseWindow(window);
     context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, context);
@@ -386,8 +386,8 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-   glad_set_pre_callback(glad_callback);
-   glad_set_post_callback(glad_callback);
+  glad_set_pre_callback(glad_callback);
+  glad_set_post_callback(glad_callback);
   // Local_Session warg_session = Local_Session();
 
   IMGUI.init(window);
@@ -456,8 +456,6 @@ int main(int argc, char *argv[])
   colors[ImGuiCol_TextSelectedBg] = ImVec4(0.36f, 0.15f, 0.00f, 0.96f);
   colors[ImGuiCol_NavHighlight] = ImVec4(0.99f, 0.53f, 0.00f, 1.00f);
 
-
-
   std::vector<SDL_Event> imgui_event_accumulator;
 
   std::vector<State *> states;
@@ -518,8 +516,35 @@ int main(int argc, char *argv[])
       std::vector<SDL_Event> state_keyboard_events;
       std::vector<SDL_Event> state_mouse_events;
       SDL_Event e;
+
+      if (!IMGUI.context->IO.WantTextInput)
+      {
+        ImGuiIO &io = ImGui::GetIO();
+        for (uint32 i = 0; i < 512; ++i)
+        {
+          io.KeysDown[i] = false;
+        }
+        
+      }
+
       while (SDL_PollEvent(&e))
       {
+        if (e.type == SDL_TEXTINPUT)
+        {
+          int a = 3;
+        }
+        if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_RETURN)
+        {
+          if (!IMGUI.context->IO.WantTextInput)
+          {
+            int a = 3;
+          }
+        }
+
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN)
+        {
+          int a = 3;
+        }
         input_preprocess(e, &rendered_state, states, IMGUI.context->IO.WantTextInput,
             IMGUI.context->IO.WantCaptureMouse, &imgui_event_accumulator, &state_keyboard_events, &state_mouse_events);
       }
@@ -690,23 +715,21 @@ int main(int argc, char *argv[])
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     vec2 texture_size_scaling = vec2(w, h) / vec2(window_size);
-    mat4 scale = glm::scale(scale_factor * vec3(texture_size_scaling,1) * vec3(1, -1, 1));
+    mat4 scale = glm::scale(scale_factor * vec3(texture_size_scaling, 1) * vec3(1, -1, 1));
 
-    mat4 transform = fullscreen_quad(); 
-    
+    mat4 transform = fullscreen_quad();
+
     transform = fullscreen_quad();
 
-    
     mat4 T = glm::translate(vec3());
     transform = fullscreen_quad();
 
-
     states[0]->renderer.passthrough.use();
-    states[0]->renderer.passthrough.set_uniform("transform", transform);//(window_size));
-    //states[0]->renderer.passthrough.set_uniform("transform",  ortho_projection(texture_size_scaling));
-   // states[0]->renderer.quad.draw();
+    states[0]->renderer.passthrough.set_uniform("transform", transform); //(window_size));
+    // states[0]->renderer.passthrough.set_uniform("transform",  ortho_projection(texture_size_scaling));
+    // states[0]->renderer.quad.draw();
     glDisable(GL_BLEND);
-    //glFinish();
+    // glFinish();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

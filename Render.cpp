@@ -1412,8 +1412,10 @@ void Renderer::draw_imgui()
     {
       show_tonemap = !show_tonemap;
     }
+    ImGui::Checkbox("Depth Prepass", &do_depth_prepass);
+
     static float32 tempscale = render_scale;
-    ImGui::SliderFloat("scale",&tempscale,0.05f,2.f);
+    ImGui::SliderFloat("scale", &tempscale, 0.05f, 2.f);
     set_render_scale(tempscale);
     if (show_tonemap)
     {
@@ -1689,6 +1691,38 @@ void Renderer::opaque_pass(float32 time)
   // set_message("opaque_pass projection:", s(projection), 1.0f);
   // set_message("opaque_pass camera:", s(camera), 1.0f);
   bind_white_to_all_textures();
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+  brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
+
+  if (do_depth_prepass)
+  {
+
+    glDrawBuffer(GL_NONE);
+    // depth pass
+    for (Render_Entity &entity : render_entities)
+    {
+      if (entity.material->descriptor.wireframe)
+      {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      }
+      entity.material->bind();
+      Shader &shader = entity.material->shader;
+      shader.set_uniform("time", time);
+      shader.set_uniform("txaa_jitter", txaa_jitter);
+      shader.set_uniform("camera_position", camera_position);
+      shader.set_uniform("MVP", projection * camera * entity.transformation);
+      shader.set_uniform("Model", entity.transformation);
+      shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabledX
+      entity.mesh->draw();
+      if (entity.material->descriptor.wireframe)
+      {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      }
+    }
+    glDrawBuffers(draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
+    glDepthFunc(GL_EQUAL);
+  }
   for (Render_Entity &entity : render_entities)
   {
     bind_white_to_all_textures();
@@ -1725,18 +1759,16 @@ void Renderer::opaque_pass(float32 time)
 #endif
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
-    glViewport(0, 0, render_target_size.x, render_target_size.y);
-    // bind_white_to_all_textures();
+    // environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+
     entity.mesh->draw();
     if (entity.material->descriptor.wireframe)
     {
-      // glEnable(GL_CULL_FACE);
-      // glEnable(GL_DEPTH_TEST);
-      // glDepthMask(GL_TRUE);
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
   }
+
+  glDepthFunc(GL_LESS);
   bind_white_to_all_textures();
 }
 
@@ -2402,7 +2434,7 @@ void Renderer::render(float64 state_time)
 
 void Renderer::resize_window(ivec2 window_size)
 {
-  //ASSERT(0);
+  // ASSERT(0);
   // todo: implement window resize, must notify imgui
   this->window_size = window_size;
   set_vfov(vfov);
@@ -4567,7 +4599,6 @@ void Liquid_Surface::run(float32 current_time)
     copy_velocity_fbo.color_attachments[0] = velocity_copy;
     copy_velocity_fbo.init();
 
-
     liquid_shader_fbo.color_attachments.resize(2);
     liquid_shader_fbo.color_attachments[0] = heightmap;
     liquid_shader_fbo.color_attachments[1] = velocity;
@@ -4657,7 +4688,6 @@ void Liquid_Surface::run(float32 current_time)
   {
     frames_until_check -= 1;
   }
-
 }
 
 /*
