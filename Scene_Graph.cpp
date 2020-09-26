@@ -916,38 +916,77 @@ void Flat_Scene_Graph::draw_imgui_octree()
   DragInt("Draw Depth", &collision_octree.depth_to_render, 1.0f, -1, MAX_OCTREE_DEPTH);
 }
 
+std::string graph_console_log = "Warg Console v0.1 :^)\n";
+int want_scroll_down = 2; //has lag and doesnt scroll down enough if we do it once
+bool want_refocus = false;
 int console_callback(ImGuiInputTextCallbackData *data)
 {
-  set_message("current textbox state",data->Buf,5.);
+  // set_message("current textbox state",data->Buf,5.);
   return 1;
 }
 
-void handle_console_command(std::string cmd)
+
+bool match(std::string_view func ,std::string_view str)
 {
- set_message("console command:",cmd,15.0f);
+  return str.substr(0,func.length()).compare(func)==0;
 }
 
+void extract_args(std::string_view str,vector<string>* args)
+{
+
+}
+
+
+void handle_console_command(std::string_view cmd)
+{
+
+  set_message("console command:", std::string(cmd), 15.0f);
+
+  static vector<string> args;
+  args.clear();
+
+  if(match("test_f",cmd))
+  {
+    //extract args
+  }
+
+  graph_console_log = s(graph_console_log, std::string(cmd), "\n");
+}
 
 void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
 {
   ImGuiWindowFlags childflags = ImGuiWindowFlags_None;
-  ImGui::BeginChild("Console_Log:",ImVec2(section_size.x,120),true,childflags);
-  std::string str = get_messages();
-  ImGui::TextWrapped(str.c_str());
-  ImGui::SetScrollY(ImGui::GetScrollMaxY());
+  ImGui::BeginChild("Console_Log:", ImVec2(section_size.x, 260), true, childflags);
+
+  ImGui::TextWrapped(graph_console_log.c_str());
+  if (want_scroll_down > 0)
+  {
+    ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    want_scroll_down = want_scroll_down - 1;
+  }
   ImGui::EndChild();
 
-  
   ImGui::BeginChild("Console_Cmd:");
   static std::string buf;
   buf.resize(512);
   uint32 size = buf.size();
-  ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways|ImGuiInputTextFlags_EnterReturnsTrue;
+  ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue;
   // ImGui::InputTextMultiline("blah", &buf[0], size, section_size, flags);
-  if(ImGui::InputText("cmd", &buf[0], size, flags,console_callback))
+  ImGui::SetNextItemWidth(section_size.x);
+  if (ImGui::InputText("", &buf[0], size, flags, console_callback))
   {
-    
-    handle_console_command(buf);
+    string_view sv = {buf.c_str(),strlen(buf.c_str())};
+    handle_console_command(sv);
+    buf.clear();
+    buf.resize(512);
+    want_scroll_down = 3;
+    want_refocus = true;
+  }
+
+  if (want_refocus)
+  {
+    ImGui::SetKeyboardFocusHere(-1);
+    want_refocus = false;
   }
 
   ImGui::IsItemEdited();

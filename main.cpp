@@ -517,16 +517,6 @@ int main(int argc, char *argv[])
       std::vector<SDL_Event> state_mouse_events;
       SDL_Event e;
 
-      if (!IMGUI.context->IO.WantTextInput)
-      {
-        ImGuiIO &io = ImGui::GetIO();
-        for (uint32 i = 0; i < 512; ++i)
-        {
-          io.KeysDown[i] = false;
-        }
-        
-      }
-
       while (SDL_PollEvent(&e))
       {
         if (e.type == SDL_TEXTINPUT)
@@ -557,6 +547,18 @@ int main(int argc, char *argv[])
       {
         IMGUI.cursor_position = cursor_position;
         IMGUI.mouse_state = mouse_state;
+
+        if (!IMGUI.context->IO.WantTextInput)
+        {//if we press enter in an entrybox, the 'keyup' of the enter doesnt get sent to imgui
+          //because it already set wanttextinput to false on the downpress, making imgui
+          //think enter is being held, we could do something smarter, but we can also
+          //just clear all the keys...
+          ImGuiIO &io = ImGui::GetIO();
+          for (uint32 i = 0; i < 512; ++i)
+          {
+            io.KeysDown[i] = false;
+          }
+        }
         IMGUI.handle_input(&imgui_event_accumulator);
 
         if (freetype_test.UpdateRebuild())
