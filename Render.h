@@ -888,6 +888,12 @@ struct Liquid_Surface
 {
   void run(float32 current_time);
 
+  ~Liquid_Surface()
+  {
+    glDeleteBuffers(1, &heightmap_pbo);
+    glDeleteBuffers(1, &velocity_pbo);
+    glDeleteSync(read_sync);
+  }
   void set_heightmap(Texture texture)
   {
     heightmap = heightmap_fbo.color_attachments[0] = texture;
@@ -911,19 +917,20 @@ struct Liquid_Surface
 
   GLuint heightmap_pbo = 0;
   GLuint velocity_pbo = 0;
+
   GLsync read_sync = 0;
 
+  // the pointers are in an invalid state when changing_pointer is true
+  std::atomic_flag lock = ATOMIC_FLAG_INIT;
+  std::vector<vec4> heightmap_pixels;
+  std::vector<vec4> velocity_pixels;
+  uint32 read_frame = 0;
 
-  float32 *heightmap_ptr = 0;
-  float32 *velocity_ptr = 0;
   Shader liquid_shader;
-
   Framebuffer heightmap_fbo;
   Framebuffer velocity_fbo;
-
   Framebuffer copy_heightmap_fbo;
   Framebuffer copy_velocity_fbo;
-
   Framebuffer liquid_shader_fbo;
 
   Texture heightmap;
@@ -931,9 +938,8 @@ struct Liquid_Surface
   Texture velocity_copy;
   Texture heightmap_copy;
 
-  Shader copy;
   Mesh quad;
-  
+
   GLint ready = 0;
   uint32 frames_until_check = 33;
   bool invalidated = true;

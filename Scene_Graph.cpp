@@ -905,6 +905,16 @@ void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
   PopID();
 }
 
+
+
+
+
+
+
+
+
+
+
 void Flat_Scene_Graph::draw_imgui_particle_emitter() {}
 
 void Flat_Scene_Graph::draw_imgui_octree()

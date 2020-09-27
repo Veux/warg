@@ -4563,7 +4563,6 @@ void Liquid_Surface::run(float32 current_time)
     liquid_shader = Shader("passthrough.vert", "liquid.frag");
     Mesh_Descriptor md(plane, "Texture_Paint's quad");
     quad = Mesh(md);
-    copy = Shader("passthrough.vert", "passthrough.frag");
     initialized = true;
   }
 
@@ -4621,7 +4620,7 @@ void Liquid_Surface::run(float32 current_time)
 
     read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    frames_until_check = 33;
+    frames_until_check = 2;
     invalidated = false;
   }
   if (frames_until_check == 0)
@@ -4630,21 +4629,27 @@ void Liquid_Surface::run(float32 current_time)
     if (ready == GL_SIGNALED)
     {
       glDeleteSync(read_sync);
-      heightmap_ptr = (float32 *)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
-      velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
+      float32 *heightmap_ptr = (float32 *)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
+      float32 *velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
 
-      float test1 = 0.f;
-      float test2 = 0.f;
-      for (uint32 i = 0; i < 100; ++i)
-      {
-        test1 += heightmap_ptr[i];
-        test2 += velocity_ptr[i];
+      uint32 subpixel_count = 4 * heightmap.t.size.x * heightmap.t.size.y;
+      vec4 heightmap_pixel_avg = vec4(0);
+      vec4 velocity_pixel_avg = vec4(0);
+      for (uint32 i = 0; i < subpixel_count; i = i + 4)
+      {        
+        heightmap_pixels.push_back(*(vec4 *)(&heightmap_ptr[i]));
       }
-      set_message("heightmaptest:", s(test1), 1.0f);
-      set_message("velocitymaptest:", s(test2), 1.0f);
+      for (uint32 i = 0; i < subpixel_count; i = i + 4)
+      {
+        velocity_pixels.push_back(*(vec4 *)(&velocity_ptr[i]));
+      }
 
       glUnmapNamedBuffer(heightmap_pbo);
       glUnmapNamedBuffer(velocity_pbo);
+      heightmap_pixel_avg = heightmap_pixel_avg / vec4(heightmap.t.size.x * heightmap.t.size.y);
+      velocity_pixel_avg = velocity_pixel_avg / vec4(heightmap.t.size.x * heightmap.t.size.y);
+      set_message("heightmaptest:", s(heightmap_pixel_avg), 1.0f);
+      set_message("velocitymaptest:", s(velocity_pixel_avg), 1.0f);
     }
   }
   for (uint32 i = 0; i < iterations; ++i)
@@ -4671,6 +4676,7 @@ void Liquid_Surface::run(float32 current_time)
   {
     if (ready == GL_SIGNALED)
     {
+
       uint32 buff_size = heightmap_fbo.color_attachments[0].t.size.x * heightmap_fbo.color_attachments[0].t.size.y * 4 *
                          sizeof(float32);
       glPixelStorei(GL_PACK_ALIGNMENT, 1);
@@ -4680,7 +4686,7 @@ void Liquid_Surface::run(float32 current_time)
       glGetTextureImage(velocity_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
       read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
       glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-      frames_until_check = 33;
+      frames_until_check = 2;
     }
   }
 
