@@ -757,7 +757,7 @@ void Texture::load()
     PERF_TIMER.start();
     glCreateBuffers(1, &texture->uploading_pbo);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, imgdata.data_size, imgdata.data, GL_STATIC_DRAW);    
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, imgdata.data_size, imgdata.data, GL_STATIC_DRAW);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     PERF_TIMER.stop();
     texture->datatype = imgdata.data_type;
@@ -1558,9 +1558,10 @@ void Renderer::build_shadow_maps()
     ivec2 shadow_map_size = CONFIG.shadow_map_scale * vec2(light->shadow_map_resolution);
     shadow_map->init(shadow_map_size);
     shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
-    
-    glTextureParameteri(shadow_map->blur.target.color_attachments[0].texture->texture,GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+    glTextureParameteri(
+        shadow_map->blur.target.color_attachments[0].texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
     glEnable(GL_CULL_FACE);
     // glDisable(GL_CULL_FACE);
@@ -4567,6 +4568,7 @@ void Liquid_Surface::run(float32 current_time)
     Mesh_Descriptor md(plane, "Texture_Paint's quad");
     quad = Mesh(md);
     initialized = true;
+    terrain = default_grid = generate_grid(ivec2(512));
   }
 
   if (invalidated)
@@ -4639,7 +4641,7 @@ void Liquid_Surface::run(float32 current_time)
       heightmap_pixels.clear();
       velocity_pixels.clear();
       for (uint32 i = 0; i < subpixel_count; i = i + 4)
-      {        
+      {
         heightmap_pixels.push_back(*(vec4 *)(&heightmap_ptr[i]));
       }
       for (uint32 i = 0; i < subpixel_count; i = i + 4)
@@ -4648,6 +4650,40 @@ void Liquid_Surface::run(float32 current_time)
       }
       glUnmapNamedBuffer(heightmap_pbo);
       glUnmapNamedBuffer(velocity_pbo);
+
+      if (generate_terrain_from_heightmap)
+      {
+        for (uint32 i = 0; i < terrain.positions.size(); ++i)
+        {
+          vec3* p = &terrain.positions[i];
+          ivec2 size = heightmap.t.size;
+
+          //should have a singular location that defines subdivision count
+          ASSERT(size == ivec2(512));
+
+          vec2 sample_p = vec2(size)*vec2(p->x,p->y);
+          sample_p = clamp(sample_p,vec2(0),vec2(size));
+
+          /*
+          0 1 2 
+          3 4 5
+          6 7 8
+          */
+          uint32 rows = floor(sample_p.y);
+          uint32 cols = floor(sample_p.x);
+          uint32 index = rows*uint32(size.x) + cols;
+          float32 ground_height = heightmap_pixels[index].g;
+          float32 water_height = heightmap_pixels[index].r;
+          float32 biome = heightmap_pixels[index].b;
+          vec4 vel_pack = velocity_pixels[index];
+          p->z = ground_height;
+        }
+
+        Mesh_Descriptor md;
+        md.mesh_data = terrain;
+        terrain_mesh = md;
+        generate_terrain_from_heightmap = false;
+      }
     }
   }
   for (uint32 i = 0; i < iterations; ++i)

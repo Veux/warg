@@ -926,6 +926,11 @@ struct Liquid_Surface
   std::vector<vec4> velocity_pixels;
   uint32 read_frame = 0;
 
+  bool generate_terrain_from_heightmap = false;
+  Mesh terrain_mesh;
+  Mesh_Data terrain;
+  Mesh_Data default_grid;
+
   Shader liquid_shader;
   Framebuffer heightmap_fbo;
   Framebuffer velocity_fbo;
