@@ -757,7 +757,8 @@ void Texture::load()
     PERF_TIMER.start();
     glCreateBuffers(1, &texture->uploading_pbo);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
-    glBufferData(GL_PIXEL_UNPACK_BUFFER, imgdata.data_size, imgdata.data, GL_STATIC_DRAW);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, imgdata.data_size, imgdata.data, GL_STATIC_DRAW);    
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     PERF_TIMER.stop();
     texture->datatype = imgdata.data_type;
     stbi_image_free(imgdata.data);
@@ -1557,7 +1558,9 @@ void Renderer::build_shadow_maps()
     ivec2 shadow_map_size = CONFIG.shadow_map_scale * vec2(light->shadow_map_resolution);
     shadow_map->init(shadow_map_size);
     shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    
+    glTextureParameteri(shadow_map->blur.target.color_attachments[0].texture->texture,GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
     glEnable(GL_CULL_FACE);
     // glDisable(GL_CULL_FACE);
@@ -4633,8 +4636,8 @@ void Liquid_Surface::run(float32 current_time)
       float32 *velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
 
       uint32 subpixel_count = 4 * heightmap.t.size.x * heightmap.t.size.y;
-      vec4 heightmap_pixel_avg = vec4(0);
-      vec4 velocity_pixel_avg = vec4(0);
+      heightmap_pixels.clear();
+      velocity_pixels.clear();
       for (uint32 i = 0; i < subpixel_count; i = i + 4)
       {        
         heightmap_pixels.push_back(*(vec4 *)(&heightmap_ptr[i]));
@@ -4643,13 +4646,8 @@ void Liquid_Surface::run(float32 current_time)
       {
         velocity_pixels.push_back(*(vec4 *)(&velocity_ptr[i]));
       }
-
       glUnmapNamedBuffer(heightmap_pbo);
       glUnmapNamedBuffer(velocity_pbo);
-      heightmap_pixel_avg = heightmap_pixel_avg / vec4(heightmap.t.size.x * heightmap.t.size.y);
-      velocity_pixel_avg = velocity_pixel_avg / vec4(heightmap.t.size.x * heightmap.t.size.y);
-      set_message("heightmaptest:", s(heightmap_pixel_avg), 1.0f);
-      set_message("velocitymaptest:", s(velocity_pixel_avg), 1.0f);
     }
   }
   for (uint32 i = 0; i < iterations; ++i)
@@ -4676,7 +4674,6 @@ void Liquid_Surface::run(float32 current_time)
   {
     if (ready == GL_SIGNALED)
     {
-
       uint32 buff_size = heightmap_fbo.color_attachments[0].t.size.x * heightmap_fbo.color_attachments[0].t.size.y * 4 *
                          sizeof(float32);
       glPixelStorei(GL_PACK_ALIGNMENT, 1);

@@ -411,4 +411,5 @@ private:
   void draw_active_nodes();
   void draw_imgui_pane_selection_button(imgui_pane *modifying);
   void draw_imgui_selected_pane(imgui_pane p);
+  void handle_console_command(std::string_view cmd);
 };

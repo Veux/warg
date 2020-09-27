@@ -4,6 +4,7 @@
 #include "Render.h"
 #include "Physics.h"
 #include "assimp/metadata.h"
+#include <errno.h>
 using json = nlohmann::json;
 using namespace std;
 using namespace ImGui;
@@ -905,16 +906,6 @@ void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
   PopID();
 }
 
-
-
-
-
-
-
-
-
-
-
 void Flat_Scene_Graph::draw_imgui_particle_emitter() {}
 
 void Flat_Scene_Graph::draw_imgui_octree()
@@ -927,7 +918,7 @@ void Flat_Scene_Graph::draw_imgui_octree()
 }
 
 std::string graph_console_log = "Warg Console v0.1 :^)\n";
-int want_scroll_down = 2; //has lag and doesnt scroll down enough if we do it once
+int want_scroll_down = 2; // has lag and doesnt scroll down enough if we do it once
 bool want_refocus = false;
 int console_callback(ImGuiInputTextCallbackData *data)
 {
@@ -935,32 +926,122 @@ int console_callback(ImGuiInputTextCallbackData *data)
   return 1;
 }
 
-
-bool match(std::string_view func ,std::string_view str)
+bool match(std::string_view func, std::string_view str)
 {
-  return str.substr(0,func.length()).compare(func)==0;
+  return str.substr(0, func.length()).compare(func) == 0;
 }
 
-void extract_args(std::string_view str,vector<string>* args)
+std::string_view extract_between(char a, char b, std::string_view str)
 {
+  uint32 a_count = 0;
 
+  int32 a_pos = -1;
+  int32 b_pos = -1;
+
+  // a = (
+  // b = )
+  // asijdhfi(s,a,fg,hg(),asdf)()  -> s,a,fg,hg(),asdf
+
+  for (uint32 i = 0; i < str.size(); ++i)
+  {
+    const char ci = str[i];
+    if (ci == a)
+    {
+      a_count += 1; // push
+      if (a_pos == -1)
+      {
+        a_pos = i + 1;
+        continue;
+      }
+    }
+
+    if (ci == b)
+    {
+      a_count -= 1; // pop
+      if (a_count == 0)
+      {
+        b_pos = i;
+        break;
+      }
+      if (a_pos == -1)
+      {
+        return "";
+      }
+    }
+  }
+  if (a_pos == -1 || b_pos == -1)
+  {
+    return "";
+  }
+
+  return str.substr(a_pos, b_pos - a_pos);
 }
 
+void extract_args(std::string_view str, vector<string> *args)
+{
+  std::string_view args_view = extract_between('(', ')', str);
 
-void handle_console_command(std::string_view cmd)
+  // asd,etfg,asd(),sgd -> [[asd],[etfg],[asd()],[sgd]]
+
+  uint32 end = args_view.size();
+  uint32 cursor = 0;
+  while (true)
+  {
+    args_view.remove_prefix(cursor);
+    uint32 i = args_view.find_first_of(',');
+
+    if (i == -1)
+    {
+      args->push_back(string(args_view));
+      break;
+    }
+    std::string_view this_arg = args_view.substr(cursor, i);
+    cursor = i + 1;
+    args->push_back(string(this_arg));
+  }
+}
+
+void Flat_Scene_Graph::handle_console_command(std::string_view cmd)
 {
 
+  graph_console_log.append(s(">>", string(cmd), "\n"));
   set_message("console command:", std::string(cmd), 15.0f);
 
   static vector<string> args;
   args.clear();
-
-  if(match("test_f",cmd))
+  extract_args(cmd, &args);
+  if (match("add_aiscene", cmd))
   {
-    //extract args
+    if (args.size())
+    {
+      string *filename = &args[0];
+      string object_name = "unnamed_node";
+      if (args.size() > 1)
+      {
+        object_name = args[1];
+      }
+      add_aiscene(*filename, object_name);
+    }
   }
 
-  graph_console_log = s(graph_console_log, std::string(cmd), "\n");
+  if (match("delete_node", cmd))
+  {
+    if (args.size())
+    {
+      if (args[0] != "")
+      {
+        errno = 0;
+        Node_Index i = strtol(args[0].c_str(), nullptr, 10);
+        if (!errno)
+          delete_node(i);
+      }
+    }
+  }
+
+  if (match("help", cmd))
+  {
+    graph_console_log.append("Available functions:\ndelete_node(Node_Index)\nadd_aiscene(filename,name)\n\n");
+  }
 }
 
 void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
@@ -985,7 +1066,7 @@ void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
   ImGui::SetNextItemWidth(section_size.x);
   if (ImGui::InputText("", &buf[0], size, flags, console_callback))
   {
-    string_view sv = {buf.c_str(),strlen(buf.c_str())};
+    string_view sv = {buf.c_str(), strlen(buf.c_str())};
     handle_console_command(sv);
     buf.clear();
     buf.resize(512);
@@ -1992,7 +2073,7 @@ Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 as
   if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
   {
     set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
-    ASSERT(0);
+    ASSERT(0); //todo: fail gracefully instead
   }
   Imported_Scene_Data dst;
   dst.assimp_filename = path;
