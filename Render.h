@@ -926,10 +926,7 @@ struct Liquid_Surface
   std::vector<vec4> velocity_pixels;
   uint32 read_frame = 0;
 
-  bool generate_terrain_from_heightmap = false;
-  Mesh terrain_mesh;
-  Mesh_Data terrain;
-  Mesh_Data default_grid;
+ 
 
   Shader liquid_shader;
   Framebuffer heightmap_fbo;
@@ -1035,6 +1032,7 @@ struct Texture_Paint
   bool generate_terrain = false;
   bool generate_water = false;
   bool clear_water = false;
+  bool generate_terrain_from_heightmap = false;
   ivec4 mask = ivec4(1);
 
   void iterate(Texture *t, float32 time);

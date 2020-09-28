@@ -2,7 +2,7 @@
 #include "Globals.h"
 #include "Scene_Graph.h"
 
-const float32 dt = 1.0f / 120.0f;
+const float32 dt = 1.0f / 80.0f;
 const float32 MOVE_SPEED = 4.f;
 const float32 STEP_SIZE = MOVE_SPEED / 3.f;
 const float32 MOUSE_X_SENS = .0041f;

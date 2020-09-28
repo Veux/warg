@@ -64,7 +64,7 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
-#define MAX_OCTREE_DEPTH 4
+#define MAX_OCTREE_DEPTH 9
 #define TRIANGLES_PER_NODE 4096
 #define OCTREE_SPLIT_STYLE
 #define OCTREE_VECTOR_STYLE
@@ -159,7 +159,7 @@ struct Octree
   }
   Octree_Node *root;
   //std::array<Octree_Node, 65536> nodes;
-  std::array<Octree_Node, 65536> nodes;
+  std::array<Octree_Node, 15*65536> nodes;
   Octree_Node *new_node(vec3 p, float32 size, uint8 parent_depth) noexcept;
   void clear();
   std::vector<Render_Entity> get_render_entities(Flat_Scene_Graph *owner);

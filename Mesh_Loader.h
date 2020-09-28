@@ -51,6 +51,11 @@ void copy_mesh_data(std::vector<vec2> &dst, aiVector3D *src, uint32 length);
 struct Mesh_Descriptor
 {
   Mesh_Descriptor() {}
+  Mesh_Descriptor(std::string name, Mesh_Data& md)
+  {
+    this->name = name;
+    mesh_data = md;
+  }
   Mesh_Descriptor(Mesh_Primitive p, std::string name)
   {
     mesh_data = load_mesh(p);

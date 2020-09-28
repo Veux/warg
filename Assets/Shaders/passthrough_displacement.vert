@@ -1,8 +1,8 @@
 #version 330
 uniform sampler2D texture11; // displacement
-uniform vec4 texture11_mod;
 uniform mat4 transform;
 uniform bool ground;
+uniform uint displacement_map_size;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -13,7 +13,6 @@ out vec2 frag_uv;
 
 vec4 get_height_sample(vec2 uv)
 {
-  vec2 plane_size = vec2(1024);
   vec2 texture_size = vec2(256);
   ivec2 p = ivec2((uv * texture_size) - vec2(0.25f));
   float o = 1. / 1024;
@@ -30,9 +29,15 @@ vec4 get_height_sample(vec2 uv)
 void main()
 {
   float offset = 0.005505;
-  vec4 height_sample = get_height_sample(uv);
-  vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
-  vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
+
+    // no smoothing
+  vec2 uv_offset = uv*(displacement_map_size-1u);
+  uv_offset = uv_offset + vec2(.5f);
+  uv_offset = uv_offset / displacement_map_size;
+  vec2 sample_uv = uv_offset;
+  vec4 height_sample = texture2D(texture11, sample_uv);
+  vec4 vheight_offsetx = texture2D(texture11, sample_uv + vec2(offset, 0));
+  vec4 vheight_offsety = texture2D(texture11, sample_uv + vec2(0, offset));
 
   float height = height_sample.r;
   float height_offsetx = vheight_offsetx.r;
@@ -45,8 +50,9 @@ void main()
   }
   float dhx = height_offsetx - height;
   float dhy = height_offsety - height;
+
   vec3 displacement_vector = normal;
-  vec3 displacement_offset = (1.f * height * displacement_vector);
+  vec3 displacement_offset = height * displacement_vector;
 
   vec4 pos = transform * vec4(position + displacement_offset, 1);
 

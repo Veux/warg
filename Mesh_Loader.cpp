@@ -3,8 +3,11 @@
 #include "Globals.h"
 #include "Render.h"
 
-Mesh_Data generate_grid(ivec2 tile_count)
+Mesh_Data generate_grid(ivec2 vertex_count)
 {
+  //assuming that tile_count meant vertex count for heightmaps, we need 1 fewer tile
+  //than we want vertices, in order for them to match properly
+  ivec2 tile_count = vertex_count -ivec2(1);
   Mesh_Data data;
 
   for (uint32 y = 0; y < tile_count.y + 1; ++y)
@@ -40,7 +43,7 @@ Mesh_Data generate_grid(ivec2 tile_count)
     }
   }
 
-  vec2 tile_size = vec2(1.f) / vec2(tile_count);
+  vec2 tile_size = vec2(1.f) / vec2(vertex_count);
   vec2 offset = vec2(-0.5f);
   for (uint32 i = 0; i < data.positions.size(); ++i)
   {

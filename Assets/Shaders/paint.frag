@@ -146,9 +146,69 @@ float fbm_h_n(vec2 x, float H, int n)
   }
   return t;
 }
+vec2 hash(vec2 p)
+{
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noise_2(vec2 p, float level, float time)
+{
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float t = pow(2., level) * .4 * time;
+  mat2 R = mat2(cos(t), -sin(t), sin(t), cos(t));
+  if (mod(i.x + i.y, 2.) == 0.)
+    R = -R;
+  return 2. * mix(mix(dot(hash(i + vec2(0, 0)), (f - vec2(0, 0)) * R), dot(hash(i + vec2(1, 0)), -(f - vec2(1, 0)) * R),
+                      u.x),
+                  mix(dot(hash(i + vec2(0, 1)), -(f - vec2(0, 1)) * R), dot(hash(i + vec2(1, 1)), (f - vec2(1, 1)) * R),
+                      u.x),
+                  u.y);
+}
+
+float Mnoise(vec2 uv, float level, float time)
+{
+  // return noise(4.*uv);
+  return noise_2(2.f * uv, level, time);
+  // return -1. + 2.* (1.-abs(noise(uv,time)));  // flame like
+  return -1. + 2. * (abs(noise_2(uv, level, time))); // cloud like
+}
+
+float turb(vec2 uv, float time)
+{
+  float f = 0.0;
+
+  float level = 1.;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  f = 0.5000 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.2500 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.1250 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0625 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0314 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+
+  return abs(f) / .75;
+  return abs(f) / .9375;
+}
+
 vec4 generate_terrain(vec4 source)
 {
-  float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
+  float t1 =  2.5 * turb(0.5 * frag_uv, .025f * time);
+  float t2 =  1. * turb(4.0415 * frag_uv, .15f * time);
+  float terrain_height = t1+t2;
+  //float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
   float biome = 1.1f;
   return vec4(source.r, source.g + terrain_height, biome, 0);
 }

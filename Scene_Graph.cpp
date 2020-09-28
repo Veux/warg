@@ -912,9 +912,9 @@ void Flat_Scene_Graph::draw_imgui_octree()
 {
   Checkbox("Draw Octree", &draw_collision_octree);
   Checkbox("Draw Triangles", &collision_octree.include_triangles);
-  Checkbox("Draw Normalss", &collision_octree.include_normals);
+  Checkbox("Draw Normals", &collision_octree.include_normals);
   Checkbox("Draw Velocity", &collision_octree.include_velocity);
-  DragInt("Draw Depth", &collision_octree.depth_to_render, 1.0f, -1, MAX_OCTREE_DEPTH);
+  ImGui::DragInt("Draw Depth", &collision_octree.depth_to_render, 1.0f, -1, MAX_OCTREE_DEPTH);
 }
 
 std::string graph_console_log = "Warg Console v0.1 :^)\n";
@@ -2212,12 +2212,12 @@ Material_Descriptor *Flat_Scene_Graph::get_modifiable_material_pointer_for(Node_
 
 // assuming world basis for now
 
-inline Octree::Octree()
+ Octree::Octree()
 {
   root = &nodes[0];
-  root->size = 100.f;
-  root->halfsize = 50.f;
-  root->minimum = vec3(-41, -39, -41);
+  root->size = 3000.f;
+  root->halfsize = 1500.f;
+  root->minimum = vec3(-1500, -1500, -1500);
   root->center = root->minimum + vec3(root->halfsize);
   free_node = 1;
   root->mydepth = 0;
@@ -2296,9 +2296,9 @@ void Octree::clear()
 {
   root->clear();
   root = &nodes[0];
-  root->size = 100.f;
-  root->halfsize = 50.f;
-  root->minimum = vec3(-41, -39, -41);
+  root->size = 3000.f;
+  root->halfsize = 1500.f;
+  root->minimum = vec3(-1500, -1500, -1500);
   root->center = root->minimum + vec3(root->halfsize);
 
   free_node = 1;

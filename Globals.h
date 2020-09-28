@@ -35,6 +35,13 @@
 #define MAX_SPELLS 16
 #define MAX_FILENAME_LENGTH 128
 
+#ifdef NDEBUG
+#define HEIGHTMAP_RESOLUTION 512
+#else
+#define HEIGHTMAP_RESOLUTION 16
+#endif
+
+
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
 #elif _WIN32

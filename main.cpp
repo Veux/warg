@@ -388,8 +388,9 @@ int main(int argc, char *argv[])
   }
   glad_set_pre_callback(glad_callback);
   glad_set_post_callback(glad_callback);
-  // Local_Session warg_session = Local_Session();
+  
 
+  Local_Session warg_session = Local_Session();
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
@@ -459,9 +460,8 @@ int main(int argc, char *argv[])
   std::vector<SDL_Event> imgui_event_accumulator;
 
   std::vector<State *> states;
-  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
-
-  // states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
+   states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
   states[0]->imgui_event_accumulator = &imgui_event_accumulator;

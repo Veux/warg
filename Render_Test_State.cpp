@@ -73,7 +73,7 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 {
   Mesh_Descriptor mesh;
   mesh.name = "generated water terrain grid";
-  mesh.mesh_data = generate_grid(ivec2(512));
+  mesh.mesh_data = generate_grid(ivec2(HEIGHTMAP_RESOLUTION));
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.034, .215, .289, .367);
@@ -273,7 +273,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
-  // spawn_compass(&scene);
+  spawn_compass(&scene);
   // spawn_test_spheres(scene);
 
   // spawn_map(&scene);
@@ -678,8 +678,7 @@ void Render_Test_State::update()
   if (painter.textures.size() && painter.textures[0].texture != nullptr)
   {
 
-    Texture* heightmap = &painter.liquid.heightmap_fbo.color_attachments[0];
-
+    Texture *heightmap = &painter.liquid.heightmap_fbo.color_attachments[0];
 
     Node_Index water_node = scene.find_by_name(NODE_NULL, "water");
     Flat_Scene_Graph_Node *node = &scene.nodes[water_node];
@@ -687,16 +686,88 @@ void Render_Test_State::update()
     Material *mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = painter.textures[painter.selected_texture];
     mat->descriptor.uniform_set.texture_uniforms[water_velocity] = painter.liquid.velocity_fbo.color_attachments[0];
-    mat->descriptor.uniform_set.float32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
+    mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
 
     Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
     node = &scene.nodes[ground_node];
     mi = node->model[0].second;
     mat = &scene.resource_manager->material_pool[mi];
     mat->displacement = *heightmap;
-    mat->descriptor.uniform_set.float32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
+    mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
 
+    if (painter.generate_terrain_from_heightmap)
+    {
+      static Mesh_Descriptor terrain = {std::string("cpu terrain"), generate_grid(ivec2(HEIGHTMAP_RESOLUTION))};
 
+      for (uint32 i = 0; i < terrain.mesh_data.positions.size(); ++i)
+      {
+
+        vec3 *pos = &terrain.mesh_data.positions[i];
+        vec2 uv = terrain.mesh_data.texture_coordinates[i];
+        ivec2 size = heightmap->t.size;
+
+        ASSERT(size == ivec2(HEIGHTMAP_RESOLUTION));
+
+        float eps = 0.0001f;
+        vec2 sample_p = (vec2(size-1) * uv) + vec2(eps);
+        sample_p = floor(sample_p);
+        sample_p = clamp(sample_p, vec2(0), vec2(size));
+
+        // p = [0,1]
+        // size = (3,3)
+        // samplep = [0,3]
+
+        // texture:
+        /*
+        x x x
+        x x x
+        0 x x
+        */
+
+        // reads into array as
+        /*
+        0 x x
+        x x x
+        x x x
+        */
+
+        // origin is the same at 0,0
+
+        /*
+        6 7 8
+        3 4 5
+        0 1 2
+        */
+        uint32 rows = sample_p.y;
+        uint32 cols = sample_p.x;
+
+        bool out_of_bounds = (cols > painter.liquid.heightmap.t.size.x - 1) || (rows > painter.liquid.heightmap.t.size.y - 1);
+
+        if (out_of_bounds)
+        {
+          int a = 3;
+        }
+
+        uint32 index = rows * uint32(size.x) + cols;
+
+        float32 ground_height = 0;
+        float32 water_height = 0;
+        float32 biome = 0;
+        vec4 vel_pack = vec4(0);
+        if (! out_of_bounds)
+        {
+          ground_height = painter.liquid.heightmap_pixels[index].g;
+          water_height = painter.liquid.heightmap_pixels[index].r;
+          biome = painter.liquid.heightmap_pixels[index].b;
+          vel_pack = painter.liquid.velocity_pixels[index];
+        }
+        pos->z = ground_height;
+      }
+      scene.collision_octree.clear();
+      mat4 transform = scene.build_transformation(ground_node);
+      scene.collision_octree.push(&terrain, &transform);
+      painter.generate_terrain_from_heightmap = false;
+    }
   }
 
   // update_grabbyarm(&scene, current_time);

@@ -94,6 +94,8 @@ struct Warg_State : protected State
   vec4 character_to_camera;
 
   Interface_State interface_state;
+
+  Texture_Paint painter;
 };
 
 Character *get_character(Game_State *game_state, UID id);

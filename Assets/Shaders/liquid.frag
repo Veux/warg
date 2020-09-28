@@ -191,7 +191,7 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
     // only absorb on negative slopes or else we absorb at shores
     if (water_depth < ground_absorbtion_threshold) // && ground_height >= other_ground_height)
     {
-      ground_absorbtion = ground_absorbtion_rate;
+      //ground_absorbtion = ground_absorbtion_rate;
     }
     water_acceleration = 0.f;
   }
@@ -341,19 +341,21 @@ void main()
     // biome = 4.5f;
   }
   // rain on water
-  if (vlow_chance_true != 0)
+  if (lowmed_chance_true != 0)
   {
 
     if (water_height > ground_height)
     {
-      float dropheight = .0071000435f;
+      float dropheight = .00205171000435f;
+      // dropheight = .0f;
       if (sin(20.f * time) > 0.f)
       {
-        // water_height = water_height + dropheight; // raindrops
+        water_height = water_height + dropheight; // raindrops
       }
       else
       {
         // water_height = water_height - dropheight; // raindrops
+         water_height = water_height + dropheight; // raindrops
       }
     }
   }

@@ -17,22 +17,7 @@ bool WANT_SPAWN_OCTREE_BOX = false;
 bool WANT_CLEAR_OCTREE = false;
 
 extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
-//{
-//  dst->float32_uniforms["index_of_refraction"] = 1.15f;
-//  dst->float32_uniforms["refraction_offset_factor"] = 0.02501;
-//  dst->float32_uniforms["water_eps"] = 0.0001;
-//  dst->float32_uniforms["water_scale"] = 4.87;
-//  dst->float32_uniforms["water_speed"] = 0.201;
-//  dst->float32_uniforms["water_dist_scale"] = .81;
-//  dst->float32_uniforms["water_dist_exp"] = 1.67;
-//  dst->float32_uniforms["water_height_scale"] = 3.0;
-//  dst->float32_uniforms["water_dist_min"] = 5.;
-//  dst->float32_uniforms["water_scale2"] = 1.52;
-//  dst->float32_uniforms["height_scale2"] = 3.0;
-//  dst->float32_uniforms["water_time2"] = 0.0192;
-//  dst->float32_uniforms["surfdotv_exp"] = 2.35f;
-//  dst->bool_uniforms["water_use_uv"] = true;
-//}
+extern void spawn_water(Flat_Scene_Graph* scene, vec3 scale, vec3 pos);
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
     : State(name, window, window_size)
@@ -40,6 +25,11 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   session = session_;
 
   map = new Blades_Edge(scene);
+
+
+  spawn_water(&scene, vec3(500, 500, 3), vec3(0, 0, -.002));
+
+
   spell_db = Spell_Database(); /*
    map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
                                // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
@@ -60,7 +50,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
+  material.emissive = "white";
+  material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
   small_object_water_settings(&material.uniform_set);
   Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
   Mesh_Index mesh_index0 = scene.nodes[particle_node].model[0].first;
@@ -82,7 +73,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
+  material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
   Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
   Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
   Material_Index material_index3 = scene.nodes[particle_node3].model[0].second;
@@ -804,7 +795,10 @@ void Warg_State::update()
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
   process_messages();
-  update_stats_bar();
+
+  //update_stats_bar(); todo: fix
+
+
   current_game_state = last_recieved_server_state;
   Character *target = get_character(&current_game_state, target_id);
   if (!target || !target->alive)
@@ -827,10 +821,10 @@ void Warg_State::update()
   Node_Index arena_collider = scene.nodes[arena].collider;
   Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
   Mesh *meshptr = &scene.resource_manager->mesh_pool[meshindex];
-  Mesh_Descriptor *md = &meshptr->mesh->descriptor;
+  Mesh_Descriptor *blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
   static Timer beatimer(100);
   beatimer.start();
-  // scene.collision_octree.push(md);
+  // scene.collision_octree.push(blades_edge_mesh_descriptor);
   beatimer.stop();
   // set_message("octree timer:", beatimer.string_report(), 1.0f);
 
@@ -884,30 +878,53 @@ void Warg_State::update()
     ptr->server->scene.nodes[servernode].position = camera.pos + 12.f * dir;
     ptr->server->scene.nodes[servernode].scale = vec3(2);
     ptr->server->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+
+
+    Flat_Scene_Graph_Node* newnodeptr = &scene.nodes[newnode];
+    Mesh_Index new_node_mesh_index = newnodeptr->model[0].first;
+    Mesh* mp = &scene.resource_manager->mesh_pool[new_node_mesh_index];
+    Mesh_Descriptor* mdp = &mp->mesh->descriptor;
+
+
+    Mesh_Descriptor* newmesh = &scene.resource_manager->mesh_pool[scene.nodes[newnode].model[0].first].mesh->descriptor;
+    Mesh_Descriptor* newmeshs = &ptr->server->scene.resource_manager->mesh_pool[ptr->server->scene.nodes[servernode].model[0].first].mesh->descriptor;
+
+    mat4 M = scene.build_transformation(newnode);
+    scene.collision_octree.push(newmesh, &M);
+
+    M = ptr->server->scene.build_transformation(servernode);
+    ptr->server->scene.collision_octree.push(newmeshs, &M);
   }
+
+  //currently set up for local particle/octree collision
+  
+
   Local_Session *ptr = (Local_Session *)this->session;
   // ptr->server->scene.collision_octree.clear();
 
-  // ptr->server->scene.collision_octree.push(md);
+  //ptr->server->scene.collision_octree.push(md);
+
+
   for (Node_Index node : spawned_nodes)
   {
-    mat4 M = scene.build_transformation(node);
-    // scene.collision_octree.push(&mesh, &M);
+    //mat4 M = scene.build_transformation(node);
+    //scene.collision_octree.push(&mesh, &M);
+    /*
     AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
-    uint32 counter;
-    scene.collision_octree.test(prober, &counter);
+    uint32 counter;*/
+    //scene.collision_octree.test(prober, &counter);
   }
   for (Node_Index node : spawned_server_nodes)
   {
-    Local_Session *ptr = (Local_Session *)this->session;
-    mat4 M = ptr->server->scene.build_transformation(node);
-    // ptr->server->scene.collision_octree.push(&mesh, &M);
+    //mat4 M = ptr->server->scene.build_transformation(node);
+    //ptr->server->scene.collision_octree.push(&mesh, &M);
   }
 
   if (WANT_CLEAR_OCTREE)
   {
+    ASSERT(0);
     WANT_CLEAR_OCTREE = false;
     for (Node_Index node : spawned_nodes)
     {
@@ -925,12 +942,14 @@ void Warg_State::update()
   velocity = 300.f * (velocity + vec3(0., 0., .02));
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
+#if 0
   Material_Descriptor material;
   static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
   scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
   transform = scene.build_transformation(dynamic_collider_node);
-  // scene.collision_octree.push(&mesh, &transform, &velocity);
+  scene.collision_octree.push(&mesh, &transform, &velocity);
+#endif
 
   // fire_emitter2(
   //   &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
@@ -940,10 +959,10 @@ void Warg_State::update()
   // fire_emitter2(
   // &renderer, &scene, &scene.particle_emitters[3], &scene.lights.lights[3], vec3(5.15, 17.5, 8.6), vec2(.5));
   static vec3 wind_dir;
-  if (fract(sin(current_time)) > .5)
+  if (fract(sin(current_time)) > .85)
     wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  if (fract(sin(current_time)) > .5)
+  if (fract(sin(current_time)) > .85)
     wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
   Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
@@ -952,58 +971,58 @@ void Warg_State::update()
   Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 1;
-  scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 15;
+  scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 45;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
   // scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
 
   scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 1;
-  scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 15;
+  scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 45;
   scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
   // scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
 
   scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 1;
-  scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 15;
+  scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 45;
   scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
   // scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
 
   scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 1;
-  scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
+  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
+  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 15;
+  scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 42;
   scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
   // scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
   scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
   scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 
@@ -1013,6 +1032,147 @@ void Warg_State::update()
   particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
   set_message("Total Particle count:", s(particle_count), 1.0f);
   uint32 i = sizeof(Octree);
+
+
+
+
+
+
+  if (painter.textures.size() && painter.textures[0].texture != nullptr)
+  {
+
+    Texture* heightmap = &painter.liquid.heightmap_fbo.color_attachments[0];
+
+    Node_Index water_node = scene.find_by_name(NODE_NULL, "water");
+    Flat_Scene_Graph_Node* node = &scene.nodes[water_node];
+    Material_Index mi = node->model[0].second;
+    Material* mat = &scene.resource_manager->material_pool[mi];
+    mat->displacement = painter.textures[painter.selected_texture];
+    mat->descriptor.uniform_set.texture_uniforms[water_velocity] = painter.liquid.velocity_fbo.color_attachments[0];
+    mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
+
+    Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
+    node = &scene.nodes[ground_node];
+    mi = node->model[0].second;
+    mat = &scene.resource_manager->material_pool[mi];
+    mat->displacement = *heightmap;
+    mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
+
+    if (painter.generate_terrain_from_heightmap)
+    {
+      static Mesh_Descriptor terrain = { std::string("cpu terrain"), generate_grid(ivec2(HEIGHTMAP_RESOLUTION)) };
+
+      for (uint32 i = 0; i < terrain.mesh_data.positions.size(); ++i)
+      {
+
+        vec3* pos = &terrain.mesh_data.positions[i];
+        vec2 uv = terrain.mesh_data.texture_coordinates[i];
+        ivec2 size = heightmap->t.size;
+
+        ASSERT(size == ivec2(HEIGHTMAP_RESOLUTION));
+
+        float eps = 0.0001f;
+        vec2 sample_p = (vec2(size - 1) * uv) + vec2(eps);
+        sample_p = floor(sample_p);
+        sample_p = clamp(sample_p, vec2(0), vec2(size));
+
+        // p = [0,1]
+        // size = (3,3)
+        // samplep = [0,3]
+
+        // texture:
+        /*
+        x x x
+        x x x
+        0 x x
+        */
+
+        // reads into array as
+        /*
+        0 x x
+        x x x
+        x x x
+        */
+
+        // origin is the same at 0,0
+
+        /*
+        6 7 8
+        3 4 5
+        0 1 2
+        */
+        uint32 rows = sample_p.y;
+        uint32 cols = sample_p.x;
+
+        bool out_of_bounds = (cols > painter.liquid.heightmap.t.size.x - 1) || (rows > painter.liquid.heightmap.t.size.y - 1);
+
+        if (out_of_bounds)
+        {
+          int a = 3;
+        }
+
+        uint32 index = rows * uint32(size.x) + cols;
+
+        float32 ground_height = 0;
+        float32 water_height = 0;
+        float32 biome = 0;
+        vec4 vel_pack = vec4(0);
+        if (!out_of_bounds)
+        {
+          ground_height = painter.liquid.heightmap_pixels[index].g;
+          water_height = painter.liquid.heightmap_pixels[index].r;
+          biome = painter.liquid.heightmap_pixels[index].b;
+          vel_pack = painter.liquid.velocity_pixels[index];
+        }
+        pos->z = ground_height;
+      }
+      Local_Session* ptr = (Local_Session*)this->session;
+      ptr->server->scene.collision_octree.clear();
+      scene.collision_octree.clear();
+
+      mat4 transform = scene.build_transformation(ground_node);
+      ptr->server->scene.collision_octree.push(&terrain, &transform);
+
+      mat4 M = scene.build_transformation(map->node);
+      ptr->server->scene.collision_octree.push(blades_edge_mesh_descriptor, &M);
+
+      for (Node_Index node : spawned_nodes)
+      {
+        M = scene.build_transformation(node);
+        Mesh_Descriptor* newmesh = &scene.resource_manager->mesh_pool[scene.nodes[node].model[0].first].mesh->descriptor;
+        scene.collision_octree.push(newmesh, &M);
+      }
+      for (Node_Index node : spawned_server_nodes)
+      {
+        M = ptr->server->scene.build_transformation(node);
+
+        Mesh_Descriptor* newmesh = &ptr->server->scene.resource_manager->mesh_pool[ptr->server->scene.nodes[node].model[0].first].mesh->descriptor;
+        ptr->server->scene.collision_octree.push(newmesh, &M);
+      }
+
+      scene.collision_octree = ptr->server->scene.collision_octree;
+
+      painter.generate_terrain_from_heightmap = false;
+    }
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
 
 void Warg_State::draw_gui()
@@ -1021,6 +1181,8 @@ void Warg_State::draw_gui()
   IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
 
   update_game_interface();
+  painter.window_open = true;
+  painter.run(imgui_event_accumulator);
   scene.draw_imgui(state_name);
 }
 
@@ -1724,7 +1886,7 @@ void Warg_State::update_unit_frames()
 
 void Warg_State::update_icons()
 {
-
+  return;
   Character *player_character = get_character(&current_game_state, player_character_id);
   ASSERT(player_character);
 

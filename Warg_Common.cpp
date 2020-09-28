@@ -340,6 +340,10 @@ void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3
   physics.grounded = colpkt.found_collision && gravity.z <= 0;
 
   final_pos *= colpkt.e_radius;
+
+  if(final_pos.z < -50)
+    final_pos = vec3(0,0,50);
+
   physics.position = final_pos;
 }
 

@@ -923,6 +923,10 @@ void Mesh_Handle::enable_assign_attributes()
 
 void Mesh_Handle::upload_data()
 {
+
+  if(descriptor.mesh_data.positions.size()==0)
+    return;
+
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(vao == 0);
   Mesh_Data &mesh_data = descriptor.mesh_data;
@@ -1279,10 +1283,10 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 
   glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
   set_message("Initializing renderer...");
-  Mesh_Descriptor md(plane, "RENDERER's PLANE");
+  Mesh_Descriptor md(plane, "mesh primitive plane");
   quad = Mesh(md);
 
-  cube = Mesh({Mesh_Primitive::cube, "RENDERER's SKYBOX"});
+  cube = Mesh({Mesh_Primitive::cube, "mesh primitive cube"});
 
   Texture_Descriptor uvtd;
   uvtd.name = "uvgrid.png";
@@ -1582,16 +1586,18 @@ void Renderer::build_shadow_maps()
     {
       if (entity.material->descriptor.casts_shadows)
       {
-        if (entity.material->displacement.texture != nullptr)
+        if (entity.material->displacement.t.source != "default")
         {
           variance_shadow_map_displacement.use();
+          bool displacement_success = entity.material->displacement.bind_for_sampling_at(Texture_Location::displacement);
           variance_shadow_map_displacement.set_uniform(
               "transform", shadow_map->projection_camera * entity.transformation);
           // sponge: jank code specific to the world sim thing:
           bool is_ground = entity.name == "ground";
           variance_shadow_map_displacement.set_uniform("ground", is_ground);
-          variance_shadow_map_displacement.set_uniform("texture11_mod", entity.material->descriptor.displacement.mod);
-          entity.material->displacement.bind_for_sampling_at(displacement);
+          variance_shadow_map_displacement.set_uniform("displacement_map_size", uint32(HEIGHTMAP_RESOLUTION));
+          //variance_shadow_map_displacement.set_uniform("texture11_mod", entity.material->descriptor.displacement.mod);
+          //entity.material->displacement.bind_for_sampling_at(displacement);
           ASSERT(entity.mesh);
           entity.mesh->draw();
           continue;
@@ -3781,7 +3787,7 @@ Texture Texture_Paint::create_new_texture(const char *name)
     tname = name;
   }
   Texture t =
-      Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+      Texture(tname, vec2(HEIGHTMAP_RESOLUTION), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }
@@ -3923,6 +3929,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   if (ImGui::Button("Clear Water"))
   {
     clear_water = true;
+  }
+  if (ImGui::Button("Generate Terrain Octree"))
+  {
+    generate_terrain_from_heightmap = true;
   }
   ImGui::DragFloat3("Ambient Waves", &liquid.ambient_wave_scale[0], 0.05f, 0.0f, 100.f, "%.3f", 1.5f);
 
@@ -4568,7 +4578,6 @@ void Liquid_Surface::run(float32 current_time)
     Mesh_Descriptor md(plane, "Texture_Paint's quad");
     quad = Mesh(md);
     initialized = true;
-    terrain = default_grid = generate_grid(ivec2(512));
   }
 
   if (invalidated)
@@ -4625,7 +4634,7 @@ void Liquid_Surface::run(float32 current_time)
 
     read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    frames_until_check = 2;
+    frames_until_check = 3;
     invalidated = false;
   }
   if (frames_until_check == 0)
@@ -4651,39 +4660,6 @@ void Liquid_Surface::run(float32 current_time)
       glUnmapNamedBuffer(heightmap_pbo);
       glUnmapNamedBuffer(velocity_pbo);
 
-      if (generate_terrain_from_heightmap)
-      {
-        for (uint32 i = 0; i < terrain.positions.size(); ++i)
-        {
-          vec3* p = &terrain.positions[i];
-          ivec2 size = heightmap.t.size;
-
-          //should have a singular location that defines subdivision count
-          ASSERT(size == ivec2(512));
-
-          vec2 sample_p = vec2(size)*vec2(p->x,p->y);
-          sample_p = clamp(sample_p,vec2(0),vec2(size));
-
-          /*
-          0 1 2 
-          3 4 5
-          6 7 8
-          */
-          uint32 rows = floor(sample_p.y);
-          uint32 cols = floor(sample_p.x);
-          uint32 index = rows*uint32(size.x) + cols;
-          float32 ground_height = heightmap_pixels[index].g;
-          float32 water_height = heightmap_pixels[index].r;
-          float32 biome = heightmap_pixels[index].b;
-          vec4 vel_pack = velocity_pixels[index];
-          p->z = ground_height;
-        }
-
-        Mesh_Descriptor md;
-        md.mesh_data = terrain;
-        terrain_mesh = md;
-        generate_terrain_from_heightmap = false;
-      }
     }
   }
   for (uint32 i = 0; i < iterations; ++i)
@@ -4719,7 +4695,7 @@ void Liquid_Surface::run(float32 current_time)
       glGetTextureImage(velocity_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
       read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
       glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-      frames_until_check = 2;
+      frames_until_check = 3;
     }
   }
 

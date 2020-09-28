@@ -14,7 +14,7 @@ uniform mat4 MVP;
 uniform mat4 Model;
 uniform mat4 shadow_map_transform[MAX_LIGHTS];
 uniform bool ground;
-uniform float displacement_map_size;
+uniform uint displacement_map_size;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -37,7 +37,7 @@ vec4 get_height_sample(vec2 uv)
 {
   ivec2 p = ivec2((uv * displacement_map_size) - vec2(0.25f));
 
-  float o = 1. / displacement_map_size;
+  float o = 1. / float(displacement_map_size);
   vec4 height = texture(texture11, uv, 0);
   vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
   vec4 height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -53,7 +53,7 @@ vec4 get_height_sample_variance(vec2 uv)
 {
   ivec2 p = ivec2((uv * displacement_map_size) - vec2(0.25f));
 
-  float o = 1. / displacement_map_size;
+  float o = 1. / float(displacement_map_size);
   vec4 height = texture(texture11, uv, 0);
   vec4 height_left = texture(texture11, uv + vec2(-o, 0), 0);
   vec4 height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -65,7 +65,7 @@ vec4 get_height_sample_variance(vec2 uv)
   float minimum = min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r))));
   float maximum = max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r))));
 
-  o = 2. / displacement_map_size;
+  o = 2. / float(displacement_map_size);
   height = texture(texture11, uv, 0);
   height_left = texture(texture11, uv + vec2(-o, 0), 0);
   height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -77,7 +77,7 @@ vec4 get_height_sample_variance(vec2 uv)
   minimum = min(minimum, min(height.r, min(height_left.r, min(height_right.r, min(height_down.r, height_up.r)))));
   maximum = max(maximum, max(height.r, max(height_left.r, max(height_right.r, max(height_down.r, height_up.r)))));
 
-  o = 3. / displacement_map_size;
+  o = 3. / float(displacement_map_size);
   height = texture(texture11, uv, 0);
   height_left = texture(texture11, uv + vec2(-o, 0), 0);
   height_right = texture(texture11, uv + vec2(o, 0), 0);
@@ -101,13 +101,24 @@ void main()
 
   float offset = 0.005505;
   // need to apply a curvature by sampling adjacent pixels with textureOffset
-  // vec4 height_sample = texture2D(texture11, uv);
-  // vec4 vheight_offsetx = texture2D(texture11, uv + vec2(offset, 0));
-  // vec4 vheight_offsety = texture2D(texture11, uv + vec2(0, offset));
 
   vec4 height_sample = get_height_sample_variance(uv);
   vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
   vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
+
+  // no smoothing
+  vec2 uv_offset = uv*(displacement_map_size-1u);
+  uv_offset = uv_offset + vec2(.5f);
+  uv_offset = uv_offset / displacement_map_size;
+  vec2 sample_uv = uv_offset;
+  height_sample = texture2D(texture11, sample_uv);
+  vheight_offsetx = texture2D(texture11, sample_uv + vec2(offset, 0));
+  vheight_offsety = texture2D(texture11, sample_uv + vec2(0, offset));
+
+  // very no smoothing
+  //height_sample = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u))), 0);
+  //vheight_offsetx = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(offset, 0)), 0);
+  //vheight_offsety = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(0, offset)), 0);
 
   float height = height_sample.r;
   height_variance = get_height_sample_variance(uv).a;
@@ -156,5 +167,5 @@ void main()
 
   // indebug = vec4(texture2D(texture11, uv).a);
 
-  gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
+  gl_Position = txaa_jitter * MVP *vec4(position +  displacement_offset, 1);
 }
