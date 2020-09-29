@@ -205,10 +205,10 @@ float turb(vec2 uv, float time)
 
 vec4 generate_terrain(vec4 source)
 {
-  float t1 =  2.5 * turb(0.5 * frag_uv, .025f * time);
-  float t2 =  1. * turb(4.0415 * frag_uv, .15f * time);
-  float terrain_height = t1+t2;
-  //float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
+  float t1 = 2.5 * turb(0.5 * frag_uv, .025f * time);
+  float t2 = 1. * turb(4.0415 * frag_uv, .15f * time);
+  float terrain_height = t1 + t2;
+  // float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
   float biome = 1.1f;
   return vec4(source.r, source.g + terrain_height, biome, 0);
 }

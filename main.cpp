@@ -553,6 +553,13 @@ int main(int argc, char *argv[])
           //because it already set wanttextinput to false on the downpress, making imgui
           //think enter is being held, we could do something smarter, but we can also
           //just clear all the keys...
+
+          /*
+              int                     WantCaptureMouseNextFrame;          // Explicit capture via CaptureKeyboardFromApp()/CaptureMouseFromApp() sets those flags
+    int                     WantCaptureKeyboardNextFrame;
+    int                     WantTextInputNextFrame;
+          
+          */
           ImGuiIO &io = ImGui::GetIO();
           for (uint32 i = 0; i < 512; ++i)
           {

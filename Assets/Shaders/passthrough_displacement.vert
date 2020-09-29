@@ -30,8 +30,8 @@ void main()
 {
   float offset = 0.005505;
 
-    // no smoothing
-  vec2 uv_offset = uv*(displacement_map_size-1u);
+  // no smoothing
+  vec2 uv_offset = uv * (displacement_map_size - 1u);
   uv_offset = uv_offset + vec2(.5f);
   uv_offset = uv_offset / displacement_map_size;
   vec2 sample_uv = uv_offset;

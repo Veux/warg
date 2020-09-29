@@ -191,7 +191,7 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
     // only absorb on negative slopes or else we absorb at shores
     if (water_depth < ground_absorbtion_threshold) // && ground_height >= other_ground_height)
     {
-      //ground_absorbtion = ground_absorbtion_rate;
+      // ground_absorbtion = ground_absorbtion_rate;
     }
     water_acceleration = 0.f;
   }
@@ -355,7 +355,7 @@ void main()
       else
       {
         // water_height = water_height - dropheight; // raindrops
-         water_height = water_height + dropheight; // raindrops
+        water_height = water_height + dropheight; // raindrops
       }
     }
   }

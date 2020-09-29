@@ -95,7 +95,7 @@ struct Warg_State : protected State
 
   Interface_State interface_state;
 
-  Texture_Paint painter;
+  Liquid_Surface terrain;
 };
 
 Character *get_character(Game_State *game_state, UID id);

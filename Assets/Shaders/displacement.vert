@@ -107,7 +107,7 @@ void main()
   vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
 
   // no smoothing
-  vec2 uv_offset = uv*(displacement_map_size-1u);
+  vec2 uv_offset = uv * (displacement_map_size - 1u);
   uv_offset = uv_offset + vec2(.5f);
   uv_offset = uv_offset / displacement_map_size;
   vec2 sample_uv = uv_offset;
@@ -116,9 +116,9 @@ void main()
   vheight_offsety = texture2D(texture11, sample_uv + vec2(0, offset));
 
   // very no smoothing
-  //height_sample = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u))), 0);
-  //vheight_offsetx = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(offset, 0)), 0);
-  //vheight_offsety = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(0, offset)), 0);
+  // height_sample = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u))), 0);
+  // vheight_offsetx = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(offset, 0)), 0);
+  // vheight_offsety = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(0, offset)), 0);
 
   float height = height_sample.r;
   height_variance = get_height_sample_variance(uv).a;
@@ -167,5 +167,5 @@ void main()
 
   // indebug = vec4(texture2D(texture11, uv).a);
 
-  gl_Position = txaa_jitter * MVP *vec4(position +  displacement_offset, 1);
+  gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
 }

@@ -11,5 +11,5 @@ struct Render_Test_State : protected State
   vec3 player_pos = vec3(0, 0, 0.5);
   vec3 player_dir = vec3(0, 1, 0);
   
-  Texture_Paint painter;
+  Liquid_Surface terrain;
 };

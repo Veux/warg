@@ -534,8 +534,8 @@ void main()
 
   // i will be assigning the snow color to the grass variable because thats whats actually getting rendered, jank
 
-  float snow_fbm = .4+.6*fbm_n(130*frag_uv,3);
-  float snow_top = smoothstep(11.*snow_fbm, 14.*snow_fbm, ground_height);
+  float snow_fbm = .4 + .6 * fbm_n(130 * frag_uv, 3);
+  float snow_top = smoothstep(11. * snow_fbm, 14. * snow_fbm, ground_height);
   grass = grass * (1 - snow_top) + snow_top * vec3(1);
 
   vec3 soil = fbm_h_n(10.f * frag_world_position.xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);

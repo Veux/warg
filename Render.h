@@ -884,100 +884,13 @@ struct Particle_Emitter
   std::shared_ptr<Physics_Shared_Data> shared_data;
 };
 
-struct Liquid_Surface
-{
-  void run(float32 current_time);
-
-  ~Liquid_Surface()
-  {
-    glDeleteBuffers(1, &heightmap_pbo);
-    glDeleteBuffers(1, &velocity_pbo);
-    glDeleteSync(read_sync);
-  }
-  void set_heightmap(Texture texture)
-  {
-    heightmap = heightmap_fbo.color_attachments[0] = texture;
-    heightmap_fbo.init();
-    invalidated = true;
-  }
-
-  void zero_velocity();
-
-  void blit(Framebuffer &src, Framebuffer &dst)
-  {
-    glBlitNamedFramebuffer(src.fbo->fbo, dst.fbo->fbo, 0, 0, src.color_attachments[0].t.size.x,
-        src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
-        GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-  }
-
-  int32 iterations = 1;
-  float64 my_time = 0.f;
-  vec3 ambient_wave_scale = vec3(30.f, 3.f, 1.0f);
-  // private:
-
-  GLuint heightmap_pbo = 0;
-  GLuint velocity_pbo = 0;
-
-  GLsync read_sync = 0;
-
-  // the pointers are in an invalid state when changing_pointer is true
-  std::atomic_flag lock = ATOMIC_FLAG_INIT;
-  std::vector<vec4> heightmap_pixels;
-  std::vector<vec4> velocity_pixels;
-  uint32 read_frame = 0;
-
- 
-
-  Shader liquid_shader;
-  Framebuffer heightmap_fbo;
-  Framebuffer velocity_fbo;
-  Framebuffer copy_heightmap_fbo;
-  Framebuffer copy_velocity_fbo;
-  Framebuffer liquid_shader_fbo;
-
-  Texture heightmap;
-  Texture velocity;
-  Texture velocity_copy;
-  Texture heightmap_copy;
-
-  Mesh quad;
-
-  GLint ready = 0;
-  uint32 frames_until_check = 33;
-  bool invalidated = true;
-  bool initialized = false;
-
-  // my algo:
-  // bind current heightmap as input, and heightmap intermediate as output
-
-  // spill height data into adjacent pixels:
-  // use height difference to determine a delta velocity to add to a velocity texture for each pixel side
-
-  // the amount of height to spill away from this pixel in each direction is determined by the velocity texture
-  // this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
-
-  // we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how
-  // much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means
-  // we will add a negative - subtracting our height
-
-  // this means that a wave can only propagate at a max speed of 1 pixel per draw..
-  // i think this is what the convolution was trying to do
-
-  // if we define a height level that is to be considered the underlying hard ground
-  // water added can flow on terrain easily
-
-  // lets store height information in alpha channel and color info in the rgb
-  // we will modify the painter to be able to paint the alpha channel too directly
-  // instead of using it as a blend operator
-
-  // when we iterate on velocity, we can also spread color along those vectors
-};
 
 struct Texture_Paint
 {
-  Texture_Paint() {}
-  void run(std::vector<SDL_Event> *imgui_event_accumulator);
-
+  Texture_Paint(){}
+  void run(std::vector<SDL_Event>* imgui_event_accumulator);
+  void iterate(Texture* t, float32 time);
+  Texture create_new_texture(glm::ivec2 size,const char* name = nullptr);
   bool window_open = true;
   Shader drawing_shader;
   Texture display_surface;
@@ -985,7 +898,6 @@ struct Texture_Paint
   Shader postprocessing_shader;
   void preset_pen();
   void preset_pen2();
-  Liquid_Surface liquid;
   // private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
@@ -1027,18 +939,68 @@ struct Texture_Paint
   int32 save_type_radio_button_state = 0;
   std::string filename;
   float32 sim_time = 0.f;
-  bool draw_cursor = false;
-  uint32 terrain_gen_seed = 0.f;
-  bool generate_terrain = false;
-  bool generate_water = false;
-  bool clear_water = false;
-  bool generate_terrain_from_heightmap = false;
   ivec4 mask = ivec4(1);
-
-  void iterate(Texture *t, float32 time);
-
-  Texture create_new_texture(const char *name = nullptr);
+  bool draw_cursor = false;
+  ivec2 new_texture_size = ivec2(1024);
+  uint32 custom_draw_mode_set = 0;
 };
+
+struct Liquid_Surface
+{
+  Liquid_Surface()
+  {
+
+    
+  }
+  void init(State* state, vec3 pos, vec3 size, ivec2 resolution);
+  void run(State* state, float32 current_time);
+  ~Liquid_Surface();
+  void set_heightmap(Texture texture);
+  void generate_geometry_from_heightmap(vec4* heightmap_pixel_array = nullptr, vec4* velocity_pixel_array=nullptr);
+  bool finish_texture_download_and_generate_geometry();//version without the pixel copy
+  void start_texture_download();
+  bool finish_texture_download();
+  void zero_velocity();
+  void blit(Framebuffer& src, Framebuffer& dst);
+  Texture_Paint painter;
+  Node_Index ground = NODE_NULL;
+  Node_Index water = NODE_NULL;
+  int32 iterations = 1;
+  float64 my_time = 0.f;
+  vec3 ambient_wave_scale = vec3(30.f, 3.f, 1.0f);
+  // private:
+  GLuint heightmap_pbo = 0;
+  GLuint velocity_pbo = 0;
+  GLsync read_sync = 0;
+  std::vector<vec4> heightmap_pixels;
+  std::vector<vec4> velocity_pixels;
+  uint32 read_frame = 0;
+  Shader liquid_shader;
+  Framebuffer heightmap_fbo;
+  Framebuffer velocity_fbo;
+  Framebuffer copy_heightmap_fbo;
+  Framebuffer copy_velocity_fbo;
+  Framebuffer liquid_shader_fbo;
+  Texture heightmap;
+  Texture velocity;
+  Texture velocity_copy;
+  Texture heightmap_copy;
+  Mesh quad;
+  uint32 frames_until_check = 33;
+  State* state = nullptr;
+  ivec2 heightmap_resolution;
+  uint32 current_buffer_size = 0;
+  bool generate_terrain_from_heightmap = false;
+  Mesh_Descriptor terrain_geometry;
+  ivec2 last_generated_terrain_geometry_resolution;
+
+  bool window_open = false;
+
+  bool invalidated = true;
+  bool initialized = false;
+};
+
+
 mat4 fullscreen_quad();
 struct Renderer
 {

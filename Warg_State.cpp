@@ -1179,11 +1179,18 @@ void Warg_State::draw_gui()
 {
   // opengl code is allowed in here
   IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
-
   update_game_interface();
+
   painter.window_open = true;
-  painter.run(imgui_event_accumulator);
   scene.draw_imgui(state_name);
+
+
+  ImGui::Begin("warg state test");
+  ImGui::Text("blah1");
+  ImGui::CaptureNextBeginAsChild();
+  painter.run(imgui_event_accumulator);
+  ImGui::End();
+
 }
 
 void Warg_State::add_girl_character_mesh(UID character_id)
