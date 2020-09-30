@@ -17,7 +17,6 @@ bool WANT_SPAWN_OCTREE_BOX = false;
 bool WANT_CLEAR_OCTREE = false;
 
 extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
-extern void spawn_water(Flat_Scene_Graph* scene, vec3 scale, vec3 pos);
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
     : State(name, window, window_size)
@@ -27,9 +26,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   map = new Blades_Edge(scene);
 
 
-  spawn_water(&scene, vec3(500, 500, 3), vec3(0, 0, -.002));
-
-
+  terrain.init(this, vec3(0, 0, -.002), vec3(100, 100, 3), ivec2(HEIGHTMAP_RESOLUTION));
+  scene.collision_octree.set_size(500);
   spell_db = Spell_Database(); /*
    map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
                                // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
@@ -796,8 +794,7 @@ void Warg_State::update()
 
   process_messages();
 
-  //update_stats_bar(); todo: fix
-
+  // update_stats_bar(); todo: fix
 
   current_game_state = last_recieved_server_state;
   Character *target = get_character(&current_game_state, target_id);
@@ -851,7 +848,6 @@ void Warg_State::update()
   last_position = me->physics.position;
 
   static std::vector<Node_Index> spawned_nodes;
-  static std::vector<Node_Index> spawned_server_nodes;
 
   if (WANT_SPAWN_OCTREE_BOX)
   {
@@ -864,10 +860,8 @@ void Warg_State::update()
 
     Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
     Local_Session *ptr = (Local_Session *)this->session;
-    Node_Index servernode = ptr->server->scene.add_mesh(cube, "spawned box", &mat);
 
     spawned_nodes.push_back(newnode);
-    spawned_server_nodes.push_back(servernode);
     vec3 dir = normalize(camera.dir);
     vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
     float32 angle2 = atan2(dir.y, dir.x);
@@ -875,52 +869,39 @@ void Warg_State::update()
     scene.nodes[newnode].scale = vec3(2);
     scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
 
-    ptr->server->scene.nodes[servernode].position = camera.pos + 12.f * dir;
-    ptr->server->scene.nodes[servernode].scale = vec3(2);
-    ptr->server->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
-
-
-    Flat_Scene_Graph_Node* newnodeptr = &scene.nodes[newnode];
+    
+    Flat_Scene_Graph_Node *newnodeptr = &scene.nodes[newnode];
     Mesh_Index new_node_mesh_index = newnodeptr->model[0].first;
-    Mesh* mp = &scene.resource_manager->mesh_pool[new_node_mesh_index];
-    Mesh_Descriptor* mdp = &mp->mesh->descriptor;
+    Mesh *mp = &scene.resource_manager->mesh_pool[new_node_mesh_index];
+    Mesh_Descriptor *mdp = &mp->mesh->descriptor;
+    Mesh_Descriptor *newmesh = &scene.resource_manager->mesh_pool[scene.nodes[newnode].model[0].first].mesh->descriptor;
 
-
-    Mesh_Descriptor* newmesh = &scene.resource_manager->mesh_pool[scene.nodes[newnode].model[0].first].mesh->descriptor;
-    Mesh_Descriptor* newmeshs = &ptr->server->scene.resource_manager->mesh_pool[ptr->server->scene.nodes[servernode].model[0].first].mesh->descriptor;
 
     mat4 M = scene.build_transformation(newnode);
     scene.collision_octree.push(newmesh, &M);
-
-    M = ptr->server->scene.build_transformation(servernode);
-    ptr->server->scene.collision_octree.push(newmeshs, &M);
+    //bad: copy doesnt work properly
+    ptr->server->scene.collision_octree = scene.collision_octree;
   }
 
-  //currently set up for local particle/octree collision
-  
+  // currently set up for local particle/octree collision
 
-  Local_Session *ptr = (Local_Session *)this->session;
+  Local_Session *server_ptr = (Local_Session *)this->session;
   // ptr->server->scene.collision_octree.clear();
 
-  //ptr->server->scene.collision_octree.push(md);
-
+  // ptr->server->scene.collision_octree.push(md);
 
   for (Node_Index node : spawned_nodes)
   {
-    //mat4 M = scene.build_transformation(node);
-    //scene.collision_octree.push(&mesh, &M);
+    // mat4 M = scene.build_transformation(node);
+    // scene.collision_octree.push(&mesh, &M);
     /*
     AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
     uint32 counter;*/
-    //scene.collision_octree.test(prober, &counter);
+    // scene.collision_octree.test(prober, &counter);
   }
-  for (Node_Index node : spawned_server_nodes)
-  {
-    //mat4 M = ptr->server->scene.build_transformation(node);
-    //ptr->server->scene.collision_octree.push(&mesh, &M);
-  }
+
 
   if (WANT_CLEAR_OCTREE)
   {
@@ -931,25 +912,11 @@ void Warg_State::update()
       scene.delete_node(node);
     }
     spawned_nodes.clear();
-
-    for (Node_Index servernode : spawned_server_nodes)
-    {
-      Local_Session *ptr = (Local_Session *)this->session;
-      ptr->server->scene.delete_node(servernode);
-    }
-    spawned_server_nodes.clear();
   }
   velocity = 300.f * (velocity + vec3(0., 0., .02));
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
-#if 0
-  Material_Descriptor material;
-  static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
-  scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
-  transform = scene.build_transformation(dynamic_collider_node);
-  scene.collision_octree.push(&mesh, &transform, &velocity);
-#endif
 
   // fire_emitter2(
   //   &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
@@ -970,6 +937,7 @@ void Warg_State::update()
   Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
   Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
+#ifdef NDEBUG
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
   scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 15;
@@ -1025,6 +993,7 @@ void Warg_State::update()
   scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
+#endif
 
   uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
   particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
@@ -1033,146 +1002,28 @@ void Warg_State::update()
   set_message("Total Particle count:", s(particle_count), 1.0f);
   uint32 i = sizeof(Octree);
 
-
-
-
-
-
-  if (painter.textures.size() && painter.textures[0].texture != nullptr)
+  if (terrain.apply_geometry_to_octree_if_necessary(&scene))
   {
-
-    Texture* heightmap = &painter.liquid.heightmap_fbo.color_attachments[0];
-
-    Node_Index water_node = scene.find_by_name(NODE_NULL, "water");
-    Flat_Scene_Graph_Node* node = &scene.nodes[water_node];
-    Material_Index mi = node->model[0].second;
-    Material* mat = &scene.resource_manager->material_pool[mi];
-    mat->displacement = painter.textures[painter.selected_texture];
-    mat->descriptor.uniform_set.texture_uniforms[water_velocity] = painter.liquid.velocity_fbo.color_attachments[0];
-    mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
-
-    Node_Index ground_node = scene.find_by_name(NODE_NULL, "ground");
-    node = &scene.nodes[ground_node];
-    mi = node->model[0].second;
-    mat = &scene.resource_manager->material_pool[mi];
-    mat->displacement = *heightmap;
-    mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = painter.textures[0].t.size.x;
-
-    if (painter.generate_terrain_from_heightmap)
+    mat4 M = scene.build_transformation(map->node);
+    scene.collision_octree.push(blades_edge_mesh_descriptor, &M);
+   
+    M = scene.build_transformation(terrain.ground);
+    scene.collision_octree.push(&terrain.terrain_geometry, &M);
+    
+    for (Node_Index node : spawned_nodes)
     {
-      static Mesh_Descriptor terrain = { std::string("cpu terrain"), generate_grid(ivec2(HEIGHTMAP_RESOLUTION)) };
-
-      for (uint32 i = 0; i < terrain.mesh_data.positions.size(); ++i)
-      {
-
-        vec3* pos = &terrain.mesh_data.positions[i];
-        vec2 uv = terrain.mesh_data.texture_coordinates[i];
-        ivec2 size = heightmap->t.size;
-
-        ASSERT(size == ivec2(HEIGHTMAP_RESOLUTION));
-
-        float eps = 0.0001f;
-        vec2 sample_p = (vec2(size - 1) * uv) + vec2(eps);
-        sample_p = floor(sample_p);
-        sample_p = clamp(sample_p, vec2(0), vec2(size));
-
-        // p = [0,1]
-        // size = (3,3)
-        // samplep = [0,3]
-
-        // texture:
-        /*
-        x x x
-        x x x
-        0 x x
-        */
-
-        // reads into array as
-        /*
-        0 x x
-        x x x
-        x x x
-        */
-
-        // origin is the same at 0,0
-
-        /*
-        6 7 8
-        3 4 5
-        0 1 2
-        */
-        uint32 rows = sample_p.y;
-        uint32 cols = sample_p.x;
-
-        bool out_of_bounds = (cols > painter.liquid.heightmap.t.size.x - 1) || (rows > painter.liquid.heightmap.t.size.y - 1);
-
-        if (out_of_bounds)
-        {
-          int a = 3;
-        }
-
-        uint32 index = rows * uint32(size.x) + cols;
-
-        float32 ground_height = 0;
-        float32 water_height = 0;
-        float32 biome = 0;
-        vec4 vel_pack = vec4(0);
-        if (!out_of_bounds)
-        {
-          ground_height = painter.liquid.heightmap_pixels[index].g;
-          water_height = painter.liquid.heightmap_pixels[index].r;
-          biome = painter.liquid.heightmap_pixels[index].b;
-          vel_pack = painter.liquid.velocity_pixels[index];
-        }
-        pos->z = ground_height;
-      }
-      Local_Session* ptr = (Local_Session*)this->session;
-      ptr->server->scene.collision_octree.clear();
-      scene.collision_octree.clear();
-
-      mat4 transform = scene.build_transformation(ground_node);
-      ptr->server->scene.collision_octree.push(&terrain, &transform);
-
-      mat4 M = scene.build_transformation(map->node);
-      ptr->server->scene.collision_octree.push(blades_edge_mesh_descriptor, &M);
-
-      for (Node_Index node : spawned_nodes)
-      {
-        M = scene.build_transformation(node);
-        Mesh_Descriptor* newmesh = &scene.resource_manager->mesh_pool[scene.nodes[node].model[0].first].mesh->descriptor;
-        scene.collision_octree.push(newmesh, &M);
-      }
-      for (Node_Index node : spawned_server_nodes)
-      {
-        M = ptr->server->scene.build_transformation(node);
-
-        Mesh_Descriptor* newmesh = &ptr->server->scene.resource_manager->mesh_pool[ptr->server->scene.nodes[node].model[0].first].mesh->descriptor;
-        ptr->server->scene.collision_octree.push(newmesh, &M);
-      }
-
-      scene.collision_octree = ptr->server->scene.collision_octree;
-
-      painter.generate_terrain_from_heightmap = false;
+      M = scene.build_transformation(node);
+      Mesh_Descriptor *newmesh =
+          &scene.resource_manager->mesh_pool[scene.nodes[node].model[0].first]
+               .mesh->descriptor;
+      scene.collision_octree.push(newmesh, &M);
     }
+
+    //this is bad: we can't just copy an octree like this because it ruins the pointers
+    //it needs a special copy constructor
+    //however it works if we dont push to it again and only do tests...
+    server_ptr->server->scene.collision_octree = scene.collision_octree;
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 void Warg_State::draw_gui()
@@ -1181,16 +1032,17 @@ void Warg_State::draw_gui()
   IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
   update_game_interface();
 
-  painter.window_open = true;
-  scene.draw_imgui(state_name);
+  terrain.window_open = true;
 
+
+
+  scene.draw_imgui(state_name);
 
   ImGui::Begin("warg state test");
   ImGui::Text("blah1");
-  ImGui::CaptureNextBeginAsChild();
-  painter.run(imgui_event_accumulator);
+  //ImGui::CaptureNextBeginAsChild();
+  terrain.run(this);
   ImGui::End();
-
 }
 
 void Warg_State::add_girl_character_mesh(UID character_id)
@@ -1926,7 +1778,7 @@ void Warg_State::update_icons()
           all_textures_ready = false;
         }
       }
-         if (!all_textures_ready)
+      if (!all_textures_ready)
         return;
     }
     else

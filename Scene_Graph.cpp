@@ -2214,13 +2214,13 @@ Material_Descriptor *Flat_Scene_Graph::get_modifiable_material_pointer_for(Node_
 
  Octree::Octree()
 {
-  root = &nodes[0];
-  root->size = 3000.f;
-  root->halfsize = 1500.f;
-  root->minimum = vec3(-1500, -1500, -1500);
-  root->center = root->minimum + vec3(root->halfsize);
-  free_node = 1;
-  root->mydepth = 0;
+   root = &nodes[0];
+   root->size = 50;
+   root->halfsize = 0.5f * 50;
+   root->minimum = -vec3(root->halfsize);
+   root->center = root->minimum + vec3(root->halfsize);
+   free_node = 1;
+   root->mydepth = 0;
 }
 
 void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
@@ -2296,12 +2296,8 @@ void Octree::clear()
 {
   root->clear();
   root = &nodes[0];
-  root->size = 3000.f;
-  root->halfsize = 1500.f;
-  root->minimum = vec3(-1500, -1500, -1500);
-  root->center = root->minimum + vec3(root->halfsize);
-
   free_node = 1;
+  root->mydepth = 0;
 }
 
 std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)

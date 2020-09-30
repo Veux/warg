@@ -3824,6 +3824,7 @@ void Texture_Paint::iterate(Texture *t, float32 current_time) {}
 
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(imgui_event_accumulator);
   if (!window_open)
     return;
@@ -4483,6 +4484,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
 void Liquid_Surface::init(State *state, vec3 pos, vec3 size, ivec2 resolution)
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(!initialized);
   initialized = true;
   liquid_shader = Shader("passthrough.vert", "liquid.frag");
@@ -4517,32 +4519,18 @@ void Liquid_Surface::init(State *state, vec3 pos, vec3 size, ivec2 resolution)
   material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;
   ground = state->scene.add_mesh("ground", &mesh, &material);
-  state->scene.nodes[water].scale = size;
-  state->scene.nodes[water].position = pos;
+  state->scene.nodes[ground].scale = size;
+  state->scene.nodes[ground].position = pos;
 
   this->state = state;
 
   heightmap_resolution = resolution;
-  Flat_Scene_Graph_Node *node = &state->scene.nodes[water];
-  Material_Index mi = node->model[0].second;
-  Material *mat = &state->scene.resource_manager->material_pool[mi];
-  mat->displacement = painter.textures[painter.selected_texture];
-  mat->descriptor.uniform_set.texture_uniforms[water_velocity] = velocity_fbo.color_attachments[0];
-  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
 
-  Flat_Scene_Graph_Node *node = &state->scene.nodes[ground];
-  mi = node->model[0].second;
-  mat = &state->scene.resource_manager->material_pool[mi];
-  mat->displacement = heightmap;
-  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
-
-  if (generate_terrain_from_heightmap)
-  {
-  }
 }
 
 Liquid_Surface::~Liquid_Surface()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   glDeleteBuffers(1, &heightmap_pbo);
   glDeleteBuffers(1, &velocity_pbo);
   glDeleteSync(read_sync);
@@ -4637,16 +4625,30 @@ void Liquid_Surface::generate_geometry_from_heightmap(vec4* heightmap_pixel_arra
     }
     pos->z = ground_height;
   }
+  last_generated_terrain_tick += 1;
 }
 
 void Liquid_Surface::zero_velocity()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   velocity_fbo.init();
   velocity_fbo.bind_for_drawing_dst();
   glViewport(
       0, 0, velocity_fbo.color_attachments[0].texture->size.x, velocity_fbo.color_attachments[0].texture->size.y);
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
+}
+bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph* scene)
+{
+  if (last_applied_terrain_tick < last_generated_terrain_tick)
+  {
+    scene->collision_octree.clear();
+    mat4 m = scene->build_transformation(ground);
+    scene->collision_octree.push(&terrain_geometry, &m);
+    last_applied_terrain_tick = last_generated_terrain_tick;
+    return true;
+  }
+  return false;
 }
 void Liquid_Surface::blit(Framebuffer &src, Framebuffer &dst)
 {
@@ -4658,6 +4660,7 @@ void Liquid_Surface::blit(Framebuffer &src, Framebuffer &dst)
 
 bool Liquid_Surface::finish_texture_download_and_generate_geometry()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   GLint ready;
   glGetSynciv(read_sync, GL_SYNC_STATUS, 1, NULL, &ready);
   if (ready != GL_SIGNALED)
@@ -4728,8 +4731,9 @@ void Liquid_Surface::start_texture_download()
   current_buffer_size = buff_size;
 }
 
-void Liquid_Surface::run(State *state, float32 current_time)
+void Liquid_Surface::run(State *state)
 {
+  ASSERT(initialized);
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGui::Begin("Liquid_Surface", &window_open, window_flags);
   if (ImGui::Button("Generate Terrain"))
@@ -4750,7 +4754,6 @@ void Liquid_Surface::run(State *state, float32 current_time)
     zero_velocity();
     painter.clear = 2;
   }
-
   ImGui::SameLine();
   if (ImGui::Button("Generate Terrain Octree"))
   {
@@ -4760,17 +4763,14 @@ void Liquid_Surface::run(State *state, float32 current_time)
   {//if finish is successful, read_sync will be 0 until the next download request
     finish_texture_download_and_generate_geometry();
   }
-
   ImGui::InputInt("Water Iterations", &iterations);
   iterations = max(iterations, 0);
-
   ImGui::DragFloat3("Ambient Waves", &ambient_wave_scale[0], 0.05f, 0.0f, 100.f, "%.3f", 1.5f);
   ImGui::End();
   if (!heightmap_fbo.color_attachments[0].texture || !heightmap_fbo.color_attachments[0].texture->texture)
   {
     return;
   }
-
   bool automatically_swap_to_painter_selected_texture = true;
   if (automatically_swap_to_painter_selected_texture)
   {
@@ -4853,6 +4853,20 @@ void Liquid_Surface::run(State *state, float32 current_time)
   }
 
   painter.run(state->imgui_event_accumulator);
+
+  Flat_Scene_Graph_Node* node = &state->scene.nodes[water];
+  Material_Index mi = node->model[0].second;
+  Material* mat = &state->scene.resource_manager->material_pool[mi];
+  mat->displacement = painter.textures[painter.selected_texture];
+  mat->descriptor.uniform_set.texture_uniforms[water_velocity] = velocity_fbo.color_attachments[0];
+  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
+
+  node = &state->scene.nodes[ground];
+  mi = node->model[0].second;
+  mat = &state->scene.resource_manager->material_pool[mi];
+  mat->displacement = heightmap;
+  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
+
 }
 
 /*

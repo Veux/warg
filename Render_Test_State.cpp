@@ -241,7 +241,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  spawn_water(&scene, vec3(25, 25, 3), vec3(0, 0, -2));
+  terrain.init(this, vec3(0, 0, -2), vec3(25, 25, 3),ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
   // spawn_planets(&scene, vec3(12, 6, 3));
@@ -654,6 +654,7 @@ void Render_Test_State::update()
   // update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
+  terrain.apply_geometry_to_octree_if_necessary(&scene);
   // update_test_triangle(&scene);
 
   // static vec3 wind_dir;
@@ -729,7 +730,7 @@ void Render_Test_State::draw_gui()
     {
       terrain.window_open = !terrain.window_open;
     }
-    terrain.run(imgui_event_accumulator);
+    terrain.run(this);
   }
   ImGui::End();
 }

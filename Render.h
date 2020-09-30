@@ -942,7 +942,7 @@ struct Texture_Paint
   ivec4 mask = ivec4(1);
   bool draw_cursor = false;
   ivec2 new_texture_size = ivec2(1024);
-  uint32 custom_draw_mode_set = 0;
+  int32 custom_draw_mode_set = 0;
 };
 
 struct Liquid_Surface
@@ -953,7 +953,7 @@ struct Liquid_Surface
     
   }
   void init(State* state, vec3 pos, vec3 size, ivec2 resolution);
-  void run(State* state, float32 current_time);
+  void run(State* state);
   ~Liquid_Surface();
   void set_heightmap(Texture texture);
   void generate_geometry_from_heightmap(vec4* heightmap_pixel_array = nullptr, vec4* velocity_pixel_array=nullptr);
@@ -961,6 +961,7 @@ struct Liquid_Surface
   void start_texture_download();
   bool finish_texture_download();
   void zero_velocity();
+  bool apply_geometry_to_octree_if_necessary(Flat_Scene_Graph* scene);
   void blit(Framebuffer& src, Framebuffer& dst);
   Texture_Paint painter;
   Node_Index ground = NODE_NULL;
@@ -974,7 +975,11 @@ struct Liquid_Surface
   GLsync read_sync = 0;
   std::vector<vec4> heightmap_pixels;
   std::vector<vec4> velocity_pixels;
-  uint32 read_frame = 0;
+  bool generate_terrain_from_heightmap = false;
+  Mesh_Descriptor terrain_geometry;
+  uint32 last_applied_terrain_tick = 0;
+  uint32 last_generated_terrain_tick = 0;
+  ivec2 last_generated_terrain_geometry_resolution;
   Shader liquid_shader;
   Framebuffer heightmap_fbo;
   Framebuffer velocity_fbo;
@@ -990,9 +995,6 @@ struct Liquid_Surface
   State* state = nullptr;
   ivec2 heightmap_resolution;
   uint32 current_buffer_size = 0;
-  bool generate_terrain_from_heightmap = false;
-  Mesh_Descriptor terrain_geometry;
-  ivec2 last_generated_terrain_geometry_resolution;
 
   bool window_open = false;
 

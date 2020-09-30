@@ -157,6 +157,17 @@ struct Octree
     root->testall(probe, 0, counter, &colliders);
     return colliders;
   }
+
+  void set_size(float32 size)
+  {
+    clear();
+    root = &nodes[0];
+    root->size = size;
+    root->halfsize = 0.5f*size;
+    root->minimum = -vec3(root->halfsize);
+    root->center = root->minimum + vec3(root->halfsize);
+  }
+
   Octree_Node *root;
   //std::array<Octree_Node, 65536> nodes;
   std::array<Octree_Node, 15*65536> nodes;
