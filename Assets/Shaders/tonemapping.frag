@@ -18,6 +18,7 @@ vec4 Tonemap_ACES(vec4 x)
 
 void main()
 {
-  vec4 result = texture0_mod * texture2D(texture0, frag_uv);
-  out0 = Tonemap_ACES(result);
+  vec4 result = texture0_mod * texture(texture0, frag_uv);
+  out0 = result;
+  // out0 = Tonemap_ACES(result);
 }

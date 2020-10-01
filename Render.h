@@ -514,6 +514,7 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
+  Render_Entity(){ }
   Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index);
   mat4 transformation;
   Mesh *mesh;

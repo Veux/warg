@@ -64,9 +64,14 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
-#define MAX_OCTREE_DEPTH 9
+#define MAX_OCTREE_DEPTH 10
 #define TRIANGLES_PER_NODE 4096
+
+//if split style is on, then triangles are stored in each max-depth node that they touch only
+//if the nodes are too small relative to the triangles, then there is excess storage required
+//if split style is off, then triangles are only stored in the node that entirely contains them
 #define OCTREE_SPLIT_STYLE
+
 #define OCTREE_VECTOR_STYLE
 
 ////the d00 d01 d11 terms can be computed once for multiple points p since they dont depend on p
@@ -170,16 +175,42 @@ struct Octree
 
   Octree_Node *root;
   //std::array<Octree_Node, 65536> nodes;
-  std::array<Octree_Node, 15*65536> nodes;
+  std::vector<Octree_Node> nodes; //size is constant, set in constructor
   Octree_Node *new_node(vec3 p, float32 size, uint8 parent_depth) noexcept;
   void clear();
   std::vector<Render_Entity> get_render_entities(Flat_Scene_Graph *owner);
+  void pack_chosen_entities()
+  {
+    chosen_render_entities.clear();
+    if (draw_nodes)
+    {
+      chosen_render_entities = cubes;
+    }
+    if (draw_triangles)
+    {
+      chosen_render_entities.push_back(triangles);
+    }
+    if (draw_normals)
+    {
+      chosen_render_entities.push_back(normals);
+    }
+    if (draw_velocity)
+    {
+      chosen_render_entities.push_back(velocities);
+    }
+  }
   uint32 free_node = 0;
-
+  std::vector<Render_Entity> chosen_render_entities;
+  std::vector<Render_Entity> cubes;
+  Render_Entity triangles;
+  Render_Entity normals;
+  Render_Entity velocities;
   int32 depth_to_render = MAX_OCTREE_DEPTH; //-1 for all
-  bool include_triangles = false;
-  bool include_normals = false;
-  bool include_velocity = false;
+  bool update_render_entities = false;
+  bool draw_nodes = false;
+  bool draw_triangles = false;
+  bool draw_normals = false;
+  bool draw_velocity = false;
   Mesh_Index mesh_depth_1 = NODE_NULL;
   Mesh_Index mesh_depth_2 = NODE_NULL;
   Mesh_Index mesh_depth_3 = NODE_NULL;
@@ -192,6 +223,7 @@ struct Octree
   Material_Index mat_triangles = NODE_NULL;
   Material_Index mat_normals = NODE_NULL;
   Material_Index mat_velocities = NODE_NULL;
+
 };
 
 struct Imported_Scene_Node

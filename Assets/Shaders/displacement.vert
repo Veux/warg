@@ -99,21 +99,29 @@ vec4 get_height_sample_variance(vec2 uv)
 void main()
 {
 
-  float offset = 0.005505;
-  // need to apply a curvature by sampling adjacent pixels with textureOffset
+  float offset = 0.25f / displacement_map_size;
 
-  vec4 height_sample = get_height_sample_variance(uv);
-  vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
-  vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
+  // vec4 height_sample = get_height_sample_variance(uv);
+  // vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
+  // vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
 
-  // no smoothing
+  // simple
+  // vec4 height_sample = texture(texture11, uv);
+  // vec4 vheight_offsetx = texture(texture11, uv + vec2(offset, 0));
+  // vec4 vheight_offsety = texture(texture11, uv + vec2(0, offset));
+  // vec4 vheight_offsetnx = texture(texture11, uv - vec2(offset, 0));
+  // vec4 vheight_offsetny = texture(texture11, uv - vec2(0, offset));
+
+  // vertex centered on pixel
+  // assumes texture is larger by 1 in x and y than the vertex grid
   vec2 uv_offset = uv * (displacement_map_size - 1u);
   uv_offset = uv_offset + vec2(.5f);
   uv_offset = uv_offset / displacement_map_size;
-  vec2 sample_uv = uv_offset;
-  height_sample = texture2D(texture11, sample_uv);
-  vheight_offsetx = texture2D(texture11, sample_uv + vec2(offset, 0));
-  vheight_offsety = texture2D(texture11, sample_uv + vec2(0, offset));
+  vec4 height_sample = texture(texture11, uv_offset);
+  vec4 vheight_offsetx = texture(texture11, uv_offset + vec2(offset, 0));
+  vec4 vheight_offsety = texture(texture11, uv_offset + vec2(0, offset));
+  vec4 vheight_offsetnx = texture(texture11, uv_offset - vec2(offset, 0));
+  vec4 vheight_offsetny = texture(texture11, uv_offset - vec2(0, offset));
 
   // very no smoothing
   // height_sample = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u))), 0);
@@ -124,27 +132,60 @@ void main()
   height_variance = get_height_sample_variance(uv).a;
   float height_offsetx = vheight_offsetx.r;
   float height_offsety = vheight_offsety.r;
+  float height_offsetnx = vheight_offsetnx.r;
+  float height_offsetny = vheight_offsetny.r;
   if (ground)
   {
     // height = texture2D(texture11, uv).g;
     height = height_sample.g;
     height_offsetx = vheight_offsetx.g;
     height_offsety = vheight_offsety.g;
+    height_offsetnx = vheight_offsetnx.g;
+    height_offsetny = vheight_offsetny.g;
   }
 
+  // right
   float dhx = height_offsetx - height;
-  float dhy = height_offsety - height;
-  vec3 displacement_tangent = normalize(vec3(offset, 0, dhx));
-  vec3 displacement_bitangent = normalize(vec3(0, offset, dhy));
-  vec3 displacement_normal = normalize(cross(displacement_tangent, displacement_bitangent));
-  mat3 displacement_TBN = mat3(displacement_tangent, displacement_bitangent, displacement_normal);
+  vec3 displacement_tangent_right = normalize(vec3(offset, 0, dhx));
+  vec3 displacement_bitangent_right = normalize(vec3(0, 1, 0));
+  vec3 normal_right_side = normalize(cross(displacement_tangent_right, displacement_bitangent_right));
+  // left
+  float dhnx = height_offsetnx - height;
+  vec3 displacement_tangent_left = normalize(vec3(offset, 0, -dhnx));
+  vec3 displacement_bitangent_left = normalize(vec3(0, 1, 0));
+  vec3 normal_left_side = normalize(cross(displacement_tangent_left, displacement_bitangent_left));
 
-  vec3 displacement_vector = normal;
+  // up
+  float dhy = height_offsety - height;
+  vec3 displacement_tangent_up = normalize(vec3(1, 0, 0));
+  vec3 displacement_bitangent_up = normalize(vec3(0,offset , dhy));
+  vec3 normal_up_side = normalize(cross(displacement_tangent_up, displacement_bitangent_up));
+
+  // down
+  float dhny = height_offsetny - height;
+  vec3 displacement_tangent_down = normalize(vec3(1, 0, 0));
+  vec3 displacement_bitangent_down = normalize(vec3(0, offset, -dhny));
+  vec3 normal_down_side = normalize(cross(displacement_tangent_down, displacement_bitangent_down));
+  
+  vec3 tan_self = vec3(1,0,0);
+  vec3 bitan_self = vec3(0,1,0);
+  vec3 n_self = vec3(0,0,1);
+
+  vec3 displacement_tangent_sum = normalize(tan_self+
+      displacement_tangent_right + displacement_tangent_left + displacement_tangent_up + displacement_tangent_down);
+  vec3 displacement_bitangent_sum = normalize(bitan_self+displacement_bitangent_right + displacement_bitangent_left +
+                                              displacement_bitangent_up + displacement_bitangent_down);
+  vec3 displacement_normal_sum = normalize(n_self+normal_right_side + normal_left_side + normal_up_side + normal_down_side);
+
+  vec3 displacement_normal = displacement_normal_sum;
+
+  mat3 displacement_TBN = mat3(displacement_tangent_sum, displacement_bitangent_sum, displacement_normal_sum);
 
   vec3 t = displacement_TBN * normalize(Model * normalize(vec4(tangent, 0))).xyz;
   vec3 b = displacement_TBN * normalize(Model * normalize(vec4(bitangent, 0))).xyz;
   vec3 n = displacement_TBN * normalize(Model * normalize(vec4(normal, 0))).xyz;
 
+  vec3 displacement_vector = normal;
   vec3 displacement_offset = (texture11_mod.r * 1.f * height * displacement_vector);
 
   frag_TBN = mat3(t, b, n);

@@ -910,11 +910,36 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter() {}
 
 void Flat_Scene_Graph::draw_imgui_octree()
 {
-  Checkbox("Draw Octree", &draw_collision_octree);
-  Checkbox("Draw Triangles", &collision_octree.include_triangles);
-  Checkbox("Draw Normals", &collision_octree.include_normals);
-  Checkbox("Draw Velocity", &collision_octree.include_velocity);
-  ImGui::DragInt("Draw Depth", &collision_octree.depth_to_render, 1.0f, -1, MAX_OCTREE_DEPTH);
+  bool draw = Checkbox("Draw Octree", &draw_collision_octree);
+  if (draw_collision_octree)
+  {
+    bool b = Checkbox("Draw Nodes", &collision_octree.draw_nodes);
+    if (b && collision_octree.draw_nodes)
+    {
+      // collision_octree.update_render_entities = true;
+    }
+    b = b || Checkbox("Draw Triangles", &collision_octree.draw_triangles);
+    if (b && collision_octree.draw_triangles)
+    {
+      // collision_octree.update_render_entities = true;
+    }
+    b = b || Checkbox("Draw Normals", &collision_octree.draw_normals);
+    if (b && collision_octree.draw_normals)
+    {
+      // collision_octree.update_render_entities = true;
+    }
+    b = b || Checkbox("Draw Velocity", &collision_octree.draw_velocity);
+    if (b && collision_octree.draw_velocity)
+    {
+      // collision_octree.update_render_entities = true;
+    }
+    b = SliderInt("Draw Depth", &collision_octree.depth_to_render, -1, MAX_OCTREE_DEPTH);
+    if (b && (collision_octree.draw_nodes || collision_octree.draw_velocity || collision_octree.draw_normals ||
+                 collision_octree.draw_triangles))
+    {
+      collision_octree.update_render_entities = true;
+    }
+  }
 }
 
 std::string graph_console_log = "Warg Console v0.1 :^)\n";
@@ -2073,7 +2098,7 @@ Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 as
   if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
   {
     set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
-    ASSERT(0); //todo: fail gracefully instead
+    ASSERT(0); // todo: fail gracefully instead
   }
   Imported_Scene_Data dst;
   dst.assimp_filename = path;
@@ -2212,19 +2237,21 @@ Material_Descriptor *Flat_Scene_Graph::get_modifiable_material_pointer_for(Node_
 
 // assuming world basis for now
 
- Octree::Octree()
+Octree::Octree()
 {
-   root = &nodes[0];
-   root->size = 50;
-   root->halfsize = 0.5f * 50;
-   root->minimum = -vec3(root->halfsize);
-   root->center = root->minimum + vec3(root->halfsize);
-   free_node = 1;
-   root->mydepth = 0;
+  nodes.resize(10000000);
+  root = &nodes[0];
+  root->size = 50;
+  root->halfsize = 0.5f * 50;
+  root->minimum = -vec3(root->halfsize);
+  root->center = root->minimum + vec3(root->halfsize);
+  free_node = 1;
+  root->mydepth = 0;
 }
 
 void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
 {
+  update_render_entities = true;
   ASSERT(root == &nodes[0]);
   Mesh_Data *data = &mesh->mesh_data;
   std::vector<Triangle_Normal> colliders;
@@ -2298,170 +2325,178 @@ void Octree::clear()
   root = &nodes[0];
   free_node = 1;
   root->mydepth = 0;
+  update_render_entities = true;
 }
 
 std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
 {
-  float64 time2 = get_real_time();
+  if (!update_render_entities)
+  {
+    pack_chosen_entities();
+    return chosen_render_entities;
+  }
   Mesh_Descriptor md1, md2, md3, mtriangles, mnormals, mvelocities;
+  md1.mesh_data.reserve(10000);
+  md2.mesh_data.reserve(10000);
+  md3.mesh_data.reserve(10000);
+  mtriangles.mesh_data.reserve(10000);
+  mnormals.mesh_data.reserve(10000);
+  mvelocities.mesh_data.reserve(10000);
+  update_render_entities = false;
 
-  if (time2 < 3325.f)
+  bool init_resources = mat1 == NODE_NULL;
+  if (init_resources)
   {
 
-    if (mat1 == NODE_NULL)
-    {
+    Mesh_Descriptor md;
+    md.mesh_data = load_mesh_plane();
+    md.name = "octree_mesh_depth_1";
+    mesh_depth_1 = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_depth_2";
+    mesh_depth_2 = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_depth_3";
+    mesh_depth_3 = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_triangles";
+    mesh_triangles = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_normals";
+    mesh_normals = scene->resource_manager->push_custom_mesh(&md);
+    md.name = "octree_mesh_velocities";
+    mesh_velocities = scene->resource_manager->push_custom_mesh(&md);
 
-      Mesh_Descriptor md;
-      md.mesh_data = load_mesh_plane();
-      md.name = "octree_mesh_depth_1";
-      mesh_depth_1 = scene->resource_manager->push_custom_mesh(&md);
-      md.name = "octree_mesh_depth_2";
-      mesh_depth_2 = scene->resource_manager->push_custom_mesh(&md);
-      md.name = "octree_mesh_depth_3";
-      mesh_depth_3 = scene->resource_manager->push_custom_mesh(&md);
-      md.name = "octree_mesh_triangles";
-      mesh_triangles = scene->resource_manager->push_custom_mesh(&md);
-      md.name = "octree_mesh_normals";
-      mesh_normals = scene->resource_manager->push_custom_mesh(&md);
-      md.name = "octree_mesh_velocities";
-      mesh_velocities = scene->resource_manager->push_custom_mesh(&md);
+    Material_Descriptor material;
+    material.frag_shader = "emission.frag";
+    material.emissive.source = "white";
+    material.wireframe = true;
+    material.backface_culling = true;
+    material.translucent_pass = false;
+    material.fixed_function_blending = false;
 
-      Material_Descriptor material;
-      material.frag_shader = "emission.frag";
-      material.wireframe = true;
-      material.backface_culling = true;
-      material.translucent_pass = false;
-      material.fixed_function_blending = true;
+    material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
+    mat1 = scene->resource_manager->push_custom_material(&material);
+    material.emissive.mod = vec4(0.0f, .10f, 0.0f, .10f);
+    mat2 = scene->resource_manager->push_custom_material(&material);
+    material.emissive.mod = vec4(0.0f, 0.0f, .10f, .10f);
+    mat3 = scene->resource_manager->push_custom_material(&material);
 
-      material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
-      mat1 = scene->resource_manager->push_custom_material(&material);
-      material.emissive.mod = vec4(0.0f, .10f, 0.0f, .10f);
-      mat2 = scene->resource_manager->push_custom_material(&material);
-      material.emissive.mod = vec4(0.0f, 0.0f, .10f, .10f);
-      mat3 = scene->resource_manager->push_custom_material(&material);
+    material.wireframe = false;
+    // material.translucent_pass = false;
+    // material.fixed_function_blending = false;
+    // material.frag_shader = "emission.frag";
+    material.emissive.mod = vec4(2.0f, 0.0f, 0.0f, 1.0f);
+    mat_triangles = scene->resource_manager->push_custom_material(&material);
 
-      material.translucent_pass = false;
-      material.fixed_function_blending = false;
-      material.frag_shader = "";
-      material.emissive.mod = vec4(2.0f, 0.0f, 0.0f, 1.0f);
-      mat_triangles = scene->resource_manager->push_custom_material(&material);
+    material.emissive.mod = vec4(0.0f, 2.0f, 2.0f, 1.0f);
+    mat_normals = scene->resource_manager->push_custom_material(&material);
 
-      material.emissive.mod = vec4(0.0f, 2.0f, 2.0f, 1.0f);
-      mat_normals = scene->resource_manager->push_custom_material(&material);
-
-      material.emissive.mod = vec4(2.0f, 0.0f, 2.0f, 1.0f);
-      mat_velocities = scene->resource_manager->push_custom_material(&material);
-    }
-
-    float32 time = get_real_time();
-
-    for (uint32 i = 0; i < free_node; ++i)
-    {
-      Octree_Node *node = &nodes[i];
-      if (depth_to_render != -1)
-      {
-        if (node->mydepth != depth_to_render)
-          continue;
-      }
-      Mesh_Descriptor *dst = nullptr;
-      if ((node->mydepth % 3) == 0)
-        dst = &md1;
-      if ((node->mydepth % 3) == 1)
-        dst = &md2;
-      if ((node->mydepth % 3) == 2)
-        dst = &md3;
-      ASSERT(dst);
-
-      add_aabb(node->minimum, node->minimum + node->size, dst->mesh_data);
-
-      if (include_triangles)
-      {
-#ifdef OCTREE_VECTOR_STYLE
-        for (uint32 j = 0; j < node->occupying_triangles.size(); ++j)
-#else
-        for (uint32 j = 0; j < node->free_triangle_index; ++j)
-#endif
-        {
-          const Triangle_Normal &tri = node->occupying_triangles[j];
-          add_triangle(tri.a, tri.b, tri.c, mtriangles.mesh_data);
-
-          if (include_normals)
-          {
-            vec3 center = vec3(0.333f) * (tri.a + tri.b + tri.c);
-            vec3 tip = center + tri.n;
-            float32 base_width = 0.1f;
-            vec3 offsettoa = base_width * (tri.a - center);
-            vec3 offsettob = base_width * (tri.b - center);
-            vec3 offsettoc = base_width * (tri.c - center);
-
-            add_triangle(center, tip, center + offsettoa, mnormals.mesh_data);
-            add_triangle(center, tip, center + offsettob, mnormals.mesh_data);
-            add_triangle(center, tip, center + offsettoc, mnormals.mesh_data);
-          }
-          if (include_velocity)
-          {
-            vec3 center = vec3(0.33333f) * (tri.a + tri.b + tri.c);
-            vec3 tip = center + 10.f * tri.v;
-            float32 base_width = 0.1f;
-            vec3 offsettoa = base_width * (tri.a - center);
-            vec3 offsettob = base_width * (tri.b - center);
-            vec3 offsettoc = base_width * (tri.c - center);
-
-            add_triangle(center, tip, center + offsettoa, mvelocities.mesh_data);
-            add_triangle(center, tip, center + offsettob, mvelocities.mesh_data);
-            add_triangle(center, tip, center + offsettoc, mvelocities.mesh_data);
-          }
-        }
-      }
-    }
-
-    scene->resource_manager->mesh_pool[mesh_depth_1] = md1;
-    scene->resource_manager->mesh_pool[mesh_depth_2] = md2;
-    scene->resource_manager->mesh_pool[mesh_depth_3] = md3;
+    material.emissive.mod = vec4(2.0f, 0.0f, 2.0f, 1.0f);
+    mat_velocities = scene->resource_manager->push_custom_material(&material);
   }
+
+  float32 time = get_real_time();
+
+  for (uint32 i = 0; i < free_node; ++i)
+  {
+    Octree_Node *node = &nodes[i];
+    if (depth_to_render != -1)
+    {
+      if (node->mydepth != depth_to_render)
+        continue;
+    }
+    Mesh_Descriptor *dst = nullptr;
+    if ((node->mydepth % 3) == 0)
+      dst = &md1;
+    if ((node->mydepth % 3) == 1)
+      dst = &md2;
+    if ((node->mydepth % 3) == 2)
+      dst = &md3;
+    ASSERT(dst);
+    add_aabb(node->minimum, node->minimum + node->size, dst->mesh_data);
+    bool limit_reached = false;
+    if (draw_triangles || draw_normals || draw_velocity)
+    {
+#ifdef OCTREE_VECTOR_STYLE
+      for (uint32 j = 0; j < node->occupying_triangles.size(); ++j)
+#else
+      for (uint32 j = 0; j < node->free_triangle_index; ++j)
+#endif
+      {
+        const Triangle_Normal &tri = node->occupying_triangles[j];
+        // if (draw_triangles)
+        {
+          add_triangle(tri.a, tri.b, tri.c, mtriangles.mesh_data);
+        }
+
+        if (mtriangles.mesh_data.positions.size() > 1000000)
+        {
+          set_message("octree triangle draw limit reached", "", 20.f);
+          limit_reached = true;
+          break;
+        }
+        // if (draw_normals)
+
+        vec3 center = vec3(0.333f) * (tri.a + tri.b + tri.c);
+        vec3 tip = center + tri.n;
+        float32 base_width = 0.1f;
+        vec3 offsettoa = base_width * (tri.a - center);
+        vec3 offsettob = base_width * (tri.b - center);
+        vec3 offsettoc = base_width * (tri.c - center);
+
+        add_triangle(center, tip, center + offsettoa, mnormals.mesh_data);
+        add_triangle(center, tip, center + offsettob, mnormals.mesh_data);
+        add_triangle(center, tip, center + offsettoc, mnormals.mesh_data);
+
+        // if (draw_velocity)
+
+        center = vec3(0.33333f) * (tri.a + tri.b + tri.c);
+        tip = center + 10.f * tri.v;
+        base_width = 0.1f;
+        offsettoa = base_width * (tri.a - center);
+        offsettob = base_width * (tri.b - center);
+        offsettoc = base_width * (tri.c - center);
+
+        add_triangle(center, tip, center + offsettoa, mvelocities.mesh_data);
+        add_triangle(center, tip, center + offsettob, mvelocities.mesh_data);
+        add_triangle(center, tip, center + offsettoc, mvelocities.mesh_data);
+      }
+    }
+    if (limit_reached)
+      break;
+  }
+  scene->resource_manager->mesh_pool[mesh_depth_1] = md1;
+  scene->resource_manager->mesh_pool[mesh_depth_2] = md2;
+  scene->resource_manager->mesh_pool[mesh_depth_3] = md3;
   Mesh *m1 = &scene->resource_manager->mesh_pool[mesh_depth_1];
   Mesh *m2 = &scene->resource_manager->mesh_pool[mesh_depth_2];
   Mesh *m3 = &scene->resource_manager->mesh_pool[mesh_depth_3];
   Render_Entity e1("OctreeDepth1", m1, &scene->resource_manager->material_pool[mat1], mat4(1), Node_Index(NODE_NULL));
   Render_Entity e2("OctreeDepth2", m2, &scene->resource_manager->material_pool[mat2], mat4(1), Node_Index(NODE_NULL));
   Render_Entity e3("OctreeDepth3", m3, &scene->resource_manager->material_pool[mat3], mat4(1), Node_Index(NODE_NULL));
-
-  std::vector<Render_Entity> entities;
-
+  set_message("octree vertex count:", s(mtriangles.mesh_data.positions.size()), 30.f);
+  set_message("octree triangle count:", s(mtriangles.mesh_data.indices.size() / 3), 30.f);
   if (m1->mesh->descriptor.mesh_data.indices.size() > 0)
-    entities.push_back(e1);
+    cubes.push_back(e1);
   if (m2->mesh->descriptor.mesh_data.indices.size() > 0)
-    entities.push_back(e2);
+    cubes.push_back(e2);
   if (m3->mesh->descriptor.mesh_data.indices.size() > 0)
-    entities.push_back(e3);
+    cubes.push_back(e3);
 
-  if (include_triangles)
-  {
-    scene->resource_manager->mesh_pool[mesh_triangles] = mtriangles;
-    Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_triangles];
-    Render_Entity e(Array_String("OctreeTriangles"), ptr, &scene->resource_manager->material_pool[mat_triangles],
-        mat4(1), Node_Index(NODE_NULL));
-    entities.push_back(e);
+  scene->resource_manager->mesh_pool[mesh_triangles] = mtriangles;
+  Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_triangles];
+  triangles = Render_Entity(Array_String("OctreeTriangles"), ptr,
+      &scene->resource_manager->material_pool[mat_triangles], mat4(1), Node_Index(NODE_NULL));
 
-    if (include_normals)
-    {
-      scene->resource_manager->mesh_pool[mesh_normals] = mnormals;
-      Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_normals];
-      Render_Entity e(Array_String("OctreeNormals"), ptr, &scene->resource_manager->material_pool[mat_normals], mat4(1),
-          Node_Index(NODE_NULL));
-      entities.push_back(e);
-    }
-    if (include_velocity)
-    {
-      scene->resource_manager->mesh_pool[mesh_velocities] = mvelocities;
-      Mesh *ptr = &scene->resource_manager->mesh_pool[mesh_velocities];
-      Render_Entity e(Array_String("OctreeVelocities"), ptr, &scene->resource_manager->material_pool[mat_velocities],
-          mat4(1), Node_Index(NODE_NULL));
-      entities.push_back(e);
-    }
-  }
+  scene->resource_manager->mesh_pool[mesh_normals] = mnormals;
+  ptr = &scene->resource_manager->mesh_pool[mesh_normals];
+  normals = Render_Entity(Array_String("OctreeNormals"), ptr, &scene->resource_manager->material_pool[mat_normals],
+      mat4(1), Node_Index(NODE_NULL));
 
-  return entities;
+  scene->resource_manager->mesh_pool[mesh_velocities] = mvelocities;
+  ptr = &scene->resource_manager->mesh_pool[mesh_velocities];
+  velocities = Render_Entity(Array_String("OctreeVelocities"), ptr,
+      &scene->resource_manager->material_pool[mat_velocities], mat4(1), Node_Index(NODE_NULL));
+
+  pack_chosen_entities();
+  return chosen_render_entities;
 }
 
 inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
@@ -2551,7 +2586,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
       else
       { // left back up
@@ -2573,7 +2608,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
     }
     else // forward
@@ -2598,7 +2633,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
       else
       { // left forward up
@@ -2620,7 +2655,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
     }
   }
@@ -2648,7 +2683,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
       else // right back up
       {
@@ -2670,7 +2705,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
     }
     else // forward
@@ -2695,7 +2730,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
       else // right forward up
       {
@@ -2717,7 +2752,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
         depth += 1;
         if (!node)
           return false;
-        return node->push(triangle, depth);
+        return node->push(triangle, depth, owner);
       }
     }
   }

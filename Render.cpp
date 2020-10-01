@@ -877,13 +877,19 @@ void Mesh::draw()
 {
   load();
   mesh->enable_assign_attributes(); // also binds vao
+  if (!mesh->vao)
+  {
+    set_message("warning: draw called on mesh with no vao","",5.f);
+    return;
+  }
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indices_buffer);
   glDrawElements(GL_TRIANGLES, mesh->indices_buffer_size, GL_UNSIGNED_INT, nullptr);
 }
 
 void Mesh_Handle::enable_assign_attributes()
 {
-  ASSERT(vao);
+  if(!vao)
+    return;
   glBindVertexArray(vao);
 
   if (position_buffer)
@@ -3844,8 +3850,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     initialized = true;
   }
 
-  ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
-  ImGui::Begin("Texture_Paint", &window_open, window_flags);
+  //ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+  //ImGui::Begin("Texture_Paint", &window_open, window_flags);
   imgui_visit_count += 1;
   const ImVec2 mouse = ImGui::GetMousePos();
   const ImVec2 windowp = ImGui::GetWindowPos();
@@ -4478,7 +4484,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   glGenerateTextureMipmap(surface->texture->texture);
   ImGui::EndChild();
-  ImGui::End();
+  //ImGui::End();
   last_run_visit_time = time;
 }
 
@@ -4766,7 +4772,6 @@ void Liquid_Surface::run(State *state)
   ImGui::InputInt("Water Iterations", &iterations);
   iterations = max(iterations, 0);
   ImGui::DragFloat3("Ambient Waves", &ambient_wave_scale[0], 0.05f, 0.0f, 100.f, "%.3f", 1.5f);
-  ImGui::End();
   if (!heightmap_fbo.color_attachments[0].texture || !heightmap_fbo.color_attachments[0].texture->texture)
   {
     return;
@@ -4854,6 +4859,7 @@ void Liquid_Surface::run(State *state)
 
   painter.run(state->imgui_event_accumulator);
 
+  ImGui::End();
   Flat_Scene_Graph_Node* node = &state->scene.nodes[water];
   Material_Index mi = node->model[0].second;
   Material* mat = &state->scene.resource_manager->material_pool[mi];

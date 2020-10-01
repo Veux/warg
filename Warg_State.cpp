@@ -1040,7 +1040,7 @@ void Warg_State::draw_gui()
 
   ImGui::Begin("warg state test");
   ImGui::Text("blah1");
-  //ImGui::CaptureNextBeginAsChild();
+  ImGui::Text("blah2");
   terrain.run(this);
   ImGui::End();
 }

@@ -21,6 +21,16 @@ struct Mesh_Data
   std::vector<vec3> tangents;
   std::vector<vec3> bitangents;
   std::vector<uint32> indices;
+  
+  void reserve(uint32 size)
+  {
+    positions.reserve(size);
+    normals.reserve(size);
+    texture_coordinates.reserve(size);
+    tangents.reserve(size);
+    bitangents.reserve(size);
+    indices.reserve(size);
+  }
 
   std::string build_unique_identifier() const
   {

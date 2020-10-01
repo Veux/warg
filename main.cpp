@@ -386,8 +386,8 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-  glad_set_pre_callback(glad_callback);
-  glad_set_post_callback(glad_callback);
+ // glad_set_pre_callback(glad_callback);
+  //glad_set_post_callback(glad_callback);
   
 
   Local_Session warg_session = Local_Session();

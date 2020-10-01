@@ -511,7 +511,6 @@ void main()
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
-
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
@@ -586,7 +585,7 @@ void main()
   m.albedo = max(charr_contribution + soil_contribution + grass_contribution, 0);
   m.emissive = max(fire_contribution, vec3(0));
   m.roughness = 1.0f - (is_soil * soil_t);
-
+  
   float terrain_ao = pow(.1 + ground_height, 1.2);
   m.ambient_occlusion = clamp(terrain_ao, 0.1, 1);
 
@@ -710,7 +709,7 @@ void main()
   camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
   // result = mix(vec3(1),result,fogFactor);
 
-  // result = m.albedo+m.emissive;
+  //result = ambient_diffuse;
   // result = vec3(is_soil*soil_t);
   // result = m.emissive;
   //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
@@ -752,6 +751,6 @@ void main()
   // result = textureLod(texture6,r,4).rgb;
   // result = pow(result,vec3(2.2));
   // result = 1*result;
-
+  //result = m.normal;
   out0 = vec4(result, 1);
 }
