@@ -2650,6 +2650,7 @@ void Renderer::init_render_targets()
   translucent_sample_source.init();
 
   td.name = name + "Renderer::self_object_depth";
+  self_object_depth.color_attachments[0] = Texture(td);
   self_object_depth.depth_enabled = true;
   self_object_depth.use_renderbuffer_depth = false;
   self_object_depth.depth_size = render_target_size;

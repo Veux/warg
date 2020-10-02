@@ -527,7 +527,7 @@ void main()
   float fire_f = 1.0f;
   vec3 fire = 30.f * fire_f * vec3(4.5, 2.1, .1);
   vec3 grass = 0.255f * fbm_h_n(5.15101f * frag_world_position.xy, .41f, 9) * vec3(0.18, .433, .08);
-
+  grass = grass * fbm_h_n(.1515101f * frag_world_position.xy, .71f, 3);
   vec3 snow = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(1);
   // grass =;
 
@@ -585,14 +585,14 @@ void main()
   m.albedo = max(charr_contribution + soil_contribution + grass_contribution, 0);
   m.emissive = max(fire_contribution, vec3(0));
   m.roughness = 1.0f - (is_soil * soil_t);
-  
+
   float terrain_ao = pow(.1 + ground_height, 1.2);
   m.ambient_occlusion = clamp(terrain_ao, 0.1, 1);
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.001); // default dielectrics
+  vec3 F0 = vec3(0.04); // default dielectrics
   // todo: could put dielectric reflectivity in a uniform
   // this would let us specify more light absorbant materials
   F0 = mix(F0, m.albedo, m.metalness);
@@ -703,13 +703,16 @@ void main()
   // basic fog:
   const float LOG2 = 1.442695;
   float z = gl_FragCoord.z / gl_FragCoord.w;
-  float camera_relative_depth = linearize_depth(gl_FragCoord.z);
-  float fogFactor = exp2(-.0131f * z * z * LOG2);
+  float camera_relative_depth = length(frag_world_position-camera_position);
+  float randfog = 1.4 + 00.7 * fbm_h_n(.112f *(frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f*time), .820f, 3);
+  z *= randfog;
+  randfog = 1;
+  float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
-  camera_relative_depth = clamp(2.5f * camera_relative_depth, 0.0, 1.0);
-  // result = mix(vec3(1),result,fogFactor);
-
-  //result = ambient_diffuse;
+  vec3 color = textureLod(texture6, v, 1).rgb; // mix(vec3(104,142,173)/vec3(255)
+  result = mix(color, result, fogFactor);
+  //result = vec3(z);
+  // result = ambient_diffuse;
   // result = vec3(is_soil*soil_t);
   // result = m.emissive;
   //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
@@ -751,6 +754,6 @@ void main()
   // result = textureLod(texture6,r,4).rgb;
   // result = pow(result,vec3(2.2));
   // result = 1*result;
-  //result = m.normal;
+  // result = m.normal;
   out0 = vec4(result, 1);
 }

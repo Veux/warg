@@ -203,7 +203,7 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float energy_loss = .9995f;
+  float energy_loss = .9991f;
   // energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 
@@ -347,7 +347,7 @@ void main()
     if (water_height > ground_height)
     {
       float dropheight = .00205171000435f;
-      // dropheight = .0f;
+      dropheight = .0f;
       if (sin(20.f * time) > 0.f)
       {
         water_height = water_height + dropheight; // raindrops

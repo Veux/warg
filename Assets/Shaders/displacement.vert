@@ -50,7 +50,10 @@ vec4 get_height_sample(vec2 uv)
 }
 
 vec4 get_height_sample_variance(vec2 uv)
-{
+{ 
+  return vec4(0);
+  //unusable until water height doesnt = ground height when 'under'
+
   ivec2 p = ivec2((uv * displacement_map_size) - vec2(0.25f));
 
   float o = 1. / float(displacement_map_size);
@@ -158,7 +161,7 @@ void main()
   // up
   float dhy = height_offsety - height;
   vec3 displacement_tangent_up = normalize(vec3(1, 0, 0));
-  vec3 displacement_bitangent_up = normalize(vec3(0,offset , dhy));
+  vec3 displacement_bitangent_up = normalize(vec3(0, offset, dhy));
   vec3 normal_up_side = normalize(cross(displacement_tangent_up, displacement_bitangent_up));
 
   // down
@@ -166,16 +169,17 @@ void main()
   vec3 displacement_tangent_down = normalize(vec3(1, 0, 0));
   vec3 displacement_bitangent_down = normalize(vec3(0, offset, -dhny));
   vec3 normal_down_side = normalize(cross(displacement_tangent_down, displacement_bitangent_down));
-  
-  vec3 tan_self = vec3(1,0,0);
-  vec3 bitan_self = vec3(0,1,0);
-  vec3 n_self = vec3(0,0,1);
 
-  vec3 displacement_tangent_sum = normalize(tan_self+
-      displacement_tangent_right + displacement_tangent_left + displacement_tangent_up + displacement_tangent_down);
-  vec3 displacement_bitangent_sum = normalize(bitan_self+displacement_bitangent_right + displacement_bitangent_left +
+  vec3 tan_self = vec3(1, 0, 0);
+  vec3 bitan_self = vec3(0, 1, 0);
+  vec3 n_self = vec3(0, 0, 1);
+
+  vec3 displacement_tangent_sum = normalize(tan_self + displacement_tangent_right + displacement_tangent_left +
+                                            displacement_tangent_up + displacement_tangent_down);
+  vec3 displacement_bitangent_sum = normalize(bitan_self + displacement_bitangent_right + displacement_bitangent_left +
                                               displacement_bitangent_up + displacement_bitangent_down);
-  vec3 displacement_normal_sum = normalize(n_self+normal_right_side + normal_left_side + normal_up_side + normal_down_side);
+  vec3 displacement_normal_sum =
+      normalize(n_self + normal_right_side + normal_left_side + normal_up_side + normal_down_side);
 
   vec3 displacement_normal = displacement_normal_sum;
 

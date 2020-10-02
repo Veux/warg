@@ -1020,7 +1020,6 @@ void Warg_State::update()
     }
 
     //this is bad: we can't just copy an octree like this because it ruins the pointers
-    //it needs a special copy constructor
     //however it works if we dont push to it again and only do tests...
     server_ptr->server->scene.collision_octree = scene.collision_octree;
   }

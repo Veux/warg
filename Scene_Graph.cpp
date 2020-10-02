@@ -165,7 +165,18 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   // ImGui::Separator();
   draw_imgui_texture_element("Roughness", &ptr->roughness, 2);
   // ImGui::Separator();
-  draw_imgui_texture_element("Normal", &ptr->normal, 3);
+  bool new_normal = draw_imgui_texture_element("Normal", &ptr->normal, 3);
+  if(new_normal)
+  {
+    if(ptr->normal.t.name == "default" || ptr->normal.t.name == "white" || ptr->normal.t.name == "white.png")
+    {
+      ptr->normal.t.mod = vec4(0.5, 0.5, 1.0, 0.0);
+    }
+    else
+    {
+      ptr->normal.t.mod = vec4(1,1,1,0);
+    }
+  }
   // ImGui::Separator();
   draw_imgui_texture_element("Metalness", &ptr->metalness, 4);
   // ImGui::Separator();
@@ -648,7 +659,6 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
 bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr, uint32 slot)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  false;
   Array_String str = ptr->t.name;
   ImGui::PushID(int(name));
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollWithMouse;
@@ -669,6 +679,7 @@ bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr
       {
         texture_picker_in_use = false;
         str = texture_picker.get_result();
+     
       }
       else if (texture_picker.get_closed())
         texture_picker_in_use = false;

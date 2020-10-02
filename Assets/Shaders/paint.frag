@@ -338,5 +338,6 @@ void main()
   }
 
   result = mix(source, result, mask);
+  result.a = 1;
   out0 = result;
 }
