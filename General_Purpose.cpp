@@ -709,9 +709,10 @@ void Config::save(string filename)
   file.write(str.c_str(), str.size());
 }
 
-Image_Data load_image(string path)
+Image_Data load_image(string path, GLenum desiredinternalformat)
 {
   Image_Data data;
+
 
   uint32 p = path.find("Assets/");
   if (p == -1)
@@ -719,7 +720,8 @@ Image_Data load_image(string path)
     path = BASE_TEXTURE_PATH + path;
   }
 
-  const bool is_hdr = stbi_is_hdr(path.c_str());
+  bool is_hdr = stbi_is_hdr(path.c_str());
+  is_hdr = is_float_format(desiredinternalformat);
   if (is_hdr)
   {
     data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
@@ -757,7 +759,7 @@ void Image_Loader::loader_loop(Image_Loader *loader)
     string filename = task.substr(0, back);
     string fmt = task.substr(back + 1);
     GLenum gl_texture_internalformat = stoi(fmt);
-    Image_Data data = load_image(filename);
+    Image_Data data = load_image(filename,gl_texture_internalformat);
 
     if (data.data_type != GL_FLOAT)
     {
@@ -781,6 +783,10 @@ void Image_Loader::loader_loop(Image_Loader *loader)
           b = (uint8)glm::clamp((uint32)round(c.b), 0u, 255u);
           //((uint32 *)data.data)[i] = (24 << a) | (16 << b) | (8 << g) | r;
         }
+      }
+      if (gl_texture_internalformat == GL_RGBA32F && data.data)
+      {
+        int a = 3;
       }
     }
     std::lock_guard<std::mutex> lock(loader->db_mtx);

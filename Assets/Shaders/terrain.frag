@@ -703,15 +703,16 @@ void main()
   // basic fog:
   const float LOG2 = 1.442695;
   float z = gl_FragCoord.z / gl_FragCoord.w;
-  float camera_relative_depth = length(frag_world_position-camera_position);
-  float randfog = 1.4 + 00.7 * fbm_h_n(.112f *(frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f*time), .820f, 3);
+  float camera_relative_depth = length(frag_world_position - camera_position);
+  float randfog =
+      1.4 + 00.7 * fbm_h_n(.112f * (frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f * time), .820f, 3);
   z *= randfog;
   randfog = 1;
   float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   vec3 color = textureLod(texture6, v, 1).rgb; // mix(vec3(104,142,173)/vec3(255)
   result = mix(color, result, fogFactor);
-  //result = vec3(z);
+  // result = vec3(z);
   // result = ambient_diffuse;
   // result = vec3(is_soil*soil_t);
   // result = m.emissive;

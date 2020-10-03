@@ -64,7 +64,11 @@ struct Octree_Node;
 
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
+#ifdef NDEBUG
 #define MAX_OCTREE_DEPTH 10
+#else
+#define MAX_OCTREE_DEPTH 4
+#endif
 #define TRIANGLES_PER_NODE 4096
 
 //if split style is on, then triangles are stored in each max-depth node that they touch only
@@ -406,7 +410,6 @@ struct Flat_Scene_Graph
   Material_Index collider_material_index = NODE_NULL;
 
   void draw_imgui(std::string name);
-  bool file_browsing = false;
   bool file_type = false; // true for radiance, false for irradiance
 
 private:
@@ -426,7 +429,6 @@ private:
   Array_String imgui_selected_import_filename;
 
   File_Picker texture_picker = File_Picker(".");
-  bool texture_picker_in_use = false;
   uint32 texture_picking_slot = 0;
 
   bool imgui_open = true;
@@ -434,7 +436,7 @@ private:
   bool showing_model = false;
   bool showing_mesh_data = false;
 
-  std::vector<std::vector<imgui_pane>> imgui_rows = {{node_tree}};
+  std::vector<std::vector<imgui_pane>> imgui_rows = { {node_tree ,selected_node} ,{selected_mat,light_array}};
   uint32 imgui_rows_count = 1;
   uint32 imgui_col_count  = 1;
   //imgui_pane imgui_panes[6] = {node_tree, resource_man, light_array, selected_node, selected_mat, blank};

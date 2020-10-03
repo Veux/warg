@@ -66,9 +66,10 @@ void File_Picker::set_dir(std::string directory)
 
 bool File_Picker::run()
 {
+  if(!window_open)
+    return false;
   bool clicked = false;
-  display = true;
-  ImGui::Begin("File Picker", &display, ImGuiWindowFlags_NoScrollbar);
+  ImGui::Begin("File Picker");//, &display, ImGuiWindowFlags_NoScrollbar);
 
   auto winsize = ImGui::GetWindowSize();
 
@@ -95,7 +96,7 @@ bool File_Picker::run()
   // std::vector<Texture> last_cache = FILE_PICKER_TEXTURE_CACHE;
   // FILE_PICKER_TEXTURE_CACHE.clear();
 
-  ImGui::PushID(0);
+  ImGui::PushID(uint32(this));
   ImGuiID id0 = ImGui::GetID("Thumbnails");
   ImGui::BeginChildFrame(id0, ImVec2(winsize.x - 16, winsize.y - 58), 0);
   vec2 thumbsize = vec2(128, 128);
@@ -107,7 +108,7 @@ bool File_Picker::run()
   {
     if (i % num_horizontal != 0)
       ImGui::SameLine();
-    std::string id1 = s("thumb", i);
+    std::string id1 = s(uint32(this),"thumb", i);
     ImGui::PushID(id1.c_str());
     ImGuiID id1_ = ImGui::GetID(id1.c_str());
     ImGui::BeginChildFrame(id1_, tframesize, ImGuiWindowFlags_NoScrollWithMouse);
@@ -165,6 +166,7 @@ bool File_Picker::run()
     {
       result = dircontents[last_clicked_node].path;
       picked = true;
+      window_open = false;
     }
   }
 
@@ -174,11 +176,6 @@ bool File_Picker::run()
 std::string File_Picker::get_result()
 {
   return result;
-}
-
-bool File_Picker::get_closed()
-{
-  return !display;
 }
 
 Layout_Grid::Layout_Grid(vec2 size_, vec2 borders_, vec2 spacing_, uint32 columns_, uint32 rows_)

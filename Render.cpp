@@ -722,6 +722,20 @@ void Texture::load()
   Image_Data imgdata;
   if (IMAGE_LOADER.load(t.source, &imgdata, t.format))
   {
+
+    if (t.format == GL_RGBA32F)
+    {
+      if (t.source == "/Assets/Textures/blocks_normal.jpg")
+      {
+        int a = 3;
+      }
+
+      if (t.source == "./Assets/Textures/blocks_normal.jpg")
+      {
+        int a = 3;
+      }
+    }
+
     if (!imgdata.data)
     {
       texture = make_shared<Texture_Handle>();
@@ -762,6 +776,7 @@ void Texture::load()
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     PERF_TIMER.stop();
     texture->datatype = imgdata.data_type;
+
     stbi_image_free(imgdata.data);
     set_message("PERF:", PERF_TIMER.string_report(), 55.0f);
     set_message("SYNC STARTED FOR:", s(t.name, " ", t.source), 1.0f);
@@ -879,7 +894,7 @@ void Mesh::draw()
   mesh->enable_assign_attributes(); // also binds vao
   if (!mesh->vao)
   {
-    set_message("warning: draw called on mesh with no vao","",5.f);
+    set_message("warning: draw called on mesh with no vao", "", 5.f);
     return;
   }
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indices_buffer);
@@ -888,7 +903,7 @@ void Mesh::draw()
 
 void Mesh_Handle::enable_assign_attributes()
 {
-  if(!vao)
+  if (!vao)
     return;
   glBindVertexArray(vao);
 
@@ -1371,6 +1386,13 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
+void blit_attachment(Framebuffer& src, Framebuffer& dst, uint32 attachment)
+{
+  glBlitNamedFramebuffer(src.fbo->fbo, dst.fbo->fbo, 0, 0, src.color_attachments[0].t.size.x,
+    src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
+    GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+}
+
 mat4 fullscreen_quad()
 {
   return scale(vec3(2, 2, 1));
@@ -1485,7 +1507,8 @@ void Renderer::draw_imgui()
           ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
           ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
           ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          ImGui::Text(s("Format:", texture_format_to_string(ptr->internalformat)).c_str());
+          ImGui::Text(s("magnification_filter:", ptr->magnification_filter).c_str());
+          ImGui::Text(s("minification_filter:", ptr->minification_filter).c_str());
 
           if (ptr->is_cubemap)
             ImGui::Text(s("Type:", "Cubemap").c_str());
@@ -3829,6 +3852,39 @@ void Texture_Paint::preset_pen2()
 
 void Texture_Paint::iterate(Texture *t, float32 current_time) {}
 
+Texture *Texture_Paint::change_texture_to(int32 index)
+{
+  ASSERT(textures.size() > index);
+  selected_texture = index;
+  Texture *surface = &textures[selected_texture];
+  while (!surface->texture || !surface->texture->texture)
+  {
+    surface->load();
+  }
+  Texture_Descriptor td;
+  td.size = surface->texture->size;
+  td.format = surface->texture->internalformat;
+  ASSERT(td.size != ivec2(0));
+  td.source = "generate";
+
+  td.name = "display_surface of Texture_Paint";
+  display_surface = Texture(td);
+  display_surface.load();
+  fbo_display.color_attachments[0] = display_surface;
+  fbo_display.init();
+
+
+  td.name = "intermediate of Texture_Paint";
+  intermediate = Texture(td);
+  intermediate.load();
+  fbo_intermediate.color_attachments[0] = intermediate;
+  fbo_intermediate.init();
+
+  fbo_drawing.color_attachments[0] = *surface;
+  fbo_drawing.init();
+
+  return surface;
+}
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
@@ -3843,16 +3899,22 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     drawing_shader = Shader("passthrough.vert", "paint.frag");
     copy = Shader("passthrough.vert", "passthrough.frag");
     postprocessing_shader = Shader("passthrough.vert", "paint_postprocessing.frag");
-    textures.push_back(create_new_texture(new_texture_size, "primary heightmap"));
-    display_surface = create_new_texture(new_texture_size, "display_surface");
-    intermediate = create_new_texture(new_texture_size, "texture_paint_intermediate");
+    if (textures.size() == 0)
+    {
+      textures.push_back(create_new_texture(new_texture_size, "primary heightmap"));
+      display_surface = create_new_texture(new_texture_size, "display_surface");
+      intermediate = create_new_texture(new_texture_size, "texture_paint_intermediate");
+    }
+    change_texture_to(0);
     preview = Texture("texture_paint_brush_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    fbo_preview.color_attachments[0] = preview;
     preview.load();
+    fbo_preview.init();
     initialized = true;
   }
 
-  //ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
-  //ImGui::Begin("Texture_Paint", &window_open, window_flags);
+  // ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+  // ImGui::Begin("Texture_Paint", &window_open, window_flags);
   imgui_visit_count += 1;
   const ImVec2 mouse = ImGui::GetMousePos();
   const ImVec2 windowp = ImGui::GetWindowPos();
@@ -3994,29 +4056,47 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   ImGui::Separator();
   ImGui::Separator();
+  if (ImGui::Button("Load file"))
+  {
+    texture_picker.window_open = true;
+  }
+  if (texture_picker.run())
+  {
+    std::string new_texture_name = texture_picker.get_result();
+    Texture_Descriptor td;
+    td.name = new_texture_name;
+    td.source = new_texture_name;
+    td.format = GL_RGBA32F;
+    Texture new_texture = td;
+    textures.insert(textures.begin() + selected_texture, new_texture);
+    surface = change_texture_to(selected_texture);
+    
+  }
   if (ImGui::Button("Clone Texture"))
   {
-    Texture new_texture = create_new_texture(new_texture_size, s(surface->t.name).c_str());
+    Texture_Descriptor td;
+    td.source = "generate";
+    td.size = surface->texture->size;
+    td.format = surface->texture->internalformat;
+    Texture new_texture(td);
+    new_texture.load();
+    Texture last_intermediate = fbo_intermediate.color_attachments[0];
     fbo_intermediate.color_attachments[0] = new_texture;
     fbo_intermediate.init();
-    fbo_intermediate.bind_for_drawing_dst();
-    glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-    surface->bind_for_sampling_at(0);
-    copy.use();
-    copy.set_uniform("texture0_mod", vec4(1));
-    copy.set_uniform("transform", fullscreen_quad());
-    quad.draw();
+    fbo_drawing.color_attachments[0] = *surface;
+    fbo_drawing.init();
+    blit_attachment(fbo_drawing, fbo_intermediate, 0);
+    fbo_intermediate.color_attachments[0] = last_intermediate;
     textures.insert(textures.begin() + selected_texture, new_texture);
-    selected_texture += 1;
-    surface = &textures[selected_texture];
+    //surface = &textures[selected_texture];
+    surface = change_texture_to(selected_texture);
   }
   ImGui::SameLine();
   if (ImGui::Button("Clear all"))
   {
     textures.clear();
     textures.push_back(create_new_texture(new_texture_size));
-    selected_texture = 0;
-    surface = &textures[selected_texture];
+    surface = change_texture_to(0);
   }
 
   for (uint32 i = 0; i < textures.size(); ++i)
@@ -4032,6 +4112,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     if (put_imgui_texture_button(this_texture, vec2(160), false))
     {
       selected_texture = i;
+      surface = change_texture_to(selected_texture);
     }
     if (green)
     {
@@ -4054,7 +4135,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
           textures.push_back(create_new_texture(new_texture_size));
         }
       }
-      surface = &textures[selected_texture];
+      surface = change_texture_to(selected_texture);
       this_texture = nullptr;
     }
     ImGui::PopStyleColor();
@@ -4176,8 +4257,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   bool out_of_texture = cursor_pos_within_texture.x < 0 || cursor_pos_within_texture.x > texture_size.x ||
                         cursor_pos_within_texture.y < 0 || cursor_pos_within_texture.y > texture_size.y;
-  fbo_preview.color_attachments[0] = preview;
-  fbo_preview.init();
+ 
 
   // ImGui::Text(s(cursor_pos_within_texture.x, " ", cursor_pos_within_texture.y).c_str());
   vec2 ndc_cursor = cursor_pos_within_texture / vec2(texture_size);
@@ -4202,38 +4282,22 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     ImGui::SetScrollY(scroll.y - mouse_delta.y);
   }
 
-  if (!intermediate.texture || intermediate.texture->size != surface->texture->size ||
-      intermediate.texture->internalformat != surface->texture->internalformat)
-  {
-    intermediate = surface->t;
-    intermediate.load();
-  }
-
+  
   while (sim_time + dt < time)
   {
     // iterate(surface, sim_time);
     sim_time += dt;
   }
 
-  fbo_drawing.color_attachments[0] = *surface;
-  fbo_intermediate.color_attachments[0] = intermediate;
-  fbo_preview.color_attachments[0] = preview;
-  fbo_display.color_attachments[0] = display_surface;
+  
 
-  // todo: only init when attachments change
-  fbo_drawing.init();
-  fbo_intermediate.init();
-  fbo_display.init();
 
-  fbo_intermediate.bind_for_drawing_dst();
+
+
+  blit_attachment(fbo_drawing, fbo_intermediate, 0);
+
+
   glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-  mat4 mat = fullscreen_quad();
-  surface->bind_for_sampling_at(0);
-  copy.use();
-  copy.set_uniform("texture0_mod", vec4(1));
-  copy.set_uniform("transform", mat);
-  quad.draw();
-
   fbo_drawing.bind_for_drawing_dst();
   intermediate.bind_for_sampling_at(0);
   drawing_shader.use();
@@ -4474,7 +4538,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   surface->bind_for_sampling_at(0);
   fbo_display.bind_for_drawing_dst();
   postprocessing_shader.use();
-  postprocessing_shader.set_uniform("transform", mat);
+  postprocessing_shader.set_uniform("transform", fullscreen_quad());
   postprocessing_shader.set_uniform("size", size);
   postprocessing_shader.set_uniform("zoom", zoom);
   postprocessing_shader.set_uniform("time", time);
@@ -4485,7 +4549,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   glGenerateTextureMipmap(surface->texture->texture);
   ImGui::EndChild();
-  //ImGui::End();
+  // ImGui::End();
   last_run_visit_time = time;
 }
 
@@ -4497,12 +4561,6 @@ void Liquid_Surface::init(State *state, vec3 pos, vec3 size, ivec2 resolution)
   liquid_shader = Shader("passthrough.vert", "liquid.frag");
   Mesh_Descriptor md(plane, "Texture_Paint's quad");
   quad = Mesh(md);
-
-  painter.new_texture_size = resolution;
-  painter.textures.clear();
-  painter.textures.push_back(painter.create_new_texture(painter.new_texture_size));
-  painter.selected_texture = 0;
-  set_heightmap(painter.textures[0]);
 
   Mesh_Descriptor mesh;
   mesh.name = "Liquid_Surface generated grid";
@@ -4533,6 +4591,11 @@ void Liquid_Surface::init(State *state, vec3 pos, vec3 size, ivec2 resolution)
 
   heightmap_resolution = resolution;
 
+  painter.new_texture_size = resolution;
+  painter.textures.clear();
+  painter.textures.push_back(painter.create_new_texture(painter.new_texture_size));
+  painter.selected_texture = 0;
+  set_heightmap(painter.textures[0]);
 }
 
 Liquid_Surface::~Liquid_Surface()
@@ -4547,12 +4610,61 @@ Liquid_Surface::~Liquid_Surface()
 
 void Liquid_Surface::set_heightmap(Texture texture)
 {
+  texture.load();
+  ASSERT(texture.texture && texture.texture->texture);
+  heightmap_resolution = texture.t.size;
   heightmap = heightmap_fbo.color_attachments[0] = texture;
   heightmap_fbo.init();
-  invalidated = true;
+
+  Flat_Scene_Graph_Node *node = &state->scene.nodes[water];
+  Material_Index mi = node->model[0].second;
+  Material *mat = &state->scene.resource_manager->material_pool[mi];
+  mat->load();
+  mat->displacement = heightmap;
+  mat->descriptor.uniform_set.texture_uniforms[water_velocity] = velocity_fbo.color_attachments[0];
+  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
+  node = &state->scene.nodes[ground];
+  mi = node->model[0].second;
+  mat = &state->scene.resource_manager->material_pool[mi];
+  mat->load();
+  mat->displacement = heightmap;
+  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
+  glDeleteSync(read_sync);
+  glDeleteBuffers(1, &heightmap_pbo);
+  glDeleteBuffers(1, &velocity_pbo);
+
+  glCreateBuffers(1, &heightmap_pbo);
+  glCreateBuffers(1, &velocity_pbo);
+
+  velocity.t = heightmap.t;
+  velocity.t.name = "velocity";
+  velocity = Texture(velocity.t);
+  velocity_fbo.color_attachments[0] = velocity;
+  velocity_fbo.init();
+
+  heightmap_copy.t = heightmap.t;
+  heightmap_copy.t.name = "heightmap_copy";
+  heightmap_copy = Texture(heightmap_copy.t);
+  copy_heightmap_fbo.color_attachments[0] = heightmap_copy;
+  copy_heightmap_fbo.init();
+
+  velocity_copy.t = heightmap.t;
+  velocity_copy.t.name = "velocity_copy";
+  velocity_copy = Texture(velocity_copy.t);
+  copy_velocity_fbo.color_attachments[0] = velocity_copy;
+  copy_velocity_fbo.init();
+
+  liquid_shader_fbo.color_attachments.resize(2);
+  liquid_shader_fbo.color_attachments[0] = heightmap;
+  liquid_shader_fbo.color_attachments[1] = velocity;
+  liquid_shader_fbo.init();
+
+  zero_velocity();
+  blit_attachment(heightmap_fbo, copy_heightmap_fbo,0);
+  blit_attachment(velocity_fbo, copy_velocity_fbo,0);
 }
 
-void Liquid_Surface::generate_geometry_from_heightmap(vec4* heightmap_pixel_array,vec4* velocity_pixel_array)
+void Liquid_Surface::generate_geometry_from_heightmap(vec4 *heightmap_pixel_array, vec4 *velocity_pixel_array)
 {
   if (last_generated_terrain_geometry_resolution != heightmap_resolution)
   {
@@ -4566,7 +4678,7 @@ void Liquid_Surface::generate_geometry_from_heightmap(vec4* heightmap_pixel_arra
   }
   if (!velocity_pixel_array)
   {
-    ASSERT(velocity_pixels.size()>0);
+    ASSERT(velocity_pixels.size() > 0);
     velocity_pixel_array = &velocity_pixels[0];
   }
 
@@ -4645,7 +4757,7 @@ void Liquid_Surface::zero_velocity()
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 }
-bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph* scene)
+bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph *scene)
 {
   if (last_applied_terrain_tick < last_generated_terrain_tick)
   {
@@ -4656,12 +4768,6 @@ bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph* sce
     return true;
   }
   return false;
-}
-void Liquid_Surface::blit(Framebuffer &src, Framebuffer &dst)
-{
-  glBlitNamedFramebuffer(src.fbo->fbo, dst.fbo->fbo, 0, 0, src.color_attachments[0].t.size.x,
-      src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
-      GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 }
 
 
@@ -4676,9 +4782,9 @@ bool Liquid_Surface::finish_texture_download_and_generate_geometry()
   }
   glDeleteSync(read_sync);
   read_sync = 0;
-  float32* heightmap_ptr = (float32*)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
-  float32* velocity_ptr = (float32*)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
-  generate_geometry_from_heightmap((vec4*)heightmap_ptr, (vec4*)velocity_ptr);
+  float32 *heightmap_ptr = (float32 *)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
+  float32 *velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
+  generate_geometry_from_heightmap((vec4 *)heightmap_ptr, (vec4 *)velocity_ptr);
   glUnmapNamedBuffer(heightmap_pbo);
   glUnmapNamedBuffer(velocity_pbo);
   return true;
@@ -4740,7 +4846,10 @@ void Liquid_Surface::start_texture_download()
 
 void Liquid_Surface::run(State *state)
 {
-  ASSERT(initialized);
+  painter.run(state->imgui_event_accumulator);
+  return;
+
+
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGui::Begin("Liquid_Surface", &window_open, window_flags);
   if (ImGui::Button("Generate Terrain"))
@@ -4767,7 +4876,7 @@ void Liquid_Surface::run(State *state)
     start_texture_download();
   }
   if (read_sync != 0)
-  {//if finish is successful, read_sync will be 0 until the next download request
+  { // if finish is successful, read_sync will be 0 until the next download request
     finish_texture_download_and_generate_geometry();
   }
   ImGui::InputInt("Water Iterations", &iterations);
@@ -4777,10 +4886,11 @@ void Liquid_Surface::run(State *state)
   {
     return;
   }
+
   bool automatically_swap_to_painter_selected_texture = true;
   if (automatically_swap_to_painter_selected_texture)
   {
-    if (!invalidated && heightmap.texture)
+    if (painter.textures.size() > 0)
     {
       bool painter_has_valid_texture = painter.textures[painter.selected_texture].texture != nullptr;
       if (painter_has_valid_texture)
@@ -4794,56 +4904,12 @@ void Liquid_Surface::run(State *state)
       }
     }
   }
-  if (invalidated)
-  {
-    if (!heightmap_fbo.color_attachments[0].texture)
-      return;
-
-    glDeleteSync(read_sync);
-    glDeleteBuffers(1, &heightmap_pbo);
-    glDeleteBuffers(1, &velocity_pbo);
-
-    glCreateBuffers(1, &heightmap_pbo);
-    glCreateBuffers(1, &velocity_pbo);
-
-    heightmap.load();
-    heightmap_fbo.init();
-
-    velocity.t = heightmap.t;
-    velocity.t.name = "velocity";
-    velocity.load();
-    velocity_fbo.color_attachments[0] = velocity;
-    velocity_fbo.init();
-
-    heightmap_copy.t = heightmap.t;
-    heightmap_copy.t.name = "heightmap_copy";
-    heightmap_copy.load();
-    copy_heightmap_fbo.color_attachments[0] = heightmap_copy;
-    copy_heightmap_fbo.init();
-
-    velocity_copy.t = heightmap.t;
-    velocity_copy.t.name = "velocity_copy";
-    velocity_copy.load();
-    copy_velocity_fbo.color_attachments[0] = velocity_copy;
-    copy_velocity_fbo.init();
-
-    liquid_shader_fbo.color_attachments.resize(2);
-    liquid_shader_fbo.color_attachments[0] = heightmap;
-    liquid_shader_fbo.color_attachments[1] = velocity;
-    liquid_shader_fbo.init();
-
-    zero_velocity();
-    blit(heightmap_fbo, copy_heightmap_fbo);
-    blit(velocity_fbo, copy_velocity_fbo);
-    invalidated = false;
-  }
-
   for (uint32 i = 0; i < iterations; ++i)
   {
     my_time = my_time + dt;
 
-    blit(heightmap_fbo, copy_heightmap_fbo);
-    blit(velocity_fbo, copy_velocity_fbo);
+    blit_attachment(heightmap_fbo, copy_heightmap_fbo,0);
+    blit_attachment(velocity_fbo, copy_velocity_fbo,0);
 
     liquid_shader_fbo.bind_for_drawing_dst();
     copy_heightmap_fbo.color_attachments[0].bind_for_sampling_at(0);
@@ -4861,19 +4927,6 @@ void Liquid_Surface::run(State *state)
   painter.run(state->imgui_event_accumulator);
 
   ImGui::End();
-  Flat_Scene_Graph_Node* node = &state->scene.nodes[water];
-  Material_Index mi = node->model[0].second;
-  Material* mat = &state->scene.resource_manager->material_pool[mi];
-  mat->displacement = painter.textures[painter.selected_texture];
-  mat->descriptor.uniform_set.texture_uniforms[water_velocity] = velocity_fbo.color_attachments[0];
-  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
-
-  node = &state->scene.nodes[ground];
-  mi = node->model[0].second;
-  mat = &state->scene.resource_manager->material_pool[mi];
-  mat->displacement = heightmap;
-  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
-
 }
 
 /*

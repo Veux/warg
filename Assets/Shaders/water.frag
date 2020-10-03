@@ -814,22 +814,16 @@ void main()
   float lenpd = length(partial_d);
   vec3 waternormal = get_water_normal();
   // waternormal = vec3(0,0,1);
-  
+
   vec4 velocity_sample = texture(texture12, frag_uv);
   vec3 velocity = velocity_sample.r * vec3(-1, 0, 0) + velocity_sample.g * vec3(1, 0, 0) +
                   velocity_sample.b * vec3(0, -1, 0) + velocity_sample.a * vec3(0, 1, 0);
 
-  vec2 fbmv = vec2(pow(length(velocity),1.2) / max(water_depth, 0.01));
-  //fbmv = smoothstep(75.1011f, 216.50f, fbmv + velocity.xy);
-  //fbmv = smoothstep(75.1011f, 216.50f, fbmv);
-  float mistlocation = smoothstep(0.05f,3.f,length(fbmv));
-  //mistlocation =saturate(pow(31300.f * height_variance * smoothstep(.10, .15, pow(length(velocity), 0.85f)), 1.15));
-  
-
-
-
-
-
+  vec2 fbmv = vec2(pow(length(velocity), 1.2) / max(water_depth, 0.01));
+  // fbmv = smoothstep(75.1011f, 216.50f, fbmv + velocity.xy);
+  // fbmv = smoothstep(75.1011f, 216.50f, fbmv);
+  float mistlocation = smoothstep(0.05f, 3.f, length(fbmv));
+  // mistlocation =saturate(pow(31300.f * height_variance * smoothstep(.10, .15, pow(length(velocity), 0.85f)), 1.15));
 
   float mistf1 =
       fbm_n(150.f * frag_uv - vec2(time, .5f * time), 3) * fbm_n(160.f * frag_uv + vec2(.5f * time, time), 3);
@@ -837,22 +831,20 @@ void main()
 
   float mistf = 51.5f * pow(mistf1, 0.785f) * pow(mistf2, 0.685f);
 
-  
-  float mist_dist_fade = min(1./(.03*pow(dist_to_pixel,2)),1);
-  float mist_dist_fade2 = min(1./(.0004*pow(dist_to_pixel,2)),1);
+  float mist_dist_fade = min(1. / (.03 * pow(dist_to_pixel, 2)), 1);
+  float mist_dist_fade2 = min(1. / (.0004 * pow(dist_to_pixel, 2)), 1);
   mistf1 = fbm_h_n(6150.f * frag_uv - 0.21f * vec2(time, .5f * time), .120f, 3) *
            fbm_h_n(6160.f * frag_uv + 0.21f * vec2(.5f * time, time), .120f, 3);
   mistf2 = fbm_h_n(240.f * frag_uv - 0.21f * vec2(time, .5f * time), .5120f, 5) +
            fbm_h_n(250.f * frag_uv + 0.21f * vec2(.5f * time, time), .5120f, 5);
-           
-  mistf1 = .51051*mistf1;
-  mistf2 = .11*pow(mistf2,3);
-  
+
+  mistf1 = .51051 * mistf1;
+  mistf2 = .11 * pow(mistf2, 3);
+
   // good:
-  //mistf = smoothstep(0, 35, mistf1* mistf2);
-  mistf = mist_dist_fade*mistf1 * mist_dist_fade2*mistf2;
-  mistf = .1*mistf1 * mistf2;
-  
+  // mistf = smoothstep(0, 35, mistf1* mistf2);
+  mistf = mist_dist_fade * mistf1 * mist_dist_fade2 * mistf2;
+  mistf = .1 * mistf1 * mistf2;
 
   m.albedo = mix(m.albedo, vec3(mistf), mistlocation);
   m.normal = normalize(TBN * waternormal);
@@ -966,12 +958,10 @@ void main()
   // we'd hit other water that would reflect back up
   if (dot(r, vec3(0, 0, 1)) > 0)
   {
-   r.z = -r.z;
-
-
+    r.z = -r.z;
   }
 
-  float diffuse_loss = 1.0;//.315f; // lobe?
+  float diffuse_loss = 1.0; //.315f; // lobe?
 
   // refraction sampling
   vec3 refracted_view = normalize(refract(v, m.normal, 1.02).xyz);
@@ -997,9 +987,7 @@ void main()
   if (isinf(len_offset) || isnan(len_offset))
   {
     ref_sample_loc = this_pixel;
-    
   }
-
 
   // ambient specular
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
@@ -1011,7 +999,6 @@ void main()
   vec3 Kd = diffuse_loss * vec3(1 - m.metalness) * (1.0 - Ks);
   vec3 irradiance = texture(texture7, -m.normal).rgb; // likely also wrong for flipped y
   vec3 ambient_diffuse = Kd * irradiance * m.albedo;
-
 
   vec4 refraction_src = texture2D(texture9, ref_sample_loc);
   // volumetric absorb
@@ -1031,20 +1018,18 @@ void main()
   // matrix
   float depth_of_object = linearize_depth(depth_of_scene) - linearize_depth(gl_FragCoord.z);
   if (linearize_depth(depth_of_scene) > 10)
-  {//probably is env map behind water
-    //depth_of_object = linearize_depth(depth_of_self) - linearize_depth(gl_FragCoord.z);
-    //debug = vec3(pow(linearize_depth(gl_FragCoord.z),1),0,0);
-
+  { // probably is env map behind water
+    // depth_of_object = linearize_depth(depth_of_self) - linearize_depth(gl_FragCoord.z);
+    // debug = vec3(pow(linearize_depth(gl_FragCoord.z),1),0,0);
   }
   depth_of_object = 215.1f * depth_of_object;
   float density = pow(premultiply_alpha, 1);
   float A = pow(1 - density, pow(depth_of_object, 0.85f));
 
-     if (isinf(len_offset) || isnan(len_offset))
+  if (isinf(len_offset) || isnan(len_offset))
   {
-    //A = 1.0f;
+    // A = 1.0f;
   }
-
 
   // A = saturate((1 * density)/depth_of_object);
   float trim_very_thin_water =
@@ -1085,18 +1070,14 @@ void main()
   // float height_t =  1-smoothstep(0,.4141,pow(lenpd,.25f));
   // result = vec3(height_t);
 
-
- 
-
   //
-
-
 
   // basic fog:
   const float LOG2 = 1.442695;
   float z = gl_FragCoord.z / gl_FragCoord.w;
-  float camera_relative_depth = length(frag_world_position-camera_position);
-  float randfog = 1.4 + 00.7 * fbm_h_n(.112f *(frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f*time), .820f, 3);
+  float camera_relative_depth = length(frag_world_position - camera_position);
+  float randfog =
+      1.4 + 00.7 * fbm_h_n(.112f * (frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f * time), .820f, 3);
   z *= randfog;
   randfog = 1;
   float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);

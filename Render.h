@@ -7,10 +7,12 @@
 #include "Third_party/stb/stb_image.h"
 #include "Physics.h"
 #include "Globals.h"
+#include "Ui.h"
 
 using json = nlohmann::json;
 using namespace glm;
 
+void blit_attachment(Framebuffer& src, Framebuffer& dst, uint32 attachment = 0);
 struct Conductor_Reflectivity
 {
   static const vec4 iron;
@@ -886,12 +888,24 @@ struct Particle_Emitter
 };
 
 
+
+
+//todo:
+//browse file and load from disk
+//ability to select out of any texture in the cache to edit
+//put a door in blades edge and put it on the map
+
+
+
+
+
 struct Texture_Paint
 {
   Texture_Paint(){}
   void run(std::vector<SDL_Event>* imgui_event_accumulator);
   void iterate(Texture* t, float32 time);
   Texture create_new_texture(glm::ivec2 size,const char* name = nullptr);
+  Texture* change_texture_to(int32 index);
   bool window_open = true;
   Shader drawing_shader;
   Texture display_surface;
@@ -944,6 +958,7 @@ struct Texture_Paint
   bool draw_cursor = false;
   ivec2 new_texture_size = ivec2(1024);
   int32 custom_draw_mode_set = 0;
+  File_Picker texture_picker = File_Picker(".");
 };
 
 struct Liquid_Surface
@@ -963,11 +978,10 @@ struct Liquid_Surface
   bool finish_texture_download();
   void zero_velocity();
   bool apply_geometry_to_octree_if_necessary(Flat_Scene_Graph* scene);
-  void blit(Framebuffer& src, Framebuffer& dst);
   Texture_Paint painter;
   Node_Index ground = NODE_NULL;
   Node_Index water = NODE_NULL;
-  int32 iterations = 1;
+  int32 iterations = 0;
   float64 my_time = 0.f;
   vec3 ambient_wave_scale = vec3(30.f, 3.f, 1.0f);
   // private:
@@ -1001,6 +1015,7 @@ struct Liquid_Surface
 
   bool invalidated = true;
   bool initialized = false;
+
 };
 
 

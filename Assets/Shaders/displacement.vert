@@ -50,9 +50,9 @@ vec4 get_height_sample(vec2 uv)
 }
 
 vec4 get_height_sample_variance(vec2 uv)
-{ 
+{
   return vec4(0);
-  //unusable until water height doesnt = ground height when 'under'
+  // unusable until water height doesnt = ground height when 'under'
 
   ivec2 p = ivec2((uv * displacement_map_size) - vec2(0.25f));
 

@@ -166,21 +166,22 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   draw_imgui_texture_element("Roughness", &ptr->roughness, 2);
   // ImGui::Separator();
   bool new_normal = draw_imgui_texture_element("Normal", &ptr->normal, 3);
-  if(new_normal)
+  if (new_normal)
   {
-    if(ptr->normal.t.name == "default" || ptr->normal.t.name == "white" || ptr->normal.t.name == "white.png")
+    if (ptr->normal.t.name == "default" || ptr->normal.t.name == "white" || ptr->normal.t.name == "white.png")
     {
       ptr->normal.t.mod = vec4(0.5, 0.5, 1.0, 0.0);
     }
     else
     {
-      ptr->normal.t.mod = vec4(1,1,1,0);
+      ptr->normal.t.mod = vec4(1, 1, 1, 0);
     }
   }
   // ImGui::Separator();
   draw_imgui_texture_element("Metalness", &ptr->metalness, 4);
   // ImGui::Separator();
   draw_imgui_texture_element("Ambient Occlusion", &ptr->ambient_occlusion, 5);
+  draw_imgui_texture_element("Displacement", &ptr->displacement, 6);
   // ImGui::Separator();
   ImGui::PushItemWidth(200);
   Array_String str = ptr->descriptor.vertex_shader;
@@ -208,7 +209,6 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::PopItemWidth();
 }
 
-File_Picker FILE_PICKER = File_Picker(".");
 void Flat_Scene_Graph::draw_imgui_light_array()
 {
   static bool open = false;
@@ -227,37 +227,21 @@ void Flat_Scene_Graph::draw_imgui_light_array()
     if (ImGui::Button("Radiance Map"))
     {
       file_type = true;
-      file_browsing = true;
+      texture_picker.window_open = true;
     }
-
     ImGui::SameLine();
-    // ImGui::TextWrapped(s("Radiance map: ", radiance_map_result).c_str());
-
-    // ImGui::Separator();
     if (ImGui::Button("Irradiance Map"))
     {
-      file_type = false;
-      file_browsing = true;
+      file_type = false; 
+      texture_picker.window_open = true;
     }
-    // ImGui::SameLine();
-    // ImGui::TextWrapped(s("Irradiance map: ", irradiance_map_result).c_str());
-
-    // ImGui::Separator();
-    if (file_browsing)
+    if (texture_picker.run())
     {
-      if (FILE_PICKER.run())
-      {
-        file_browsing = false;
-        if (file_type)
-          radiance_map_result = FILE_PICKER.get_result();
-        else
-          irradiance_map_result = FILE_PICKER.get_result();
-        updated = true;
-      }
-      else if (FILE_PICKER.get_closed())
-      {
-        file_browsing = false;
-      }
+      if (file_type)
+        radiance_map_result = texture_picker.get_result();
+      else
+        irradiance_map_result = texture_picker.get_result();
+      updated = true;
     }
 
     if (updated)
@@ -666,23 +650,18 @@ bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr
   ImGui::Text(name);
   ImGui::SameLine();
   if (ImGui::Button("Browse"))
-    if (!texture_picker_in_use)
+  {
+    if (!texture_picker.window_open)
     {
-      texture_picker_in_use = true;
+      texture_picker.window_open = true;
       texture_picking_slot = slot;
     }
-  if (texture_picker_in_use)
+  }
+  if (texture_picker.window_open && slot == texture_picking_slot)
   {
-    if (slot == texture_picking_slot)
-    { // don't consume the result if it isnt for this texture
-      if (texture_picker.run())
-      {
-        texture_picker_in_use = false;
-        str = texture_picker.get_result();
-     
-      }
-      else if (texture_picker.get_closed())
-        texture_picker_in_use = false;
+    if (texture_picker.run())
+    {
+      str = texture_picker.get_result();
     }
   }
 
