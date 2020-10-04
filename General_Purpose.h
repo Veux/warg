@@ -150,12 +150,13 @@ vec3 random_3D_unit_vector(float32 azimuth_min, float32 azimuth_max, float32 alt
 // Uint32 string_to_U32_color(std::string color);
 // glm::vec4 string_to_float4_color(std::string color);
 const char *texture_format_to_string(GLenum texture_format);
+const char *filter_format_to_string(GLenum filter_format);
 bool has_img_file_extension(std::string name);
 bool has_hdr_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
 int32 save_texture(Texture *texture, std::string filename, uint32 level = 0);
 int32 save_texture_type(Texture *texture, std::string filename, std::string type = "png", uint32 level = 0);
-int32 save_texture_type(GLuint texture,ivec2 size, std::string filename, std::string type = "png", uint32 level = 0);
+int32 save_texture_type(GLuint texture, ivec2 size, std::string filename, std::string type = "png", uint32 level = 0);
 uint32 type_of_float_format(GLenum texture_format);
 uint32 components_of_float_format(GLenum texture_format);
 

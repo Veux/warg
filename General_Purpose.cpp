@@ -517,6 +517,27 @@ UID uid()
   return i++;
 }
 
+const char* filter_format_to_string(GLenum filter_format)
+{
+  switch (filter_format)
+  {
+  case GL_NEAREST:
+    return "GL_NEAREST";
+  case GL_NEAREST_MIPMAP_LINEAR:
+    return "GL_NEAREST_MIPMAP_LINEAR";
+  case GL_NEAREST_MIPMAP_NEAREST:
+    return "GL_NEAREST_MIPMAP_NEAREST";
+  case GL_LINEAR_MIPMAP_NEAREST:
+    return "GL_LINEAR_MIPMAP_NEAREST";
+  case GL_LINEAR_MIPMAP_LINEAR:
+    return "GL_LINEAR_MIPMAP_LINEAR - Trilinear  Should only be in the min filter";
+  case GL_LINEAR:
+    return "GL_LINEAR - Bilinear - Should only be in the mag filter";
+  default:
+    return "UNKNOWN";
+  }
+}
+
 const char *texture_format_to_string(GLenum texture_format)
 {
   switch (texture_format)

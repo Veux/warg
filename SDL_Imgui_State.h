@@ -20,6 +20,7 @@ struct Imgui_Texture_Descriptor
   bool gamma_encode = false;
   bool is_cubemap = false;
   bool is_mipmap_list_command = false;
+  bool use_alpha = false;
 };
 
 struct SDL_Imgui_State

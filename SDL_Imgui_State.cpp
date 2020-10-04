@@ -167,6 +167,14 @@ void SDL_Imgui_State::render()
           {
             glDisable(GL_FRAMEBUFFER_SRGB);
           }
+          if (itd.use_alpha)
+          {
+            glEnable(GL_BLEND);
+          }
+          else
+          {
+            glDisable(GL_BLEND);
+          }
 
           glActiveTexture(GL_TEXTURE0);
           if (itd.ptr)
@@ -192,7 +200,7 @@ void SDL_Imgui_State::render()
             vec3 dir = vec3(glm::sin(float32(get_real_time())), glm::cos(float32(get_real_time())), -1);
             // dir = vec3(0,0,-1);
             mat4 camera = lookAt(vec3(0), dir, vec3(0, 1, 0));
-            float32 t = wrap_to_range(0.2f*float32(get_real_time()),0.f,glm::two_pi<float32>());
+            float32 t = wrap_to_range(0.2f * float32(get_real_time()), 0.f, glm::two_pi<float32>());
             mat4 transform = projection * glm::rotate(t, vec3(0, 0, 1));
             ;
             glUniform1i(is_cubemap_location, 1);
@@ -232,6 +240,7 @@ void SDL_Imgui_State::render()
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, itd.ptr->minification_filter);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, itd.ptr->magnification_filter);
           }
+          glEnable(GL_BLEND);
         }
       }
       idx_buffer_offset += pcmd->ElemCount;

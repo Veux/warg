@@ -1501,19 +1501,51 @@ void Renderer::draw_imgui()
         Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
         shared_ptr<Texture_Handle> ptr = itd->ptr;
 
-        ImGui::PushID(s(i).c_str());
-        if (ImGui::TreeNode(ptr->peek_filename().c_str()))
+        const char* label = ptr->peek_filename().c_str();
+        ImGui::PushID(s(ptr->texture,label).c_str());
+        bool popped = false;
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        ImGuiID id = window->GetID(label);
+        bool node_is_open = ImGui::TreeNodeBehaviorIsOpen(id, ImGuiTreeNodeFlags_Framed);
+        if (node_is_open)
         {
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 255, 0, 1));
+        }
+        else
+        {
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(255, 0, 0, 1));
+        }
+        if (ImGui::TreeNodeEx(label,ImGuiTreeNodeFlags_Framed))
+        {
+          float32 indent_width = 25;
+          ImGui::PopStyleColor();
+          popped = true;
+          ImGui::Indent(indent_width);
           ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
           ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
           ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          ImGui::Text(s("magnification_filter:", ptr->magnification_filter).c_str());
-          ImGui::Text(s("minification_filter:", ptr->minification_filter).c_str());
+          ImGui::Text("Magnification filter:");
+          ImGui::SameLine();
+          ImGui::TextColored(ImVec4(1, 0, 1, 1), filter_format_to_string(ptr->magnification_filter));
+          ImGui::Text("Minification filter:");
+          ImGui::SameLine();
+          ImGui::TextColored(ImVec4(1, 0, 1, 1), filter_format_to_string(ptr->minification_filter));
+          ImGui::Text("Format:");
+          ImGui::SameLine();
+          ImGui::TextColored(ImVec4(1, 0, 1, 1), texture_format_to_string(ptr->internalformat));
 
           if (ptr->is_cubemap)
-            ImGui::Text(s("Type:", "Cubemap").c_str());
+          {
+            ImGui::Text("Type:");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1, 0, 1, 1), "Cubemap");
+          }
           else
-            ImGui::Text(s("Type:", "Texture2D").c_str());
+          {
+            ImGui::Text("Type:");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1,0,1,1),"Texture2D");
+          }
           ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
           Imgui_Texture_Descriptor descriptor;
           descriptor.ptr = ptr;
@@ -1523,19 +1555,20 @@ void Renderer::draw_imgui()
 
           descriptor.gamma_encode = gamma_flag;
           descriptor.is_cubemap = ptr->is_cubemap;
-
+          ImGui::Checkbox("Use alpha in thumbnail",&ptr->imgui_use_alpha);
           ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
-          ImGui::InputFloat("LOD", &ptr->imgui_mipmap_setting, 0.1f);
+          uint32 mip_levels = ptr->levels;
+          ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
+          ImGui::InputFloat("Mipmap LOD", &ptr->imgui_mipmap_setting, 0.1f);
           descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
           descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
           descriptor.size = ptr->imgui_size_scale * vec2(256);
           descriptor.y_invert = true;
+          descriptor.use_alpha = ptr->imgui_use_alpha;
           put_imgui_texture(&descriptor);
 
           if (ImGui::TreeNode("List Mipmaps"))
           {
-            uint32 mip_levels = ptr->levels;
-            ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
             for (uint32 i = 0; i < mip_levels; ++i)
             {
               Imgui_Texture_Descriptor d = descriptor;
@@ -1546,7 +1579,11 @@ void Renderer::draw_imgui()
             ImGui::TreePop();
           }
           ImGui::TreePop();
+
+          ImGui::Unindent(indent_width);
         }
+        if(!popped)
+          ImGui::PopStyleColor();
         ImGui::PopID();
       }
       ImGui::Unindent(5.f);
@@ -4092,6 +4129,33 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     surface = change_texture_to(selected_texture);
   }
   ImGui::SameLine();
+
+
+
+
+
+
+
+  //green texture means its transparent i think
+  //should have the texture draw ui for the renderer split up
+  //alpha channel into a 2nd black/white image
+  //or just make a checkbox to swapto/use alpha
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   if (ImGui::Button("Clear all"))
   {
     textures.clear();

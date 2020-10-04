@@ -79,6 +79,7 @@ struct Texture_Handle
   }
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
+  bool imgui_use_alpha = true;
   GLuint texture = 0;
 
   // last bound dynamic state:
