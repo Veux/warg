@@ -89,6 +89,10 @@ bool File_Picker::run()
   {
     FILE_PICKER_TEXTURE_CACHE.clear();
   }
+  if (ImGui::Button("Close"))
+  {
+    window_open = false;
+  }
 
   // we cache the textures to hold on to the handle globally
   // instead of holding a handle inside the file_picker object

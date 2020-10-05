@@ -1,4 +1,4 @@
-#version 330
+#version 400
 #extension GL_ARB_separate_shader_objects : enable
 
 #define MAX_LIGHTS 10
@@ -15,6 +15,7 @@ uniform mat4 Model;
 uniform mat4 shadow_map_transform[MAX_LIGHTS];
 uniform bool ground;
 uniform uint displacement_map_size;
+uniform float derivative_offset;
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
@@ -102,36 +103,82 @@ vec4 get_height_sample_variance(vec2 uv)
 void main()
 {
 
-  float offset = 0.25f / displacement_map_size;
-
+  // float offset = 1.50105f / displacement_map_size;
+  float offset = 0.01f * derivative_offset;
   // vec4 height_sample = get_height_sample_variance(uv);
   // vec4 vheight_offsetx = get_height_sample(uv + vec2(offset, 0));
   // vec4 vheight_offsety = get_height_sample(uv + vec2(0, offset));
 
   // simple
-  // vec4 height_sample = texture(texture11, uv);
-  // vec4 vheight_offsetx = texture(texture11, uv + vec2(offset, 0));
-  // vec4 vheight_offsety = texture(texture11, uv + vec2(0, offset));
-  // vec4 vheight_offsetnx = texture(texture11, uv - vec2(offset, 0));
-  // vec4 vheight_offsetny = texture(texture11, uv - vec2(0, offset));
+  //   vec4 height_sample = texture(texture11, uv);
+  //   vec4 vheight_offsetx = texture(texture11, uv + vec2(offset, 0));
+  //   vec4 vheight_offsety = texture(texture11, uv + vec2(0, offset));
+  //   vec4 vheight_offsetnx = texture(texture11, uv - vec2(offset, 0));
+  //   vec4 vheight_offsetny = texture(texture11, uv - vec2(0, offset));
 
   // vertex centered on pixel
   // assumes texture is larger by 1 in x and y than the vertex grid
   vec2 uv_offset = uv * (displacement_map_size - 1u);
   uv_offset = uv_offset + vec2(.5f);
   uv_offset = uv_offset / displacement_map_size;
-  vec4 height_sample = texture(texture11, uv_offset);
+  // vec4 height_sample = texture(texture11, uv_offset);
   vec4 vheight_offsetx = texture(texture11, uv_offset + vec2(offset, 0));
   vec4 vheight_offsety = texture(texture11, uv_offset + vec2(0, offset));
   vec4 vheight_offsetnx = texture(texture11, uv_offset - vec2(offset, 0));
   vec4 vheight_offsetny = texture(texture11, uv_offset - vec2(0, offset));
 
   // very no smoothing
-  // height_sample = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u))), 0);
-  // vheight_offsetx = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(offset, 0)), 0);
-  // vheight_offsety = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(0, offset)), 0);
+  vec4 height_sample = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u))), 0);
+  // vec4 vheight_offsetx = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(offset, 0)), 0);
+  // vec4 vheight_offsety = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) + vec2(0, offset)), 0);
+  // vec4 vheight_offsetnx = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) - vec2(offset, 0)), 0);
+  // vec4 vheight_offsetny = texelFetch(texture11, ivec2((uv * (displacement_map_size-1u)) - vec2(0, offset)), 0);
 
+  vec4 right = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(1, 0)), 0);
+  vec4 up = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(0, 1)), 0);
+  vec4 left = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(-1, 0)), 0);
+  vec4 down = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(0, -1)), 0);
+
+  vec4 rightup = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(1, 1)), 0);
+  vec4 rightdown = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(1, -1)), 0);
+  vec4 leftup = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(-1, 1)), 0);
+  vec4 leftdown = texelFetch(texture11, ivec2((uv * (displacement_map_size - 1u)) + vec2(-1, -1)), 0);
+  indebug = vec4(0);
   float height = height_sample.r;
+  if (!ground)
+  {
+    if (height_sample.r <= height_sample.g)
+    {
+      vec4 adjacent_waters = vec4(right.r, up.r, left.r, down.r);
+      vec4 adjacent_grounds = vec4(right.g, up.g, left.g, down.g);
+
+       vec4 diag_waters = vec4(rightup.r, rightdown.r, leftup.r, leftdown.r);
+       vec4 diag_grounds = vec4(rightup.g, rightdown.g, leftup.g, leftdown.g);
+
+      float sum = 0;
+      float count = 0;
+      for (int i = 0; i < 4; ++i)
+      {
+        if (adjacent_waters[i] > adjacent_grounds[i] )
+        {
+          sum += adjacent_waters[i];
+          count += 1;
+        }
+        if (diag_waters[i] > diag_grounds[i] )
+        {
+          sum += diag_waters[i];
+           count += 1;
+        }
+      }
+      if (count == 0)
+      {
+      }
+      else
+      {
+        height = sum / count;
+      }
+    }
+  }
   height_variance = get_height_sample_variance(uv).a;
   float height_offsetx = vheight_offsetx.r;
   float height_offsety = vheight_offsety.r;

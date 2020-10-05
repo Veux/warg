@@ -241,7 +241,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  terrain.init(this, vec3(0, 0, -2), vec3(25, 25, 3),ivec2(HEIGHTMAP_RESOLUTION));
+  terrain.init(this, vec3(0, 0, -2), 25,ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
   // spawn_planets(&scene, vec3(12, 6, 3));

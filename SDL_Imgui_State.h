@@ -70,12 +70,12 @@ private:
   SDL_Cursor *sdl_cursors[ImGuiMouseCursor_Count_] = {0};
 };
 
-void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert = false);
-void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert = false);
-void put_imgui_texture(std::shared_ptr<Texture_Handle> t, glm::vec2 size, bool y_invert = false);
-void put_imgui_texture(Imgui_Texture_Descriptor *itd);
+void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert = false, bool auto_aspect = true);
+void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert = false, bool auto_aspect = true);
+void put_imgui_texture(std::shared_ptr<Texture_Handle> t, glm::vec2 size, bool y_invert = false, bool auto_aspect = true);
+void put_imgui_texture(Imgui_Texture_Descriptor *itd, bool auto_aspect = true);
 
-bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert = false);
-bool put_imgui_texture_button(Texture_Descriptor *td, glm::vec2 size, bool y_invert = false);
-bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> t, glm::vec2 size, bool y_invert = false);
-bool put_imgui_texture_button(Imgui_Texture_Descriptor *itd);
+bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert = false, bool auto_aspect = true);
+bool put_imgui_texture_button(Texture_Descriptor *td, glm::vec2 size, bool y_invert = false, bool auto_aspect = true);
+bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> t, glm::vec2 size, bool y_invert = false, bool auto_aspect = true);
+bool put_imgui_texture_button(Imgui_Texture_Descriptor *itd, bool auto_aspect = true);

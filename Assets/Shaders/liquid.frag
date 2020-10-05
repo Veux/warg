@@ -121,9 +121,9 @@ float ambient_waves(ivec2 p)
   return t1 + t2;
   float water_height = 0.f;
   water_height = water_height +
-                 ambient_wave_scale.x * fbm_h_n(.0175f * p + .030f * vec2(.9 * time, -.7 * time), .825960248501f, 3);
+                 ambient_wave_scale.x * fbm_h_n(.0175f * p + .065f * vec2(.9 * time, -.7 * time), .825960248501f, 3);
   water_height = water_height +
-                 ambient_wave_scale.x * fbm_h_n(.0175f * p + .023f * vec2(-.85 * time, .8 * time), .825930248501f, 3);
+                 ambient_wave_scale.x * fbm_h_n(.0175f * p + .047f * vec2(-.85 * time, .8 * time), .825930248501f, 3);
   // water_height = water_height + ambient_wave_scale.y * fbm_h_n(1.115105f * p + .030f * vec2(.9*time,-.7*time),
   // .025960248501f, 3);
   // water_height = water_height + ambient_wave_scale.y * fbm_h_n(1.115105f * p + .023f * vec2(-.85*time,.8*time),
@@ -146,9 +146,9 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
   float my_ambient = 0.f;
   float other_ambient = 0.f;
 
-  if (water_height - .01 > ground_height)
+  if (water_height - .003 > ground_height)
   {
-    if (other_water_height - .01 > other_ground_height)
+    if (other_water_height - .003 > other_ground_height)
     {
       my_ambient = ambient_waves(p);
       other_ambient = ambient_waves(other_p);

@@ -38,7 +38,7 @@
 #ifdef NDEBUG
 #define HEIGHTMAP_RESOLUTION 512
 #else
-#define HEIGHTMAP_RESOLUTION 16
+#define HEIGHTMAP_RESOLUTION 64
 #endif
 
 

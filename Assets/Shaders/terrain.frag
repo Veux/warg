@@ -534,7 +534,7 @@ void main()
   // i will be assigning the snow color to the grass variable because thats whats actually getting rendered, jank
 
   float snow_fbm = .4 + .6 * fbm_n(130 * frag_uv, 3);
-  float snow_top = smoothstep(11. * snow_fbm, 14. * snow_fbm, ground_height);
+  float snow_top = smoothstep(11. * snow_fbm, 14. * snow_fbm, 95 * ground_height);
   grass = grass * (1 - snow_top) + snow_top * vec3(1);
 
   vec3 soil = fbm_h_n(10.f * frag_world_position.xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);
@@ -710,7 +710,7 @@ void main()
   randfog = 1;
   float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
-  vec3 color = textureLod(texture6, v, 1).rgb; // mix(vec3(104,142,173)/vec3(255)
+  vec3 color = textureLod(texture6, v, 2).rgb; // mix(vec3(104,142,173)/vec3(255)
   result = mix(color, result, fogFactor);
   // result = vec3(z);
   // result = ambient_diffuse;
@@ -755,6 +755,6 @@ void main()
   // result = textureLod(texture6,r,4).rgb;
   // result = pow(result,vec3(2.2));
   // result = 1*result;
-  // result = m.normal;
+  // result = vec3(ground_height);
   out0 = vec4(result, 1);
 }

@@ -380,49 +380,17 @@ void push_log_to_disk()
   file.close();
   message_log.clear();
 }
-std::string vtos(glm::vec2 v)
+std::string to_string(glm::vec2 v)
 {
-  std::string result = "";
-  for (uint32 i = 0; i < 2; ++i)
-  {
-    if (v[i] >= 0.0f)
-    {
-      result += " ";
-    }
-    result += to_string(v[i]) + " ";
-  }
-  return result;
+  return s("(",v.x,",", v.y,")");
 }
-std::string vtos(glm::vec3 v)
+std::string to_string(glm::vec3 v)
 {
-  std::string result = "";
-  for (uint32 i = 0; i < 3; ++i)
-  {
-    if (v[i] >= 0.0f)
-    {
-      result += " ";
-    }
-    result += to_string(v[i]) + " ";
-  }
-  return result;
+  return s("(", v.x, ",", v.y,",", v.z, ")");
 }
-std::string vtos(glm::vec4 v)
+std::string to_string(glm::vec4 v)
 {
-  std::string result = "";
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    if (v[i] >= 0.0f)
-    {
-      result += " ";
-    }
-    string sf = to_string(v[i]);
-    while (sf.length() > 6)
-      sf.pop_back();
-    while (sf.length() <= 6)
-      sf.push_back('0');
-    result += sf + " ";
-  }
-  return result;
+  return s("(", v.x, ",", v.y, ",", v.z, ",", v.w, ")");
 }
 
 std::string qtos(glm::quat v)
@@ -530,9 +498,9 @@ const char* filter_format_to_string(GLenum filter_format)
   case GL_LINEAR_MIPMAP_NEAREST:
     return "GL_LINEAR_MIPMAP_NEAREST";
   case GL_LINEAR_MIPMAP_LINEAR:
-    return "GL_LINEAR_MIPMAP_LINEAR - Trilinear  Should only be in the min filter";
+    return "GL_LINEAR_MIPMAP_LINEAR";
   case GL_LINEAR:
-    return "GL_LINEAR - Bilinear - Should only be in the mag filter";
+    return "GL_LINEAR";
   default:
     return "UNKNOWN";
   }

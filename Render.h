@@ -12,7 +12,7 @@
 using json = nlohmann::json;
 using namespace glm;
 
-void blit_attachment(Framebuffer& src, Framebuffer& dst, uint32 attachment = 0);
+void blit_attachment(Framebuffer &src, Framebuffer &dst);
 struct Conductor_Reflectivity
 {
   static const vec4 iron;
@@ -174,6 +174,7 @@ struct Texture_Descriptor
 struct Texture
 {
   Texture() {}
+  Texture(std::shared_ptr<Texture_Handle> texture);
   Texture(Texture_Descriptor &td);
 
   Texture(std::string name, glm::ivec2 size, uint8 levels, GLenum format, GLenum minification_filter,
@@ -341,7 +342,7 @@ struct Uniform_Set_Descriptor
 
 struct Material_Descriptor
 {
-  Material_Descriptor() {}
+  // Material_Descriptor() {}
   void mod_by(const Material_Descriptor *override);
   Texture_Descriptor albedo;
   Texture_Descriptor normal;
@@ -356,7 +357,8 @@ struct Material_Descriptor
   std::string frag_shader;
   vec2 uv_scale = vec2(1);
   vec2 normal_uv_scale = vec2(1);
-  float albedo_alpha_override = -1.f;
+  float32 albedo_alpha_override = -1.f;
+  float32 derivative_offset = 0.008;
   bool backface_culling = true;
   bool translucent_pass = false;
   bool discard_on_alpha = true;
@@ -517,7 +519,7 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
-  Render_Entity(){ }
+  Render_Entity() {}
   Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index);
   mat4 transformation;
   Mesh *mesh;
@@ -888,25 +890,18 @@ struct Particle_Emitter
   std::shared_ptr<Physics_Shared_Data> shared_data;
 };
 
-
-
-
-//todo:
-//browse file and load from disk
-//ability to select out of any texture in the cache to edit
-//put a door in blades edge and put it on the map
-
-
-
-
+// todo:
+// browse file and load from disk
+// ability to select out of any texture in the cache to edit
+// put a door in blades edge and put it on the map
 
 struct Texture_Paint
 {
-  Texture_Paint(){}
-  void run(std::vector<SDL_Event>* imgui_event_accumulator);
-  void iterate(Texture* t, float32 time);
-  Texture create_new_texture(glm::ivec2 size,const char* name = nullptr);
-  Texture* change_texture_to(int32 index);
+  Texture_Paint() {}
+  void run(std::vector<SDL_Event> *imgui_event_accumulator);
+  void iterate(Texture *t, float32 time);
+  Texture create_new_texture(glm::ivec2 size, const char *name = nullptr);
+  Texture *change_texture_to(int32 index);
   bool window_open = true;
   Shader drawing_shader;
   Texture display_surface;
@@ -936,7 +931,7 @@ struct Texture_Paint
   vec4 clear_color = vec4(0.05);
   float32 intensity = 1.0f;
   float32 exponent = 1.0f;
-  float32 size = 5.0f;
+  float32 size = 155.0f;
   float32 exposure_delta = 0.1f;
   vec2 last_drawn_ndc = vec2(0, 0);
   vec2 last_seen_mouse_ndc = vec2(0);
@@ -956,7 +951,7 @@ struct Texture_Paint
   std::string filename;
   float32 sim_time = 0.f;
   ivec4 mask = ivec4(1);
-  bool draw_cursor = false;
+  bool draw_cursor = true;
   ivec2 new_texture_size = ivec2(1024);
   int32 custom_draw_mode_set = 0;
   File_Picker texture_picker = File_Picker(".");
@@ -964,21 +959,17 @@ struct Texture_Paint
 
 struct Liquid_Surface
 {
-  Liquid_Surface()
-  {
-
-    
-  }
-  void init(State* state, vec3 pos, vec3 size, ivec2 resolution);
-  void run(State* state);
+  Liquid_Surface() {}
+  void init(State *state, vec3 pos, float32 scale, ivec2 resolution);
+  void run(State *state);
   ~Liquid_Surface();
   void set_heightmap(Texture texture);
-  void generate_geometry_from_heightmap(vec4* heightmap_pixel_array = nullptr, vec4* velocity_pixel_array=nullptr);
-  bool finish_texture_download_and_generate_geometry();//version without the pixel copy
+  void generate_geometry_from_heightmap(vec4 *heightmap_pixel_array = nullptr, vec4 *velocity_pixel_array = nullptr);
+  bool finish_texture_download_and_generate_geometry(); // version without the pixel copy
   void start_texture_download();
   bool finish_texture_download();
   void zero_velocity();
-  bool apply_geometry_to_octree_if_necessary(Flat_Scene_Graph* scene);
+  bool apply_geometry_to_octree_if_necessary(Flat_Scene_Graph *scene);
   Texture_Paint painter;
   Node_Index ground = NODE_NULL;
   Node_Index water = NODE_NULL;
@@ -1002,13 +993,21 @@ struct Liquid_Surface
   Framebuffer copy_heightmap_fbo;
   Framebuffer copy_velocity_fbo;
   Framebuffer liquid_shader_fbo;
+
+  // for resized downloading:
+  Framebuffer heightmap_resize_fbo;
+  Framebuffer velocity_resize_fbo;
+  Texture height_dst;
+  Texture velocity_dst;
+  ivec2 desired_download_resolution = ivec2(HEIGHTMAP_RESOLUTION);
+
   Texture heightmap;
   Texture velocity;
   Texture velocity_copy;
   Texture heightmap_copy;
   Mesh quad;
   uint32 frames_until_check = 33;
-  State* state = nullptr;
+  State *state = nullptr;
   ivec2 heightmap_resolution;
   uint32 current_buffer_size = 0;
 
@@ -1016,9 +1015,7 @@ struct Liquid_Surface
 
   bool invalidated = true;
   bool initialized = false;
-
 };
-
 
 mat4 fullscreen_quad();
 struct Renderer

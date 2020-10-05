@@ -589,7 +589,7 @@ float waterheight(vec2 uv, float time)
 float ambient_waves(vec2 p, float timescale, int i)
 {
   // turb style:
-  return turb(p, timescale * 11 * time);
+  return turb(p, timescale * 6 * time);
 
   // fbm style:
   float water_height = 0.f;
@@ -736,7 +736,7 @@ vec3 get_water_normal()
 
   vec3 waternormal = normalize(waternormalfine + waternormallarge);
 
-  waterp = 3.1f * frag_world_position.xy;
+  waterp = .231f * frag_world_position.xy;
 
   h = ambient_waves(waterp, .2350f, 11);
   hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 11);
@@ -744,7 +744,7 @@ vec3 get_water_normal()
   dx = hdx - h;
   dy = hdy - h;
   vec3 waternormaltest = normalize(vec3(dx, dy, eps));
-  waternormaltest.z *= max(lenpd * 511121.f, .025251);
+  waternormaltest.z *= max(lenpd * 81121.f, .025251);
   return normalize(waternormaltest);
 }
 
@@ -819,7 +819,7 @@ void main()
   vec3 velocity = velocity_sample.r * vec3(-1, 0, 0) + velocity_sample.g * vec3(1, 0, 0) +
                   velocity_sample.b * vec3(0, -1, 0) + velocity_sample.a * vec3(0, 1, 0);
 
-  vec2 fbmv = vec2(pow(length(velocity), 1.2) / max(water_depth, 0.01));
+  vec2 fbmv = 4.f * vec2(pow(length(velocity), 1.2) / max(water_depth, 0.01));
   // fbmv = smoothstep(75.1011f, 216.50f, fbmv + velocity.xy);
   // fbmv = smoothstep(75.1011f, 216.50f, fbmv);
   float mistlocation = smoothstep(0.05f, 3.f, length(fbmv));
@@ -961,7 +961,7 @@ void main()
     r.z = -r.z;
   }
 
-  float diffuse_loss = 1.0; //.315f; // lobe?
+  float diffuse_loss = .120; //.315f; // lobe?
 
   // refraction sampling
   vec3 refracted_view = normalize(refract(v, m.normal, 1.02).xyz);
@@ -1034,11 +1034,11 @@ void main()
   // A = saturate((1 * density)/depth_of_object);
   float trim_very_thin_water =
       saturate(smoothstep(0.0015, 0.015, water_depth) + smoothstep(0.0015, 0.015, depth_of_object));
-  float trim_very_thin_water2 = smoothstep(0.0345, 0.045, water_depth);
+  float trim_very_thin_water2 = smoothstep(0.0005, 0.00445, water_depth);
   float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
   float shore_fbm2 =
       pow(saturate(.755f * fbm_h_n(1.5f * frag_world_position.xy + .65f * vec2(sin(time)), 0.8125f, 2)), 2);
-  float shore_t = shore_fbm2 * shore_fbm * trim_very_thin_water2 * (1 - smoothstep(.00, 0.19f, water_depth));
+  float shore_t = shore_fbm2 * shore_fbm * (1 - smoothstep(.00,  0.001519f, water_depth));
   // A = mix(A,0.9f,step(0.9,A));
 
   // light that reaches v from sea floor
@@ -1051,10 +1051,11 @@ void main()
   vec3 total_specular = direct_specular + ambient_specular;
   vec3 total_diffuse = direct_diffuse + ambient_diffuse;
 
-  vec3 mist_result = vec3(mistf * saturate(shore_t + mistlocation));
+  vec3 mist_result = vec3(mistf * saturate(saturate(shore_t) + saturate(mistlocation)));
+  //mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
   vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
   // result += (1 - A) * 2.f * mist_result * total_specular;
-  result += trim_very_thin_water * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
+  result +=   15*clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
   // result = (1 - A) *mist_result*Kd;
   vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
   // result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
@@ -1068,7 +1069,7 @@ void main()
     result = debug;
   }
   // float height_t =  1-smoothstep(0,.4141,pow(lenpd,.25f));
-  // result = vec3(height_t);
+  // result = 1000.f*vec3(length(velocity));
 
   //
 
@@ -1082,8 +1083,11 @@ void main()
   randfog = 1;
   float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
-  vec3 color = textureLod(texture6, v, 1).rgb; // mix(vec3(104,142,173)/vec3(255)
+  vec3 color = textureLod(texture6, v, 2).rgb; // mix(vec3(104,142,173)/vec3(255)
   result = mix(color, result, fogFactor);
 
+  // result = total_specular;//total_diffuse;
+  //result = m.normal;
+  //result = vec3(mistf*shore_t);
   out0 = vec4(result, 1);
 }

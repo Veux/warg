@@ -52,6 +52,7 @@ const uint32 ENV_MAP_MIP_LEVELS = 7;
 static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
+shared_ptr<Texture_Handle> COPIED_TEXTURE_HANDLE;
 extern std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
 
 // if we overwrite an opengl object in a state thread that isnt the main thread
@@ -445,6 +446,21 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
+Texture::Texture(std::shared_ptr<Texture_Handle> texture)
+{
+  t.name = s("Created from copied handle of: ", texture->filename);
+  t.source = texture->filename;
+  t.size = texture->size;
+  t.format = texture->internalformat;
+  t.key = s(t.source, ",", t.format);
+  t.wrap_s = texture->wrap_s;
+  t.wrap_t = texture->wrap_t;
+  t.minification_filter = texture->minification_filter;
+  t.magnification_filter = texture->magnification_filter;
+  t.levels = texture->levels;
+  this->texture = texture;
+}
+
 Texture::Texture(Texture_Descriptor &td)
 {
   t = td;
@@ -641,6 +657,7 @@ void Texture::load()
 
         if (ready == GL_SIGNALED)
         {
+          t.size = texture->size;
           glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
 
@@ -710,7 +727,7 @@ void Texture::load()
 
     TEXTURE2D_CACHE[t.key] = texture;
     texture->internalformat = GL_RGBA8;
-    texture->size = ivec2(1);
+    t.size = texture->size = ivec2(1);
     texture->datatype = GL_UNSIGNED_BYTE;
     uint8 arr[4] = {255, 255, 255, 255};
     glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
@@ -722,27 +739,13 @@ void Texture::load()
   Image_Data imgdata;
   if (IMAGE_LOADER.load(t.source, &imgdata, t.format))
   {
-
-    if (t.format == GL_RGBA32F)
-    {
-      if (t.source == "/Assets/Textures/blocks_normal.jpg")
-      {
-        int a = 3;
-      }
-
-      if (t.source == "./Assets/Textures/blocks_normal.jpg")
-      {
-        int a = 3;
-      }
-    }
-
     if (!imgdata.data)
     {
       texture = make_shared<Texture_Handle>();
       texture->filename = t.name + " - FILE MISSING";
       TEXTURE2D_CACHE[t.key] = texture;
       texture->internalformat = GL_RGBA8;
-      texture->size = ivec2(1);
+      t.size = texture->size = ivec2(1);
       texture->datatype = GL_UNSIGNED_BYTE;
       texture->levels = t.levels;
       uint8 arr[4] = {255, 255, 255, 255};
@@ -1157,7 +1160,7 @@ void Material::load()
   {
     descriptor.frag_shader = DEFAULT_FRAG_SHADER;
   }
-
+  descriptor.derivative_offset = default_md.derivative_offset;
   shader = Shader(descriptor.vertex_shader, descriptor.frag_shader);
   reload_from_descriptor = false;
 }
@@ -1174,6 +1177,13 @@ void Material::bind()
   shader.use();
 
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
+
+  
+ // if (shader.vs == "displacement.vert")
+  {
+    shader.set_uniform("derivative_offset", descriptor.derivative_offset);
+    //ASSERT(descriptor.derivative_offset != 0.0);
+  }
 
   bool success = albedo.bind_for_sampling_at(Texture_Location::albedo);
   shader.set_uniform("texture0_mod", albedo.t.mod);
@@ -1386,16 +1396,114 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
-void blit_attachment(Framebuffer& src, Framebuffer& dst, uint32 attachment)
+void blit_attachment(Framebuffer &src, Framebuffer &dst)
 {
   glBlitNamedFramebuffer(src.fbo->fbo, dst.fbo->fbo, 0, 0, src.color_attachments[0].t.size.x,
-    src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
-    GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+      src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
+      GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 }
 
 mat4 fullscreen_quad()
 {
   return scale(vec3(2, 2, 1));
+}
+
+void draw_texture_handle_info(shared_ptr<Texture_Handle> ptr)
+{
+  if (!ptr.get())
+  {
+    ImGui::Text("No texture");
+    return;
+  }
+  uint32 addr = (uint32)ptr.get();
+  std::stringstream ss;
+  ss << std::hex << addr;
+  std::string str = ss.str();
+  ImGui::Text(s("Heap Address:", str).c_str());
+  ImGui::SameLine();
+  if (ImGui::Button("Copy Handle"))
+  {
+    COPIED_TEXTURE_HANDLE = ptr;
+  }
+  ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
+  ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
+
+  const char *min_filter_result = filter_format_to_string(ptr->minification_filter);
+  const char *mag_filter_result = filter_format_to_string(ptr->magnification_filter);
+  bool min_good = strcmp(min_filter_result, filter_format_to_string(GL_LINEAR_MIPMAP_LINEAR)) == 0;
+  bool mag_good = strcmp(mag_filter_result, filter_format_to_string(GL_LINEAR)) == 0;
+  ImGui::Text("Minification filter:");
+  ImGui::SameLine();
+  if (min_good)
+  {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), min_filter_result);
+  }
+  else
+  {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), min_filter_result);
+  }
+
+  ImGui::Text("Magnification filter:");
+  ImGui::SameLine();
+  if (mag_good)
+  {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), mag_filter_result);
+  }
+  else
+  {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), mag_filter_result);
+  }
+
+  ImGui::Text("Format:");
+  ImGui::SameLine();
+  ImGui::TextColored(ImVec4(1, 0, 1, 1), texture_format_to_string(ptr->internalformat));
+
+  if (ptr->is_cubemap)
+  {
+    ImGui::Text("Type:");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1, 0, 1, 1), "Cubemap");
+  }
+  else
+  {
+    ImGui::Text("Type:");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1, 0, 1, 1), "Texture2D");
+  }
+  ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
+  Imgui_Texture_Descriptor descriptor;
+  descriptor.ptr = ptr;
+  GLenum format = descriptor.ptr->get_format();
+  bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
+                    format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
+  descriptor.gamma_encode = gamma_flag;
+  descriptor.is_cubemap = ptr->is_cubemap;
+  ImGui::Checkbox("Use alpha in thumbnail", &ptr->imgui_use_alpha);
+  ImGui::SetNextItemWidth(200);
+  ImGui::DragFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.02f);
+  uint32 mip_levels = ptr->levels;
+  ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
+  ImGui::SetNextItemWidth(200);
+  ImGui::SliderFloat("Mipmap LOD", &ptr->imgui_mipmap_setting, 0.f, float32(mip_levels), "%.2f");
+  descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
+  descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
+  descriptor.size = ptr->imgui_size_scale * vec2(256);
+  descriptor.y_invert = false;
+  descriptor.use_alpha = ptr->imgui_use_alpha;
+  put_imgui_texture(&descriptor);
+
+  if (ImGui::TreeNode("List Mipmaps"))
+  {
+    for (uint32 i = 0; i < mip_levels; ++i)
+    {
+      Imgui_Texture_Descriptor d = descriptor;
+      d.mip_lod_to_draw = (float)i;
+      d.is_mipmap_list_command = true;
+      put_imgui_texture(&d);
+    }
+    ImGui::TreePop();
+  }
 }
 
 void Renderer::draw_imgui()
@@ -1459,12 +1567,14 @@ void Renderer::draw_imgui()
 
       ImGui::End();
     }
-
+    if (ImGui::CollapsingHeader("Copied Texture"))
+    {
+      draw_texture_handle_info(COPIED_TEXTURE_HANDLE);
+    }
     if (ImGui::CollapsingHeader("GPU Textures"))
-    { // todo improve texture names for generated textures
-
+    {
       ImGui::Indent(5);
-      vector<Imgui_Texture_Descriptor> imgui_texture_array; // all the unique textures
+      vector<Imgui_Texture_Descriptor> imgui_texture_array;
       for (auto &tex : TEXTURE2D_CACHE)
       {
         auto ptr = tex.second.lock();
@@ -1501,10 +1611,10 @@ void Renderer::draw_imgui()
         Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
         shared_ptr<Texture_Handle> ptr = itd->ptr;
 
-        const char* label = ptr->peek_filename().c_str();
-        ImGui::PushID(s(ptr->texture,label).c_str());
+        const char *label = ptr->peek_filename().c_str();
+        ImGui::PushID(s(ptr->texture, label).c_str());
         bool popped = false;
-        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        ImGuiWindow *window = ImGui::GetCurrentWindow();
         ImGuiID id = window->GetID(label);
         bool node_is_open = ImGui::TreeNodeBehaviorIsOpen(id, ImGuiTreeNodeFlags_Framed);
         if (node_is_open)
@@ -1515,74 +1625,17 @@ void Renderer::draw_imgui()
         {
           ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(255, 0, 0, 1));
         }
-        if (ImGui::TreeNodeEx(label,ImGuiTreeNodeFlags_Framed))
+        if (ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_Framed))
         {
-          float32 indent_width = 25;
           ImGui::PopStyleColor();
           popped = true;
+          float32 indent_width = 25;
           ImGui::Indent(indent_width);
-          ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
-          ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
-          ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          ImGui::Text("Magnification filter:");
-          ImGui::SameLine();
-          ImGui::TextColored(ImVec4(1, 0, 1, 1), filter_format_to_string(ptr->magnification_filter));
-          ImGui::Text("Minification filter:");
-          ImGui::SameLine();
-          ImGui::TextColored(ImVec4(1, 0, 1, 1), filter_format_to_string(ptr->minification_filter));
-          ImGui::Text("Format:");
-          ImGui::SameLine();
-          ImGui::TextColored(ImVec4(1, 0, 1, 1), texture_format_to_string(ptr->internalformat));
-
-          if (ptr->is_cubemap)
-          {
-            ImGui::Text("Type:");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1, 0, 1, 1), "Cubemap");
-          }
-          else
-          {
-            ImGui::Text("Type:");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1,0,1,1),"Texture2D");
-          }
-          ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
-          Imgui_Texture_Descriptor descriptor;
-          descriptor.ptr = ptr;
-          GLenum format = descriptor.ptr->get_format();
-          bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
-                            format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-
-          descriptor.gamma_encode = gamma_flag;
-          descriptor.is_cubemap = ptr->is_cubemap;
-          ImGui::Checkbox("Use alpha in thumbnail",&ptr->imgui_use_alpha);
-          ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
-          uint32 mip_levels = ptr->levels;
-          ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
-          ImGui::InputFloat("Mipmap LOD", &ptr->imgui_mipmap_setting, 0.1f);
-          descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
-          descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
-          descriptor.size = ptr->imgui_size_scale * vec2(256);
-          descriptor.y_invert = true;
-          descriptor.use_alpha = ptr->imgui_use_alpha;
-          put_imgui_texture(&descriptor);
-
-          if (ImGui::TreeNode("List Mipmaps"))
-          {
-            for (uint32 i = 0; i < mip_levels; ++i)
-            {
-              Imgui_Texture_Descriptor d = descriptor;
-              d.mip_lod_to_draw = (float)i;
-              d.is_mipmap_list_command = true;
-              put_imgui_texture(&d);
-            }
-            ImGui::TreePop();
-          }
+          draw_texture_handle_info(ptr);
           ImGui::TreePop();
-
           ImGui::Unindent(indent_width);
         }
-        if(!popped)
+        if (!popped)
           ImGui::PopStyleColor();
         ImGui::PopID();
       }
@@ -1688,6 +1741,8 @@ void Renderer::build_shadow_maps()
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
+
 
 void run_pixel_shader(Shader *shader, vector<Texture> *src_textures, Framebuffer *dst, bool clear_dst)
 {
@@ -3910,7 +3965,6 @@ Texture *Texture_Paint::change_texture_to(int32 index)
   fbo_display.color_attachments[0] = display_surface;
   fbo_display.init();
 
-
   td.name = "intermediate of Texture_Paint";
   intermediate = Texture(td);
   intermediate.load();
@@ -3956,10 +4010,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   const ImVec2 mouse = ImGui::GetMousePos();
   const ImVec2 windowp = ImGui::GetWindowPos();
   const ImVec2 window_size = ImGui::GetWindowSize();
-  ivec2 window_cursor_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
+  ivec2 window_mouse_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
   // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0 ||
   //                    window_cursor_pos.y > window_size.y;
-  window_cursor_pos = clamp(window_cursor_pos, ivec2(0), ivec2(window_size.x, window_size.y));
+  window_mouse_pos = clamp(window_mouse_pos, ivec2(0), ivec2(window_size.x, window_size.y));
   Texture *surface = &textures[selected_texture];
 
   if (!surface->texture || !surface->bind_for_sampling_at(0))
@@ -3972,7 +4026,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::Checkbox("HDR", &hdr);
   ImGui::SameLine();
   ImGui::Checkbox("Cursor", &draw_cursor);
-  ImGui::SameLine();
   if (ImGui::Button("Clear Color"))
   {
     clear = 2;
@@ -4097,6 +4150,18 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   {
     texture_picker.window_open = true;
   }
+  ImGui::SameLine();
+  if (ImGui::Button("Paste Texture"))
+  {
+    Texture new_texture = COPIED_TEXTURE_HANDLE;
+    textures.insert(textures.begin() + selected_texture, new_texture);
+    surface = change_texture_to(selected_texture);
+
+    if (is_float_format(new_texture.texture->internalformat))
+      hdr = true;
+    else
+      hdr = false;
+  }
   if (texture_picker.run())
   {
     std::string new_texture_name = texture_picker.get_result();
@@ -4105,9 +4170,9 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     td.source = new_texture_name;
     td.format = GL_RGBA32F;
     Texture new_texture = td;
+    new_texture.load();
     textures.insert(textures.begin() + selected_texture, new_texture);
     surface = change_texture_to(selected_texture);
-    
   }
   if (ImGui::Button("Clone Texture"))
   {
@@ -4122,39 +4187,18 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     fbo_intermediate.init();
     fbo_drawing.color_attachments[0] = *surface;
     fbo_drawing.init();
-    blit_attachment(fbo_drawing, fbo_intermediate, 0);
+    blit_attachment(fbo_drawing, fbo_intermediate);
     fbo_intermediate.color_attachments[0] = last_intermediate;
     textures.insert(textures.begin() + selected_texture, new_texture);
-    //surface = &textures[selected_texture];
+    // surface = &textures[selected_texture];
     surface = change_texture_to(selected_texture);
   }
   ImGui::SameLine();
 
-
-
-
-
-
-
-  //green texture means its transparent i think
-  //should have the texture draw ui for the renderer split up
-  //alpha channel into a 2nd black/white image
-  //or just make a checkbox to swapto/use alpha
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  // green texture means its transparent i think
+  // should have the texture draw ui for the renderer split up
+  // alpha channel into a 2nd black/white image
+  // or just make a checkbox to swapto/use alpha
 
   if (ImGui::Button("Clear all"))
   {
@@ -4281,7 +4325,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ivec2 childoffset = vec2(childo.x, childo.y);
   // ImGuiWindowFlags childflags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGuiWindowFlags childflags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, .2));
   ImGui::BeginChild("paintbox", ImVec2(0, 0), false, childflags);
+  ImGui::PopStyleColor();
   bool is_within = ImGui::IsWindowHovered();
   // ImGui::Dummy(ImVec2(0.0f, 120.0f));
   // ImGui::Dummy(ImVec2(120.0f, 0.f));
@@ -4291,7 +4338,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
   glGenerateTextureMipmap(display_surface.texture->texture);
 
-  put_imgui_texture(&display_surface, texture_size);
+  put_imgui_texture(&display_surface, ivec2(texture_size), false, false);
 
   // ImGui::SameLine();
   // ImGui::Dummy(ImVec2(120.0f, 0.f));
@@ -4317,16 +4364,20 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   zoom = clamp(zoom, 0.1f, 10.f);
 
-  const vec2 cursor_pos_within_texture = window_cursor_pos - window_position_for_texture - childoffset + scroll;
+  ivec2 texture_position_within_window = window_position_for_texture;
+  const vec2 cursor_pos_within_texture = window_mouse_pos - texture_position_within_window - childoffset + scroll;
+
+  // mat4 scroll = translate(vec3(cursor_pos_within_texture, 0));
 
   bool out_of_texture = cursor_pos_within_texture.x < 0 || cursor_pos_within_texture.x > texture_size.x ||
                         cursor_pos_within_texture.y < 0 || cursor_pos_within_texture.y > texture_size.y;
- 
 
   // ImGui::Text(s(cursor_pos_within_texture.x, " ", cursor_pos_within_texture.y).c_str());
   vec2 ndc_cursor = cursor_pos_within_texture / vec2(texture_size);
   ndc_cursor = 2.0f * ndc_cursor;
   ndc_cursor = ndc_cursor - vec2(1);
+
+  ImGui::Text(s("ndc:", ndc_cursor).c_str());
 
   ImVec2 imouse_delta = ImGui::GetIO().MouseDelta;
   vec2 mouse_delta = vec2(imouse_delta.x, imouse_delta.y);
@@ -4346,20 +4397,26 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     ImGui::SetScrollY(scroll.y - mouse_delta.y);
   }
 
-  
   while (sim_time + dt < time)
   {
     // iterate(surface, sim_time);
     sim_time += dt;
   }
 
-  
+  blit_attachment(fbo_drawing, fbo_intermediate);
 
+  GLint p;
+  glGetNamedFramebufferAttachmentParameteriv(
+      fbo_drawing.fbo->fbo, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &p);
 
-
-
-  blit_attachment(fbo_drawing, fbo_intermediate, 0);
-
+  if (p == GL_LINEAR)
+  {
+    glDisable(GL_FRAMEBUFFER_SRGB);
+  }
+  if (p == GL_SRGB)
+  {
+    glEnable(GL_FRAMEBUFFER_SRGB);
+  }
 
   glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
   fbo_drawing.bind_for_drawing_dst();
@@ -4377,6 +4434,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   drawing_shader.set_uniform("time", time);
   drawing_shader.set_uniform("blendmode", blendmode);
   drawing_shader.set_uniform("tonemap_pow", pow);
+  drawing_shader.set_uniform("aspect", float32(surface->texture->size.x)/float32(surface->texture->size.y));
   drawing_shader.set_uniform("mask", vec4(mask));
 
   if (is_within)
@@ -4595,6 +4653,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   drawing_shader.set_uniform("mouse_pos", vec2(0));
   drawing_shader.set_uniform("size", 450.f);
   drawing_shader.set_uniform("mode", 3);
+
+  drawing_shader.set_uniform("aspect", 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
 
@@ -4608,8 +4668,11 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   postprocessing_shader.set_uniform("time", time);
   postprocessing_shader.set_uniform("tonemap_aces", (int32)postprocess_aces);
   postprocessing_shader.set_uniform("mouse_pos", draw_cursor ? ndc_cursor : vec2(-9999999));
+  postprocessing_shader.set_uniform("aspect", float32(surface->texture->size.x) / float32(surface->texture->size.y));
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
+
+  glDisable(GL_FRAMEBUFFER_SRGB);
 
   glGenerateTextureMipmap(surface->texture->texture);
   ImGui::EndChild();
@@ -4617,39 +4680,54 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   last_run_visit_time = time;
 }
 
-void Liquid_Surface::init(State *state, vec3 pos, vec3 size, ivec2 resolution)
+void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolution)
 {
+  vec3 size = vec3(scale);
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(!initialized);
   initialized = true;
   liquid_shader = Shader("passthrough.vert", "liquid.frag");
-  Mesh_Descriptor md(plane, "Texture_Paint's quad");
+  Mesh_Descriptor md(plane, "Liquid_Surface's quad");
   quad = Mesh(md);
 
   Mesh_Descriptor mesh;
   mesh.name = "Liquid_Surface generated grid";
   mesh.mesh_data = generate_grid(resolution);
   Material_Descriptor material;
+
+
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.034, .215, .289, .367);
   material.uv_scale = vec2(1);
   material.roughness.source = "white";
-  material.roughness.mod = vec4(0.84);
+  material.roughness.mod = vec4(0.054);
   material.metalness.mod = vec4(1);
   material.vertex_shader = "displacement.vert";
   material.frag_shader = "water.frag";
   material.backface_culling = true;
   material.translucent_pass = true;
   material.uniform_set.bool_uniforms["ground"] = false;
+
+
+
   water = state->scene.add_mesh("water", &mesh, &material);
   state->scene.nodes[water].scale = size;
-  state->scene.nodes[water].position = pos - vec3(0, 0, 0.001);
+  state->scene.nodes[water].position = pos - vec3(0, 0, 0.03);
   material.frag_shader = "terrain.frag";
   material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;
   ground = state->scene.add_mesh("ground", &mesh, &material);
   state->scene.nodes[ground].scale = size;
   state->scene.nodes[ground].position = pos;
+
+  Material_Index mi = state->scene.nodes[ground].model[0].second;
+  Material_Descriptor* groundmat = &state->scene.resource_manager->material_pool[mi].descriptor;
+  if (groundmat->derivative_offset == 0.0)
+  {
+    set_message("Liquid_Surface::init bad offset after add", "", 330.f);
+  }
+
+
 
   this->state = state;
 
@@ -4658,7 +4736,7 @@ void Liquid_Surface::init(State *state, vec3 pos, vec3 size, ivec2 resolution)
   painter.new_texture_size = resolution;
   painter.textures.clear();
   painter.textures.push_back(painter.create_new_texture(painter.new_texture_size));
-  painter.selected_texture = 0;
+  painter.change_texture_to(0);
   set_heightmap(painter.textures[0]);
 }
 
@@ -4674,15 +4752,85 @@ Liquid_Surface::~Liquid_Surface()
 
 void Liquid_Surface::set_heightmap(Texture texture)
 {
-  texture.load();
+  while (!texture.texture || !texture.texture->texture)
+  {
+    texture.load();
+  }
+  ASSERT(texture.texture->size != ivec2(0));
   ASSERT(texture.texture && texture.texture->texture);
-  heightmap_resolution = texture.t.size;
+  heightmap_resolution = texture.texture->size;
   heightmap = heightmap_fbo.color_attachments[0] = texture;
   heightmap_fbo.init();
+
+  glDeleteSync(read_sync);
+  read_sync = 0;
+  glDeleteBuffers(1, &heightmap_pbo);
+  glDeleteBuffers(1, &velocity_pbo);
+  current_buffer_size = 0;
+
+  glCreateBuffers(1, &heightmap_pbo);
+  glCreateBuffers(1, &velocity_pbo);
+
+  velocity.t.size = texture.texture->size;
+  velocity.t.format = texture.texture->internalformat;
+  velocity.t.name = "Liquid_Surface::velocity";
+  velocity.t.source = "generate";
+  velocity = Texture(velocity.t);
+  velocity.load();
+  velocity_fbo.color_attachments[0] = velocity;
+  velocity_fbo.init();
+
+  heightmap_copy.t.size = texture.texture->size;
+  heightmap_copy.t.format = texture.texture->internalformat;
+  heightmap_copy.t.name = "Liquid_Surface::heightmap_copy";
+  heightmap_copy.t.source = "generate";
+  heightmap_copy = Texture(heightmap_copy.t);
+  heightmap_copy.load();
+  copy_heightmap_fbo.color_attachments[0] = heightmap_copy;
+  copy_heightmap_fbo.init();
+
+  velocity_copy.t.size = texture.texture->size;
+  velocity_copy.t.format = texture.texture->internalformat;
+  velocity_copy.t.name = "Liquid_Surface::velocity_copy";
+  velocity_copy.t.source = "generate";
+  velocity_copy = Texture(velocity_copy.t);
+  velocity_copy.load();
+  copy_velocity_fbo.color_attachments[0] = velocity_copy;
+  copy_velocity_fbo.init();
+
+  liquid_shader_fbo.color_attachments.resize(2);
+  liquid_shader_fbo.color_attachments[0] = heightmap;
+  liquid_shader_fbo.color_attachments[1] = velocity;
+  liquid_shader_fbo.init();
+
+  zero_velocity();
+  blit_attachment(heightmap_fbo, copy_heightmap_fbo);
+  blit_attachment(velocity_fbo, copy_velocity_fbo);
+
+  Texture_Descriptor td;
+  td.size = desired_download_resolution;
+  td.format = heightmap.texture->internalformat;
+  td.source = "generate";
+  td.name = "Liquid_Surface::height_dst";
+
+  height_dst = Texture(td);
+  height_dst.load();
+  heightmap_resize_fbo.color_attachments[0] = height_dst;
+  heightmap_resize_fbo.init();
+
+  td.name = "Liquid_Surface::velocity_dst";
+  velocity_dst = Texture(td);
+  velocity_dst.load();
+  velocity_resize_fbo.color_attachments[0] = velocity_dst;
+  velocity_resize_fbo.init();
 
   Flat_Scene_Graph_Node *node = &state->scene.nodes[water];
   Material_Index mi = node->model[0].second;
   Material *mat = &state->scene.resource_manager->material_pool[mi];
+  if (mat->descriptor.derivative_offset == 0.0)
+  {
+    set_message("Liquid_Surface::set_heightmap bad offset","",330.f);
+  }
   mat->load();
   mat->displacement = heightmap;
   mat->descriptor.uniform_set.texture_uniforms[water_velocity] = velocity_fbo.color_attachments[0];
@@ -4693,47 +4841,14 @@ void Liquid_Surface::set_heightmap(Texture texture)
   mat->load();
   mat->displacement = heightmap;
   mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
-  glDeleteSync(read_sync);
-  glDeleteBuffers(1, &heightmap_pbo);
-  glDeleteBuffers(1, &velocity_pbo);
-
-  glCreateBuffers(1, &heightmap_pbo);
-  glCreateBuffers(1, &velocity_pbo);
-
-  velocity.t = heightmap.t;
-  velocity.t.name = "velocity";
-  velocity = Texture(velocity.t);
-  velocity_fbo.color_attachments[0] = velocity;
-  velocity_fbo.init();
-
-  heightmap_copy.t = heightmap.t;
-  heightmap_copy.t.name = "heightmap_copy";
-  heightmap_copy = Texture(heightmap_copy.t);
-  copy_heightmap_fbo.color_attachments[0] = heightmap_copy;
-  copy_heightmap_fbo.init();
-
-  velocity_copy.t = heightmap.t;
-  velocity_copy.t.name = "velocity_copy";
-  velocity_copy = Texture(velocity_copy.t);
-  copy_velocity_fbo.color_attachments[0] = velocity_copy;
-  copy_velocity_fbo.init();
-
-  liquid_shader_fbo.color_attachments.resize(2);
-  liquid_shader_fbo.color_attachments[0] = heightmap;
-  liquid_shader_fbo.color_attachments[1] = velocity;
-  liquid_shader_fbo.init();
-
-  zero_velocity();
-  blit_attachment(heightmap_fbo, copy_heightmap_fbo,0);
-  blit_attachment(velocity_fbo, copy_velocity_fbo,0);
 }
 
 void Liquid_Surface::generate_geometry_from_heightmap(vec4 *heightmap_pixel_array, vec4 *velocity_pixel_array)
 {
-  if (last_generated_terrain_geometry_resolution != heightmap_resolution)
+  if (last_generated_terrain_geometry_resolution != desired_download_resolution)
   {
-    terrain_geometry = {std::string("Liquid_Surface cpu terrain"), generate_grid(heightmap_resolution)};
-    last_generated_terrain_geometry_resolution;
+    terrain_geometry = {std::string("Liquid_Surface cpu terrain"), generate_grid(desired_download_resolution)};
+    last_generated_terrain_geometry_resolution = desired_download_resolution;
   }
   if (!heightmap_pixel_array)
   {
@@ -4750,8 +4865,7 @@ void Liquid_Surface::generate_geometry_from_heightmap(vec4 *heightmap_pixel_arra
   {
     vec3 *pos = &terrain_geometry.mesh_data.positions[i];
     vec2 uv = terrain_geometry.mesh_data.texture_coordinates[i];
-    ASSERT(heightmap.t.size == heightmap_resolution);
-    ivec2 &size = heightmap_resolution;
+    ivec2 &size = desired_download_resolution;
 
     float32 eps = 0.0001f;
     vec2 sample_p = (vec2(size - 1) * uv) + vec2(eps);
@@ -4834,7 +4948,6 @@ bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph *sce
   return false;
 }
 
-
 bool Liquid_Surface::finish_texture_download_and_generate_geometry()
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
@@ -4887,6 +5000,35 @@ bool Liquid_Surface::finish_texture_download()
 
 void Liquid_Surface::start_texture_download()
 {
+  bool resize_to_desired_resolution = true;
+  if (resize_to_desired_resolution)
+  {
+    heightmap_fbo.init();
+    blit_attachment(heightmap_fbo, heightmap_resize_fbo);
+    blit_attachment(velocity_fbo, velocity_resize_fbo);
+
+    ASSERT(read_sync == 0);
+    uint32 buff_size = heightmap_resize_fbo.color_attachments[0].t.size.x *
+                       heightmap_resize_fbo.color_attachments[0].t.size.y * 4 * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, heightmap_pbo);
+    if (current_buffer_size != buff_size)
+    {
+      glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+    }
+    glGetTextureImage(heightmap_resize_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, velocity_pbo);
+    if (current_buffer_size != buff_size)
+    {
+      glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+    }
+    glGetTextureImage(velocity_resize_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+    read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    current_buffer_size = buff_size;
+    return;
+  }
+
   ASSERT(read_sync == 0);
   uint32 buff_size =
       heightmap_fbo.color_attachments[0].t.size.x * heightmap_fbo.color_attachments[0].t.size.y * 4 * sizeof(float32);
@@ -4910,9 +5052,8 @@ void Liquid_Surface::start_texture_download()
 
 void Liquid_Surface::run(State *state)
 {
-  painter.run(state->imgui_event_accumulator);
-  return;
-
+  //painter.run(state->imgui_event_accumulator);
+  //return;
 
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGui::Begin("Liquid_Surface", &window_open, window_flags);
@@ -4943,9 +5084,22 @@ void Liquid_Surface::run(State *state)
   { // if finish is successful, read_sync will be 0 until the next download request
     finish_texture_download_and_generate_geometry();
   }
+  if (ImGui::Button("Set Heightmap To Downloaded"))
+  {
+    start_texture_download();
+    while (!finish_texture_download_and_generate_geometry())
+    {
+    }
+    painter.new_texture_size = heightmap_resize_fbo.color_attachments[0].t.size;
+    painter.textures.push_back(heightmap_resize_fbo.color_attachments[0]);
+    painter.change_texture_to(painter.textures.size() - 1);
+    set_heightmap(heightmap_resize_fbo.color_attachments[0]);
+  }
+
   ImGui::InputInt("Water Iterations", &iterations);
   iterations = max(iterations, 0);
   ImGui::DragFloat3("Ambient Waves", &ambient_wave_scale[0], 0.05f, 0.0f, 100.f, "%.3f", 1.5f);
+
   if (!heightmap_fbo.color_attachments[0].texture || !heightmap_fbo.color_attachments[0].texture->texture)
   {
     return;
@@ -4972,8 +5126,8 @@ void Liquid_Surface::run(State *state)
   {
     my_time = my_time + dt;
 
-    blit_attachment(heightmap_fbo, copy_heightmap_fbo,0);
-    blit_attachment(velocity_fbo, copy_velocity_fbo,0);
+    blit_attachment(heightmap_fbo, copy_heightmap_fbo);
+    blit_attachment(velocity_fbo, copy_velocity_fbo);
 
     liquid_shader_fbo.bind_for_drawing_dst();
     copy_heightmap_fbo.color_attachments[0].bind_for_sampling_at(0);

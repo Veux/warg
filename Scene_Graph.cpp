@@ -204,6 +204,7 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::Checkbox("Uses Transparency", &ptr->descriptor.translucent_pass);
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
+  ImGui::SliderFloat("Derivative offset", &ptr->descriptor.derivative_offset,0.001f,0.5f);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
   ImGui::Checkbox("Fixed Function Blending", &ptr->descriptor.fixed_function_blending);
   ImGui::PopItemWidth();
@@ -2368,7 +2369,7 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
     material.emissive.mod = vec4(0.0f, 0.0f, .10f, .10f);
     mat3 = scene->resource_manager->push_custom_material(&material);
 
-    material.wireframe = false;
+    material.wireframe = true;
     // material.translucent_pass = false;
     // material.fixed_function_blending = false;
     // material.frag_shader = "emission.frag";

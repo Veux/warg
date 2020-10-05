@@ -17,7 +17,8 @@ bool WANT_SPAWN_OCTREE_BOX = false;
 bool WANT_CLEAR_OCTREE = false;
 
 extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
-
+extern void spawn_grabbyarm(Flat_Scene_Graph* scene, vec3 position);
+extern void update_grabbyarm(Flat_Scene_Graph* scene, float64 current_time);
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
     : State(name, window, window_size)
 {
@@ -26,7 +27,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   map = new Blades_Edge(scene);
 
 
-  terrain.init(this, vec3(0, 0, -.002), vec3(100, 100, 3), ivec2(HEIGHTMAP_RESOLUTION));
+  terrain.init(this, vec3(0, 0, -.002), 255, ivec2(HEIGHTMAP_RESOLUTION));
+  spawn_grabbyarm(&scene, vec3(0, 0, 1));
   scene.collision_octree.set_size(500);
   spell_db = Spell_Database(); /*
    map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
@@ -101,24 +103,26 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   scene.lights.light_count = 5;
 
-  Light *light = &scene.lights.lights[4];
-  light->position = vec3(1070.00000, -545.00000, 621.00000);
-  light->direction = vec3(3.00000, 0.00000, 6.00000);
-  light->brightness = 4580.93408;
-  light->color = vec3(1.00000, 1.00000, 0.99999);
-  light->attenuation = vec3(1.00000, 1.00000, 0.00000);
-  light->ambient = 0.00000;
-  light->radius = 33.24000;
-  light->cone_angle = 0.24000;
-  light->type = Light_Type::spot;
-  light->casts_shadows = true;
-  light->shadow_blur_iterations = 3;
-  light->shadow_blur_radius = 2.75560;
-  light->shadow_near_plane = 1280.10010;
-  light->shadow_far_plane = 1387.00012;
-  light->max_variance = 0.00000;
-  light->shadow_fov = 0.05125;
-  light->shadow_map_resolution = ivec2(4096, 4096);
+  Light* light4 = &scene.lights.lights[4];
+  light4->position = vec3(1070.00000, -545.00000, 621.00000);
+  light4->direction = vec3(3.00000, 0.00000, 6.00000);
+  light4->brightness = 4580.93408;
+  light4->color = vec3(1.00000, 1.00000, 0.99999);
+  light4->attenuation = vec3(1.00000, 1.00000, 0.00000);
+  light4->ambient = 0.24995;
+  light4->radius = 33.24000;
+  light4->cone_angle = 0.24000;
+  light4->type = Light_Type::spot;
+  light4->casts_shadows = 1;
+  light4->shadow_blur_iterations = 2;
+  light4->shadow_blur_radius = 0.42756;
+  light4->shadow_near_plane = 1180.09998;
+  light4->shadow_far_plane = 1587.00000;
+  light4->max_variance = 0.00000;
+  light4->shadow_fov = 0.25965;
+  light4->shadow_map_resolution = ivec2(4096, 4096);
+
+
 }
 
 Warg_State::~Warg_State()
@@ -791,7 +795,7 @@ void Warg_State::update()
 
   // set_message("Warg update. Time:", s(current_time), 1.0f);
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
-
+  update_grabbyarm(&scene, 3*current_time);
   process_messages();
 
   // update_stats_bar(); todo: fix

@@ -774,20 +774,20 @@ void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
   }
 }
 
-void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert)
+void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert, bool auto_aspect)
 {
   ASSERT(t);
   t->load();
-  put_imgui_texture(t->texture, size, y_invert);
+  put_imgui_texture(t->texture, size, y_invert, auto_aspect);
 }
 
-void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
+void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert, bool auto_aspect)
 {
   Texture texture = *td;
   texture.load();
-  put_imgui_texture(texture.texture, size, y_invert);
+  put_imgui_texture(texture.texture, size, y_invert, auto_aspect);
 }
-void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert)
+void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert, bool auto_aspect)
 {
   Imgui_Texture_Descriptor descriptor;
   descriptor.ptr = handle;
@@ -803,12 +803,16 @@ void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, b
     descriptor.gamma_encode = gamma_flag;
     descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
   }
-  put_imgui_texture(&descriptor);
+  put_imgui_texture(&descriptor, auto_aspect);
 }
 
-void put_imgui_texture(Imgui_Texture_Descriptor *descriptor)
+void put_imgui_texture(Imgui_Texture_Descriptor *descriptor, bool auto_aspect)
 {
   ASSERT(descriptor);
+  if (!auto_aspect)
+  {
+    descriptor->aspect = 1;
+  }
   IMGUI_TEXTURE_DRAWS.push_back(*descriptor);
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
 
@@ -819,18 +823,18 @@ void put_imgui_texture(Imgui_Texture_Descriptor *descriptor)
     ImGui::Image((ImTextureID)data, ImVec2(descriptor->aspect * descriptor->size.x, descriptor->size.y));
 }
 
-bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert)
+bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert, bool auto_aspect)
 {
-  return put_imgui_texture_button(t->texture, size, y_invert);
+  return put_imgui_texture_button(t->texture, size, y_invert, auto_aspect);
 }
 
-bool put_imgui_texture_button(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
+bool put_imgui_texture_button(Texture_Descriptor *td, glm::vec2 size, bool y_invert, bool auto_aspect)
 {
   Texture texture = *td;
   texture.load();
   return put_imgui_texture_button(texture.texture, size, y_invert);
 }
-bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert)
+bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert, bool auto_aspect)
 {
   Imgui_Texture_Descriptor descriptor;
   descriptor.ptr = handle;
@@ -846,12 +850,16 @@ bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 
     descriptor.gamma_encode = gamma_flag;
     descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
   }
-  return put_imgui_texture_button(&descriptor);
+  return put_imgui_texture_button(&descriptor, auto_aspect);
 }
 
-bool put_imgui_texture_button(Imgui_Texture_Descriptor *descriptor)
+bool put_imgui_texture_button(Imgui_Texture_Descriptor *descriptor, bool auto_aspect)
 {
   ASSERT(descriptor);
+  if (!auto_aspect)
+  {
+    descriptor->aspect = 1;
+  }
   IMGUI_TEXTURE_DRAWS.push_back(*descriptor);
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
 

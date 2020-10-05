@@ -4,6 +4,7 @@ uniform float time;
 uniform vec2 mouse_pos;
 uniform float zoom;
 uniform int tonemap_aces;
+uniform float aspect;
 
 uniform float size;
 in vec2 frag_uv;
@@ -47,7 +48,10 @@ void main()
 {
   vec4 source = texture2D(texture0, frag_uv);
   vec2 p = 2 * (frag_uv - vec2(0.5)); // ndc
-  float d = 1000 * (1. / size) * length(p - mouse_pos);
+  p.x = aspect * p.x;
+  vec2 mouse_p = mouse_pos;
+  mouse_p.x = aspect * mouse_p.x;
+  float d = 1000 * (1. / size) * length(p - mouse_p);
   vec4 result = source;
 
   if (tonemap_aces == 1)

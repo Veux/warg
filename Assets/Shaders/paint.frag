@@ -17,6 +17,7 @@ uniform float tonemap_pow;
 uniform float tonemap_x;
 uniform vec4 brush_color = vec4(1, 1, 1, 1);
 uniform vec4 mask;
+uniform float aspect;
 in vec2 frag_uv;
 
 layout(location = 0) out vec4 out0;
@@ -207,7 +208,7 @@ vec4 generate_terrain(vec4 source)
 {
   float t1 = 2.5 * turb(0.5 * frag_uv, .025f * time);
   float t2 = 1. * turb(4.0415 * frag_uv, .15f * time);
-  float terrain_height = t1 + t2;
+  float terrain_height = .05f * (t1 + t2);
   // float terrain_height = .13f * fbm_h_n(vec2(time) + 20.f * frag_uv, 1.5f, 15);
   float biome = 1.1f;
   return vec4(source.r, source.g + terrain_height, biome, 0);
@@ -215,18 +216,32 @@ vec4 generate_terrain(vec4 source)
 
 vec4 generate_water(vec4 source)
 {
-  float water_height = .1215f * fbm_h_n(220.f * (vec2(time, time * 0.331f) + random(frag_uv.yx)), .58501f, 2);
-  float water_height2 = 0.16135f * fbm_h_n(10.1f * (vec2(time, time * 0.331f) + frag_uv.yx), .391f, 6);
-  water_height = 0.1f * random(frag_uv.yx) + water_height2;
-  return vec4(water_height + water_height2 * (source.r), source.g, source.b, 0);
+  float smol_waves = 0.01f * random(frag_uv.yx);
+  float large_waves = 0.004f * fbm_h_n(135.1f * (vec2(time, time * 0.331f) + frag_uv.yx), .391f, 2);
+  float large_waves2 = 0.016f * fbm_h_n(20.1f * (vec2(time, time * 0.331f) + frag_uv.yx), .391f, 2);
+
+  float water_over_ground_location = fbm_h_n(5.f * (vec2(time, time * 0.3f) + frag_uv.yx), .958f, 4);
+  water_over_ground_location = float(water_over_ground_location > 1.5);
+  if (source.r > source.g)
+  {
+    water_over_ground_location = 1.f;
+  }
+
+  float extra_water_height = smol_waves + large_waves;
+  extra_water_height = 0.3 * water_over_ground_location * (large_waves + large_waves2);
+  // extra_water_height =mod_water_source;
+  // mod_water_source = 0;
+  return vec4(extra_water_height + source.r, source.g, source.b, 0);
 }
 
 void main()
 {
   vec4 source = texture0_mod * texture2D(texture0, frag_uv);
   vec2 p = 2 * (frag_uv - vec2(0.5));
-
-  float d = 1000. * (1. / size) * length(p - mouse_pos);
+  p.x = aspect * p.x;
+  vec2 mouse_p = mouse_pos;
+  mouse_p.x = aspect * mouse_p.x;
+  float d = 1000 * (1. / size) * length(p - mouse_p);
 
   if (mode == 3)
   {
@@ -338,6 +353,6 @@ void main()
   }
 
   result = mix(source, result, mask);
-  result.a = 1;
+  out0 = source;
   out0 = result;
 }
