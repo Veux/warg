@@ -307,6 +307,7 @@ struct Flat_Scene_Graph_Node
   vec3 position = {0, 0, 0};
   quat orientation = glm::angleAxis(0.f, glm::vec3(0, 0, 1));
   vec3 scale = {1, 1, 1};
+  vec3 oriented_scale = {1,1,1};
   vec3 scale_vertex = {1, 1, 1};
   vec3 velocity = {0, 0, 0};
   // mat4 import_basis = mat4(1);

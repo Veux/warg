@@ -13,3 +13,14 @@ struct Render_Test_State : protected State
   
   Liquid_Surface terrain;
 };
+
+struct Frostbolt_Effect
+{
+  Frostbolt_Effect(State* state, uint32 available_light_index);
+  Node_Index crystal;
+  std::vector<Node_Index> billboards;
+  Particle_Emitter emitter;
+  bool update(State* owning_state, vec3 target);
+  float32 speed = 4.0f;
+  uint32 light_index = 0;
+};

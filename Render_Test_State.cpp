@@ -74,6 +74,9 @@ void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 
 }
 
+
+
+
 void spawn_ground(Flat_Scene_Graph *scene)
 {
   Material_Descriptor material;
@@ -95,6 +98,8 @@ void spawn_ground(Flat_Scene_Graph *scene)
   scene->nodes[underwater].scale = {6500.0f, 6500.0f, 1.f};
   material.albedo.mod = vec4(1);
 }
+
+
 
 void spawn_gun(Flat_Scene_Graph *scene, vec3 position)
 {
@@ -814,4 +819,124 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
     }
   }
   return true;
+}
+
+Frostbolt_Effect::Frostbolt_Effect(State* state,uint32  light_index)
+{
+  Material_Descriptor mat;
+  mat.albedo.source = "white";
+  mat.albedo.mod = vec4(0.0, 0., 0., 0.);
+  mat.emissive.source = "test_emissive_white.png";
+  mat.emissive.mod = vec4(.01, .25, .5, 0);
+  mat.roughness.mod.x = .0f;
+  mat.metalness.mod.x = 0.5f;
+  mat.translucent_pass = true;
+  mat.fixed_function_blending = true;
+  mat.frag_shader = "emission.frag";
+  for (uint32 i = 0; i < 45; ++i)
+  {
+    Node_Index billboard = state->scene.add_mesh(cube, "frostbolt billboard", &mat);
+    Flat_Scene_Graph_Node* node = &state->scene.nodes[billboard];
+    node->scale = vec3(0, 3, 3);
+    billboards.push_back(billboard);
+  }
+
+
+  crystal = state->scene.add_aiscene("sphere-1.fbx", "frostbolt crystal");
+  Flat_Scene_Graph_Node* node = &state->scene.nodes[crystal];
+  node->scale = vec3(.5);
+  Node_Index crystalchild = state->scene.nodes[crystal].children[0];
+  Material_Descriptor* material = state->scene.get_modifiable_material_pointer_for(crystalchild,0);
+  material->albedo.source = "white";
+  material->albedo.mod = vec4(1,1,1,.15);
+  material->emissive.source = "test_normal.png";
+  material->emissive.mod = vec4(.15,5.125,5.25,0);
+  material->roughness.source = "white";
+  material->roughness.mod.x = 0.15f;
+  material->fixed_function_blending = true;
+  material->translucent_pass = true;
+
+  node = &state->scene.nodes[crystalchild];
+  //node->scale_vertex = vec3()
+
+  //state->scene.set_parent(billboard,crystalchild);
+
+  this->light_index = light_index;
+
+  Light* light6 = &state->scene.lights.lights[light_index];
+  light6->position = vec3(6.33112, 6.33112, 6.62005);
+  light6->direction = vec3(0.00000, 0.00000, 0.00000);
+  light6->brightness = 8111.00000;
+  light6->color = vec3(.05, 0.97895, 0.94803);
+  light6->attenuation = vec3(1.00000, 6.76000, 21.28000);
+  light6->ambient = 0.00001;
+  light6->radius = 0.40000;
+  light6->cone_angle = 0.15000;
+  light6->type = Light_Type::omnidirectional;
+  light6->casts_shadows = 0;
+  light6->shadow_blur_iterations = 2;
+  light6->shadow_blur_radius = 0.50000;
+  light6->shadow_near_plane = 0.10000;
+  light6->shadow_far_plane = 100.00000;
+  light6->max_variance = 0.00000;
+  light6->shadow_fov = 1.57080;
+  light6->shadow_map_resolution = ivec2(1024, 1024);
+
+  
+}
+
+bool Frostbolt_Effect::update(State* owning_state, vec3 target)
+{
+  Flat_Scene_Graph_Node* node = &owning_state->scene.nodes[crystal];
+
+  if (length(target - node->position) < 0.15f)
+  {
+    node->position = vec3(15);//*random_3D_unit_vector(0,two_pi<float32>(),pi<float32>(),two_pi<float32>());
+    return false;
+  }
+  float32 sintime = 0.5 + 0.5 * sin(6 * owning_state->current_time);
+  
+  vec3 dir = normalize(target - node->position);
+  vec3 pos = node->position + (dt * speed) * dir;
+  pos = vec3(1);
+  node->position = pos;
+  //node->orientation = glm::toQuat(lookAt(node->position,target,vec3(0,0,1)));
+  Light* light = &owning_state->scene.lights.lights[light_index];
+  
+  light->position = node->position;
+  light->brightness = random_between(7611., 9511.);
+  light->radius = random_between(0.200, 0.4);
+
+ //node->scale_vertex = vec3(0.4f) + 0.6f * vec3(sintime);
+  //node->oriented_scale = vec3(.5) + 10.5f * dir;
+
+
+
+
+  node = &owning_state->scene.nodes[billboards[0]];
+  node->position = pos;
+
+
+  //for billboarding - might want to do this elsewhere since we have to undo the camera matrix here...
+  vec3 v = normalize(owning_state->camera.dir);
+  vec3 axis = normalize(cross(v, vec3(0, 0, 1)));
+  float32 angle2 = atan2(v.y, v.x);
+  quat o = angleAxis(-owning_state->camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+  
+  //node->orientation = angleAxis(random_between(0.f, two_pi<float32>()), -v) * node->orientation;
+
+  for (uint32 i = 0; i < billboards.size(); ++i)
+  {
+    Flat_Scene_Graph_Node* node = &owning_state->scene.nodes[billboards[i]];
+    float32 t = 0.1 + 0.9 * float32(billboards.size() - i) / billboards.size();
+    vec3 randdir = vec3(random_between(0.9f, 1.0f) * dir.x, random_between(0.9f, 1.0f) * dir.y, random_between(0.9f, 1.0f) * dir.z);
+    node->position = pos - random_between(0.95f, 1.0f) * 125.f * (dt * (1-t) * speed) * dir;
+
+    node->scale = random_between(0.8f,1.0f)*3.f*vec3(t);
+    node->scale.x = 0;
+    node->orientation = o;
+    float32 sintime2 = wrap_to_range(t + 5.1f * owning_state->current_time, 0, two_pi<float32>());
+    node->orientation = angleAxis(sintime2, -v) * node->orientation;
+  }
+
 }

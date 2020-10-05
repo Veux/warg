@@ -5,7 +5,7 @@
 #include "State.h"
 #include "Animation_Utilities.h"
 #include "UI.h"
-
+#include "Render_Test_State.h"
 using namespace glm;
 using std::make_unique;
 using std::shared_ptr;
@@ -28,7 +28,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
 
   terrain.init(this, vec3(0, 0, -.002), 255, ivec2(HEIGHTMAP_RESOLUTION));
-  spawn_grabbyarm(&scene, vec3(0, 0, 1));
+  //spawn_grabbyarm(&scene, vec3(0, 0, 1));
   scene.collision_octree.set_size(500);
   spell_db = Spell_Database(); /*
    map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
@@ -795,7 +795,7 @@ void Warg_State::update()
 
   // set_message("Warg update. Time:", s(current_time), 1.0f);
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
-  update_grabbyarm(&scene, 3*current_time);
+  //update_grabbyarm(&scene, 3*current_time);
   process_messages();
 
   // update_stats_bar(); todo: fix
@@ -1027,6 +1027,17 @@ void Warg_State::update()
     //however it works if we dont push to it again and only do tests...
     server_ptr->server->scene.collision_octree = scene.collision_octree;
   }
+
+  static uint32 light_index = scene.lights.light_count + 1;
+  static bool firstt = true;
+  if (firstt)
+  {
+    firstt = false;
+    scene.lights.light_count = light_index;
+  }
+  static Frostbolt_Effect frostbolt_effect(this,light_index);
+  frostbolt_effect.update(this,vec3(0,0,.5));
+
 }
 
 void Warg_State::draw_gui()

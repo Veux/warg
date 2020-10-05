@@ -463,6 +463,7 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), name.c_str());
   ImGui::DragFloat3("Position", &node->position[0], 0.01f);
   ImGui::DragFloat3("Scale", &node->scale[0], 0.01f);
+  ImGui::DragFloat3("Oriented Scale", &node->oriented_scale[0], 0.01f);
   ImGui::DragFloat3("Vertex Scale", &node->scale_vertex[0], 0.01f);
   ImGui::DragFloat3("Velocity", &node->velocity[0], 0.01f);
   ImGui::DragFloat4("Orientation", &node->orientation[0], 0.01f);
@@ -1801,12 +1802,13 @@ glm::mat4 Flat_Scene_Graph::build_transformation(Node_Index node_index, bool use
 
   mat4 M = __build_transformation(parent);
   const mat4 T = translate(node->position);
+  const mat4 S_o = scale(node->oriented_scale);
   const mat4 S_prop = scale(node->scale);
   const mat4 S_non = scale(node->scale_vertex);
   const mat4 R = toMat4(node->orientation);
   // const mat4 B = node->import_basis;
   // this node specifically
-  mat4 BASIS = M * T * R * S_prop;
+  mat4 BASIS = M * T * S_o * R * S_prop;
 
   if (use_vertex_scale)
   {
@@ -1917,12 +1919,13 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
   assert_valid_parent_ptr(node_index);
 
   const mat4 T = translate(entity->position);
+  const mat4 S_o = scale(entity->oriented_scale);
   const mat4 S_prop = scale(entity->scale);
   const mat4 S_non = scale(entity->scale_vertex);
   const mat4 R = toMat4(entity->orientation);
   // const mat4 B = entity->import_basis;
 
-  const mat4 RTM = M * T * R;
+  const mat4 RTM = M * T * S_o * R;
 
   // what the nodes below inherit
   const mat4 STACK = RTM * S_prop;

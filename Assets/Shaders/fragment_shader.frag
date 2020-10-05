@@ -571,6 +571,6 @@ void main()
   // result = textureLod(texture6,r,4).rgb;
   // result = pow(result,vec3(2.2));
   // result = 1*result;
-
-  out0 = vec4(result, premultiply_alpha);
+  //result = vec3(premultiply_alpha);
+  out0 = vec4(texture0_mod.a*result, premultiply_alpha);
 }
