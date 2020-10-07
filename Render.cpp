@@ -3754,7 +3754,7 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
     new_particle.billboard = d->billboarding;
     new_particle.billboard_lock_z = d->billboard_lock_z;
     new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity;
-
+    new_particle.billboard_angle = d->billboard_initial_angle;
     vec3 pos_variance = random_within(d->initial_position_variance);
     pos_variance = pos_variance - 0.5f * d->initial_position_variance;
     new_particle.position = pos + pos_variance;

@@ -797,7 +797,7 @@ struct Particle_Emission_Method_Descriptor
   glm::vec3 initial_angular_velocity = glm::vec3(0);
   glm::vec3 initial_angular_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
 
-
+  float32 billboard_initial_angle = 0.f;
   float32 billboard_rotation_velocity = 0.f; //spin the billboard
   bool billboard_lock_z = false;
   bool billboarding = false;
