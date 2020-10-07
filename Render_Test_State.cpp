@@ -959,6 +959,7 @@ bool Frostbolt_Effect::update(State* owning_state, vec3 target)
   rotation = rotation + 22 * dt;
   billboards.push_back({new_particle,rotation});
   node = &owning_state->scene.nodes[new_particle];
+  node->orientation = o;//was not set before
   node->position = pos;// - .5f*randdir;
   node->velocity = .5f * -randdir;
   float32 sintime2 = wrap_to_range(rotation + 3.1f * owning_state->current_time, 0, two_pi<float32>());
