@@ -665,7 +665,7 @@ struct Particle
   glm::vec3 velocity;
   glm::vec3 angular_velocity;
   glm::vec3 scale;
-  float32 time_to_live;
+  float32 lifespan;
   float32 time_left_to_live;
   bool billboard;
   bool billboard_lock_z;

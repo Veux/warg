@@ -40,7 +40,7 @@ void main()
 //    gl_Position = instanced_MVP * vec4(position, 1);
 
   if (use_billboarding)
-    gl_Position = project * (view *  billboard_position + instanced_model *vec4(position.xy, 0, 0));
+    gl_Position = project * (billboard_position + instanced_model *vec4(position.xy, 0, 0));
   else
     gl_Position = instanced_MVP * vec4(position, 1);
 }

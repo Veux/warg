@@ -1062,8 +1062,8 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State* state,uint32  light_index)
   Particle_Emission_Method_Descriptor pemd;
   pemd.type = stream;
   pemd.particles_per_second = 1.000001f/dt;
-  pemd.minimum_time_to_live = 10;
-  pemd.initial_scale = vec3(0.5f);
+  pemd.minimum_time_to_live = 3;
+  pemd.initial_scale = vec3(1.5f);
   pemd.billboarding = true;
   Particle_Physics_Method_Descriptor ppmd;
   ppmd.type = simple;
@@ -1100,13 +1100,16 @@ bool Frostbolt_Effect_2::update(State* owning_state, vec3 target)
   light->brightness = random_between(4611., 6511.);
   light->radius = 0.f;
 
-  rotation_inversion = -1.f*rotation_inversion;
-  spawn_rotation = spawn_rotation + 22 * dt;
+  //rotation_inversion = -1.f*rotation_inversion;
+  spawn_rotation = wrap_to_range(spawn_rotation + 6 * dt + 3.1f * owning_state->current_time,0,two_pi<float32>());
+
+  vec3 randdir = vec3(random_between(0.9f, 1.1f) * dir.x, random_between(0.9f, 1.1f) * dir.y, random_between(0.9f, 1.1f) * dir.z);
+
 
   Particle_Emitter* pe = &owning_state->scene.particle_emitters[particle_emitter_index];
-  pe->descriptor.emission_descriptor.billboard_rotation_velocity = rotation_inversion* spawn_rotation;
-  pe->descriptor.emission_descriptor.initial_velocity = dir;
-  pe->descriptor.emission_descriptor.initial_velocity_variance = vec3(0.2f);
+  pe->descriptor.emission_descriptor.billboard_rotation_velocity = dt;
+  pe->descriptor.emission_descriptor.initial_velocity = -0.5f*randdir;
+  //pe->descriptor.emission_descriptor.initial_velocity_variance = vec3(0.2f);
 
   pe->descriptor.position = pos;
   pe->update(owning_state->renderer.projection,owning_state->renderer.camera,dt);

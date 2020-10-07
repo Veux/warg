@@ -507,8 +507,7 @@ int main(int argc, char *argv[])
   colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 
 
-
-
+  timeBeginPeriod(1);
 
   std::vector<SDL_Event> imgui_event_accumulator;
 

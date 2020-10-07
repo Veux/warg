@@ -1961,7 +1961,7 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("camera_right", right_v);
     shader.set_uniform("camera_up", up_v);
     shader.set_uniform("project", projection);
-    shader.set_uniform("view", camera);
+    //shader.set_uniform("view", camera);
     shader.set_uniform("use_billboarding", entity.use_billboarding);
 
     lights.bind(shader);
@@ -3789,9 +3789,9 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
 
     new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
 
-    new_particle.time_to_live = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
+    new_particle.lifespan = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
 
-    new_particle.time_left_to_live = new_particle.time_to_live;
+    new_particle.time_left_to_live = new_particle.lifespan;
     p->particles.push_back(new_particle);
   }
 }
@@ -3860,20 +3860,44 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 view)
   mat4 inv_view = inverse(view);
   vec3 camera_right = {view[0][0], view[1][0], view[2][0]};
   vec3 camera_up = {view[0][1], view[1][1], view[2][1]};
+  float32 current_time = get_real_time();
   for (Particle &i : particles)
   {
 
     if (i.billboard)
     {
       use_billboarding = true;
-      // const mat4 R = toMat4(i.orientation);
-      mat4 R = mat4(1);
+
+      //this really should be pulled out into the simulator methods if possible..
+      float32 angle = i.billboard_angle;
+      float32 thing2 = i.billboard_rotation_velocity;
+      bool lock_z = i.billboard_lock_z;
+
+      quat q = quat(0,0,0,1);
+      vec3 camera_location = view[3];
+      vec3 camera_at = view[2];
+      float32 applying_angle = wrap_to_range(i.billboard_angle + 1.1f * current_time,0,two_pi<float32>());
+      q = angleAxis(applying_angle,vec3(0,0,1));
+      i.billboard_angle += i.billboard_rotation_velocity;
+
+      float fade_t = random_between(0.97f, 0.99f);
+      i.scale = fade_t*i.scale;
+
+      if (length(i.scale) < 0.25f)
+      {
+        i.time_left_to_live = 0.f;
+      }
+      //const mat4 R = toMat4(i.orientation);
+      mat4 R = toMat4(q);
       mat4 S = scale(i.scale);
-      //S = R;
       mat4 T = translate(i.position);
+
       mat4 model = R * S;
       Model_Matrices.push_back(model);
-      billboard_locations.push_back(vec4(i.position, 1));
+
+      vec4 billboard_position = view * vec4(i.position,1);
+      billboard_locations.push_back(billboard_position);
+
       if (i.use_attribute0)
       {
         use_attribute0 = true;
