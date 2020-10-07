@@ -1011,10 +1011,10 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State* state,uint32  light_index)
   mat.metalness.mod.x = 0.5f;
   mat.translucent_pass = true;
   mat.fixed_function_blending = true;
-  mat.backface_culling = false;
+  mat.backface_culling = true;
   mat.vertex_shader = "instance.vert";
   mat.frag_shader = "emission.frag";
-  billboard_spawn_source =  state->scene.add_mesh(cube, "frostbolt billboard source",&mat);
+  billboard_spawn_source =  state->scene.add_mesh(cube, "frostbolt2 billboard source",&mat);
   Flat_Scene_Graph_Node* node = &state->scene.nodes[billboard_spawn_source];
   node->scale = vec3(0.0001, 3, 3);
 
@@ -1061,7 +1061,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State* state,uint32  light_index)
   
   Particle_Emission_Method_Descriptor pemd;
   pemd.type = stream;
-  pemd.particles_per_second = 1.000001f/dt;
+  pemd.particles_per_second = .9999000001f/dt;
   pemd.minimum_time_to_live = 3;
   pemd.initial_scale = vec3(3.f);
   pemd.billboarding = true;
@@ -1101,17 +1101,18 @@ bool Frostbolt_Effect_2::update(State* owning_state, vec3 target)
   light->radius = 0.f;
 
   //rotation_inversion = -1.f*rotation_inversion;
-  spawn_rotation = spawn_rotation + 22 * dt;
+  rotation = rotation + 22 * dt;
   
-  float32 new_rotation = wrap_to_range(spawn_rotation + 3.1f * owning_state->current_time,0,two_pi<float32>());
 
   vec3 randdir = vec3(random_between(0.9f, 1.1f) * dir.x, random_between(0.9f, 1.1f) * dir.y, random_between(0.9f, 1.1f) * dir.z);
 
 
   Particle_Emitter* pe = &owning_state->scene.particle_emitters[particle_emitter_index];
   pe->descriptor.emission_descriptor.billboard_rotation_velocity = dt;
-  pe->descriptor.emission_descriptor.billboard_initial_angle = new_rotation;
-  pe->descriptor.emission_descriptor.initial_velocity = -0.5f*randdir;
+
+  float32 sintime2 = wrap_to_range(rotation + 3.1f * owning_state->current_time, 0, two_pi<float32>());
+  pe->descriptor.emission_descriptor.billboard_initial_angle = sintime2;
+  pe->descriptor.emission_descriptor.initial_velocity = 0.5f* -randdir;
   //pe->descriptor.emission_descriptor.initial_velocity_variance = vec3(0.2f);
 
   pe->descriptor.position = pos;

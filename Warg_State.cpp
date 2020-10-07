@@ -1037,7 +1037,8 @@ void Warg_State::update()
     firstt = false;
     scene.lights.light_count = light_index;
   }
-  static Frostbolt_Effect_2 frostbolt_effect(this,light_index);
+  static Frostbolt_Effect frostbolt_effect(this, light_index);
+  static Frostbolt_Effect_2 frostbolt_effect2(this, light_index);
 
   vec3 ray = renderer.ray_from_screen_pixel(this->cursor_position);
   vec3 intersect_result;
@@ -1047,7 +1048,8 @@ void Warg_State::update()
   {
    frostbolt_dst =  intersect_result;
   }
-  frostbolt_effect.update(this, frostbolt_dst);
+  frostbolt_effect.update(this, frostbolt_dst+vec3(0,0,2));
+  frostbolt_effect2.update(this, frostbolt_dst);
 }
 
 void Warg_State::draw_gui()

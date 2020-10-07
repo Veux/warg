@@ -34,13 +34,13 @@ void main()
   frag_normal_uv = normal_uv_scale * frag_uv;
   float s = sin(time);
 
-//  if (use_billboarding)
-//    gl_Position = project * (view * instanced_model * billboard_position + vec4(position.xy, 0, 0));
-//  else
-//    gl_Position = instanced_MVP * vec4(position, 1);
+  //  if (use_billboarding)
+  //    gl_Position = project * (view * instanced_model * billboard_position + vec4(position.xy, 0, 0));
+  //  else
+  //    gl_Position = instanced_MVP * vec4(position, 1);
 
   if (use_billboarding)
-    gl_Position = project * (billboard_position + instanced_model *vec4(position.xy, 0, 0));
+    gl_Position = project * (billboard_position + instanced_model * vec4(position.xy, 0, 0));
   else
     gl_Position = instanced_MVP * vec4(position, 1);
 }

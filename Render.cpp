@@ -1961,7 +1961,7 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("camera_right", right_v);
     shader.set_uniform("camera_up", up_v);
     shader.set_uniform("project", projection);
-    //shader.set_uniform("view", camera);
+    // shader.set_uniform("view", camera);
     shader.set_uniform("use_billboarding", entity.use_billboarding);
 
     lights.bind(shader);
@@ -3489,6 +3489,8 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
   {
     if (shared_data->requested_tick == shared_data->completed_update)
     {
+      // instead of this we should wait on an event that is triggered by setting the new tick...
+      // so that we can get to work immediately
       SDL_Delay(1);
       continue;
     }
@@ -3738,7 +3740,14 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
   ASSERT(p);
   ASSERT(d);
 
-  // do this better, accumulate time?
+  // do this better, accumulate time
+  // they should also be placed smoothly along the delta position of the
+  // emitter itself
+  // based on time between visits and expected spawn time per individual particle
+  // instead of all clumped at the current position
+
+  // perhaps a simple way would to be loop n times per dt and do the same thing here
+  // do this spawns loop "spawns per dt"+1 times per visit to this function
   const uint32 particles_before_tick = (uint32)floor(d->particles_per_second * time);
   const uint32 particles_after_tick = (uint32)floor(d->particles_per_second * (time + dt));
   const uint32 spawns = particles_after_tick - particles_before_tick;
@@ -3851,16 +3860,28 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 view)
   attributes0.clear();
   attributes1.clear();
   attributes2.clear();
-  // set_message("compute_attributes projection:", s(projection), 1.0f);
-  // set_message("compute_attributes camera:", s(camera), 1.0f);
 
   mat4 VP = projection * view;
 
-  // should be equivalent?
-  mat4 inv_view = inverse(view);
-  vec3 camera_right = {view[0][0], view[1][0], view[2][0]};
-  vec3 camera_up = {view[0][1], view[1][1], view[2][1]};
   float32 current_time = get_real_time();
+
+  vec3 camera_location = view[3];
+  for (Particle &i : particles)
+  {
+    vec3 p;
+    if (i.billboard)
+    {
+      p = view * vec4(i.position, 1);
+    }
+    else
+    {
+      p = i.position;
+    }
+    i.distance_to_camera = length(p-camera_location);
+  }
+
+  sort(particles.begin(),particles.end(),[](const Particle& p1, const Particle& p2){return p1.distance_to_camera > p2.distance_to_camera;});
+
   for (Particle &i : particles)
   {
 
@@ -3868,26 +3889,27 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 view)
     {
       use_billboarding = true;
 
-      //this really should be pulled out into the simulator methods if possible..
+      // this really should be pulled out into the simulator methods if possible..
       float32 angle = i.billboard_angle;
       float32 thing2 = i.billboard_rotation_velocity;
       bool lock_z = i.billboard_lock_z;
 
-      quat q = quat(0,0,0,1);
-      vec3 camera_location = view[3];
-      vec3 camera_at = view[2];
-      float32 applying_angle = wrap_to_range(i.billboard_angle + 1.1f * current_time,0,two_pi<float32>());
-      q = angleAxis(applying_angle,vec3(0,0,1));
+      quat q = quat(0, 0, 0, 1);
+
+      i.velocity = .99f * i.velocity;
+
       i.billboard_angle += i.billboard_rotation_velocity;
+      float32 applying_angle = wrap_to_range(i.billboard_angle + 1.1f * current_time, 0, two_pi<float32>());
+      q = angleAxis(applying_angle, vec3(0, 0, 1));
 
       float fade_t = random_between(0.97f, 0.99f);
-      i.scale = fade_t*i.scale;
+      i.scale = fade_t * i.scale;
 
       if (length(i.scale) < 0.25f)
       {
         i.time_left_to_live = 0.f;
       }
-      //const mat4 R = toMat4(i.orientation);
+      // const mat4 R = toMat4(i.orientation);
       mat4 R = toMat4(q);
       mat4 S = scale(i.scale);
       mat4 T = translate(i.position);
@@ -3895,7 +3917,7 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 view)
       mat4 model = R * S;
       Model_Matrices.push_back(model);
 
-      vec4 billboard_position = view * vec4(i.position,1);
+      vec4 billboard_position = view * vec4(i.position, 1);
       billboard_locations.push_back(billboard_position);
 
       if (i.use_attribute0)

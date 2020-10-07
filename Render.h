@@ -671,6 +671,7 @@ struct Particle
   bool billboard_lock_z;
   float32 billboard_angle;
   float32 billboard_rotation_velocity;
+  float32 distance_to_camera;
 
   // generic shader-specific per-particle attributes
   glm::vec4 attribute0;
