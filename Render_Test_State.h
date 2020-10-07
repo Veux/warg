@@ -18,9 +18,25 @@ struct Frostbolt_Effect
 {
   Frostbolt_Effect(State* state, uint32 available_light_index);
   Node_Index crystal;
-  std::vector<Node_Index> billboards;
-  Particle_Emitter emitter;
+  std::vector<std::pair<Node_Index,float32>> billboards;
   bool update(State* owning_state, vec3 target);
-  float32 speed = 4.0f;
+  float32 speed = 14.0f;
   uint32 light_index = 0;
+  float32 spacing = 0.1f;
+  float32 rotation = 0.f;
+  Node_Index billboard_spawn_source;
+  uint32 particle_emitter_index = 0;
+};
+
+struct Frostbolt_Effect_2
+{
+  Frostbolt_Effect_2(State* state, uint32 available_light_index);
+  Node_Index crystal;
+  Node_Index billboard_spawn_source;
+  bool update(State* owning_state, vec3 target);
+  float32 speed = 14.0f;
+  uint32 light_index = 0;
+  float32 rotation_inversion = 1.f;
+  float32 spawn_rotation = 0.f;
+  uint32 particle_emitter_index = 0;
 };

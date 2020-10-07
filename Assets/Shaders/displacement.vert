@@ -152,22 +152,22 @@ void main()
       vec4 adjacent_waters = vec4(right.r, up.r, left.r, down.r);
       vec4 adjacent_grounds = vec4(right.g, up.g, left.g, down.g);
 
-       vec4 diag_waters = vec4(rightup.r, rightdown.r, leftup.r, leftdown.r);
-       vec4 diag_grounds = vec4(rightup.g, rightdown.g, leftup.g, leftdown.g);
+      vec4 diag_waters = vec4(rightup.r, rightdown.r, leftup.r, leftdown.r);
+      vec4 diag_grounds = vec4(rightup.g, rightdown.g, leftup.g, leftdown.g);
 
       float sum = 0;
       float count = 0;
       for (int i = 0; i < 4; ++i)
       {
-        if (adjacent_waters[i] > adjacent_grounds[i] )
+        if (adjacent_waters[i] > adjacent_grounds[i])
         {
           sum += adjacent_waters[i];
           count += 1;
         }
-        if (diag_waters[i] > diag_grounds[i] )
+        if (diag_waters[i] > diag_grounds[i])
         {
           sum += diag_waters[i];
-           count += 1;
+          count += 1;
         }
       }
       if (count == 0)

@@ -758,8 +758,13 @@ void Texture::load()
     TEXTURE2D_CACHE[t.key] = texture;
 
     struct stat attr;
-    stat(t.name.c_str(), &attr);
+    stat(t.source.c_str(), &attr);
     texture.get()->file_mod_t = attr.st_mtime;
+
+    if (t.name == "default")
+    {
+      t.name = t.source;
+    }
 
     t.size = texture->size = ivec2(imgdata.x, imgdata.y);
     t.levels = 1 + floor(glm::log2(float32(glm::max(texture->size.x, texture->size.y))));
@@ -1178,11 +1183,10 @@ void Material::bind()
 
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
-  
- // if (shader.vs == "displacement.vert")
+  // if (shader.vs == "displacement.vert")
   {
     shader.set_uniform("derivative_offset", descriptor.derivative_offset);
-    //ASSERT(descriptor.derivative_offset != 0.0);
+    // ASSERT(descriptor.derivative_offset != 0.0);
   }
 
   bool success = albedo.bind_for_sampling_at(Texture_Location::albedo);
@@ -1742,8 +1746,6 @@ void Renderer::build_shadow_maps()
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-
-
 void run_pixel_shader(Shader *shader, vector<Texture> *src_textures, Framebuffer *dst, bool clear_dst)
 {
   std::vector<Texture *> src;
@@ -1958,6 +1960,9 @@ void Renderer::instance_pass(float32 time)
     shader.set_uniform("camera_forward", forward_v);
     shader.set_uniform("camera_right", right_v);
     shader.set_uniform("camera_up", up_v);
+    shader.set_uniform("project", projection);
+    shader.set_uniform("view", camera);
+    shader.set_uniform("use_billboarding", entity.use_billboarding);
 
     lights.bind(shader);
     environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
@@ -2012,34 +2017,64 @@ void Renderer::instance_pass(float32 time)
       glVertexAttribDivisor(12, 1);
     }
 
-    int32 loc0 = glGetAttribLocation(shader.program->program, "attribute0");
-    if (loc0 != -1)
+    int32 loc_billboard_pos = glGetAttribLocation(shader.program->program, "billboard_position");
+    if (loc_billboard_pos != -1)
     {
-      ASSERT(loc0 == 13);
+      ASSERT(loc_billboard_pos == 13);
       glEnableVertexAttribArray(13);
-      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
+      glBindBuffer(GL_ARRAY_BUFFER, entity.instance_billboard_location_buffer);
       glVertexAttribPointer(13, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
       glVertexAttribDivisor(13, 1);
     }
 
-    int32 loc1 = glGetAttribLocation(shader.program->program, "attribute1");
-    if (loc1 != -1)
+    if (entity.use_attribute0)
     {
-      ASSERT(loc1 == 14);
-      glEnableVertexAttribArray(14);
-      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
-      glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-      glVertexAttribDivisor(14, 1);
+      int32 loc0 = glGetAttribLocation(shader.program->program, "attribute0");
+      if (loc0 != -1)
+      {
+        ASSERT(loc0 == 14);
+        glEnableVertexAttribArray(14);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
+        glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(14, 1);
+      }
     }
 
-    int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
-    if (loc2 != -1)
+    if (entity.use_attribute1)
     {
-      ASSERT(loc2 == 15);
-      glEnableVertexAttribArray(15);
-      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
-      glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-      glVertexAttribDivisor(15, 1);
+      int32 loc1 = glGetAttribLocation(shader.program->program, "attribute1");
+      if (loc1 != -1)
+      {
+        ASSERT(loc1 == 15);
+        glEnableVertexAttribArray(15);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
+        glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(15, 1);
+      }
+    }
+    if (entity.use_attribute2)
+    {
+      int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
+      if (loc2 != -1)
+      {
+        ASSERT(loc2 == 16);
+        glEnableVertexAttribArray(16);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
+        glVertexAttribPointer(16, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(16, 1);
+      }
+    }
+    if (entity.use_attribute3)
+    {
+      int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
+      if (loc2 != -1)
+      {
+        ASSERT(loc2 == 17);
+        glEnableVertexAttribArray(17);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute3_buffer);
+        glVertexAttribPointer(17, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(17, 1);
+      }
     }
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(
@@ -2062,8 +2097,22 @@ void Renderer::instance_pass(float32 time)
     glDisableVertexAttribArray(11);
     glDisableVertexAttribArray(12);
     glDisableVertexAttribArray(13);
-    glDisableVertexAttribArray(14);
-    glDisableVertexAttribArray(15);
+    if (entity.use_attribute0)
+    {
+      glDisableVertexAttribArray(14);
+    }
+    if (entity.use_attribute1)
+    {
+      glDisableVertexAttribArray(15);
+    }
+    if (entity.use_attribute2)
+    {
+      glDisableVertexAttribArray(16);
+    }
+    if (entity.use_attribute3)
+    {
+      glDisableVertexAttribArray(17);
+    }
   }
 
   glDepthMask(GL_TRUE);
@@ -3688,6 +3737,8 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
 {
   ASSERT(p);
   ASSERT(d);
+
+  // do this better, accumulate time?
   const uint32 particles_before_tick = (uint32)floor(d->particles_per_second * time);
   const uint32 particles_after_tick = (uint32)floor(d->particles_per_second * (time + dt));
   const uint32 spawns = particles_after_tick - particles_before_tick;
@@ -3700,6 +3751,9 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
       return;
     }
     Particle new_particle;
+    new_particle.billboard = d->billboarding;
+    new_particle.billboard_lock_z = d->billboard_lock_z;
+    new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity;
 
     vec3 pos_variance = random_within(d->initial_position_variance);
     pos_variance = pos_variance - 0.5f * d->initial_position_variance;
@@ -3754,6 +3808,10 @@ void Particle_Array::init()
   glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
 
+  glGenBuffers(1, &instance_billboard_location_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_billboard_location_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
+
   glGenBuffers(1, &instance_attribute0_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
@@ -3762,6 +3820,9 @@ void Particle_Array::init()
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
   glGenBuffers(1, &instance_attribute2_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
+  glGenBuffers(1, &instance_attribute3_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute3_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -3775,33 +3836,95 @@ void Particle_Array::destroy()
   glDeleteBuffers(1, &instance_attribute0_buffer);
   glDeleteBuffers(1, &instance_attribute1_buffer);
   glDeleteBuffers(1, &instance_attribute2_buffer);
+  glDeleteBuffers(1, &instance_attribute3_buffer);
+  glDeleteBuffers(1, &instance_billboard_location_buffer);
   initialized = false;
 }
 
 Particle_Array::Particle_Array(Particle_Array &&rhs) {}
 
-void Particle_Array::compute_attributes(mat4 projection, mat4 camera)
+void Particle_Array::compute_attributes(mat4 projection, mat4 view)
 {
   MVP_Matrices.clear();
   Model_Matrices.clear();
+  billboard_locations.clear();
   attributes0.clear();
   attributes1.clear();
   attributes2.clear();
   // set_message("compute_attributes projection:", s(projection), 1.0f);
   // set_message("compute_attributes camera:", s(camera), 1.0f);
-  mat4 PC = projection * camera;
-  for (auto &i : particles)
+
+  mat4 VP = projection * view;
+
+  // should be equivalent?
+  mat4 inv_view = inverse(view);
+  vec3 camera_right = {view[0][0], view[1][0], view[2][0]};
+  vec3 camera_up = {view[0][1], view[1][1], view[2][1]};
+  for (Particle &i : particles)
   {
+
+    if (i.billboard)
+    {
+      use_billboarding = true;
+      // const mat4 R = toMat4(i.orientation);
+      mat4 R = mat4(1);
+      mat4 S = scale(i.scale);
+      //S = R;
+      mat4 T = translate(i.position);
+      mat4 model = R * S;
+      Model_Matrices.push_back(model);
+      billboard_locations.push_back(vec4(i.position, 1));
+      if (i.use_attribute0)
+      {
+        use_attribute0 = true;
+        attributes0.push_back(i.attribute0);
+      }
+      if (i.use_attribute1)
+      {
+        use_attribute1 = true;
+        attributes1.push_back(i.attribute1);
+      }
+      if (i.use_attribute2)
+      {
+        use_attribute2 = true;
+        attributes2.push_back(i.attribute2);
+      }
+      if (i.use_attribute3)
+      {
+        use_attribute3 = true;
+        attributes3.push_back(i.attribute3);
+      }
+      continue;
+    }
+
+    ASSERT(!use_billboarding); // all particles must use or not use
     const mat4 R = toMat4(i.orientation);
     const mat4 S = scale(i.scale);
     const mat4 T = translate(i.position);
     const mat4 model = T * R * S;
-    const mat4 MVP = PC * model;
+    const mat4 MVP = VP * model;
     MVP_Matrices.push_back(MVP);
     Model_Matrices.push_back(model);
-    attributes0.push_back(i.attribute0);
-    attributes1.push_back(i.attribute1);
-    attributes2.push_back(i.attribute2);
+    if (i.use_attribute0)
+    {
+      use_attribute0 = true;
+      attributes0.push_back(i.attribute0);
+    }
+    if (i.use_attribute1)
+    {
+      use_attribute1 = true;
+      attributes1.push_back(i.attribute1);
+    }
+    if (i.use_attribute2)
+    {
+      use_attribute2 = true;
+      attributes2.push_back(i.attribute2);
+    }
+    if (i.use_attribute3)
+    {
+      use_attribute3 = true;
+      attributes3.push_back(i.attribute3);
+    }
   }
 }
 
@@ -3814,30 +3937,56 @@ bool Particle_Array::prepare_instance(std::vector<Render_Instance> *accumulator)
   }
 
   Render_Instance result;
-  uint32 num_instances = MVP_Matrices.size();
+  uint32 num_instances = particles.size();
   if (num_instances == 0)
     return false;
 
   ASSERT(num_instances <= MAX_INSTANCE_COUNT);
 
-  glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
+  if (!use_billboarding)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
+  }
   glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
   glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &Model_Matrices[0][0][0]);
 
-  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes0[0]);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes1[0]);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes2[0]);
+  if (use_billboarding)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_billboard_location_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &billboard_locations[0]);
+  }
+
+  if (use_attribute0)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes0[0]);
+  }
+  if (use_attribute1)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes1[0]);
+  }
+  if (use_attribute2)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes2[0]);
+  }
+  if (use_attribute3)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute3_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes3[0]);
+  }
 
   result.mvp_buffer = instance_mvp_buffer;
   result.model_buffer = instance_model_buffer;
   result.attribute0_buffer = instance_attribute0_buffer;
   result.attribute1_buffer = instance_attribute1_buffer;
   result.attribute2_buffer = instance_attribute2_buffer;
+  result.attribute3_buffer = instance_attribute3_buffer;
+  result.instance_billboard_location_buffer = instance_billboard_location_buffer;
   result.size = num_instances;
+  result.use_billboarding = use_billboarding;
   accumulator->push_back(result);
   return true;
 }
@@ -4252,7 +4401,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     if (ImGui::Button("S") && this_texture != nullptr)
     {
       ImGui::OpenPopup("Save Texture");
-      filename = this_texture->t.name;
+      filename = BASE_TEXTURE_PATH + this_texture->t.name;
     }
     ImGui::PopStyleColor();
     if (ImGui::BeginPopupModal("Save Texture", NULL, ImGuiWindowFlags_AlwaysAutoResize) && this_texture != nullptr)
@@ -4434,7 +4583,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   drawing_shader.set_uniform("time", time);
   drawing_shader.set_uniform("blendmode", blendmode);
   drawing_shader.set_uniform("tonemap_pow", pow);
-  drawing_shader.set_uniform("aspect", float32(surface->texture->size.x)/float32(surface->texture->size.y));
+  drawing_shader.set_uniform("aspect", float32(surface->texture->size.x) / float32(surface->texture->size.y));
   drawing_shader.set_uniform("mask", vec4(mask));
 
   if (is_within)
@@ -4695,7 +4844,6 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   mesh.mesh_data = generate_grid(resolution);
   Material_Descriptor material;
 
-
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.034, .215, .289, .367);
   material.uv_scale = vec2(1);
@@ -4708,8 +4856,6 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   material.translucent_pass = true;
   material.uniform_set.bool_uniforms["ground"] = false;
 
-
-
   water = state->scene.add_mesh("water", &mesh, &material);
   state->scene.nodes[water].scale = size;
   state->scene.nodes[water].position = pos - vec3(0, 0, 0.03);
@@ -4721,13 +4867,11 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   state->scene.nodes[ground].position = pos;
 
   Material_Index mi = state->scene.nodes[ground].model[0].second;
-  Material_Descriptor* groundmat = &state->scene.resource_manager->material_pool[mi].descriptor;
+  Material_Descriptor *groundmat = &state->scene.resource_manager->material_pool[mi].descriptor;
   if (groundmat->derivative_offset == 0.0)
   {
     set_message("Liquid_Surface::init bad offset after add", "", 330.f);
   }
-
-
 
   this->state = state;
 
@@ -4829,7 +4973,7 @@ void Liquid_Surface::set_heightmap(Texture texture)
   Material *mat = &state->scene.resource_manager->material_pool[mi];
   if (mat->descriptor.derivative_offset == 0.0)
   {
-    set_message("Liquid_Surface::set_heightmap bad offset","",330.f);
+    set_message("Liquid_Surface::set_heightmap bad offset", "", 330.f);
   }
   mat->load();
   mat->displacement = heightmap;
@@ -5052,8 +5196,8 @@ void Liquid_Surface::start_texture_download()
 
 void Liquid_Surface::run(State *state)
 {
-  //painter.run(state->imgui_event_accumulator);
-  //return;
+  // painter.run(state->imgui_event_accumulator);
+  // return;
 
   ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGui::Begin("Liquid_Surface", &window_open, window_flags);

@@ -826,31 +826,29 @@ Frostbolt_Effect::Frostbolt_Effect(State* state,uint32  light_index)
   Material_Descriptor mat;
   mat.albedo.source = "white";
   mat.albedo.mod = vec4(0.0, 0., 0., 0.);
-  mat.emissive.source = "test_emissive_white.png";
+  mat.emissive.source = "frostbolteffect.png";
   mat.emissive.mod = vec4(.01, .25, .5, 0);
   mat.roughness.mod.x = .0f;
   mat.metalness.mod.x = 0.5f;
   mat.translucent_pass = true;
   mat.fixed_function_blending = true;
   mat.frag_shader = "emission.frag";
-  for (uint32 i = 0; i < 45; ++i)
-  {
-    Node_Index billboard = state->scene.add_mesh(cube, "frostbolt billboard", &mat);
-    Flat_Scene_Graph_Node* node = &state->scene.nodes[billboard];
-    node->scale = vec3(0, 3, 3);
-    billboards.push_back(billboard);
-  }
+  billboard_spawn_source =  state->scene.add_mesh(cube, "frostbolt billboard source",&mat);
+  Flat_Scene_Graph_Node* node = &state->scene.nodes[billboard_spawn_source];
+  node->scale = vec3(0.0001, 3, 3);
+
+
 
 
   crystal = state->scene.add_aiscene("sphere-1.fbx", "frostbolt crystal");
-  Flat_Scene_Graph_Node* node = &state->scene.nodes[crystal];
+  node = &state->scene.nodes[crystal];
   node->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal].children[0];
   Material_Descriptor* material = state->scene.get_modifiable_material_pointer_for(crystalchild,0);
-  material->albedo.source = "white";
-  material->albedo.mod = vec4(1,1,1,.15);
+  material->albedo.source = "test_normal.png";
+  material->albedo.mod = vec4(1,1,1,.315);
   material->emissive.source = "test_normal.png";
-  material->emissive.mod = vec4(.15,5.125,5.25,0);
+  material->emissive.mod = vec4(.15,0.125,0.25,0);
   material->roughness.source = "white";
   material->roughness.mod.x = 0.15f;
   material->fixed_function_blending = true;
@@ -867,8 +865,8 @@ Frostbolt_Effect::Frostbolt_Effect(State* state,uint32  light_index)
   light6->position = vec3(6.33112, 6.33112, 6.62005);
   light6->direction = vec3(0.00000, 0.00000, 0.00000);
   light6->brightness = 8111.00000;
-  light6->color = vec3(.05, 0.97895, 0.94803);
-  light6->attenuation = vec3(1.00000, 6.76000, 21.28000);
+  light6->color = vec3(.05, 0.67895, 0.94803);
+  light6->attenuation = vec3(1.00000, 16.76000, 33.28000);
   light6->ambient = 0.00001;
   light6->radius = 0.40000;
   light6->cone_angle = 0.15000;
@@ -891,30 +889,25 @@ bool Frostbolt_Effect::update(State* owning_state, vec3 target)
 
   if (length(target - node->position) < 0.15f)
   {
-    node->position = vec3(15);//*random_3D_unit_vector(0,two_pi<float32>(),pi<float32>(),two_pi<float32>());
-    return false;
+    //node->position = vec3(35,35,5);//*random_3D_unit_vector(0,two_pi<float32>(),pi<float32>(),two_pi<float32>());
+    //return false;
   }
   float32 sintime = 0.5 + 0.5 * sin(6 * owning_state->current_time);
-  
   vec3 dir = normalize(target - node->position);
   vec3 pos = node->position + (dt * speed) * dir;
-  pos = vec3(1);
+  //pos = vec3(1);
   node->position = pos;
   //node->orientation = glm::toQuat(lookAt(node->position,target,vec3(0,0,1)));
   Light* light = &owning_state->scene.lights.lights[light_index];
   
   light->position = node->position;
-  light->brightness = random_between(7611., 9511.);
-  light->radius = random_between(0.200, 0.4);
-
+  light->brightness = random_between(4611., 6511.);
+  light->radius = 0.f;
  //node->scale_vertex = vec3(0.4f) + 0.6f * vec3(sintime);
   //node->oriented_scale = vec3(.5) + 10.5f * dir;
 
 
 
-
-  node = &owning_state->scene.nodes[billboards[0]];
-  node->position = pos;
 
 
   //for billboarding - might want to do this elsewhere since we have to undo the camera matrix here...
@@ -925,18 +918,201 @@ bool Frostbolt_Effect::update(State* owning_state, vec3 target)
   
   //node->orientation = angleAxis(random_between(0.f, two_pi<float32>()), -v) * node->orientation;
 
-  for (uint32 i = 0; i < billboards.size(); ++i)
-  {
-    Flat_Scene_Graph_Node* node = &owning_state->scene.nodes[billboards[i]];
-    float32 t = 0.1 + 0.9 * float32(billboards.size() - i) / billboards.size();
-    vec3 randdir = vec3(random_between(0.9f, 1.0f) * dir.x, random_between(0.9f, 1.0f) * dir.y, random_between(0.9f, 1.0f) * dir.z);
-    node->position = pos - random_between(0.95f, 1.0f) * 125.f * (dt * (1-t) * speed) * dir;
 
-    node->scale = random_between(0.8f,1.0f)*3.f*vec3(t);
-    node->scale.x = 0;
+  uint32 size = billboards.size();
+  for (uint32 i = 0; i < size; ++i)
+  {
+    Flat_Scene_Graph_Node* node = &owning_state->scene.nodes[billboards[i].first];
+
+    //node->velocity = node->velocity + dt * vec3(0, 0, -9.8);
+    node->velocity = .99f*node->velocity;
+    node->position = node->position + dt* node->velocity;
+    float fade_t = random_between(0.97f, 0.99f);
+    node->scale = fade_t *node->scale;
+    node->scale.x = 0.0001;
     node->orientation = o;
-    float32 sintime2 = wrap_to_range(t + 5.1f * owning_state->current_time, 0, two_pi<float32>());
+
+    float32 invert_dir = -1;
+    if (i % 2 == 0)
+    {
+      invert_dir = 1;
+    }
+    billboards[i].second = billboards[i].second + dt;
+    float32 rotation_offset = billboards[i].second;
+    float32 sintime2 = wrap_to_range(rotation_offset + 1.1f * owning_state->current_time, 0, two_pi<float32>());
     node->orientation = angleAxis(sintime2, -v) * node->orientation;
+
+    if (length(node->scale) < 0.25f)
+    {
+      node->exists = false;
+      billboards.erase(billboards.begin()+i);
+      i = i - 1;
+      size = size - 1;
+    }
   }
+
+  vec3 randdir = vec3(random_between(0.9f, 1.1f) * dir.x, random_between(0.9f, 1.1f) * dir.y, random_between(0.9f, 1.1f) * dir.z);
+  
+  Node_Index new_particle = owning_state->scene.new_node("frostbolt particle");
+  owning_state->scene.nodes[new_particle] = owning_state->scene.nodes[billboard_spawn_source];
+
+  rotation = rotation + 22 * dt;
+  billboards.push_back({new_particle,rotation});
+  node = &owning_state->scene.nodes[new_particle];
+  node->position = pos;// - .5f*randdir;
+  node->velocity = .5f * -randdir;
+  float32 sintime2 = wrap_to_range(rotation + 3.1f * owning_state->current_time, 0, two_pi<float32>());
+  node->orientation = angleAxis(sintime2, -v) * node->orientation;
+  return true;
+
+
+}
+
+
+
+
+
+
+//////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Frostbolt_Effect_2::Frostbolt_Effect_2(State* state,uint32  light_index)
+{
+  Material_Descriptor mat;
+  mat.albedo.source = "white";
+  mat.albedo.mod = vec4(0.0, 0., 0., 0.);
+  mat.emissive.source = "frostbolteffect.png";
+  mat.emissive.mod = vec4(.01, .25, .5, 0);
+  mat.roughness.mod.x = .0f;
+  mat.metalness.mod.x = 0.5f;
+  mat.translucent_pass = true;
+  mat.fixed_function_blending = true;
+  mat.backface_culling = false;
+  mat.vertex_shader = "instance.vert";
+  mat.frag_shader = "emission.frag";
+  billboard_spawn_source =  state->scene.add_mesh(cube, "frostbolt billboard source",&mat);
+  Flat_Scene_Graph_Node* node = &state->scene.nodes[billboard_spawn_source];
+  node->scale = vec3(0.0001, 3, 3);
+
+  crystal = state->scene.add_aiscene("sphere-1.fbx", "frostbolt crystal");
+  node = &state->scene.nodes[crystal];
+  node->scale = vec3(.5);
+  Node_Index crystalchild = state->scene.nodes[crystal].children[0];
+  Material_Descriptor* material = state->scene.get_modifiable_material_pointer_for(crystalchild,0);
+  material->albedo.source = "test_normal.png";
+  material->albedo.mod = vec4(1,1,1,.315);
+  material->emissive.source = "test_normal.png";
+  material->emissive.mod = vec4(.15,0.125,0.25,0);
+  material->roughness.source = "white";
+  material->roughness.mod.x = 0.15f;
+  material->fixed_function_blending = true;
+  material->translucent_pass = true;
+
+  node = &state->scene.nodes[crystalchild];
+  //node->scale_vertex = vec3()
+
+  //state->scene.set_parent(billboard,crystalchild);
+
+  this->light_index = light_index;
+
+  Light* light6 = &state->scene.lights.lights[light_index];
+  light6->position = vec3(6.33112, 6.33112, 6.62005);
+  light6->direction = vec3(0.00000, 0.00000, 0.00000);
+  light6->brightness = 8111.00000;
+  light6->color = vec3(.05, 0.67895, 0.94803);
+  light6->attenuation = vec3(1.00000, 16.76000, 33.28000);
+  light6->ambient = 0.00001;
+  light6->radius = 0.40000;
+  light6->cone_angle = 0.15000;
+  light6->type = Light_Type::omnidirectional;
+  light6->casts_shadows = 0;
+  light6->shadow_blur_iterations = 2;
+  light6->shadow_blur_radius = 0.50000;
+  light6->shadow_near_plane = 0.10000;
+  light6->shadow_far_plane = 100.00000;
+  light6->max_variance = 0.00000;
+  light6->shadow_fov = 1.57080;
+  light6->shadow_map_resolution = ivec2(1024, 1024);
+
+  
+  Particle_Emission_Method_Descriptor pemd;
+  pemd.type = stream;
+  pemd.particles_per_second = 1.000001f/dt;
+  pemd.minimum_time_to_live = 10;
+  pemd.initial_scale = vec3(0.5f);
+  pemd.billboarding = true;
+  Particle_Physics_Method_Descriptor ppmd;
+  ppmd.type = simple;
+  ppmd.gravity = vec3(0);
+  ppmd.size_multiply = vec3(.95);
+  
+  node = &state->scene.nodes[billboard_spawn_source];
+  Mesh_Index mesh_i = node->model[0].first;
+  Material_Index mat_i = node->model[0].second;
+
+  Particle_Emitter_Descriptor ped;
+  ped.emission_descriptor = pemd;
+  ped.physics_descriptor = ppmd;
+  state->scene.particle_emitters.emplace_back(ped,mesh_i,mat_i);
+  this->particle_emitter_index = state->scene.particle_emitters.size()-1;
+}
+
+bool Frostbolt_Effect_2::update(State* owning_state, vec3 target)
+{
+  Flat_Scene_Graph_Node* node = &owning_state->scene.nodes[crystal];
+
+  if (length(target - node->position) < 0.15f)
+  {
+    //node->position = vec3(35,35,5);//*random_3D_unit_vector(0,two_pi<float32>(),pi<float32>(),two_pi<float32>());
+    //return false;
+  }
+  float32 sintime = 0.5 + 0.5 * sin(6 * owning_state->current_time);
+  vec3 dir = normalize(target - node->position);
+  vec3 pos = node->position + (dt * speed) * dir;
+  node->position = pos;
+  Light* light = &owning_state->scene.lights.lights[light_index];
+  
+  light->position = node->position;
+  light->brightness = random_between(4611., 6511.);
+  light->radius = 0.f;
+
+  rotation_inversion = -1.f*rotation_inversion;
+  spawn_rotation = spawn_rotation + 22 * dt;
+
+  Particle_Emitter* pe = &owning_state->scene.particle_emitters[particle_emitter_index];
+  pe->descriptor.emission_descriptor.billboard_rotation_velocity = rotation_inversion* spawn_rotation;
+  pe->descriptor.emission_descriptor.initial_velocity = dir;
+  pe->descriptor.emission_descriptor.initial_velocity_variance = vec3(0.2f);
+
+  pe->descriptor.position = pos;
+  pe->update(owning_state->renderer.projection,owning_state->renderer.camera,dt);
+  /*
+  node->orientation = angleAxis(sintime2, -v) * node->orientation;*/
+  return true;
+
 
 }

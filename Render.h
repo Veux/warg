@@ -551,6 +551,13 @@ struct Render_Instance
   GLuint attribute0_buffer = 0;
   GLuint attribute1_buffer = 0;
   GLuint attribute2_buffer = 0;
+  GLuint attribute3_buffer = 0;
+  GLuint instance_billboard_location_buffer = 0;
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
+  bool use_billboarding = false;
   GLuint size = 0;
 };
 // struct Buffer_Handle
@@ -660,11 +667,20 @@ struct Particle
   glm::vec3 scale;
   float32 time_to_live;
   float32 time_left_to_live;
+  bool billboard;
+  bool billboard_lock_z;
+  float32 billboard_angle;
+  float32 billboard_rotation_velocity;
 
   // generic shader-specific per-particle attributes
   glm::vec4 attribute0;
   glm::vec4 attribute1;
   glm::vec4 attribute2;
+  glm::vec4 attribute3;
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
 };
 struct Particle_Array
 {
@@ -688,15 +704,25 @@ struct Particle_Array
 
   std::vector<mat4> MVP_Matrices;
   std::vector<mat4> Model_Matrices;
+  std::vector<vec4> billboard_locations;
   std::vector<vec4> attributes0;
   std::vector<vec4> attributes1;
   std::vector<vec4> attributes2;
+  std::vector<vec4> attributes3;
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
 
-  GLuint instance_mvp_buffer;
-  GLuint instance_model_buffer;
-  GLuint instance_attribute0_buffer;
-  GLuint instance_attribute1_buffer;
-  GLuint instance_attribute2_buffer;
+  bool use_billboarding = false;
+
+  GLuint instance_mvp_buffer = 0;
+  GLuint instance_model_buffer = 0;
+  GLuint instance_billboard_location_buffer = 0;
+  GLuint instance_attribute0_buffer = 0;
+  GLuint instance_attribute1_buffer = 0;
+  GLuint instance_attribute2_buffer = 0;
+  GLuint instance_attribute3_buffer = 0;
   bool initialized = false;
 };
 
@@ -771,12 +797,32 @@ struct Particle_Emission_Method_Descriptor
   glm::vec3 initial_angular_velocity = glm::vec3(0);
   glm::vec3 initial_angular_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
 
+
+  float32 billboard_rotation_velocity = 0.f; //spin the billboard
+  bool billboard_lock_z = false;
+  bool billboarding = false;
+  uint32 particles_per_spawn = 1;
+
   // stream
   bool generate_particles = true;
   float32 particles_per_second = 10.f;
 
   // explosion
   float32 particle_count = 1000.f;
+
+  //generics
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
+  vec4 initial_state_of_attribute0 = vec4(0);
+  vec4 initial_state_of_attribute1 = vec4(0);
+  vec4 initial_state_of_attribute2 = vec4(0);
+  vec4 initial_state_of_attribute3 = vec4(0);
+  void* data0 = nullptr;
+  uint32 size0 = 0;
+  void* data1 = nullptr;
+  uint32 size1 = 0;
 };
 struct Particle_Physics_Method_Descriptor
 {
@@ -785,9 +831,12 @@ struct Particle_Physics_Method_Descriptor
   // available to all types
   float32 mass = 1.0f;
   vec3 gravity = vec3(0, 0, -9.8);
-  bool oriented_towards_camera = false;
   float32 bounce_min = 0.45;
   float32 bounce_max = 0.75;
+  vec3 size_multiply = vec3(1);
+  vec3 velocity_multiply = vec3(1);
+  float32 billboard_rotation_velocity_multiply = 1.f; //should be good for growing smoke particles
+  Octree* octree = nullptr;
 
   // simple
 
@@ -795,7 +844,17 @@ struct Particle_Physics_Method_Descriptor
   vec3 direction = vec3(1, .4, .3);
   float32 intensity = 1.0f;
 
-  Octree *octree = nullptr;
+
+
+  //generics
+  vec4 iteration_of_attribute0 = vec4(0);
+  vec4 iteration_of_attribute1 = vec4(0);
+  vec4 iteration_of_attribute2 = vec4(0);
+  vec4 iteration_of_attribute3 = vec4(0);
+  void* data0 = nullptr;
+  uint32 size0 = 0;
+  void* data1 = nullptr;
+  uint32 size1 = 0;
 };
 
 struct Particle_Emission_Method
@@ -804,6 +863,12 @@ struct Particle_Emission_Method
       quat o, float32 time, float32 dt) = 0;
 };
 
+
+//make an emission method "onto heightmap"
+//can spawn them all in one go, but then turn them on/off each frame based on dist?
+//alternatively deterministically spawn them each frame in a radius..
+//and a physics method that locks them in place but shears with wind
+//and fades/despawns at distance
 struct Particle_Stream_Emission : Particle_Emission_Method
 {
   void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
@@ -1020,15 +1085,27 @@ struct Liquid_Surface
 mat4 fullscreen_quad();
 struct Renderer
 {
+
+  // todo: forward+ rendering
+
+  // the way it seems to work is that lights themselves are placed into a voxelized frustrum
+  // strong lights will touch more than 1 voxel, but each light will only be placed
+  // into the voxels it is likely to affect
+  // and then the pixels in the pixel shader only ask for the lights in the voxel it actually 
+  // occupies and instead of the actual light data being duplicated, its an index into a 
+  // buffer array, a 'pointer' to the light data it wants
+
+  //if you have a hundred teeny tiny lights in the distance, and one big sun that touches all
+  //pixels, almost all pixels will do only 1 light computation, and only the ones close to the lights will do 2 or very rarely more
+
+
   // todo: irradiance map generation
   // todo: skeletal animation
   // todo: screen space reflections
   // todo: parallax mapping
   // todo: procedural raymarched volumetric effects
   // todo: godrays
-  // todo: pbr terrain
   // todo: fbm noise in water depth
-  // todo: mix water to noisy white on high velocity
   // todo: rain particles
   // todo: spawn object gui - manual entry for new node and its resource indices
   // todo: dithering in tonemapper

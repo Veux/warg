@@ -287,7 +287,7 @@ void main()
 
   float brush_result = intensity * pow(brush_t, brush_exponent);
 
-  vec4 result_mod_color = brush_result * vec4(brush_color.rgb, 1);
+  vec4 result_mod_color = brush_result * vec4(brush_color.rgb, brush_color.a);
   vec4 result = vec4(0);
   if (mode == 0)
   {
@@ -353,6 +353,6 @@ void main()
   }
 
   result = mix(source, result, mask);
-  out0 = source;
+  // out0 = source;
   out0 = result;
 }

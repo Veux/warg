@@ -1038,7 +1038,7 @@ void main()
   float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
   float shore_fbm2 =
       pow(saturate(.755f * fbm_h_n(1.5f * frag_world_position.xy + .65f * vec2(sin(time)), 0.8125f, 2)), 2);
-  float shore_t = shore_fbm2 * shore_fbm * (1 - smoothstep(.00,  0.001519f, water_depth));
+  float shore_t = shore_fbm2 * shore_fbm * (1 - smoothstep(.00, 0.001519f, water_depth));
   // A = mix(A,0.9f,step(0.9,A));
 
   // light that reaches v from sea floor
@@ -1052,10 +1052,10 @@ void main()
   vec3 total_diffuse = direct_diffuse + ambient_diffuse;
 
   vec3 mist_result = vec3(mistf * saturate(saturate(shore_t) + saturate(mistlocation)));
-  //mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
+  // mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
   vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
   // result += (1 - A) * 2.f * mist_result * total_specular;
-  result +=   15*clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
+  result += 15 * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
   // result = (1 - A) *mist_result*Kd;
   vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
   // result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
@@ -1087,7 +1087,7 @@ void main()
   result = mix(color, result, fogFactor);
 
   // result = total_specular;//total_diffuse;
-  //result = m.normal;
-  //result = vec3(mistf*shore_t);
+  // result = m.normal;
+  // result = vec3(mistf*shore_t);
   out0 = vec4(result, 1);
 }

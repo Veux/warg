@@ -35,7 +35,6 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
-uniform float alpha_albedo_override;
 struct Light
 {
   vec3 position;
@@ -425,10 +424,6 @@ void main()
     reflected back out
   */
   float premultiply_alpha = albedo_tex.a;
-  if (alpha_albedo_override != -1.0f)
-  {
-    premultiply_alpha = alpha_albedo_override;
-  }
   premultiply_alpha *= texture0_mod.a;
 
   m.albedo = texture0_mod.rgb * albedo_tex.rgb;
@@ -571,6 +566,8 @@ void main()
   // result = textureLod(texture6,r,4).rgb;
   // result = pow(result,vec3(2.2));
   // result = 1*result;
-  //result = vec3(premultiply_alpha);
-  out0 = vec4(texture0_mod.a*result, premultiply_alpha);
+  // result = vec3(premultiply_alpha);
+
+  // out0 = vec4(texture0_mod.a*result, premultiply_alpha);
+  out0 = vec4(result, premultiply_alpha);
 }

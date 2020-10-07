@@ -415,6 +415,8 @@ void Warg_State::set_camera_geometry()
     return;
 
   float effective_zoom = camera.zoom;
+
+  //todo: fix camera collision
   // for (Triangle &surface : collider_cache)
   //{
   //  break;
@@ -1035,9 +1037,17 @@ void Warg_State::update()
     firstt = false;
     scene.lights.light_count = light_index;
   }
-  static Frostbolt_Effect frostbolt_effect(this,light_index);
-  frostbolt_effect.update(this,vec3(0,0,.5));
+  static Frostbolt_Effect_2 frostbolt_effect(this,light_index);
 
+  vec3 ray = renderer.ray_from_screen_pixel(this->cursor_position);
+  vec3 intersect_result;
+  Node_Index node_result =  scene.ray_intersects_node(renderer.camera_position,ray, arena,intersect_result);
+  vec3 frostbolt_dst = vec3(0,0,1);
+  if (node_result == arena)
+  {
+   frostbolt_dst =  intersect_result;
+  }
+  frostbolt_effect.update(this, frostbolt_dst);
 }
 
 void Warg_State::draw_gui()
