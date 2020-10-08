@@ -586,8 +586,8 @@ void main()
   m.emissive = max(fire_contribution, vec3(0));
   m.roughness = 1.0f - (is_soil * soil_t);
 
-  float terrain_ao = pow(.1 + ground_height, 1.2);
-  m.ambient_occlusion = clamp(terrain_ao, 0.1, 1);
+  float terrain_ao = 0.1f + 0.9 * smoothstep(0, 7, pow(255.f * ground_height, 1.0));
+  m.ambient_occlusion = terrain_ao;
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
@@ -756,5 +756,6 @@ void main()
   // result = pow(result,vec3(2.2));
   // result = 1*result;
   // result = vec3(ground_height);
+  // result = vec3(m.ambient_occlusion);
   out0 = vec4(result, 1);
 }

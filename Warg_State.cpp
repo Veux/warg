@@ -1046,10 +1046,14 @@ void Warg_State::update()
   vec3 frostbolt_dst = vec3(0,0,1);
   if (node_result == arena)
   {
-   frostbolt_dst =  intersect_result;
+   //frostbolt_dst =  intersect_result;
   }
   //frostbolt_effect.update(this, frostbolt_dst);
-  frostbolt_effect2.update(this, frostbolt_dst);
+  if (!frostbolt_effect2.update(this, frostbolt_dst))
+  {
+    frostbolt_effect2.position = 31.f*random_3D_unit_vector();
+    frostbolt_effect2.position.z = abs(frostbolt_effect2.position.z);
+  }
 }
 
 void Warg_State::draw_gui()

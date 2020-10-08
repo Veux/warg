@@ -872,6 +872,16 @@ float32 random_between(float32 min, float32 max)
   std::uniform_real_distribution<float32> distribution(min, max);
   return distribution(generator);
 }
+
+glm::vec3 random_between(glm::vec3 min, glm::vec3 max)
+{
+  vec3 r;
+  r.x = random_between(min.x, max.x);
+  r.y = random_between(min.y, max.y);
+  r.z = random_between(min.z, max.z);
+  return r;
+}
+
 glm::vec2 random_within(const vec2 &vec)
 {
   std::uniform_real_distribution<float32> x(0, vec.x);

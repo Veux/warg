@@ -803,13 +803,21 @@ struct Particle_Emission_Method_Descriptor
   bool billboard_lock_z = false;
   bool billboarding = false;
   uint32 particles_per_spawn = 1;
+  bool low_discrepency_velocity_variance = false;
 
   // stream
   bool generate_particles = true;
   float32 particles_per_second = 10.f;
 
   // explosion
-  float32 particle_count = 1000.f;
+  float32 particle_count_per_tick = 1000.f;
+  float32 boom_t = 0.f;
+  float32 power = 1.0f;
+  bool low_discrepency_position_variance = false;
+  bool low_discrepency_velocity_variance = false;
+  bool enforce_velocity_position_offset_match = true;
+  vec3 impulse_center_offset_min = vec3(0);//centered on emitter position
+  vec3 impulse_center_offset_max = vec3(0);//centered on emitter position
 
   //generics
   bool use_attribute0 = false;
@@ -834,8 +842,13 @@ struct Particle_Physics_Method_Descriptor
   vec3 gravity = vec3(0, 0, -9.8);
   float32 bounce_min = 0.45;
   float32 bounce_max = 0.75;
-  vec3 size_multiply = vec3(1);
-  vec3 velocity_multiply = vec3(1);
+  float32 size_multiply_uniform_min = 1.f;
+  float32 size_multiply_uniform_max = 1.f;
+  vec3 size_multiply_min = vec3(1);
+  vec3 size_multiply_max = vec3(1);
+  vec3 die_when_size_smaller_than = vec3(0);
+  vec3 friction = vec3(1);
+  float32 stiction_velocity = 0.05f;
   float32 billboard_rotation_velocity_multiply = 1.f; //should be good for growing smoke particles
   Octree* octree = nullptr;
 
@@ -857,41 +870,48 @@ struct Particle_Physics_Method_Descriptor
   void* data1 = nullptr;
   uint32 size1 = 0;
 };
-
-struct Particle_Emission_Method
-{
-  virtual void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
-      quat o, float32 time, float32 dt) = 0;
-};
-
-
-//make an emission method "onto heightmap"
+//todo make an emission method "onto heightmap"
 //can spawn them all in one go, but then turn them on/off each frame based on dist?
 //alternatively deterministically spawn them each frame in a radius..
 //and a physics method that locks them in place but shears with wind
 //and fades/despawns at distance
+
+
+
+//a warning about these - the methods are allowed to modify the descriptors themselves
+//however we should never modify the descriptors elsewhere if the emitter is not spun up to date
+//or else there will be race conditions on the descriptor values
+//only change values in the descriptors if you are certain that the emitter is up to date
+//for example, it is a new state update tick and you have yet to call update on the emitter - the
+//emitter would have been synchronized at the end of the update...?
+struct Particle_Emission_Method
+{
+  virtual void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
+      quat o, float32 time, float32 dt) = 0;
+};
 struct Particle_Stream_Emission : Particle_Emission_Method
 {
-  void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
+  void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
       float32 time, float32 dt) final override;
 };
 struct Particle_Explosion_Emission : Particle_Emission_Method
 {
-  void update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
+  void update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
       float32 dt) final override;
 };
 
+
 struct Particle_Physics_Method
 {
-  virtual void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) = 0;
+  virtual void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) = 0;
 };
 struct Wind_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
 };
 struct Simple_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
 };
 
 struct Particle_Emitter_Descriptor
@@ -920,7 +940,7 @@ struct Particle_Emitter
   void update(mat4 projection, mat4 camera, float32 dt);
   void clear();
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
-  void spin_until_up_to_date() const;
+  void fence() const;
   Mesh_Index mesh_index;
   Material_Index material_index;
   Particle_Emitter_Descriptor descriptor;
@@ -930,17 +950,10 @@ struct Particle_Emitter
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 
   struct Physics_Shared_Data
-  { // todo :
-
-    /*
-
-    proper rigid body physics algorithm
-
-
-    */
+  { // todo :proper rigid body physics algorithm
     mat4 projection;
     mat4 camera;
-    Particle_Emitter_Descriptor descriptor;        // thread reads
+    Particle_Emitter_Descriptor* descriptor = nullptr;        // thread reads/writes
     std::atomic<bool> request_thread_exit = false; // thread reads
     std::atomic<uint64> requested_tick = 0;        // thread reads
     std::atomic<uint64> completed_update = 0;      // thread reads/writes

@@ -326,6 +326,21 @@ float fbm(vec2 uv)
   return v;
 }
 
+float fbm_h_n(vec2 x, float H, int n)
+{
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    t += a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+
 float waterheight(vec2 uv, float time)
 {
   vec2 q = vec2(0.);
@@ -532,6 +547,21 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
+
+  //    // basic fog:
+  //  const float LOG2 = 1.442695;
+  //  float z = gl_FragCoord.z / gl_FragCoord.w;
+  //  float camera_relative_depth = length(frag_world_position - camera_position);
+  //  float randfog =
+  //      1.4 + 00.7 * fbm_h_n(.112f * (frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f * time), .820f,
+  //      3);
+  //  z *= randfog;
+  //  randfog = 1;
+  //  float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
+  //  fogFactor = clamp(fogFactor, 0.0, 1.0);
+  //  vec3 color = textureLod(texture6, v, 2).rgb; // mix(vec3(104,142,173)/vec3(255)
+  //  result = mix(color, result, fogFactor);
+
   // result = m.emissive;
   //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
   //  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
@@ -567,7 +597,7 @@ void main()
   // result = pow(result,vec3(2.2));
   // result = 1*result;
   // result = vec3(premultiply_alpha);
-
+  // result = m.albedo;
   // out0 = vec4(texture0_mod.a*result, premultiply_alpha);
   out0 = vec4(result, premultiply_alpha);
 }

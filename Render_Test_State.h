@@ -34,9 +34,11 @@ struct Frostbolt_Effect_2
   Node_Index crystal;
   Node_Index billboard_spawn_source;
   bool update(State* owning_state, vec3 target);
+  vec3 position = vec3(0);
   float32 speed = 14.0f;
   uint32 light_index = 0;
   float32 rotation_inversion = 1.f;
   float32 rotation = 0.f;
   uint32 particle_emitter_index = 0;
+
 };

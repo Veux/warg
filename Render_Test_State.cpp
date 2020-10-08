@@ -1021,6 +1021,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State* state,uint32  light_index)
 
   crystal = state->scene.add_aiscene("sphere-1.fbx", "frostbolt crystal");
   node = &state->scene.nodes[crystal];
+  node->position = position;
   node->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal].children[0];
   Material_Descriptor* material = state->scene.get_modifiable_material_pointer_for(crystalchild,0);
@@ -1059,46 +1060,65 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State* state,uint32  light_index)
   light6->shadow_fov = 1.57080;
   light6->shadow_map_resolution = ivec2(1024, 1024);
 
-  
-  Particle_Emission_Method_Descriptor pemd;
-  pemd.type = stream;
-  pemd.particles_per_second = .9999000001f/dt;
-  pemd.minimum_time_to_live = 3;
-  pemd.initial_scale = vec3(3.f);
-  pemd.billboarding = true;
-  Particle_Physics_Method_Descriptor ppmd;
-  ppmd.type = simple;
-  ppmd.gravity = vec3(0);
-  //ppmd.size_multiply = vec3(.95);
+
+  Particle_Emission_Method_Descriptor pemd_trail;
+  Particle_Physics_Method_Descriptor ppmd_trail;
+  pemd_trail.type = stream;
+  pemd_trail.particles_per_second = .9999000001f/dt;
+  pemd_trail.minimum_time_to_live = 3;
+  pemd_trail.initial_scale = vec3(3.f);
+  pemd_trail.billboarding = true;
+
+  ppmd_trail.type = simple;
+  ppmd_trail.gravity = vec3(0);
+  ppmd_trail.friction = vec3(0.99f);
+  ppmd_trail.size_multiply_uniform_min = 0.97f;
+  ppmd_trail.size_multiply_uniform_max = 0.99f;
   
   node = &state->scene.nodes[billboard_spawn_source];
   Mesh_Index mesh_i = node->model[0].first;
   Material_Index mat_i = node->model[0].second;
 
-  Particle_Emitter_Descriptor ped;
-  ped.emission_descriptor = pemd;
-  ped.physics_descriptor = ppmd;
-  state->scene.particle_emitters.emplace_back(ped,mesh_i,mat_i);
+  Particle_Emitter_Descriptor ped_trail;
+  ped_trail.emission_descriptor = pemd_trail;
+  ped_trail.physics_descriptor = ppmd_trail;
+  state->scene.particle_emitters.emplace_back(ped_trail,mesh_i,mat_i);
   this->particle_emitter_index = state->scene.particle_emitters.size()-1;
+
+
+
+  Particle_Emission_Method_Descriptor pemd_impact;
+  pemd_impact.type = explosion;
+  pemd_impact.particles_per_spawn = 1000;
+  pemd_impact.billboarding = true;
+  pemd_impact.inherit_velocity = true;
+  pemd_impact.static_geometry_collision = true;
+
+
+  Particle_Physics_Method_Descriptor ppmd_impact;
+  ppmd_impact.type = wind;
+  ppmd_impact.octree = &state->scene.collision_octree;
+
 }
 
 bool Frostbolt_Effect_2::update(State* owning_state, vec3 target)
 {
   Flat_Scene_Graph_Node* node = &owning_state->scene.nodes[crystal];
 
-  if (length(target - node->position) < 0.15f)
+  if (length(target - position) < dt * speed)
   {
     //node->position = vec3(35,35,5);//*random_3D_unit_vector(0,two_pi<float32>(),pi<float32>(),two_pi<float32>());
-    //return false;
+    return false;
   }
   float32 sintime = 0.5 + 0.5 * sin(6 * owning_state->current_time);
-  vec3 dir = normalize(target - node->position);
-  vec3 pos = node->position + (dt * speed) * dir;
+  vec3 dir = normalize(target - position);
+  vec3 pos = position + (dt * speed) * dir;
   node->position = pos;
+  position = pos;
   Light* light = &owning_state->scene.lights.lights[light_index];
   
-  light->position = node->position;
-  light->brightness = random_between(4611., 6511.);
+  light->position = node->position + 0.01f*(owning_state->camera.pos - pos);
+  light->brightness = random_between(4611., 5611.);
   light->radius = 0.f;
 
   //rotation_inversion = -1.f*rotation_inversion;
@@ -1115,6 +1135,7 @@ bool Frostbolt_Effect_2::update(State* owning_state, vec3 target)
   pe->descriptor.emission_descriptor.billboard_initial_angle = sintime2;
   pe->descriptor.emission_descriptor.initial_velocity = 0.5f* -randdir;
   //pe->descriptor.emission_descriptor.initial_velocity_variance = vec3(0.2f);
+
 
   pe->descriptor.position = pos;
   pe->update(owning_state->renderer.projection,owning_state->renderer.camera,dt);

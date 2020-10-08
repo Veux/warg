@@ -2386,7 +2386,6 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
     mat_velocities = scene->resource_manager->push_custom_material(&material);
   }
 
-  float32 time = get_real_time();
 
   for (uint32 i = 0; i < free_node; ++i)
   {

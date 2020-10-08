@@ -140,6 +140,7 @@ vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
 float64 random_between(float64 min, float64 max);
 int32 random_between(int32 min, int32 max);
 float32 random_between(float32 min, float32 max);
+glm::vec3 random_between(glm::vec3 min, glm::vec3 max);
 glm::vec2 random_within(const vec2 &vec);
 glm::vec3 random_within(const vec3 &vec);
 glm::vec4 random_within(const vec4 &vec);

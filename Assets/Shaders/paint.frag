@@ -297,9 +297,9 @@ void main()
   {
     if (blendmode == 0) // mix
       result = mix(source, result_mod_color, brush_t);
-    if (blendmode == 1) // blend
-      result = mix(source, brush_color, brush_t);
-    if (blendmode == 2) // add
+    if (blendmode == 1)                                       // blend
+      result = mix(source, intensity * brush_color, brush_t); // result = mix(source, brush_color, brush_t);
+    if (blendmode == 2)                                       // add
       result = source + result_mod_color;
   }
   if (mode == 2)
@@ -310,9 +310,9 @@ void main()
   {
     if (blendmode == 0) // mix
       result = mix(source, result_mod_color, brush_t);
-    if (blendmode == 1) // blend
-      result = mix(source, brush_color, brush_t);
-    if (blendmode == 2) // add
+    if (blendmode == 1)                                       // blend
+      result = mix(source, intensity * brush_color, brush_t); // result = mix(source, brush_color, brush_t);
+    if (blendmode == 2)                                       // add
       result = source + result_mod_color;
   }
 

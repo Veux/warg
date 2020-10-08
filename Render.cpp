@@ -3376,7 +3376,7 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, 
     : descriptor(d), mesh_index(m), material_index(mat)
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
-  shared_data->descriptor = descriptor;
+  shared_data->descriptor = &descriptor;
   t = std::thread(thread, shared_data);
   t.detach();
   thread_launched = true;
@@ -3385,6 +3385,7 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, 
 Particle_Emitter::Particle_Emitter()
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
+  shared_data->descriptor = &descriptor;
   t = std::thread(thread, shared_data);
   t.detach();
   thread_launched = true;
@@ -3394,13 +3395,9 @@ Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
     : descriptor(rhs.descriptor), mesh_index(rhs.mesh_index), material_index(rhs.material_index)
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
-  construct_physics_method(descriptor);
-  construct_emission_method(descriptor);
-  shared_data->descriptor = descriptor;
-
-  rhs.spin_until_up_to_date();
+  shared_data->descriptor = &descriptor;
+  rhs.fence();
   shared_data->particles = rhs.shared_data->particles;
-
   t = std::thread(thread, shared_data);
   t.detach();
   thread_launched = true;
@@ -3409,7 +3406,7 @@ Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
 Particle_Emitter::Particle_Emitter(Particle_Emitter &&rhs)
 {
   ASSERT(rhs.shared_data->request_thread_exit == false);
-  rhs.spin_until_up_to_date();
+  rhs.fence();
   t = std::move(rhs.t);
   thread_launched = rhs.thread_launched;
   shared_data = std::move(rhs.shared_data);
@@ -3425,22 +3422,21 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter &&rhs)
 
 void Particle_Emitter::update(mat4 projection, mat4 camera, float32 dt)
 {
-  // todo: geometry collision interface
-  // todo: option to add parent node velocity or not
-  // todo: option to snap all particles to basis space or world space
+  // todo: option to snap all particles to emitter space or world space
 
   // locally calculate basis vector, or, change scene graph to store its last-calculated world basis, and read from
   // that here  take lock  modify the descriptor to change position, orientation, velocity  release lock
   ASSERT(shared_data);
   ASSERT(thread_launched);
-  spin_until_up_to_date();
-  shared_data->descriptor = descriptor;
+
+  fence();
+  ASSERT(shared_data->descriptor == &descriptor);
   shared_data->projection = projection;
   shared_data->camera = camera;
   shared_data->requested_tick += 1;
 }
 
-void Particle_Emitter::spin_until_up_to_date() const
+void Particle_Emitter::fence() const
 {
   ASSERT(shared_data);
   if (shared_data->requested_tick != 0)
@@ -3481,10 +3477,10 @@ std::unique_ptr<Particle_Emission_Method> Particle_Emitter::construct_emission_m
 void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
 {
   ASSERT(shared_data);
-  std::unique_ptr<Particle_Emission_Method> emission = construct_emission_method(shared_data->descriptor);
-  std::unique_ptr<Particle_Physics_Method> physics = construct_physics_method(shared_data->descriptor);
-  Particle_Emission_Type emission_type = shared_data->descriptor.emission_descriptor.type;
-  Particle_Physics_Type physics_type = shared_data->descriptor.physics_descriptor.type;
+  std::unique_ptr<Particle_Emission_Method> emission = construct_emission_method(*shared_data->descriptor);
+  std::unique_ptr<Particle_Physics_Method> physics = construct_physics_method(*shared_data->descriptor);
+  Particle_Emission_Type emission_type = shared_data->descriptor->emission_descriptor.type;
+  Particle_Physics_Type physics_type = shared_data->descriptor->physics_descriptor.type;
   while (!shared_data->request_thread_exit)
   {
     if (shared_data->requested_tick == shared_data->completed_update)
@@ -3495,17 +3491,17 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       continue;
     }
 
-    if (emission_type != shared_data->descriptor.emission_descriptor.type)
-      emission = construct_emission_method(shared_data->descriptor);
-    if (physics_type != shared_data->descriptor.physics_descriptor.type)
-      physics = construct_physics_method(shared_data->descriptor);
+    if (emission_type != shared_data->descriptor->emission_descriptor.type)
+      emission = construct_emission_method(*shared_data->descriptor);
+    if (physics_type != shared_data->descriptor->physics_descriptor.type)
+      physics = construct_physics_method(*shared_data->descriptor);
 
     const float32 time = shared_data->completed_update * dt;
-    vec3 pos = shared_data->descriptor.position;
-    vec3 vel = shared_data->descriptor.velocity;
-    quat o = shared_data->descriptor.orientation;
-    emission->update(&shared_data->particles, &shared_data->descriptor.emission_descriptor, pos, vel, o, time, dt);
-    physics->step(&shared_data->particles, &shared_data->descriptor.physics_descriptor, time, dt);
+    vec3 pos = shared_data->descriptor->position;
+    vec3 vel = shared_data->descriptor->velocity;
+    quat o = shared_data->descriptor->orientation;
+    emission->update(&shared_data->particles, &shared_data->descriptor->emission_descriptor, pos, vel, o, time, dt);
+    physics->step(&shared_data->particles, &shared_data->descriptor->physics_descriptor, time, dt);
     // delete expired particles:
 
     for (uint i = 0; i < shared_data->particles.particles.size(); ++i)
@@ -3531,7 +3527,7 @@ bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulato
 {
   ASSERT(shared_data);
   ASSERT(accumulator);
-  spin_until_up_to_date();
+  fence();
   if (mesh_index != NODE_NULL && material_index != NODE_NULL)
   {
     return shared_data->particles.prepare_instance(accumulator);
@@ -3542,18 +3538,17 @@ bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulato
 void Particle_Emitter::clear()
 {
   ASSERT(shared_data);
-  spin_until_up_to_date();
+  fence();
   shared_data->particles.particles.clear();
 }
 
 Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs)
 {
-  rhs.spin_until_up_to_date();
-  spin_until_up_to_date();
+  rhs.fence();
+  fence();
+  shared_data = std::make_unique<Physics_Shared_Data>();
   descriptor = rhs.descriptor;
-  construct_physics_method(descriptor);
-  construct_emission_method(descriptor);
-  shared_data->descriptor = descriptor;
+  shared_data->descriptor = &descriptor;
   mesh_index = rhs.mesh_index;
   material_index = rhs.material_index;
   return *this;
@@ -3563,59 +3558,90 @@ Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs)
 {
   ASSERT(rhs.shared_data->request_thread_exit == false);
   ASSERT(shared_data->request_thread_exit == false);
-  rhs.spin_until_up_to_date();
-  spin_until_up_to_date();
+  rhs.fence();
+  fence();
   shared_data->request_thread_exit = true;
   t.join();
   t = std::move(rhs.t);
   shared_data = std::move(rhs.shared_data);
   descriptor = rhs.descriptor;
+  shared_data->descriptor = &descriptor;
   mesh_index = rhs.mesh_index;
   material_index = rhs.material_index;
   return *this;
 }
 
-void Simple_Particle_Physics::step(
-    Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 time, float32 dt)
+void physics_billboard_step(Particle &particle, const Particle_Physics_Method_Descriptor *d, float32 current_time)
 {
-  ASSERT(p);
-  ASSERT(d);
-  for (auto &particle : p->particles)
+  bool lock_z = particle.billboard_lock_z;
+  particle.billboard_angle += particle.billboard_rotation_velocity;
+  float32 applying_angle = wrap_to_range(particle.billboard_angle + 1.1f * current_time, 0, two_pi<float32>());
+  particle.orientation = angleAxis(applying_angle, vec3(0, 0, 1));
+}
+
+void misc_particle_attribute_iteration_step(
+    Particle &particle, const Particle_Physics_Method_Descriptor *d, float32 current_time)
+{
+  if (d->size_multiply_uniform_min != 1.f && d->size_multiply_uniform_max != 1.f)
   {
-    particle.velocity += dt * d->gravity;
-    particle.position += dt * particle.velocity;
+    particle.scale = random_between(d->size_multiply_uniform_min, d->size_multiply_uniform_max) * particle.scale;
+  }
+  if (d->size_multiply_min != vec3(1.f) && d->size_multiply_max != vec3(1.f))
+  {
+    particle.scale =
+        (d->size_multiply_min + random_within(d->size_multiply_max - d->size_multiply_min)) * particle.scale;
+  }
+
+  if (d->die_when_size_smaller_than != vec3(0))
+  {
+    bool3 greater = glm::greaterThan(particle.scale, d->die_when_size_smaller_than);
+    if (!any(greater))
+    {
+      particle.time_left_to_live = 0.f;
+    }
   }
 }
 
-void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt)
+void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor *d, float32 current_time)
+{
+  particle.position += dt * particle.velocity;
+  particle.velocity *= d->friction;
+  particle.velocity += dt * d->gravity;
+  misc_particle_attribute_iteration_step(particle, d, current_time);
+  if (particle.billboard)
+  {
+    physics_billboard_step(particle, d, current_time);
+  }
+}
+
+void Simple_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 time, float32 dt)
+{
+  ASSERT(p);
+  ASSERT(d);
+  float32 current_time = get_real_time();
+  for (auto &particle : p->particles)
+  {
+    simple_physics_step(particle, d, current_time);
+  }
+}
+
+void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt)
 {
   ASSERT(p);
   ASSERT(d);
 
-  float32 rand = 0.75;
+  float32 current_time = get_real_time();
+  float32 bounce_loss = 0.75;
   if (p->particles.size() > 0)
   {
-    rand = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
-    rand = lerp(d->bounce_min, d->bounce_max, rand);
+    // bounce_loss = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
+    // bounce_loss = lerp(d->bounce_min, d->bounce_max, rand);
   }
-  // rand = random_between(0.65f, 0.75f);
-  // rand = 1.0f;
+  float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
   for (Particle &particle : p->particles)
   {
-    vec3 wind = d->intensity * d->direction;
-    particle.velocity += dt * (d->gravity + wind);
-    // if (length(particle.velocity) < 0.1)
-    //{
-    //  particle.velocity = vec3(0);
-    //  continue;
-    //}
-
-    // vec3 ray = dt * particle.velocity;
-    // AABB probe;
-    // vec3 new_pos = particle.position + ray;
-    // vec3 probesize = 1.0f * particle.scale;
-    // probe.min = new_pos - 0.5f*probesize;
-    // probe.max = new_pos + 0.5f*probesize;
+    bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
+    bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
 
     vec3 ray = dt * particle.velocity;
     AABB probe(vec3(0));
@@ -3630,9 +3656,11 @@ void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Metho
     uint32 counter = 0;
     std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
 
+    vec3 wind = dt * d->intensity * d->direction;
     if (colliders.size() == 0)
     {
-      particle.position = particle.position + ray;
+      simple_physics_step(particle, d, current_time);
+      particle.position = particle.position + wind;
       continue;
     }
 
@@ -3702,12 +3730,12 @@ void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Metho
     particle.position = particle.position + (t * ray);
     particle.velocity = reflect(particle.velocity, reflection_normal);
     particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
-    particle.velocity = rand * particle.velocity + collider_velocity;
+    particle.velocity = bounce_loss * particle.velocity + collider_velocity;
 
     particle.position += 0.002f * reflection_normal;
     bool colliding = true;
 
-    for (uint32 i = 0; i < 5; ++i)
+    for (uint32 i = 0; i < 2; ++i)
     {
       probe.min = particle.position - 0.5f * particle.scale;
       probe.max = particle.position + 0.5f * particle.scale;
@@ -3721,21 +3749,133 @@ void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Metho
         particle.position += 0.01f * collider.n;
       }
     }
+    // particle.position += dt * particle.velocity; no: we did it just above
+    particle.velocity *= d->friction;
+    particle.velocity += dt * d->gravity;
+    particle.velocity += wind;
+    bool moving = length(particle.velocity) < d->stiction_velocity;
+    particle.velocity *= float32(moving);
+    misc_particle_attribute_iteration_step(particle, d, current_time);
   }
 }
 
-void Particle_Explosion_Emission::update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos,
-    vec3 vel, quat o, float32 time, float32 dt)
+float32 radicalInverse_VdC(uint bits)
+{
+  bits = (bits << 16u) | (bits >> 16u);
+  bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+  bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+  bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+  bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+  return float32(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+vec2 hammersley2d(uint i, uint N)
+{
+  return vec2(float32(i) / float32(N), radicalInverse_VdC(i));
+}
+
+vec3 hemisphere_sample_uniform(vec2 uv)
+{
+  float32 phi = uv.y * two_pi<float32>();
+  float32 cos_theta = 1.0 - uv.x;
+  float32 sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+  return vec3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
+}
+
+vec3 hammersley_hemisphere(uint i, uint n)
+{
+  return hemisphere_sample_uniform(hammersley2d(i, n));
+}
+
+vec3 hammersley_sphere(uint i, uint n)
+{
+  uint32 extra_index = n % 2 != 0; // if n is odd, we do one extra on the top hemisphere
+  uint half_n = n / 2;
+  vec3 result;
+  if (i < half_n)
+    result = vec3(1, 1, -1) * hammersley_hemisphere(i, half_n); // bottom
+  else
+    result = hammersley_hemisphere(i - half_n, half_n + extra_index); // top
+
+  return result;
+}
+
+void Particle_Explosion_Emission::update(
+    Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
 {
   ASSERT(p);
   ASSERT(d);
-  // todo: particle explosion
-  Particle new_particle;
-  p->particles.push_back(new_particle);
+  if (d->boom_t < dt)
+  {
+    return;
+  }
+
+  d->boom_t = d->boom_t - dt;
+
+  for (uint32 i = 0; i < d->particle_count_per_tick; ++i)
+  {
+    Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
+
+    vec3 impulse_p = pos;
+
+    if (d->impulse_center_offset_min != vec3(0) || d->impulse_center_offset_max != vec3(0))
+    {
+      impulse_p += random_betwewen(d->impulse_center_offset_min, d->impulse_center_offset_max);
+    }
+
+    p->particles.push_back(new_particle);
+  }
 }
 
-void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos,
-    vec3 vel, quat o, float32 time, float32 dt)
+Particle misc_particle_emitter_step(
+    Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+{
+  Particle new_particle;
+  new_particle.billboard = d->billboarding;
+  new_particle.billboard_lock_z = d->billboard_lock_z;
+  new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity;
+  new_particle.billboard_angle = d->billboard_initial_angle;
+  vec3 pos_variance = random_within(d->initial_position_variance);
+  pos_variance = pos_variance - 0.5f * d->initial_position_variance;
+  new_particle.position = pos + pos_variance;
+
+  vec3 vel_variance = random_within(d->initial_velocity_variance);
+  vel_variance = vel_variance - 0.5f * d->initial_velocity_variance;
+  if (d->inherit_velocity)
+    new_particle.velocity = o * (vel + d->initial_velocity + vel_variance);
+  else
+    new_particle.velocity = o * (d->initial_velocity + vel_variance);
+
+  vec3 av_variance = random_within(d->initial_angular_velocity_variance);
+  av_variance = av_variance - 0.5f * d->initial_angular_velocity_variance;
+  new_particle.angular_velocity = d->initial_angular_velocity + av_variance;
+
+  //// first generated orientation - use to orient within a cone or an entire unit sphere
+  //// these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
+  // glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
+  // float32 randomized_orientation_angle_variance = 0.f;
+
+  //// post-spawn - use to orient the model relative to the emitter:
+  // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
+  // float32 initial_orientation_angle = 0.0f;
+
+  const vec4 &ov = d->randomized_orientation_axis;
+  vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
+  float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
+  oav = oav - 0.5f * d->randomized_orientation_angle_variance;
+  quat first_orientation = angleAxis(oav, orientation_vector);
+  quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
+  new_particle.orientation = o * second_orientation * first_orientation;
+
+  new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
+
+  new_particle.lifespan = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
+
+  new_particle.time_left_to_live = new_particle.lifespan;
+  return new_particle;
+}
+
+void Particle_Stream_Emission::update(
+    Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
 {
   ASSERT(p);
   ASSERT(d);
@@ -3754,53 +3894,11 @@ void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission
 
   for (uint32 i = 0; i < spawns; ++i)
   {
-
     if (!(p->particles.size() < MAX_INSTANCE_COUNT))
     {
       return;
     }
-    Particle new_particle;
-    new_particle.billboard = d->billboarding;
-    new_particle.billboard_lock_z = d->billboard_lock_z;
-    new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity;
-    new_particle.billboard_angle = d->billboard_initial_angle;
-    vec3 pos_variance = random_within(d->initial_position_variance);
-    pos_variance = pos_variance - 0.5f * d->initial_position_variance;
-    new_particle.position = pos + pos_variance;
-
-    vec3 vel_variance = random_within(d->initial_velocity_variance);
-    vel_variance = vel_variance - 0.5f * d->initial_velocity_variance;
-    if (d->inherit_velocity)
-      new_particle.velocity = o * (vel + d->initial_velocity + vel_variance);
-    else
-      new_particle.velocity = o * (d->initial_velocity + vel_variance);
-
-    vec3 av_variance = random_within(d->initial_angular_velocity_variance);
-    av_variance = av_variance - 0.5f * d->initial_angular_velocity_variance;
-    new_particle.angular_velocity = d->initial_angular_velocity + av_variance;
-
-    //// first generated orientation - use to orient within a cone or an entire unit sphere
-    //// these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
-    // glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
-    // float32 randomized_orientation_angle_variance = 0.f;
-
-    //// post-spawn - use to orient the model relative to the emitter:
-    // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
-    // float32 initial_orientation_angle = 0.0f;
-
-    const vec4 &ov = d->randomized_orientation_axis;
-    vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
-    float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
-    oav = oav - 0.5f * d->randomized_orientation_angle_variance;
-    quat first_orientation = angleAxis(oav, orientation_vector);
-    quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
-    new_particle.orientation = o * second_orientation * first_orientation;
-
-    new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
-
-    new_particle.lifespan = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
-
-    new_particle.time_left_to_live = new_particle.lifespan;
+    Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
     p->particles.push_back(new_particle);
   }
 }
@@ -3816,11 +3914,9 @@ void Particle_Array::init()
   glGenBuffers(1, &instance_model_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
-
   glGenBuffers(1, &instance_billboard_location_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_billboard_location_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
-
   glGenBuffers(1, &instance_attribute0_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
@@ -3842,11 +3938,11 @@ void Particle_Array::destroy()
 {
   glDeleteBuffers(1, &instance_mvp_buffer);
   glDeleteBuffers(1, &instance_model_buffer);
+  glDeleteBuffers(1, &instance_billboard_location_buffer);
   glDeleteBuffers(1, &instance_attribute0_buffer);
   glDeleteBuffers(1, &instance_attribute1_buffer);
   glDeleteBuffers(1, &instance_attribute2_buffer);
   glDeleteBuffers(1, &instance_attribute3_buffer);
-  glDeleteBuffers(1, &instance_billboard_location_buffer);
   initialized = false;
 }
 
@@ -3860,63 +3956,36 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 view)
   attributes0.clear();
   attributes1.clear();
   attributes2.clear();
+  attributes3.clear();
 
   mat4 VP = projection * view;
 
-  float32 current_time = get_real_time();
+  // vec3 camera_location = view[3];
+  // for (Particle &i : particles)
+  //{
+  //  vec3 p;
+  //  if (i.billboard)
+  //  {
+  //    p = view * vec4(i.position, 1);
+  //  }
+  //  else
+  //  {
+  //    p = i.position;
+  //  }
+  //  i.distance_to_camera = length(p-camera_location);
+  //}
 
-  vec3 camera_location = view[3];
+  // sort(particles.begin(),particles.end(),[](const Particle& p1, const Particle& p2){return p1.distance_to_camera >
+  // p2.distance_to_camera;});
+
   for (Particle &i : particles)
   {
-    vec3 p;
-    if (i.billboard)
-    {
-      p = view * vec4(i.position, 1);
-    }
-    else
-    {
-      p = i.position;
-    }
-    i.distance_to_camera = length(p-camera_location);
-  }
-
-  sort(particles.begin(),particles.end(),[](const Particle& p1, const Particle& p2){return p1.distance_to_camera > p2.distance_to_camera;});
-
-  for (Particle &i : particles)
-  {
-
     if (i.billboard)
     {
       use_billboarding = true;
-
-      // this really should be pulled out into the simulator methods if possible..
-      float32 angle = i.billboard_angle;
-      float32 thing2 = i.billboard_rotation_velocity;
-      bool lock_z = i.billboard_lock_z;
-
-      quat q = quat(0, 0, 0, 1);
-
-      i.velocity = .99f * i.velocity;
-
-      i.billboard_angle += i.billboard_rotation_velocity;
-      float32 applying_angle = wrap_to_range(i.billboard_angle + 1.1f * current_time, 0, two_pi<float32>());
-      q = angleAxis(applying_angle, vec3(0, 0, 1));
-
-      float fade_t = random_between(0.97f, 0.99f);
-      i.scale = fade_t * i.scale;
-
-      if (length(i.scale) < 0.25f)
-      {
-        i.time_left_to_live = 0.f;
-      }
-      // const mat4 R = toMat4(i.orientation);
-      mat4 R = toMat4(q);
+      const mat4 R = toMat4(i.orientation);
       mat4 S = scale(i.scale);
-      mat4 T = translate(i.position);
-
-      mat4 model = R * S;
-      Model_Matrices.push_back(model);
-
+      Model_Matrices.push_back(R * S);
       vec4 billboard_position = view * vec4(i.position, 1);
       billboard_locations.push_back(billboard_position);
 

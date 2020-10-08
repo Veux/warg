@@ -17,7 +17,7 @@ void server_loop(std::shared_ptr<Warg_Server> server)
       server->update(dt);
       // SDL_Delay(random_between(0, 3));
     }
-    SDL_Delay(5);
+    SDL_Delay(1);
   }
 }
 
