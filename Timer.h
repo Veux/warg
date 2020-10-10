@@ -51,6 +51,9 @@ struct Timer
   // get all of the active samples that have completed
   std::vector<float64> get_times();
 
+  // get all of the samples recorded sorted with latest at the front
+  std::vector<float64> get_ordered_times();
+
   // get the timestamp of the last call to start()
   uint64 get_begin();
 

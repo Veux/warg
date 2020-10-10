@@ -193,10 +193,10 @@ struct Texture
 
 private:
 };
-struct Image
+struct Image2
 {
-  Image() {}
-  Image(std::string filename);
+  Image2() {}
+  Image2(std::string filename);
   void rotate90();
   std::string filename = "NULL";
   std::vector<float> data;
@@ -216,7 +216,7 @@ struct Cubemap
 private:
   void produce_cubemap_from_equirectangular_source();
   void produce_cubemap_from_texture_array();
-  std::array<Image, 6> sources;
+  std::array<Image2, 6> sources;
   bool is_equirectangular = true;
   bool is_gamma_encoded = false;
 };
@@ -780,11 +780,12 @@ struct Particle_Emission_Method_Descriptor
                                               // object that constantly emits particles
   float32 minimum_time_to_live = 4.0f;
   float32 extra_time_to_live_variance = 1.0f;
-  glm::vec3 initial_position_variance = glm::vec3(0);
+  vec3 initial_position_variance = vec3(0);
+ 
 
   // first generated orientation - use to orient within a cone or an entire unit sphere
   // these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
-  glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
+  vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
   float32 randomized_orientation_angle_variance = 0.f;
 
   // post-spawn - use to orient the model relative to the emitter:
@@ -793,8 +794,8 @@ struct Particle_Emission_Method_Descriptor
 
   glm::vec3 initial_scale = glm::vec3(1);
   glm::vec3 initial_extra_scale_variance = glm::vec3(0);
-  glm::vec3 initial_velocity = glm::vec3(0, 0, 1);
-  glm::vec3 initial_velocity_variance = glm::vec3(0.15, 0.15, 0);
+  glm::vec3 initial_velocity = glm::vec3(0, 0, 0);
+  glm::vec3 initial_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
   glm::vec3 initial_angular_velocity = glm::vec3(0);
   glm::vec3 initial_angular_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
 
@@ -803,21 +804,22 @@ struct Particle_Emission_Method_Descriptor
   bool billboard_lock_z = false;
   bool billboarding = false;
   uint32 particles_per_spawn = 1;
-  bool low_discrepency_velocity_variance = false;
 
   // stream
   bool generate_particles = true;
   float32 particles_per_second = 10.f;
 
   // explosion
-  float32 particle_count_per_tick = 1000.f;
+  uint32 explosion_particle_count = 1000;
   float32 boom_t = 0.f;
   float32 power = 1.0f;
   bool low_discrepency_position_variance = false;
-  bool low_discrepency_velocity_variance = false;
-  bool enforce_velocity_position_offset_match = true;
+  bool hammersley_sphere = true; //true for sphere, false for hemisphere
   vec3 impulse_center_offset_min = vec3(0);//centered on emitter position
   vec3 impulse_center_offset_max = vec3(0);//centered on emitter position
+  float32 hammersley_radius = 1.0f;
+  bool enforce_velocity_position_offset_match = false; // all particles will go 'exactly out' from emitter
+
 
   //generics
   bool use_attribute0 = false;
@@ -848,7 +850,7 @@ struct Particle_Physics_Method_Descriptor
   vec3 size_multiply_max = vec3(1);
   vec3 die_when_size_smaller_than = vec3(0);
   vec3 friction = vec3(1);
-  float32 stiction_velocity = 0.05f;
+  float32 stiction_velocity = 0.005f;
   float32 billboard_rotation_velocity_multiply = 1.f; //should be good for growing smoke particles
   Octree* octree = nullptr;
 
@@ -929,9 +931,9 @@ struct Particle_Emitter
 {
   Particle_Emitter();
   Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, Material_Index mat);
-  Particle_Emitter(const Particle_Emitter &rhs);
+  Particle_Emitter(Particle_Emitter &rhs);
   Particle_Emitter(Particle_Emitter &&rhs);
-  Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs);
+  Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &rhs);
   Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs);
   void init()
   {
@@ -940,10 +942,14 @@ struct Particle_Emitter
   void update(mat4 projection, mat4 camera, float32 dt);
   void clear();
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
-  void fence() const;
-  Mesh_Index mesh_index;
-  Material_Index material_index;
+  void fence();
+  Mesh_Index mesh_index = NODE_NULL;
+  Material_Index material_index = NODE_NULL;
   Particle_Emitter_Descriptor descriptor;
+
+  //don't actually use these as timers directly, they are being overwritten by the thread's timers when we fence
+  Timer idle = Timer(100u);
+  Timer active = Timer(100u);
 
   // private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
@@ -953,6 +959,8 @@ struct Particle_Emitter
   { // todo :proper rigid body physics algorithm
     mat4 projection;
     mat4 camera;
+    Timer idle = Timer(100u);
+    Timer active = Timer(100u);
     Particle_Emitter_Descriptor* descriptor = nullptr;        // thread reads/writes
     std::atomic<bool> request_thread_exit = false; // thread reads
     std::atomic<uint64> requested_tick = 0;        // thread reads

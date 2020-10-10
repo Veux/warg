@@ -412,6 +412,19 @@ std::string qtos(glm::quat v)
   return result;
 }
 
+std::string to_string(Particle_Physics_Type& t)
+{
+  if (t == Particle_Physics_Type::simple)
+  {
+    return "Simple";
+  }
+  if (t == Particle_Physics_Type::wind)
+  {
+    return "Wind";
+  }
+  return "Unknown";
+}
+
 std::string to_string(glm::mat4 &m)
 {
   string result = "";
@@ -473,6 +486,19 @@ string to_string(Light_Type &value)
     return "Spotlight";
 
   return "s(): Unknown Light_Type";
+}
+
+std::string to_string(Particle_Emission_Type& t)
+{
+    if (t == Particle_Emission_Type::stream)
+    {
+        return "Stream";
+    }
+    if (t == Particle_Emission_Type::explosion)
+    {
+        return "Explosion";
+    }
+    return "Unknown";
 }
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)

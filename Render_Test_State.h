@@ -39,6 +39,8 @@ struct Frostbolt_Effect_2
   uint32 light_index = 0;
   float32 rotation_inversion = 1.f;
   float32 rotation = 0.f;
-  uint32 particle_emitter_index = 0;
+  uint32 stream_particle_emitter_index = 0;
+  uint32 impact_particle_emitter_index = 0;
+
 
 };

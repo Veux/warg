@@ -41,65 +41,65 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   //    "Assets/Textures/black.jpg", "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
+  //scene.particle_emitters.push_back({});
+  //scene.particle_emitters.push_back({});
+  //scene.particle_emitters.push_back({});
+  //scene.particle_emitters.push_back({});
 
-  Material_Descriptor material;
+  //Material_Descriptor material;
 
-  material.vertex_shader = "instance.vert";
-  material.frag_shader = "emission.frag";
-  material.emissive = "white";
-  material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
-  small_object_water_settings(&material.uniform_set);
-  Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
-  Mesh_Index mesh_index0 = scene.nodes[particle_node].model[0].first;
-  Material_Index material_index0 = scene.nodes[particle_node].model[0].second;
+  //material.vertex_shader = "instance.vert";
+  //material.frag_shader = "emission.frag";
+  //material.emissive = "white";
+  //material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
+  //small_object_water_settings(&material.uniform_set);
+  //Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
+  //Mesh_Index mesh_index0 = scene.nodes[particle_node].model[0].first;
+  //Material_Index material_index0 = scene.nodes[particle_node].model[0].second;
 
-  material.vertex_shader = "instance.vert";
-  material.frag_shader = "emission.frag";
-  material.emissive.mod = vec4(1.25f, .0f, .35f, 1.f);
-  Node_Index particle_node1 = scene.add_mesh(cube, "particle1", &material);
-  Mesh_Index mesh_index1 = scene.nodes[particle_node1].model[0].first;
-  Material_Index material_index1 = scene.nodes[particle_node1].model[0].second;
+  //material.vertex_shader = "instance.vert";
+  //material.frag_shader = "emission.frag";
+  //material.emissive.mod = vec4(1.25f, .0f, .35f, 1.f);
+  //Node_Index particle_node1 = scene.add_mesh(cube, "particle1", &material);
+  //Mesh_Index mesh_index1 = scene.nodes[particle_node1].model[0].first;
+  //Material_Index material_index1 = scene.nodes[particle_node1].model[0].second;
 
-  material.vertex_shader = "instance.vert";
-  material.frag_shader = "emission.frag";
-  material.emissive.mod = vec4(1.05f, .0f, 2.15f, 1.f);
-  Node_Index particle_node2 = scene.add_mesh(cube, "particle2", &material);
-  Mesh_Index mesh_index2 = scene.nodes[particle_node2].model[0].first;
-  Material_Index material_index2 = scene.nodes[particle_node2].model[0].second;
+  //material.vertex_shader = "instance.vert";
+  //material.frag_shader = "emission.frag";
+  //material.emissive.mod = vec4(1.05f, .0f, 2.15f, 1.f);
+  //Node_Index particle_node2 = scene.add_mesh(cube, "particle2", &material);
+  //Mesh_Index mesh_index2 = scene.nodes[particle_node2].model[0].first;
+  //Material_Index material_index2 = scene.nodes[particle_node2].model[0].second;
 
-  material.vertex_shader = "instance.vert";
-  material.frag_shader = "emission.frag";
-  material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
-  Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
-  Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
-  Material_Index material_index3 = scene.nodes[particle_node3].model[0].second;
-  scene.nodes[particle_node].visible = false;
-  scene.nodes[particle_node1].visible = false;
-  scene.nodes[particle_node2].visible = false;
-  scene.nodes[particle_node3].visible = false;
+  //material.vertex_shader = "instance.vert";
+  //material.frag_shader = "emission.frag";
+  //material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
+  //Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
+  //Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
+  //Material_Index material_index3 = scene.nodes[particle_node3].model[0].second;
+  //scene.nodes[particle_node].visible = false;
+  //scene.nodes[particle_node1].visible = false;
+  //scene.nodes[particle_node2].visible = false;
+  //scene.nodes[particle_node3].visible = false;
 
-  scene.nodes[particle_node].scale = vec3(0.05);
-  scene.nodes[particle_node1].scale = vec3(0.05);
-  scene.nodes[particle_node2].scale = vec3(0.05);
-  scene.nodes[particle_node3].scale = vec3(0.05);
-  scene.nodes[particle_node].position = vec3(0, 0, 10.f);
-  scene.nodes[particle_node1].position = vec3(0, 0, 10.f);
-  scene.nodes[particle_node2].position = vec3(0, 0, 10.f);
-  scene.nodes[particle_node3].position = vec3(0, 0, 10.f);
+  //scene.nodes[particle_node].scale = vec3(0.05);
+  //scene.nodes[particle_node1].scale = vec3(0.05);
+  //scene.nodes[particle_node2].scale = vec3(0.05);
+  //scene.nodes[particle_node3].scale = vec3(0.05);
+  //scene.nodes[particle_node].position = vec3(0, 0, 10.f);
+  //scene.nodes[particle_node1].position = vec3(0, 0, 10.f);
+  //scene.nodes[particle_node2].position = vec3(0, 0, 10.f);
+  //scene.nodes[particle_node3].position = vec3(0, 0, 10.f);
 
-  scene.particle_emitters[0].mesh_index = mesh_index0;
-  scene.particle_emitters[0].material_index = material_index0;
+  //scene.particle_emitters[0].mesh_index = mesh_index0;
+  //scene.particle_emitters[0].material_index = material_index0;
 
-  scene.particle_emitters[1].mesh_index = mesh_index1;
-  scene.particle_emitters[1].material_index = material_index1;
-  scene.particle_emitters[2].mesh_index = mesh_index2;
-  scene.particle_emitters[2].material_index = material_index2;
-  scene.particle_emitters[3].mesh_index = mesh_index3;
-  scene.particle_emitters[3].material_index = material_index3;
+  //scene.particle_emitters[1].mesh_index = mesh_index1;
+  //scene.particle_emitters[1].material_index = material_index1;
+  //scene.particle_emitters[2].mesh_index = mesh_index2;
+  //scene.particle_emitters[2].material_index = material_index2;
+  //scene.particle_emitters[3].mesh_index = mesh_index3;
+  //scene.particle_emitters[3].material_index = material_index3;
 
   scene.lights.light_count = 5;
 
@@ -953,7 +953,7 @@ void Warg_State::update()
   scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
   scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
@@ -967,7 +967,7 @@ void Warg_State::update()
   scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
   scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
@@ -981,7 +981,7 @@ void Warg_State::update()
   scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
   scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
@@ -995,17 +995,13 @@ void Warg_State::update()
   scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
   scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
   scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
+  //scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
   scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(5.f, 5.f);
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 #endif
 
-  uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[2].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
-  set_message("Total Particle count:", s(particle_count), 1.0f);
+
   uint32 i = sizeof(Octree);
 
   if (terrain.apply_geometry_to_octree_if_necessary(&scene))
@@ -1046,7 +1042,7 @@ void Warg_State::update()
   vec3 frostbolt_dst = vec3(0,0,1);
   if (node_result == arena)
   {
-   //frostbolt_dst =  intersect_result;
+   frostbolt_dst =  intersect_result;
   }
   //frostbolt_effect.update(this, frostbolt_dst);
   if (!frostbolt_effect2.update(this, frostbolt_dst))

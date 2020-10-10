@@ -3144,7 +3144,7 @@ void Cubemap::produce_cubemap_from_texture_array()
   glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   for (uint32 i = 0; i < 6; ++i)
   {
-    Image &face = sources[i];
+    Image2 &face = sources[i];
     glTexImage2D(
         GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, face.width, face.height, 0, GL_RGBA, GL_FLOAT, &face.data[0]);
     ASSERT(face.width == size.x && face.height == size.y); // generate_ibl_mipmaps() assumes all sizes are equal
@@ -3161,14 +3161,14 @@ void Cubemap::produce_cubemap_from_texture_array()
 
 // opengl z-forward space is ordered: right left top bottom back front
 // our coordinate space is +Z up, +X right, +Y forward
-std::array<Image, 6> load_cubemap_faces(array<string, 6> filenames)
+std::array<Image2, 6> load_cubemap_faces(array<string, 6> filenames)
 {
-  Image right = filenames[0];
-  Image left = filenames[1];
-  Image top = filenames[2];
-  Image bottom = filenames[3];
-  Image back = filenames[4];
-  Image front = filenames[5];
+  Image2 right = filenames[0];
+  Image2 left = filenames[1];
+  Image2 top = filenames[2];
+  Image2 bottom = filenames[3];
+  Image2 back = filenames[4];
+  Image2 front = filenames[5];
 
   right.rotate90();
   right.rotate90();
@@ -3179,7 +3179,7 @@ std::array<Image, 6> load_cubemap_faces(array<string, 6> filenames)
   front.rotate90();
   front.rotate90();
 
-  array<Image, 6> result;
+  array<Image2, 6> result;
   result[0] = left;
   result[1] = right;
   result[2] = back;
@@ -3391,7 +3391,7 @@ Particle_Emitter::Particle_Emitter()
   thread_launched = true;
 }
 
-Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
+Particle_Emitter::Particle_Emitter(Particle_Emitter &rhs)
     : descriptor(rhs.descriptor), mesh_index(rhs.mesh_index), material_index(rhs.material_index)
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
@@ -3430,13 +3430,14 @@ void Particle_Emitter::update(mat4 projection, mat4 camera, float32 dt)
   ASSERT(thread_launched);
 
   fence();
-  ASSERT(shared_data->descriptor == &descriptor);
+  shared_data->descriptor = &descriptor;
+  //ASSERT(shared_data->descriptor == &descriptor);
   shared_data->projection = projection;
   shared_data->camera = camera;
   shared_data->requested_tick += 1;
 }
 
-void Particle_Emitter::fence() const
+void Particle_Emitter::fence()
 {
   ASSERT(shared_data);
   if (shared_data->requested_tick != 0)
@@ -3447,6 +3448,9 @@ void Particle_Emitter::fence() const
       // Sleep(1);
     }
   }
+  idle = shared_data->idle;
+  active = shared_data->active;
+
   return;
 }
 
@@ -3483,6 +3487,7 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
   Particle_Physics_Type physics_type = shared_data->descriptor->physics_descriptor.type;
   while (!shared_data->request_thread_exit)
   {
+    shared_data->idle.start();
     if (shared_data->requested_tick == shared_data->completed_update)
     {
       // instead of this we should wait on an event that is triggered by setting the new tick...
@@ -3490,11 +3495,22 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       SDL_Delay(1);
       continue;
     }
+    shared_data->idle.stop();
+    shared_data->active.start();
 
     if (emission_type != shared_data->descriptor->emission_descriptor.type)
       emission = construct_emission_method(*shared_data->descriptor);
     if (physics_type != shared_data->descriptor->physics_descriptor.type)
       physics = construct_physics_method(*shared_data->descriptor);
+
+    emission_type = shared_data->descriptor->emission_descriptor.type;
+    physics_type = shared_data->descriptor->physics_descriptor.type;
+
+
+#ifndef NDEBUG
+    shared_data->descriptor->emission_descriptor.particles_per_second = min(shared_data->descriptor->emission_descriptor.particles_per_second, 5.f);    
+    shared_data->descriptor->emission_descriptor.explosion_particle_count = min(shared_data->descriptor->emission_descriptor.explosion_particle_count, 15u);
+#endif
 
     const float32 time = shared_data->completed_update * dt;
     vec3 pos = shared_data->descriptor->position;
@@ -3515,6 +3531,10 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       }
     }
     shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera);
+
+
+
+    shared_data->active.stop();
     shared_data->completed_update += 1;
   }
   // possible problem: if requested_update doesnt match completed_update when the thread exits
@@ -3542,7 +3562,7 @@ void Particle_Emitter::clear()
   shared_data->particles.particles.clear();
 }
 
-Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs)
+Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &rhs)
 {
   rhs.fence();
   fence();
@@ -3631,17 +3651,17 @@ void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Desc
   ASSERT(d);
 
   float32 current_time = get_real_time();
-  float32 bounce_loss = 0.75;
+  //float32 bounce_loss = 0.75;
+  float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
   if (p->particles.size() > 0)
   {
     // bounce_loss = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
     // bounce_loss = lerp(d->bounce_min, d->bounce_max, rand);
   }
-  float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
   for (Particle &particle : p->particles)
   {
-    bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
-    bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
+    //bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
+   // bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
 
     vec3 ray = dt * particle.velocity;
     AABB probe(vec3(0));
@@ -3654,8 +3674,13 @@ void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Desc
     push_aabb(probe, max + ray);
 
     uint32 counter = 0;
-    std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
+    std::vector<Triangle_Normal> colliders;
+    if (d->octree)
+    {
 
+    colliders = d->octree->test_all(probe, &counter);
+
+    }
     vec3 wind = dt * d->intensity * d->direction;
     if (colliders.size() == 0)
     {
@@ -3753,7 +3778,7 @@ void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Desc
     particle.velocity *= d->friction;
     particle.velocity += dt * d->gravity;
     particle.velocity += wind;
-    bool moving = length(particle.velocity) < d->stiction_velocity;
+    bool moving = length(particle.velocity) > d->stiction_velocity;
     particle.velocity *= float32(moving);
     misc_particle_attribute_iteration_step(particle, d, current_time);
   }
@@ -3798,36 +3823,8 @@ vec3 hammersley_sphere(uint i, uint n)
 
   return result;
 }
-
-void Particle_Explosion_Emission::update(
-    Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
-{
-  ASSERT(p);
-  ASSERT(d);
-  if (d->boom_t < dt)
-  {
-    return;
-  }
-
-  d->boom_t = d->boom_t - dt;
-
-  for (uint32 i = 0; i < d->particle_count_per_tick; ++i)
-  {
-    Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
-
-    vec3 impulse_p = pos;
-
-    if (d->impulse_center_offset_min != vec3(0) || d->impulse_center_offset_max != vec3(0))
-    {
-      impulse_p += random_betwewen(d->impulse_center_offset_min, d->impulse_center_offset_max);
-    }
-
-    p->particles.push_back(new_particle);
-  }
-}
-
 Particle misc_particle_emitter_step(
-    Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+  Particle_Emission_Method_Descriptor* d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
 {
   Particle new_particle;
   new_particle.billboard = d->billboarding;
@@ -3858,7 +3855,7 @@ Particle misc_particle_emitter_step(
   // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
   // float32 initial_orientation_angle = 0.0f;
 
-  const vec4 &ov = d->randomized_orientation_axis;
+  const vec4& ov = d->randomized_orientation_axis;
   vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
   float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
   oav = oav - 0.5f * d->randomized_orientation_angle_variance;
@@ -3873,6 +3870,99 @@ Particle misc_particle_emitter_step(
   new_particle.time_left_to_live = new_particle.lifespan;
   return new_particle;
 }
+void Particle_Explosion_Emission::update(
+    Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+{
+  ASSERT(p);
+  ASSERT(d);
+  if (d->boom_t < dt)
+  {
+    return;
+  }
+
+  d->boom_t = d->boom_t - dt;
+
+  if (!d->generate_particles)
+  {
+    return;
+  }
+
+  //std::vector<uint32> shuffled_indices;
+  //if (d->low_discrepency_position_variance)
+  //{
+  //  shuffled_indices.resize(d->particle_count_per_tick);
+  //  std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
+  //  std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), std::mt19937{ std::random_device{}() });
+  //}
+  for (uint32 i = 0; i < d->explosion_particle_count; ++i)
+  {
+    Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
+
+    vec3 impulse_p = pos;
+
+    if (d->impulse_center_offset_min != vec3(0) || d->impulse_center_offset_max != vec3(0))
+    {
+      impulse_p += random_between(d->impulse_center_offset_min, d->impulse_center_offset_max);
+    }
+
+    if (d->low_discrepency_position_variance)
+    {
+      vec3 hammersley_pos;
+      if (d->hammersley_sphere)
+      {
+        hammersley_pos = hammersley_sphere(i,d->explosion_particle_count);
+      }
+      else
+      {
+        hammersley_pos = hammersley_hemisphere(i,d->explosion_particle_count);
+      }
+      //lets take the previously calculated random-offsetted position from the
+      //misc emitter step and use its length as the distance from emitter origin
+      float32 dist = length(new_particle.position - pos);
+      dist = length(new_particle.position - impulse_p);
+      if (dist == 0)
+      {
+        dist = d->hammersley_radius;
+      }
+      new_particle.position = pos + dist * normalize(hammersley_pos);
+
+
+ 
+
+      vec3 dir = normalize(new_particle.position - impulse_p);
+      new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
+
+      if (d->enforce_velocity_position_offset_match)
+      {
+        new_particle.velocity = length(new_particle.velocity) * (new_particle.position - pos);
+      }
+      p->particles.push_back(new_particle);
+      continue;
+    }
+
+    vec3 dir = normalize(new_particle.position - impulse_p);
+
+    if (new_particle.position == impulse_p)
+    {
+      new_particle.position += 0.1f*random_3D_unit_vector();
+    }
+
+    float32 dist = length(new_particle.position-impulse_p);
+    if (dist == 0)
+    {
+      dist = 0.01f;
+    }
+    
+    new_particle.velocity = new_particle.velocity +  (d->power/dist) * dir ;
+    if (d->enforce_velocity_position_offset_match)
+    {
+      new_particle.velocity = length(new_particle.velocity) * normalize((new_particle.position - pos));
+    }
+    p->particles.push_back(new_particle);
+  }
+}
+
+
 
 void Particle_Stream_Emission::update(
     Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
@@ -3891,6 +3981,12 @@ void Particle_Stream_Emission::update(
   const uint32 particles_before_tick = (uint32)floor(d->particles_per_second * time);
   const uint32 particles_after_tick = (uint32)floor(d->particles_per_second * (time + dt));
   const uint32 spawns = particles_after_tick - particles_before_tick;
+
+  if (!d->generate_particles)
+  {
+    return;
+  }
+
 
   for (uint32 i = 0; i < spawns; ++i)
   {
@@ -4116,7 +4212,7 @@ Particle_Array &Particle_Array::operator=(Particle_Array &rhs)
   return *this;
 }
 
-Image::Image(string filename)
+Image2::Image2(string filename)
 {
   float *d = stbi_loadf(filename.c_str(), &width, &height, &n, 4);
   n = 4;
@@ -4138,11 +4234,11 @@ Image::Image(string filename)
   }
 }
 
-void Image::rotate90()
+void Image2::rotate90()
 {
   const int floats_per_pixel = 4;
   int32 size = width * height * floats_per_pixel;
-  Image result;
+  Image2 result;
   result.data.resize(size);
 
   for (int32 y = 0; y < height; ++y)

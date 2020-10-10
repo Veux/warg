@@ -16,7 +16,21 @@ uint32 new_ID()
   static uint32 last = 0;
   return last += 1;
 }
-
+bool push_color_text_if_tree_label_open(const char *label, ImVec4 color_true, ImVec4 color_false)
+{
+  ImGuiWindow *window = ImGui::GetCurrentWindow();
+  ImGuiID id = window->GetID(label);
+  bool node_is_open = ImGui::TreeNodeBehaviorIsOpen(id, ImGuiTreeNodeFlags_Framed);
+  if (node_is_open)
+  {
+    ImGui::PushStyleColor(ImGuiCol_Text, color_true);
+  }
+  else
+  {
+    ImGui::PushStyleColor(ImGuiCol_Text, color_false);
+  }
+  return node_is_open;
+}
 glm::mat4 copy(aiMatrix4x4 m)
 {
   // assimp is row-major
@@ -204,7 +218,7 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::Checkbox("Uses Transparency", &ptr->descriptor.translucent_pass);
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
-  ImGui::SliderFloat("Derivative offset", &ptr->descriptor.derivative_offset,0.001f,0.5f);
+  ImGui::SliderFloat("Derivative offset", &ptr->descriptor.derivative_offset, 0.001f, 0.5f);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
   ImGui::Checkbox("Fixed Function Blending", &ptr->descriptor.fixed_function_blending);
   ImGui::PopItemWidth();
@@ -233,7 +247,7 @@ void Flat_Scene_Graph::draw_imgui_light_array()
     ImGui::SameLine();
     if (ImGui::Button("Irradiance Map"))
     {
-      file_type = false; 
+      file_type = false;
       texture_picker.window_open = true;
     }
     if (texture_picker.run())
@@ -601,7 +615,8 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
     return;
 
   ImGuiTreeNodeFlags flags;
-  if (imgui_selected_node == node_index)
+  bool selected = imgui_selected_node == node_index;
+  if (selected)
     flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_Selected;
   else
     flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
@@ -611,7 +626,23 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
   {
     name = "Unnamed Node";
   }
-  bool open = ImGui::TreeNodeEx(s("[", node_index, "] ", name).c_str(), flags);
+
+  std::string label = s("[", node_index, "] ", name);
+
+  push_color_text_if_tree_label_open(label.c_str(), {0, 1, 0, 1}, {1, 1, 1, 1});
+
+  if (selected)
+  {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 1, 1));
+  }
+  bool open = ImGui::TreeNodeEx(label.c_str(), flags);
+  if (selected)
+  {
+    ImGui::PopStyleColor();
+  }
+
+  ImGui::PopStyleColor();
+
   if (ImGui::IsItemClicked())
   {
     if (imgui_selected_node != node_index)
@@ -622,12 +653,15 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
 
   if (open)
   {
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(name, "'s ", "Children:").c_str());
-    ImGui::Separator();
+    // ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(name, "'s ", "Children:").c_str());
+    //ImGui::Separator();
+
+    bool empty = true;
     for (uint32 i = 0; i < node->children.size(); ++i)
     {
       if (node->children[i] != NODE_NULL)
       {
+        empty = false;
         ImGui::Text("[");
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(i).c_str());
@@ -637,7 +671,11 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
         draw_imgui_tree_node(node->children[i]);
       }
     }
-    ImGui::Separator();
+    if (empty)
+    {
+      ImGui::TextColored(ImVec4(1.05f, 1.05f, 1.05f, 1.0f), "---");
+    }
+    //ImGui::Separator();
     ImGui::TreePop();
   }
 }
@@ -874,10 +912,20 @@ const char *imgui_pane_to_string(imgui_pane p)
 void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
 {
   PushID(uint32(modifying));
+
+  //ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.8, 0, .8, 1));
+
+  ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.18, .180, .368, 1));
+  //ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1., 0, 1., 1));
+  //ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1., .3, 1., 1));
   if (Button("Pane Selection"))
   {
     OpenPopup("popperup");
   }
+  ImGui::PopStyleColor();
+  //ImGui::PopStyleColor();
+  //ImGui::PopStyleColor();
+
   SameLine();
   TextColored(ImVec4(0, 1, 1, 1), imgui_pane_to_string(*modifying));
   if (BeginPopup("popperup"))
@@ -898,7 +946,148 @@ void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
   PopID();
 }
 
-void Flat_Scene_Graph::draw_imgui_particle_emitter() {}
+void Flat_Scene_Graph::draw_imgui_particle_emitter()
+{
+
+  if (ImGui::Button("Push Emitter"))
+  {
+    particle_emitters.push_back({});
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Pop Emitter"))
+  {
+    particle_emitters.pop_back();
+  }
+  ImGui::SameLine();
+  bool want_collapse = false;
+  if (ImGui::Button("Collapse"))
+  {
+    want_collapse = true;
+  }
+  ImGui::BeginChild("ScrollingRegion");
+  for (uint32 i = 0; i < particle_emitters.size(); ++i)
+  {
+    ImGui::PushID(s("emitter", i).c_str());
+    if (want_collapse)
+    {
+      ImGui::SetNextTreeNodeOpen(false);
+    }
+    if (!ImGui::CollapsingHeader(s("Particle Emitter ", i).c_str()))
+    {
+      ImGui::PopID();
+      continue;
+    }
+    Particle_Emitter *pe = &particle_emitters[i];
+    Particle_Physics_Method_Descriptor *ppmd = &pe->descriptor.physics_descriptor;
+    Particle_Emission_Method_Descriptor *pemd = &pe->descriptor.emission_descriptor;
+
+    ImGui::Indent(5);
+    ImGui::Text("Mesh_Index:[");
+    ImGui::SameLine();
+    if (pe->mesh_index == NODE_NULL)
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+    else
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(pe->mesh_index).c_str());
+    ImGui::SameLine();
+    ImGui::Text("]");
+
+    ImGui::Text("Material_Index:[");
+    ImGui::SameLine();
+    if (pe->material_index == NODE_NULL)
+      ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+    else
+      ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(pe->material_index).c_str());
+    ImGui::SameLine();
+    ImGui::Text("]");
+
+    ImGui::Unindent(5);
+
+    const char *emission_label = "Emission Method";
+    bool node_open = push_color_text_if_tree_label_open(emission_label, ImVec4(0, 255, 0, 1), ImVec4(255, 0, 0, 1));
+    if (ImGui::TreeNode(emission_label))
+    {
+      ImGui::PopStyleColor();
+      // ImGui::Indent(5);
+      std::string current_type = s(pemd->type);
+      if (ImGui::BeginCombo("Physics Type", current_type.c_str()))
+      {
+        const uint emitter_type_count = 2;
+        for (int n = 0; n < emitter_type_count; n++)
+        {
+          std::string list_type_n = s(Particle_Emission_Type(n));
+          bool is_selected = (current_type == list_type_n);
+          if (ImGui::Selectable(list_type_n.c_str(), is_selected))
+            pemd->type = Particle_Emission_Type(n);
+          if (is_selected)
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::Text("testtext");
+
+      // ImGui::Unindent(5);
+      ImGui::TreePop();
+    }
+    else
+    {
+      ImGui::PopStyleColor();
+    }
+
+    const char *physics_label = "Physics Method";
+    node_open = push_color_text_if_tree_label_open(physics_label, ImVec4(0, 255, 0, 1), ImVec4(255, 0, 0, 1));
+    if (ImGui::TreeNode(physics_label))
+    {
+      ImGui::PopStyleColor();
+      // ImGui::Indent(5);
+      std::string current_type = s(ppmd->type);
+      if (ImGui::BeginCombo("Physics Type", current_type.c_str()))
+      {
+        const uint32 physics_type_count = 2;
+        for (uint32 n = 0; n < physics_type_count; n++)
+        {
+          std::string list_type_n = s(Particle_Physics_Type(n));
+          bool is_selected = (current_type == list_type_n);
+          if (ImGui::Selectable(list_type_n.c_str(), is_selected))
+            ppmd->type = Particle_Physics_Type(n);
+          if (is_selected)
+            ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+      }
+      ImGui::Text("testtext");
+      ImGui::TreePop();
+    }
+    else
+    {
+      ImGui::PopStyleColor();
+    }
+
+    if (ImGui::Button("Save Emitter"))
+    {
+      std::stringstream ss;
+      ss.precision(numeric_limits<float32>::digits10 - 1);
+      ss << fixed;
+      ss << "Light* light" << i << " = &scene.lights.lights[" << i << "];\n";
+
+      if (ppmd->type == Particle_Physics_Type::simple)
+      {
+        ss << "parallel;\n";
+      }
+
+      int32 result = SDL_SetClipboardText(ss.str().c_str());
+      if (result == 0)
+      {
+        set_message("Copied to clipboard:", ss.str(), 1.0f);
+      }
+      else
+      {
+        set_message("Copied to clipboard failed.", "", 1.0f);
+      }
+    }
+    ImGui::PopID();
+  }
+  ImGui::EndChild();
+}
 
 void Flat_Scene_Graph::draw_imgui_octree()
 {
@@ -1152,7 +1341,7 @@ void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Particle Emitters:");
     ImGui::BeginChild("Particle Emitters:");
-    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Particle Emitters Draw Not Implemented");
+    draw_imgui_particle_emitter();
     ImGui::EndChild();
   }
   if (p == octree)
@@ -1189,26 +1378,32 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
 
   ImGui::Begin(s("Scene Graph:", name).c_str(), &imgui_open, flags);
 
-  const float32 line_height = ImGui::GetTextLineHeight();
+  //const float32 line_height = ImGui::GetTextLineHeight();
 
+  ImVec2 before = ImGui::GetCursorPos();
+
+  ImGui::BeginGroup();
   ImGui::Dummy(ImVec2(15, 24));
+
+  if (ImGui::Button("<"))
+  { // pop a pane on the right for every row
+    imgui_col_count -= 1;
+  }
+  ImGui::EndGroup();
+
+
   ImGui::SameLine();
+  ImGui::BeginGroup();
   // remove entire row
   if (ImGui::Button("^"))
   {
     if (imgui_rows.size() > 1)
       imgui_rows_count -= 1;
   }
-  if (ImGui::Button("<"))
-  { // pop a pane on the right for every row
-    imgui_col_count -= 1;
-  }
 
-  ImGui::SameLine();
   // add entire row
   if (ImGui::Button("v"))
   {
-
     if (imgui_rows.size() < imgui_rows_count + 1)
     { // need to add an entire row
       imgui_rows.push_back({blank});
@@ -1220,7 +1415,12 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     }
     imgui_rows_count += 1;
   }
+  ImGui::EndGroup();
+
   ImGui::SameLine();
+
+  ImGui::BeginGroup();
+  ImGui::Dummy(ImVec2(15, 24));
   if (ImGui::Button(">"))
   { // push a pane on the right for every row
     for (uint32 i = 0; i < imgui_rows.size(); ++i)
@@ -1232,11 +1432,74 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     }
     imgui_col_count += 1;
   }
+  ImGui::EndGroup();
 
   if (imgui_rows_count < 1)
     imgui_rows_count = 1;
   if (imgui_col_count < 1)
     imgui_col_count = 1;
+
+
+  ImGui::SameLine();
+  ImVec2 after = ImGui::GetCursorPos();
+  float32 width_of_arrow_group = after.x-before.x;
+
+  uint32 emitter_count = particle_emitters.size();
+  float32 window_width = GetWindowWidth();
+  std::mt19937 generator2 = generator;
+  generator.seed(0);
+  vec3 color = abs(random_3D_unit_vector());
+  generator = generator2;
+
+  float32 available_size = (imgui_col_count * (horizontal_tile_size)) - width_of_arrow_group;
+  available_size -= 110;
+  available_size = available_size - 5 ;//+ ((imgui_col_count-1)*7);
+
+
+
+  ImVec2 each_emitter_size = ImVec2(floor(available_size/emitter_count), 110.0f);
+  for(uint32 i = 0; i < emitter_count;++i)
+  {
+    //std::vector<float64> idle64 = particle_emitters[i].idle.get_ordered_times();
+    //std::vector<float64> active64 = particle_emitters[i].active.get_ordered_times();
+    std::vector<float64> idle64 = particle_emitters[i].idle.get_times();
+    std::vector<float64> active64 = particle_emitters[i].active.get_times();
+
+    uint32 size = idle64.size();
+    std::vector<float32> idle(size);
+    std::vector<float32> active(size);
+    std::vector<float32> load(size);
+    for (uint32 j = 0; j < size; ++j)
+    {
+      idle[j] = idle64[j];
+      active[j] = active64[j];
+      //load[(size - 1) - j] = active[j] / (active[j] + idle[j]);
+      load[j] = active[j] / (active[j] + idle[j]);
+    }
+    if(size != 0)
+    {
+
+    PushID(s("histogram", i).c_str());
+    ImGui::PlotHistogram("", &load[0], size, 0, NULL, 0.0f, 1.0f,each_emitter_size);
+    PopID();
+    }
+    else
+    {
+      Dummy(each_emitter_size);
+    }
+    if(i != emitter_count-1)
+    {
+      ImGui::SameLine();
+    }
+
+  }
+
+  ImGui::SameLine();
+  static Texture_Descriptor td("io.jpg");
+  static Texture io = Texture(td);
+  put_imgui_texture(&io,vec2(110));
+
+
 
   for (uint32 i = 0; i < imgui_rows_count; ++i)
   { // rows
@@ -2154,7 +2417,8 @@ Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
   result = current_material_pool_size;
   current_material_pool_size += 1;
   ASSERT(result < MAX_POOL_SIZE);
-  material_pool[result] = *d;
+  material_pool[result].descriptor = *d;
+  material_pool[result].reload_from_descriptor = true;
   return result;
 }
 
@@ -2164,7 +2428,7 @@ Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
   result = current_mesh_pool_size;
   current_mesh_pool_size += 1;
   ASSERT(result < MAX_POOL_SIZE);
-  mesh_pool[result] = *d;
+  mesh_pool[result] = Mesh(*d);
   return result;
 }
 
@@ -2385,7 +2649,6 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
     material.emissive.mod = vec4(2.0f, 0.0f, 2.0f, 1.0f);
     mat_velocities = scene->resource_manager->push_custom_material(&material);
   }
-
 
   for (uint32 i = 0; i < free_node; ++i)
   {

@@ -65,7 +65,7 @@ struct Octree_Node;
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
 #ifdef NDEBUG
-#define MAX_OCTREE_DEPTH 10
+#define MAX_OCTREE_DEPTH 6
 #else
 #define MAX_OCTREE_DEPTH 4
 #endif
@@ -227,6 +227,7 @@ struct Octree
   Material_Index mat_triangles = NODE_NULL;
   Material_Index mat_normals = NODE_NULL;
   Material_Index mat_velocities = NODE_NULL;
+
 
 };
 

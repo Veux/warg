@@ -18,8 +18,9 @@ Timer::Timer(uint32 samples)
 
 void Timer::start()
 {
-  stopped = false;
+  if(stopped)
   begin = SDL_GetPerformanceCounter();
+  stopped = false;
 }
 
 void Timer::start(uint64 t)
@@ -125,6 +126,25 @@ std::vector<float64> Timer::get_times()
   {
     if (t != -1)
       result.push_back(t);
+  }
+  return result;
+}
+
+// get all of the samples recorded sorted with latest at the front
+
+std::vector<float64> Timer::get_ordered_times()
+{
+  std::vector<float64> result;
+  for (int32 i = 0; i < num_samples; ++i)
+  {
+    int32 index = (int32)current_index - i;
+
+    if (index < 0)
+    {
+      index = times.size() - abs(index);
+    }
+
+    result.push_back(times[index]);
   }
   return result;
 }

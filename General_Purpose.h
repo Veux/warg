@@ -130,7 +130,11 @@ std::string to_string(glm::vec3 v);
 //std::string to_string(glm::vec4 v);
 std::string qtos(glm::quat v);
 
+enum Particle_Emission_Type;
+enum Particle_Physics_Type;
 std::string to_string(Light_Type &value);
+std::string to_string(Particle_Emission_Type& t);
+std::string to_string(Particle_Physics_Type& t);
 std::string to_string(glm::mat4 &m);
 std::string to_string(Array_String &s);
 std::string to_string(vec4 &value);

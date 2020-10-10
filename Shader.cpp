@@ -7,7 +7,8 @@ std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
 
 GLuint load_shader(const std::string &vertex_path, const std::string &fragment_path)
 {
-  check_gl_error();
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  //check_gl_error();
   std::string full_vertex_path = BASE_SHADER_PATH + vertex_path;
   std::string full_fragment_path = BASE_SHADER_PATH + fragment_path;
   GLuint vert_shader = glCreateShader(GL_VERTEX_SHADER);

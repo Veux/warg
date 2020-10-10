@@ -3,7 +3,7 @@
 #include "Scene_Graph.h"
 
 #ifdef NDEBUG
-const float32 dt = 1.0f / 120.0f;
+const float32 dt = 1.0f / 60.0f;
 #else
 const float32 dt = 1.0f / 60.f;
 #endif
