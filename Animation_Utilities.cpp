@@ -70,7 +70,7 @@ void fire_emitter(Renderer *renderer, Particle_Emitter *pe, Light *l, vec3 pos, 
 
   ped->emission_descriptor.initial_velocity_variance = vec3(2, 2, 2);
 
-  ped->physics_descriptor.intensity = random_between(11.f, 25.f);
+  ped->physics_descriptor.wind_intensity = random_between(11.f, 25.f);
   static vec3 wind_dir;
   if (fract(sin(time)) > .5)
     wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
@@ -109,7 +109,7 @@ void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter
 
   ped->emission_descriptor.initial_velocity_variance = vec3(1, 1, 00.1);
 
-  ped->physics_descriptor.intensity = random_between(21.f, 55.f);
+  ped->physics_descriptor.wind_intensity = random_between(21.f, 55.f);
   static vec3 wind_dir;
   if (fract(sin(time)) > .5)
     wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
@@ -123,7 +123,7 @@ void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter
   l->brightness = area * random_between(13.f, 16.f);
   l->position = pos;
 
-  pe->descriptor.physics_descriptor.octree = &scene->collision_octree;
+  pe->descriptor.physics_descriptor.static_octree = &scene->collision_octree;
 
   pe->update(renderer->projection, renderer->camera, dt);
 

@@ -654,7 +654,7 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
   if (open)
   {
     // ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(name, "'s ", "Children:").c_str());
-    //ImGui::Separator();
+    // ImGui::Separator();
 
     bool empty = true;
     for (uint32 i = 0; i < node->children.size(); ++i)
@@ -675,7 +675,7 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
     {
       ImGui::TextColored(ImVec4(1.05f, 1.05f, 1.05f, 1.0f), "---");
     }
-    //ImGui::Separator();
+    // ImGui::Separator();
     ImGui::TreePop();
   }
 }
@@ -913,18 +913,18 @@ void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
 {
   PushID(uint32(modifying));
 
-  //ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.8, 0, .8, 1));
+  // ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.8, 0, .8, 1));
 
   ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(.18, .180, .368, 1));
-  //ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1., 0, 1., 1));
-  //ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1., .3, 1., 1));
+  // ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1., 0, 1., 1));
+  // ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1., .3, 1., 1));
   if (Button("Pane Selection"))
   {
     OpenPopup("popperup");
   }
   ImGui::PopStyleColor();
-  //ImGui::PopStyleColor();
-  //ImGui::PopStyleColor();
+  // ImGui::PopStyleColor();
+  // ImGui::PopStyleColor();
 
   SameLine();
   TextColored(ImVec4(0, 1, 1, 1), imgui_pane_to_string(*modifying));
@@ -978,8 +978,8 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
       continue;
     }
     Particle_Emitter *pe = &particle_emitters[i];
-    Particle_Physics_Method_Descriptor *ppmd = &pe->descriptor.physics_descriptor;
     Particle_Emission_Method_Descriptor *pemd = &pe->descriptor.emission_descriptor;
+    Particle_Physics_Method_Descriptor *ppmd = &pe->descriptor.physics_descriptor;
 
     ImGui::Indent(5);
     ImGui::Text("Mesh_Index:[");
@@ -1023,7 +1023,17 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         }
         ImGui::EndCombo();
       }
-      ImGui::Text("testtext");
+
+      bool snap = Checkbox("snap_to_basis - todo", &pemd->snap_to_basis);
+      bool inherit = Checkbox("inherit_velocity", &pemd->inherit_velocity);
+
+      // ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+      // ImGui::InputInt2("Shadow Map Resolution", &light->shadow_map_resolution[0]);
+      //  ImGui::DragFloat3("Velocity", &node->velocity[0], 0.01f);
+      // ImGui::DragFloat4("Orientation", &node->orientation[0], 0.01f);
+
+      //  bool draw = Checkbox("Draw Octree", &draw_collision_octree);
+      // ImGui::Text("testtext");
 
       // ImGui::Unindent(5);
       ImGui::TreePop();
@@ -1034,7 +1044,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
     }
 
     const char *physics_label = "Physics Method";
-    node_open = push_color_text_if_tree_label_open(physics_label, ImVec4(0, 255, 0, 1), ImVec4(255, 0, 0, 1));
+    node_open = push_color_text_if_tree_label_open(physics_label, imgui_green, imgui_red);
     if (ImGui::TreeNode(physics_label))
     {
       ImGui::PopStyleColor();
@@ -1054,9 +1064,81 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         }
         ImGui::EndCombo();
       }
-      ImGui::Text("testtext");
+      bool static_col = Checkbox("static_geometry_collision - todo", &ppmd->static_geometry_collision);
+      bool dynamic_col = Checkbox("dynamic_geometry_collision - todo", &ppmd->dynamic_geometry_collision);
       ImGui::TreePop();
     }
+    else
+    {
+      ImGui::PopStyleColor();
+    }
+
+    const char *perf_label = "Performance Statistics";
+    node_open = push_color_text_if_tree_label_open(perf_label, imgui_green, imgui_red);
+    if (ImGui::TreeNode(perf_label))
+    {
+      ImGui::PopStyleColor();
+
+      if (!pe->descriptor.physics_descriptor.dynamic_geometry_collision ||
+          !pe->descriptor.physics_descriptor.static_octree)
+      {
+        ImGui::TextColored(imgui_red, "Static octree collision is off.");
+      }
+      else
+      {
+        ImGui::Text("Static Octree:");
+        ImGui::Indent(10);
+        ImGui::TextColored(imgui_red, pe->per_static_octree_test.string_report().c_str());
+        ImGui::Text("Max collider count: ");
+        ImGui::SameLine();
+        ImGui::TextColored(imgui_red, s(pe->static_collider_count_max).c_str());
+        if (pe->static_collider_count_samples != 0)
+        {
+          ImGui::Text("Collider count sum: ");
+          ImGui::Text(s(pe->static_collider_count_sum).c_str());
+          ImGui::Text("Collider count samples: ");
+          ImGui::Text(s(float64(pe->static_collider_count_samples)).c_str());
+          ImGui::Text("Average collider count: ");
+          ImGui::SameLine();
+          std::stringstream ss;
+          ss << std::setprecision(4) << std::scientific
+             << float64(pe->static_collider_count_sum) / float64(pe->static_collider_count_samples);
+          ImGui::TextColored(imgui_red, ss.str().c_str());
+        }
+
+        ImGui::Unindent(10);
+      }
+      if (!pe->descriptor.physics_descriptor.dynamic_geometry_collision ||
+          !pe->descriptor.physics_descriptor.dynamic_octree)
+      {
+        ImGui::TextColored(imgui_red, "Dynamic octree collision is off.");
+      }
+      else
+      {
+        ImGui::Text("Dynamic octree:");
+        ImGui::Indent(10);
+        ImGui::TextColored(imgui_red, pe->per_dynamic_octree_test.string_report().c_str());
+        ImGui::Text("Max collider count: ");
+        ImGui::SameLine();
+        ImGui::TextColored(imgui_red, s(pe->dynamic_collider_count_max).c_str());
+
+        if (pe->dynamic_collider_count_samples != 0)
+        {
+          ImGui::Text("Collider count sum: ");
+          ImGui::Text(s(pe->dynamic_collider_count_sum).c_str());
+          ImGui::Text("Collider count samples: ");
+          ImGui::Text(s(float64(pe->dynamic_collider_count_samples)).c_str());
+          ImGui::Text("Average collider count: ");
+          ImGui::SameLine();
+          std::stringstream ss;
+          ss << std::setprecision(4) << std::scientific
+             << float64(pe->dynamic_collider_count_sum) / float64(pe->dynamic_collider_count_samples);
+          ImGui::TextColored(imgui_red, ss.str().c_str());
+        }
+        ImGui::Unindent(10);
+      }
+    }
+
     else
     {
       ImGui::PopStyleColor();
@@ -1091,6 +1173,13 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
 
 void Flat_Scene_Graph::draw_imgui_octree()
 {
+
+  ImGui::Text(s("Pushed Triangles: ", collision_octree.pushed_triangle_count).c_str());
+  ImGui::Text(s("Stored Triangles: ", collision_octree.stored_triangle_count).c_str());
+  ImGui::Text(
+      s("Ratio:", float32(collision_octree.stored_triangle_count) / float32(collision_octree.pushed_triangle_count))
+          .c_str());
+
   bool draw = Checkbox("Draw Octree", &draw_collision_octree);
   if (draw_collision_octree)
   {
@@ -1378,7 +1467,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
 
   ImGui::Begin(s("Scene Graph:", name).c_str(), &imgui_open, flags);
 
-  //const float32 line_height = ImGui::GetTextLineHeight();
+  // const float32 line_height = ImGui::GetTextLineHeight();
 
   ImVec2 before = ImGui::GetCursorPos();
 
@@ -1390,7 +1479,6 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     imgui_col_count -= 1;
   }
   ImGui::EndGroup();
-
 
   ImGui::SameLine();
   ImGui::BeginGroup();
@@ -1439,10 +1527,9 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   if (imgui_col_count < 1)
     imgui_col_count = 1;
 
-
   ImGui::SameLine();
   ImVec2 after = ImGui::GetCursorPos();
-  float32 width_of_arrow_group = after.x-before.x;
+  float32 width_of_arrow_group = after.x - before.x;
 
   uint32 emitter_count = particle_emitters.size();
   float32 window_width = GetWindowWidth();
@@ -1452,16 +1539,20 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   generator = generator2;
 
   float32 available_size = (imgui_col_count * (horizontal_tile_size)) - width_of_arrow_group;
-  available_size -= 110;
-  available_size = available_size - 5 ;//+ ((imgui_col_count-1)*7);
 
-
-
-  ImVec2 each_emitter_size = ImVec2(floor(available_size/emitter_count), 110.0f);
-  for(uint32 i = 0; i < emitter_count;++i)
+  bool icarus = true;
+  if (icarus)
   {
-    //std::vector<float64> idle64 = particle_emitters[i].idle.get_ordered_times();
-    //std::vector<float64> active64 = particle_emitters[i].active.get_ordered_times();
+
+    available_size -= 120;
+    available_size = available_size - 5 + ((imgui_col_count - 1) * 7);
+  }
+
+  ImVec2 each_emitter_size = ImVec2(floor(available_size / emitter_count), 110.0f);
+  for (uint32 i = 0; i < emitter_count; ++i)
+  {
+    // std::vector<float64> idle64 = particle_emitters[i].idle.get_ordered_times();
+    // std::vector<float64> active64 = particle_emitters[i].active.get_ordered_times();
     std::vector<float64> idle64 = particle_emitters[i].idle.get_times();
     std::vector<float64> active64 = particle_emitters[i].active.get_times();
 
@@ -1473,33 +1564,33 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     {
       idle[j] = idle64[j];
       active[j] = active64[j];
-      //load[(size - 1) - j] = active[j] / (active[j] + idle[j]);
+      // load[(size - 1) - j] = active[j] / (active[j] + idle[j]);
       load[j] = active[j] / (active[j] + idle[j]);
     }
-    if(size != 0)
+    if (size != 0)
     {
 
-    PushID(s("histogram", i).c_str());
-    ImGui::PlotHistogram("", &load[0], size, 0, NULL, 0.0f, 1.0f,each_emitter_size);
-    PopID();
+      PushID(s("histogram", i).c_str());
+      ImGui::PlotHistogram("", &load[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
+      PopID();
     }
     else
     {
       Dummy(each_emitter_size);
     }
-    if(i != emitter_count-1)
+    if (i != emitter_count - 1)
     {
       ImGui::SameLine();
     }
-
   }
 
-  ImGui::SameLine();
-  static Texture_Descriptor td("io.jpg");
-  static Texture io = Texture(td);
-  put_imgui_texture(&io,vec2(110));
-
-
+  if (icarus)
+  {
+    ImGui::SameLine();
+    static Texture_Descriptor td("io.jpg");
+    static Texture io = Texture(td);
+    put_imgui_texture(&io, vec2(110));
+  }
 
   for (uint32 i = 0; i < imgui_rows_count; ++i)
   { // rows
@@ -2500,9 +2591,9 @@ Octree::Octree()
   nodes.resize(10000000);
   root = &nodes[0];
   root->size = 50;
-  root->halfsize = 0.5f * 50;
-  root->minimum = -vec3(root->halfsize);
-  root->center = root->minimum + vec3(root->halfsize);
+  // root->halfsize = 0.5f * 50;
+  root->minimum = -vec3(0.5 * root->size);
+  root->center = root->minimum + vec3(0.5 * root->size);
   free_node = 1;
   root->mydepth = 0;
 }
@@ -2541,8 +2632,8 @@ void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
     vec3 atob = t.b - t.a;
     vec3 atoc = t.c - t.a;
     t.n = normalize(cross(atob, atoc));
-
     all_worked = all_worked && root->push(t, 0, this);
+    pushed_triangle_count++;
     // return;//sponge
   }
 
@@ -2568,8 +2659,8 @@ inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
   free_node += 1;
   ptr->minimum = p;
   ptr->size = size;
-  ptr->halfsize = 0.5f * size;
-  ptr->center = p + vec3(ptr->halfsize);
+  // ptr->halfsize = 0.5f * size;
+  ptr->center = p + vec3(0.5 * ptr->size);
   ptr->mydepth = depth + 1;
 #ifdef OCTREE_VECTOR_STYLE
   ptr->occupying_triangles.reserve(16);
@@ -2757,6 +2848,7 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
 
 inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
 {
+
 #ifdef OCTREE_VECTOR_STYLE
   occupying_triangles.push_back(tri);
 #else
@@ -2775,6 +2867,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
 #ifdef OCTREE_SPLIT_STYLE
   if (depth == MAX_OCTREE_DEPTH)
   {
+    owner->stored_triangle_count = owner->stored_triangle_count + 1;
     return insert_triangle(triangle);
   }
 
@@ -2782,7 +2875,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
   for (uint32 i = 0; i < 8; ++i)
   {
 
-    AABB box = aabb_from_octree_child_index(i, minimum, halfsize, size);
+    AABB box = aabb_from_octree_child_index(i, minimum, 0.5 * size, size);
     bool intersects = aabb_triangle_intersection(box, triangle);
     if (intersects)
     {
@@ -2790,7 +2883,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
 
       if (!child)
       {
-        child = children[i] = owner->new_node(box.min, halfsize, depth);
+        child = children[i] = owner->new_node(box.min, 0.5 * size, depth);
         ASSERT(child);
       }
 
@@ -2805,6 +2898,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
   }
   if (requires_self)
   {
+    owner->stored_triangle_count = owner->stored_triangle_count + 1;
     return insert_triangle(triangle);
   }
   return true;

@@ -603,8 +603,17 @@ int main(int argc, char *argv[])
     const float64 time = get_real_time();
     elapsed_time = time - current_time;
     if (elapsed_time > 0.3)
+    {
+      SPIRAL_OF_DEATH = true;
+    }
+    else
+    {
+      SPIRAL_OF_DEATH = false;
+    }
+    if (SPIRAL_OF_DEATH)
+    {//warg server mightve set it, not us 
       elapsed_time = 0.3;
-
+    }
     last_time = current_time;
     imgui_frame_active = false;
     float64 imgui_dt_accumulator = 0;

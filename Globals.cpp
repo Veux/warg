@@ -29,6 +29,7 @@ Config CONFIG;
 bool WARG_SERVER;
 bool WARG_RUNNING = true;
 bool PROCESS_USES_SDL_AND_OPENGL = true;
+std::atomic<bool> SPIRAL_OF_DEATH = false;
 std::thread::id MAIN_THREAD_ID;
 SDL_Imgui_State IMGUI;
 std::mutex IMGUI_MUTEX;

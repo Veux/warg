@@ -768,13 +768,11 @@ enum Particle_Emission_Type
 
 struct Particle_Emission_Method_Descriptor
 {
-  Particle_Emission_Type type = stream;
+  Particle_Emission_Type type = Particle_Emission_Type::stream;
 
   // available to all types:
   bool snap_to_basis = false;   // particles 'follow' the emitter
   bool inherit_velocity = true; // particles gain the velocity of the emitter when spawned
-  bool static_geometry_collision = true;
-  bool dynamic_geometry_collision = true;
   float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
                                               // when emitter is initialized, this is useful for things like fog or any
                                               // object that constantly emits particles
@@ -794,6 +792,7 @@ struct Particle_Emission_Method_Descriptor
 
   glm::vec3 initial_scale = glm::vec3(1);
   glm::vec3 initial_extra_scale_variance = glm::vec3(0);
+  float32 initial_extra_scale_uniform_variance = 0.0f;
   glm::vec3 initial_velocity = glm::vec3(0, 0, 0);
   glm::vec3 initial_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
   glm::vec3 initial_angular_velocity = glm::vec3(0);
@@ -801,6 +800,7 @@ struct Particle_Emission_Method_Descriptor
 
   float32 billboard_initial_angle = 0.f;
   float32 billboard_rotation_velocity = 0.f; //spin the billboard
+  float32 initial_billboard_rotation_velocity_variance = 0.f; //spin the billboard
   bool billboard_lock_z = false;
   bool billboarding = false;
   uint32 particles_per_spawn = 1;
@@ -837,7 +837,12 @@ struct Particle_Emission_Method_Descriptor
 };
 struct Particle_Physics_Method_Descriptor
 {
-  Particle_Physics_Type type = simple;
+  Particle_Physics_Type type = Particle_Physics_Type::simple;
+
+  bool static_geometry_collision = true;
+  bool dynamic_geometry_collision = true;
+  bool abort_when_late = true;
+
 
   // available to all types
   float32 mass = 1.0f;
@@ -852,13 +857,14 @@ struct Particle_Physics_Method_Descriptor
   vec3 friction = vec3(1);
   float32 stiction_velocity = 0.005f;
   float32 billboard_rotation_velocity_multiply = 1.f; //should be good for growing smoke particles
-  Octree* octree = nullptr;
+  Octree* static_octree = nullptr;
+  Octree* dynamic_octree = nullptr;
 
   // simple
 
   // wind
   vec3 direction = vec3(1, .4, .3);
-  float32 intensity = 1.0f;
+  float32 wind_intensity = 1.0f;
 
 
 
@@ -878,7 +884,30 @@ struct Particle_Physics_Method_Descriptor
 //and a physics method that locks them in place but shears with wind
 //and fades/despawns at distance
 
+struct Particle_Emitter_Descriptor;
+struct Physics_Shared_Data
+{ // todo :proper rigid body physics algorithm
+  mat4 projection;
+  mat4 camera;
+  Timer idle = Timer(100u);
+  Timer active = Timer(100u);
+  Timer per_static_octree_test = Timer(100000);
+  Timer per_dynamic_octree_test = Timer(100000);
 
+  uint32 static_collider_count_max = 0;
+  uint32 static_collider_count_sum = 0;
+  uint32 static_collider_count_samples = 0;
+
+  uint32 dynamic_collider_count_max = 0;
+  uint32 dynamic_collider_count_sum = 0;
+  uint32 dynamic_collider_count_samples = 0;
+
+  Particle_Emitter_Descriptor* descriptor = nullptr;        // thread reads/writes
+  std::atomic<bool> request_thread_exit = false; // thread reads
+  std::atomic<uint64> requested_tick = 0;        // thread reads
+  std::atomic<uint64> completed_update = 0;      // thread reads/writes
+  Particle_Array particles;                      // thread reads/writes
+};
 
 //a warning about these - the methods are allowed to modify the descriptors themselves
 //however we should never modify the descriptors elsewhere if the emitter is not spun up to date
@@ -889,31 +918,31 @@ struct Particle_Physics_Method_Descriptor
 struct Particle_Emission_Method
 {
   virtual void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
-      quat o, float32 time, float32 dt) = 0;
+      quat o, float32 time, float32 dt, Physics_Shared_Data* data) = 0;
 };
 struct Particle_Stream_Emission : Particle_Emission_Method
 {
   void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
-      float32 time, float32 dt) final override;
+      float32 time, float32 dt, Physics_Shared_Data* data) final override;
 };
 struct Particle_Explosion_Emission : Particle_Emission_Method
 {
   void update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
-      float32 dt) final override;
+      float32 dt, Physics_Shared_Data* data) final override;
 };
 
 
 struct Particle_Physics_Method
 {
-  virtual void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) = 0;
+  virtual void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data* data) = 0;
 };
 struct Wind_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data* data) final override;
 };
 struct Simple_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data* data) final override;
 };
 
 struct Particle_Emitter_Descriptor
@@ -950,23 +979,21 @@ struct Particle_Emitter
   //don't actually use these as timers directly, they are being overwritten by the thread's timers when we fence
   Timer idle = Timer(100u);
   Timer active = Timer(100u);
+  Timer per_static_octree_test = Timer(100000);
+  Timer per_dynamic_octree_test = Timer(100000);
+  uint32 static_collider_count_max = 0;
+  uint32 static_collider_count_sum = 0;
+  uint32 static_collider_count_samples = 0;
+  uint32 dynamic_collider_count_max = 0;
+  uint32 dynamic_collider_count_sum = 0;
+  uint32 dynamic_collider_count_samples = 0;
+  
 
   // private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 
-  struct Physics_Shared_Data
-  { // todo :proper rigid body physics algorithm
-    mat4 projection;
-    mat4 camera;
-    Timer idle = Timer(100u);
-    Timer active = Timer(100u);
-    Particle_Emitter_Descriptor* descriptor = nullptr;        // thread reads/writes
-    std::atomic<bool> request_thread_exit = false; // thread reads
-    std::atomic<uint64> requested_tick = 0;        // thread reads
-    std::atomic<uint64> completed_update = 0;      // thread reads/writes
-    Particle_Array particles;                      // thread reads/writes
-  };
+
   static void thread(std::shared_ptr<Physics_Shared_Data> shared_data);
   bool thread_launched = false;
   std::thread t;

@@ -1562,7 +1562,10 @@ void Renderer::draw_imgui()
 
     static float32 tempscale = render_scale;
     ImGui::SliderFloat("scale", &tempscale, 0.05f, 2.f);
+    static float32 tempfov = vfov;
+    ImGui::SliderFloat("fov", &tempfov, 0.f, 360.f);
     set_render_scale(tempscale);
+    set_vfov(tempfov);
     if (show_tonemap)
     {
       ImGui::Begin("Tonemapping", &show_tonemap);
@@ -2617,8 +2620,6 @@ void Renderer::render(float64 state_time)
 
 void Renderer::resize_window(ivec2 window_size)
 {
-  // ASSERT(0);
-  // todo: implement window resize, must notify imgui
   this->window_size = window_size;
   set_vfov(vfov);
 }
@@ -3431,7 +3432,7 @@ void Particle_Emitter::update(mat4 projection, mat4 camera, float32 dt)
 
   fence();
   shared_data->descriptor = &descriptor;
-  //ASSERT(shared_data->descriptor == &descriptor);
+  // ASSERT(shared_data->descriptor == &descriptor);
   shared_data->projection = projection;
   shared_data->camera = camera;
   shared_data->requested_tick += 1;
@@ -3451,6 +3452,16 @@ void Particle_Emitter::fence()
   idle = shared_data->idle;
   active = shared_data->active;
 
+  per_static_octree_test = shared_data->per_static_octree_test;
+  per_dynamic_octree_test = shared_data->per_dynamic_octree_test;
+
+  static_collider_count_max = shared_data->static_collider_count_max;
+  static_collider_count_sum = shared_data->static_collider_count_sum;
+  static_collider_count_samples = shared_data->static_collider_count_samples;
+
+  dynamic_collider_count_max = shared_data->dynamic_collider_count_max;
+  dynamic_collider_count_sum = shared_data->dynamic_collider_count_sum;
+  dynamic_collider_count_samples = shared_data->dynamic_collider_count_samples;
   return;
 }
 
@@ -3506,18 +3517,20 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
     emission_type = shared_data->descriptor->emission_descriptor.type;
     physics_type = shared_data->descriptor->physics_descriptor.type;
 
-
 #ifndef NDEBUG
-    shared_data->descriptor->emission_descriptor.particles_per_second = min(shared_data->descriptor->emission_descriptor.particles_per_second, 5.f);    
-    shared_data->descriptor->emission_descriptor.explosion_particle_count = min(shared_data->descriptor->emission_descriptor.explosion_particle_count, 15u);
+    shared_data->descriptor->emission_descriptor.particles_per_second =
+        min(shared_data->descriptor->emission_descriptor.particles_per_second, 5.f);
+    shared_data->descriptor->emission_descriptor.explosion_particle_count =
+        min(shared_data->descriptor->emission_descriptor.explosion_particle_count, 15u);
 #endif
 
     const float32 time = shared_data->completed_update * dt;
     vec3 pos = shared_data->descriptor->position;
     vec3 vel = shared_data->descriptor->velocity;
     quat o = shared_data->descriptor->orientation;
-    emission->update(&shared_data->particles, &shared_data->descriptor->emission_descriptor, pos, vel, o, time, dt);
-    physics->step(&shared_data->particles, &shared_data->descriptor->physics_descriptor, time, dt);
+    emission->update(&shared_data->particles, &shared_data->descriptor->emission_descriptor, pos, vel, o, time, dt,
+        shared_data.get());
+    physics->step(&shared_data->particles, &shared_data->descriptor->physics_descriptor, time, dt, shared_data.get());
     // delete expired particles:
 
     for (uint i = 0; i < shared_data->particles.particles.size(); ++i)
@@ -3531,8 +3544,6 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       }
     }
     shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera);
-
-
 
     shared_data->active.stop();
     shared_data->completed_update += 1;
@@ -3594,6 +3605,7 @@ Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs)
 void physics_billboard_step(Particle &particle, const Particle_Physics_Method_Descriptor *d, float32 current_time)
 {
   bool lock_z = particle.billboard_lock_z;
+
   particle.billboard_angle += particle.billboard_rotation_velocity;
   float32 applying_angle = wrap_to_range(particle.billboard_angle + 1.1f * current_time, 0, two_pi<float32>());
   particle.orientation = angleAxis(applying_angle, vec3(0, 0, 1));
@@ -3602,11 +3614,11 @@ void physics_billboard_step(Particle &particle, const Particle_Physics_Method_De
 void misc_particle_attribute_iteration_step(
     Particle &particle, const Particle_Physics_Method_Descriptor *d, float32 current_time)
 {
-  if (d->size_multiply_uniform_min != 1.f && d->size_multiply_uniform_max != 1.f)
+  if (d->size_multiply_uniform_min != 1.f || d->size_multiply_uniform_max != 1.f)
   {
     particle.scale = random_between(d->size_multiply_uniform_min, d->size_multiply_uniform_max) * particle.scale;
   }
-  if (d->size_multiply_min != vec3(1.f) && d->size_multiply_max != vec3(1.f))
+  if (d->size_multiply_min != vec3(1.f) || d->size_multiply_max != vec3(1.f))
   {
     particle.scale =
         (d->size_multiply_min + random_within(d->size_multiply_max - d->size_multiply_min)) * particle.scale;
@@ -3634,24 +3646,33 @@ void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor 
   }
 }
 
-void Simple_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 time, float32 dt)
+void Simple_Particle_Physics::step(
+    Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 time, float32 dt, Physics_Shared_Data *data)
 {
   ASSERT(p);
   ASSERT(d);
   float32 current_time = get_real_time();
   for (auto &particle : p->particles)
   {
+    if (d->abort_when_late)
+    {
+      if (data->active.get_current() > 0.9f * dt)
+      {
+        return;
+      }
+    }
     simple_physics_step(particle, d, current_time);
   }
 }
 
-void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt)
+void Wind_Particle_Physics::step(
+    Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data *data)
 {
   ASSERT(p);
   ASSERT(d);
 
   float32 current_time = get_real_time();
-  //float32 bounce_loss = 0.75;
+  // float32 bounce_loss = 0.75;
   float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
   if (p->particles.size() > 0)
   {
@@ -3660,8 +3681,17 @@ void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Desc
   }
   for (Particle &particle : p->particles)
   {
-    //bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
-   // bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
+    // bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
+    // bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
+
+    if (d->abort_when_late)
+    {
+
+      if (data->active.get_current() > 0.9f * dt)
+      {
+        return;
+      }
+    }
 
     vec3 ray = dt * particle.velocity;
     AABB probe(vec3(0));
@@ -3674,14 +3704,35 @@ void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Desc
     push_aabb(probe, max + ray);
 
     uint32 counter = 0;
-    std::vector<Triangle_Normal> colliders;
-    if (d->octree)
+    thread_local static std::vector<Triangle_Normal> colliders;
+    colliders.clear();
+    uint32 static_collider_count = 0;
+    uint32 dynamic_collider_count = 0;
+    if (d->static_octree && d->static_geometry_collision)
     {
+      data->per_static_octree_test.start();
+      d->static_octree->test_all(probe, &counter, &colliders);
+      data->per_static_octree_test.stop();
 
-    colliders = d->octree->test_all(probe, &counter);
-
+      static_collider_count = (uint32)colliders.size();
+      data->static_collider_count_max = glm::max(data->static_collider_count_max, static_collider_count);
+      data->static_collider_count_samples += 1;
+      data->static_collider_count_sum = data->static_collider_count_sum + static_collider_count;
     }
-    vec3 wind = dt * d->intensity * d->direction;
+    if (d->dynamic_octree && d->dynamic_geometry_collision)
+    {
+      data->per_static_octree_test.start();
+      data->per_dynamic_octree_test.start();
+      data->per_dynamic_octree_test.start();
+      d->dynamic_octree->test_all(probe, &counter, &colliders);
+      data->per_dynamic_octree_test.stop();
+
+      dynamic_collider_count = (uint32)colliders.size() - static_collider_count;
+      data->dynamic_collider_count_max = glm::max(data->dynamic_collider_count_max, dynamic_collider_count);
+      data->dynamic_collider_count_samples += 1;
+      data->dynamic_collider_count_sum += dynamic_collider_count;
+    }
+    vec3 wind = dt * d->wind_intensity * d->direction;
     if (colliders.size() == 0)
     {
       simple_physics_step(particle, d, current_time);
@@ -3757,21 +3808,33 @@ void Wind_Particle_Physics::step(Particle_Array *p, Particle_Physics_Method_Desc
     particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
     particle.velocity = bounce_loss * particle.velocity + collider_velocity;
 
-    particle.position += 0.002f * reflection_normal;
+    particle.position += 0.004f * reflection_normal;
     bool colliding = true;
 
-    for (uint32 i = 0; i < 2; ++i)
+    for (uint32 i = 0; i < 1; ++i)
     {
       probe.min = particle.position - 0.5f * particle.scale;
       probe.max = particle.position + 0.5f * particle.scale;
-      std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
 
+      colliders.clear();
+      if (d->static_octree && d->static_geometry_collision)
+      {
+        //data->per_static_octree_test.start();
+        d->static_octree->test_all(probe, &counter, &colliders);
+        //data->per_static_octree_test.stop();
+      }
+      if (d->dynamic_octree && d->dynamic_geometry_collision)
+      {
+        //data->per_dynamic_octree_test.start();
+        d->dynamic_octree->test_all(probe, &counter, &colliders);
+       // data->per_dynamic_octree_test.stop();
+      }
       if (colliders.size() == 0)
         break;
 
       for (Triangle_Normal &collider : colliders)
       {
-        particle.position += 0.01f * collider.n;
+        particle.position += 0.02f * collider.n;
       }
     }
     // particle.position += dt * particle.velocity; no: we did it just above
@@ -3824,12 +3887,13 @@ vec3 hammersley_sphere(uint i, uint n)
   return result;
 }
 Particle misc_particle_emitter_step(
-  Particle_Emission_Method_Descriptor* d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+    Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
 {
   Particle new_particle;
   new_particle.billboard = d->billboarding;
   new_particle.billboard_lock_z = d->billboard_lock_z;
-  new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity;
+  float32 extra_rotational_vel = random_between(0.f, d->initial_billboard_rotation_velocity_variance);
+  new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity + extra_rotational_vel;
   new_particle.billboard_angle = d->billboard_initial_angle;
   vec3 pos_variance = random_within(d->initial_position_variance);
   pos_variance = pos_variance - 0.5f * d->initial_position_variance;
@@ -3855,7 +3919,7 @@ Particle misc_particle_emitter_step(
   // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
   // float32 initial_orientation_angle = 0.0f;
 
-  const vec4& ov = d->randomized_orientation_axis;
+  const vec4 &ov = d->randomized_orientation_axis;
   vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
   float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
   oav = oav - 0.5f * d->randomized_orientation_angle_variance;
@@ -3864,14 +3928,16 @@ Particle misc_particle_emitter_step(
   new_particle.orientation = o * second_orientation * first_orientation;
 
   new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
+  new_particle.scale =
+      new_particle.scale + random_between(0.f, d->initial_extra_scale_uniform_variance) * d->initial_scale;
 
   new_particle.lifespan = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
 
   new_particle.time_left_to_live = new_particle.lifespan;
   return new_particle;
 }
-void Particle_Explosion_Emission::update(
-    Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
+    quat o, float32 time, float32 dt, Physics_Shared_Data *data)
 {
   ASSERT(p);
   ASSERT(d);
@@ -3887,8 +3953,8 @@ void Particle_Explosion_Emission::update(
     return;
   }
 
-  //std::vector<uint32> shuffled_indices;
-  //if (d->low_discrepency_position_variance)
+  // std::vector<uint32> shuffled_indices;
+  // if (d->low_discrepency_position_variance)
   //{
   //  shuffled_indices.resize(d->particle_count_per_tick);
   //  std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
@@ -3910,14 +3976,14 @@ void Particle_Explosion_Emission::update(
       vec3 hammersley_pos;
       if (d->hammersley_sphere)
       {
-        hammersley_pos = hammersley_sphere(i,d->explosion_particle_count);
+        hammersley_pos = hammersley_sphere(i, d->explosion_particle_count);
       }
       else
       {
-        hammersley_pos = hammersley_hemisphere(i,d->explosion_particle_count);
+        hammersley_pos = hammersley_hemisphere(i, d->explosion_particle_count);
       }
-      //lets take the previously calculated random-offsetted position from the
-      //misc emitter step and use its length as the distance from emitter origin
+      // lets take the previously calculated random-offsetted position from the
+      // misc emitter step and use its length as the distance from emitter origin
       float32 dist = length(new_particle.position - pos);
       dist = length(new_particle.position - impulse_p);
       if (dist == 0)
@@ -3925,9 +3991,6 @@ void Particle_Explosion_Emission::update(
         dist = d->hammersley_radius;
       }
       new_particle.position = pos + dist * normalize(hammersley_pos);
-
-
- 
 
       vec3 dir = normalize(new_particle.position - impulse_p);
       new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
@@ -3944,16 +4007,16 @@ void Particle_Explosion_Emission::update(
 
     if (new_particle.position == impulse_p)
     {
-      new_particle.position += 0.1f*random_3D_unit_vector();
+      new_particle.position += 0.1f * random_3D_unit_vector();
     }
 
-    float32 dist = length(new_particle.position-impulse_p);
+    float32 dist = length(new_particle.position - impulse_p);
     if (dist == 0)
     {
       dist = 0.01f;
     }
-    
-    new_particle.velocity = new_particle.velocity +  (d->power/dist) * dir ;
+
+    new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
     if (d->enforce_velocity_position_offset_match)
     {
       new_particle.velocity = length(new_particle.velocity) * normalize((new_particle.position - pos));
@@ -3962,10 +4025,8 @@ void Particle_Explosion_Emission::update(
   }
 }
 
-
-
-void Particle_Stream_Emission::update(
-    Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+void Particle_Stream_Emission::update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
+    quat o, float32 time, float32 dt, Physics_Shared_Data *data)
 {
   ASSERT(p);
   ASSERT(d);
@@ -3986,7 +4047,6 @@ void Particle_Stream_Emission::update(
   {
     return;
   }
-
 
   for (uint32 i = 0; i < spawns; ++i)
   {

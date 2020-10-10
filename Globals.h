@@ -35,6 +35,15 @@
 #define MAX_SPELLS 16
 #define MAX_FILENAME_LENGTH 128
 
+#define imgui_red ImVec4(1.0, 0.0, 0.0, 1.0)
+#define imgui_green ImVec4(0.0, 1.0, 0.0, 1.0)
+#define imgui_blue ImVec4(0.0, 0.0, 1.0, 1.0)
+#define imgui_yellow ImVec4(1.0, 1.0, 0.0, 1.0)
+#define imgui_teal ImVec4(0.0, 1.0, 1.0, 1.0)
+#define imgui_purple ImVec4(1.0, 0.0, 1.0, 1.0)
+#define imgui_white ImVec4(1.0, 1.0, 1.0, 1.0)
+#define imgui_black ImVec4(0.0, 0.0, 0.0, 1.0)
+
 #ifdef NDEBUG
 #define HEIGHTMAP_RESOLUTION 256
 #else
@@ -86,6 +95,7 @@ extern Image_Loader IMAGE_LOADER;
 extern bool WARG_SERVER;
 extern bool WARG_RUNNING;
 extern bool PROCESS_USES_SDL_AND_OPENGL;
+extern std::atomic<bool> SPIRAL_OF_DEATH;
 extern std::thread::id MAIN_THREAD_ID;
 extern std::mutex IMGUI_MUTEX;
 extern SDL_Imgui_State IMGUI;

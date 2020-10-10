@@ -65,7 +65,7 @@ struct Octree_Node;
 bool point_within_square(vec3 p, vec3 ps, float32 size);
 
 #ifdef NDEBUG
-#define MAX_OCTREE_DEPTH 6
+#define MAX_OCTREE_DEPTH 10
 #else
 #define MAX_OCTREE_DEPTH 4
 #endif
@@ -148,7 +148,7 @@ struct Octree_Node
   vec3 minimum;
   vec3 center;
   float32 size;
-  float32 halfsize;
+  //float32 halfsize;
   // warning about some reallocating owning object...
   //Octree *owner = nullptr;
   uint8 mydepth;
@@ -167,14 +167,19 @@ struct Octree
     return colliders;
   }
 
+ void test_all(const AABB& probe, uint32* counter, std::vector<Triangle_Normal>* acc) const
+  {
+    root->testall(probe, 0, counter, acc);
+  }
+
   void set_size(float32 size)
   {
     clear();
     root = &nodes[0];
     root->size = size;
-    root->halfsize = 0.5f*size;
-    root->minimum = -vec3(root->halfsize);
-    root->center = root->minimum + vec3(root->halfsize);
+    //root->halfsize = 0.5f*size;
+    root->minimum = -vec3(0.5 * root->size);
+    root->center = root->minimum + vec3(0.5 * root->size);
   }
 
   Octree_Node *root;
@@ -227,6 +232,9 @@ struct Octree
   Material_Index mat_triangles = NODE_NULL;
   Material_Index mat_normals = NODE_NULL;
   Material_Index mat_velocities = NODE_NULL;
+
+  uint32 pushed_triangle_count = 0;
+  uint32 stored_triangle_count = 0;
 
 
 };

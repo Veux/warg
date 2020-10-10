@@ -108,7 +108,7 @@ inline float64 Timer::shortest()
 
 std::string Timer::string_report()
 {
-  std::string s = "\n";
+  std::string s = "";
   s += "Last          : " + std::to_string(get_last()) + "\n";
   s += "Average       : " + std::to_string(moving_average()) + "\n";
   s += "Max           : " + std::to_string(longest()) + "\n";

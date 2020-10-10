@@ -938,12 +938,12 @@ void Warg_State::update()
   if (fract(sin(current_time)) > .85)
     wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
-  Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
-  Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
-  Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
+  //Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
+  //Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
+  //Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
+  //Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
-#ifdef NDEBUG
+#if 0
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
   scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(1, 1, 0);
   scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 15;

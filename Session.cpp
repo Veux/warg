@@ -11,6 +11,23 @@ void server_loop(std::shared_ptr<Warg_Server> server)
     const float64 time = get_real_time();
     elapsed_time = time - current_time;
     last_time = current_time;
+
+    if (elapsed_time > 0.3)
+    {
+      SPIRAL_OF_DEATH = true;
+      elapsed_time = 0.3;
+    }
+    if (SPIRAL_OF_DEATH)
+    { //this won't skip state updates or change dt
+      //the program is still deterministic, it just
+      //'piles up' time and slows down
+      //and will speed up and catch up to real time later
+      //(if cpu load is eventually reduced)
+
+      //think of it as similar to "we only do one dt update per second"
+      elapsed_time = 0.3;
+    }
+
     while (current_time + dt < last_time + elapsed_time)
     {
       current_time += dt;

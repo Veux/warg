@@ -24,6 +24,15 @@ struct Timer
   // resets the timer
   void clear_all();
 
+  // returns the elapsed time of the current ongoing timer
+  float64 get_current()
+  {
+    if(stopped)
+      return 0.;
+    float64 now = SDL_GetPerformanceCounter();
+    return (float64)(now - begin) / freq;
+  }
+
   // returns the time between the latest (start->stop)
   float64 get_last();
 
