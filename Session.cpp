@@ -15,7 +15,7 @@ void server_loop(std::shared_ptr<Warg_Server> server)
     if (elapsed_time > 0.3)
     {
       SPIRAL_OF_DEATH = true;
-      elapsed_time = 0.3;
+      //elapsed_time = 0.3;
     }
     if (SPIRAL_OF_DEATH)
     { //this won't skip state updates or change dt
@@ -25,7 +25,7 @@ void server_loop(std::shared_ptr<Warg_Server> server)
       //(if cpu load is eventually reduced)
 
       //think of it as similar to "we only do one dt update per second"
-      elapsed_time = 0.3;
+      //elapsed_time = 0.3;
     }
 
     while (current_time + dt < last_time + elapsed_time)

@@ -1024,8 +1024,110 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         ImGui::EndCombo();
       }
 
-      bool snap = Checkbox("snap_to_basis - todo", &pemd->snap_to_basis);
-      bool inherit = Checkbox("inherit_velocity", &pemd->inherit_velocity);
+      // slider* is the range-clamped with the scrollbar thing
+      // drag* is the unbounded dragger
+      // input* is text-entry
+      PushItemWidth(-1);
+      Checkbox("generate_particles", &pemd->generate_particles);
+      TextColored(imgui_purple, "Position:");
+      Text("initial_position_variance:");
+      DragFloat3("initial_position_variance", &pemd->initial_position_variance[0]);
+      Separator();
+      TextColored(imgui_teal, "Velocity:");
+      Text("initial_velocity:");
+      DragFloat3("initial_velocity", &pemd->initial_velocity[0]);
+      Text("initial_velocity_variance:");
+      DragFloat3("initial_velocity_variance", &pemd->initial_velocity_variance[0]);
+      Text("initial_angular_velocity:");
+      DragFloat3("initial_angular_velocity", &pemd->initial_angular_velocity[0]);
+      Text("initial_angular_velocity_variance:");
+      DragFloat3("initial_angular_velocity_variance", &pemd->initial_angular_velocity_variance[0]);
+
+      Separator();
+      TextColored(imgui_purple, "Orientation:");
+      Text("randomized_orientation_axis:");
+      DragFloat4("randomized_orientation_axis", &pemd->randomized_orientation_axis[0]);
+      Text("randomized_orientation_angle_variance:");
+      DragFloat("randomized_orientation_angle_variance", &pemd->randomized_orientation_angle_variance);
+      Text("intitial_orientation_axis:");
+      DragFloat3("intitial_orientation_axis", &pemd->intitial_orientation_axis[0]);
+      Text("initial_orientation_angle:");
+      DragFloat("initial_orientation_angle", &pemd->initial_orientation_angle);
+      Separator();
+
+      TextColored(imgui_teal, "Scale:");
+      Text("initial_scale:");
+      DragFloat3("initial_scale", &pemd->initial_scale[0]);
+      Text("initial_extra_scale_variance:");
+      DragFloat3("initial_extra_scale_variance", &pemd->initial_extra_scale_variance[0]);
+      Text("initial_extra_scale_uniform_variance:");
+      DragFloat("initial_extra_scale_uniform_variance", &pemd->initial_extra_scale_uniform_variance);
+      Separator();
+
+      TextColored(imgui_teal, "Type Specific settings:");
+      TextColored(imgui_teal, "Stream settings:");
+      Text("particles_per_second:");
+      DragFloat("particles_per_second", &pemd->particles_per_second);
+      Separator();
+
+      TextColored(imgui_teal, "Explosion:");
+      Text("explosion_particle_count:");
+      DragInt("explosion_particle_count", (int32 *)&pemd->explosion_particle_count, 1.f, 0);
+      Text("boom_t:");
+      DragFloat("boom_t", &pemd->boom_t);
+      Text("power:");
+      DragFloat("power", &pemd->power);
+      Text("impulse_center_offset_min:");
+      DragFloat3("impulse_center_offset_min", &pemd->impulse_center_offset_min[0]);
+      Text("impulse_center_offset_max:");
+      DragFloat3("impulse_center_offset_max", &pemd->impulse_center_offset_max[0]);
+      Separator();
+      if (pemd->impulse_center_offset_min.x > pemd->impulse_center_offset_max.x)
+      {
+        pemd->impulse_center_offset_min.x = pemd->impulse_center_offset_max.x;
+      }
+      if (pemd->impulse_center_offset_min.y > pemd->impulse_center_offset_max.y)
+      {
+        pemd->impulse_center_offset_min.y = pemd->impulse_center_offset_max.y;
+      }
+      if (pemd->impulse_center_offset_min.z > pemd->impulse_center_offset_max.z)
+      {
+        pemd->impulse_center_offset_min.z = pemd->impulse_center_offset_max.z;
+      }
+
+      TextColored(imgui_purple, "Misc:");
+      Text("inherit_velocity:");
+      Checkbox("inherit_velocity", &pemd->inherit_velocity);
+      Text("minimum_time_to_live:");
+      DragFloat("minimum_time_to_live", &pemd->minimum_time_to_live);
+      Text("extra_time_to_live_variance:");
+      DragFloat("extra_time_to_live_variance", &pemd->extra_time_to_live_variance);
+
+      Separator();
+
+      TextColored(imgui_purple, "May need more implmenentation work:");
+      Text("hammersley_radius:");
+      DragFloat("hammersley_radius", &pemd->hammersley_radius);
+      Text("enforce_velocity_position_offset_match:");
+      Checkbox("enforce_velocity_position_offset_match", &pemd->enforce_velocity_position_offset_match);
+      Text("low_discrepency_position_variance:");
+      Checkbox("low_discrepency_position_variance", &pemd->low_discrepency_position_variance);
+      Text("hammersley_sphere:");
+      Checkbox("hammersley_sphere", &pemd->hammersley_sphere);
+      Separator();
+      Separator();
+      TextColored(imgui_purple, "May crash or not work at all:");
+      Text("particles_per_spawn:");
+      DragInt("particles_per_spawn - todo", (int32 *)&pemd->particles_per_spawn, 1.f, 0);
+      Text("billboarding - todo:");
+      Checkbox("billboarding - todo", &pemd->snap_to_basis);
+      Text("billboard_lock_z - todo:");
+      Checkbox("billboard_lock_z - todo", &pemd->snap_to_basis);
+      Text("snap_to_basis - todo:");
+      Checkbox("snap_to_basis - todo", &pemd->snap_to_basis);
+      Text("simulate_for_n_secs_on_init - todo:");
+      InputFloat("simulate_for_n_secs_on_init - todo", &pemd->simulate_for_n_secs_on_init);
+      ImGui::PopItemWidth();
 
       // ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
       // ImGui::InputInt2("Shadow Map Resolution", &light->shadow_map_resolution[0]);
@@ -1064,8 +1166,58 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         }
         ImGui::EndCombo();
       }
-      bool static_col = Checkbox("static_geometry_collision - todo", &ppmd->static_geometry_collision);
-      bool dynamic_col = Checkbox("dynamic_geometry_collision - todo", &ppmd->dynamic_geometry_collision);
+
+      Checkbox("static_geometry_collision", &ppmd->static_geometry_collision);
+      Checkbox("dynamic_geometry_collision", &ppmd->dynamic_geometry_collision);
+
+      TextColored(imgui_purple, "Misc:");
+      Checkbox("abort_when_late", &ppmd->abort_when_late);
+      DragFloat("maximum_octree_probe_size", &ppmd->maximum_octree_probe_size);
+      DragFloat("mass", &ppmd->mass);
+      DragFloat3("gravity", &ppmd->gravity[0]);
+      DragFloat("bounce_min", &ppmd->bounce_min);
+      DragFloat("bounce_max", &ppmd->bounce_max);
+      if (ppmd->bounce_min > ppmd->bounce_max)
+      {
+        ppmd->bounce_min = ppmd->bounce_max;
+      }
+      DragFloat("size_multiply_uniform_min", &ppmd->size_multiply_uniform_min);
+      DragFloat("size_multiply_uniform_max", &ppmd->size_multiply_uniform_max);
+      if (ppmd->size_multiply_uniform_min > ppmd->size_multiply_uniform_max)
+      {
+        ppmd->size_multiply_uniform_min = ppmd->size_multiply_uniform_max;
+      }
+      DragFloat3("size_multiply_min", &ppmd->size_multiply_min[0]);
+      DragFloat3("size_multiply_max", &ppmd->size_multiply_max[0]);
+      if (ppmd->size_multiply_min.x > ppmd->size_multiply_max.x)
+      {
+        ppmd->size_multiply_min.x = ppmd->size_multiply_max.x;
+      }
+      if (ppmd->size_multiply_min.y > ppmd->size_multiply_max.y)
+      {
+        ppmd->size_multiply_min.y = ppmd->size_multiply_max.y;
+      }
+      if (ppmd->size_multiply_min.z > ppmd->size_multiply_max.z)
+      {
+        ppmd->size_multiply_min.z = ppmd->size_multiply_max.z;
+      }
+      DragFloat3("die_when_size_smaller_than", &ppmd->die_when_size_smaller_than[0]);
+      DragFloat3("friction", &ppmd->friction[0]);
+
+      DragFloat("stiction_velocity", &ppmd->stiction_velocity);
+      DragFloat("billboard_rotation_velocity_multiply", &ppmd->billboard_rotation_velocity_multiply);
+
+      TextColored(imgui_teal, "Type Specific settings:");
+      TextColored(imgui_teal, "Simple Settings:");
+
+      TextColored(imgui_teal, "Wind Settings:");
+      DragFloat3("direction", &ppmd->direction[0]);
+      DragFloat("wind_intensity", &ppmd->wind_intensity);
+
+      TextColored(imgui_purple, "May need more implmenentation work:");
+
+      TextColored(imgui_purple, "May crash or not work at all:");
+
       ImGui::TreePop();
     }
     else
@@ -1137,6 +1289,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         }
         ImGui::Unindent(10);
       }
+      ImGui::TreePop();
     }
 
     else
@@ -1474,7 +1627,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   ImGui::BeginGroup();
   ImGui::Dummy(ImVec2(15, 24));
 
-  if (ImGui::Button("<"))
+  if (ArrowButton("left", ImGuiDir_Left))
   { // pop a pane on the right for every row
     imgui_col_count -= 1;
   }
@@ -1483,14 +1636,13 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   ImGui::SameLine();
   ImGui::BeginGroup();
   // remove entire row
-  if (ImGui::Button("^"))
+  if (ArrowButton("up", ImGuiDir_Up))
   {
     if (imgui_rows.size() > 1)
       imgui_rows_count -= 1;
   }
-
   // add entire row
-  if (ImGui::Button("v"))
+  if (ArrowButton("down", ImGuiDir_Down))
   {
     if (imgui_rows.size() < imgui_rows_count + 1)
     { // need to add an entire row
@@ -1509,7 +1661,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
 
   ImGui::BeginGroup();
   ImGui::Dummy(ImVec2(15, 24));
-  if (ImGui::Button(">"))
+  if (ArrowButton("right", ImGuiDir_Right))
   { // push a pane on the right for every row
     for (uint32 i = 0; i < imgui_rows.size(); ++i)
     {
@@ -1555,24 +1707,51 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     // std::vector<float64> active64 = particle_emitters[i].active.get_ordered_times();
     std::vector<float64> idle64 = particle_emitters[i].idle.get_times();
     std::vector<float64> active64 = particle_emitters[i].active.get_times();
+    std::vector<float64> time_allocs64 = particle_emitters[i].time_allocations.get_times();
+    std::vector<float64> attribute_times64 = particle_emitters[i].attribute_times.get_times();
 
     uint32 size = idle64.size();
     std::vector<float32> idle(size);
     std::vector<float32> active(size);
     std::vector<float32> load(size);
+    std::vector<float32> time_allocs(size);
+    std::vector<float32> attribute_times(size);
+    float32 inv_dt = 1.0f / dt;
     for (uint32 j = 0; j < size; ++j)
     {
+      uint32 dst_index = j;
+      // dst_index = (size - 1) - j; //??
       idle[j] = idle64[j];
       active[j] = active64[j];
-      // load[(size - 1) - j] = active[j] / (active[j] + idle[j]);
-      load[j] = active[j] / (active[j] + idle[j]);
+      time_allocs[j] = inv_dt * time_allocs64[j];
+      attribute_times[j] = inv_dt * attribute_times64[j];
+      load[dst_index] = active[j] / (active[j] + idle[j]);
     }
     if (size != 0)
     {
 
       PushID(s("histogram", i).c_str());
+      ImVec2 cursor_pos_for_this_graph = ImGui::GetCursorPos();
       ImGui::PlotHistogram("", &load[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
       PopID();
+      // ImGui::PushStyleColor(ImGuiCol_Text, color_true);
+      PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
+
+      PushStyleColor(ImGuiCol_PlotLines, imgui_red);
+      PushID(s("histogram2", i).c_str());
+      ImGui::SetCursorPos(cursor_pos_for_this_graph);
+      ImGui::PlotLines("", &time_allocs[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
+      PopStyleColor();
+      PopID();
+
+      PushStyleColor(ImGuiCol_PlotLines, imgui_blue);
+      PushID(s("histogram3", i).c_str());
+      ImGui::SetCursorPos(cursor_pos_for_this_graph);
+      ImGui::PlotLines("", &attribute_times[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
+      PopStyleColor();
+      PopID();
+
+      PopStyleColor();
     }
     else
     {
@@ -2606,7 +2785,7 @@ void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
   std::vector<Triangle_Normal> colliders;
 
   bool all_worked = true;
-
+  uint32 degenerate_count = 0;
   for (size_t i = 0; i < data->indices.size(); i += 3)
   {
     uint32 a, b, c;
@@ -2632,10 +2811,19 @@ void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
     vec3 atob = t.b - t.a;
     vec3 atoc = t.c - t.a;
     t.n = normalize(cross(atob, atoc));
+
+    if (isnan(t.n.x) || isnan(t.n.y) || isnan(t.n.z))
+    {
+      degenerate_count += 1;
+      continue;
+    }
     all_worked = all_worked && root->push(t, 0, this);
     pushed_triangle_count++;
     // return;//sponge
   }
+  if (degenerate_count)
+    set_message(s("Warning: Degenerate triangles in Octree::push() for ", mesh->name, " Count:").c_str(),
+        s(degenerate_count), 15.f);
 
   if (!all_worked)
   {
@@ -3183,6 +3371,8 @@ inline const Triangle_Normal *Octree_Node::test(const AABB &probe, uint8 depth, 
 #endif
     }
   }
+
+  int a = 3;
 #ifndef OCTREE_VECTOR_STYLE
   if (requires_self)
   {

@@ -1040,20 +1040,19 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   pemd_impact.explosion_particle_count = 1215;
   pemd_impact.billboarding = true;
   pemd_impact.inherit_velocity = true;
-  pemd_impact.hammersley_sphere = true;
-  pemd_impact.low_discrepency_position_variance = true;
+  pemd_impact.hammersley_sphere = false;
+  pemd_impact.low_discrepency_position_variance = false;
   pemd_impact.power = 5.0001f;
-  pemd_impact.minimum_time_to_live = .05;
+  pemd_impact.minimum_time_to_live = 2.05;
   pemd_impact.extra_time_to_live_variance = .4;
-  pemd_impact.initial_position_variance = vec3(0.0f);
-  pemd_impact.initial_velocity_variance = vec3(.0f);
+  pemd_impact.initial_position_variance = vec3(0.20f);
+  pemd_impact.initial_velocity_variance = vec3(.20f);
   pemd_impact.billboard_rotation_velocity = 3.f * dt;
-  pemd_impact.initial_billboard_rotation_velocity_variance = 3.f*dt;
-  
+  pemd_impact.initial_billboard_rotation_velocity_variance = 3.f * dt;
+
   pemd_impact.initial_scale = vec3(.5f);
   pemd_impact.initial_extra_scale_variance = vec3(0.f);
   pemd_impact.initial_extra_scale_uniform_variance = 1.5f;
-  pemd_impact.inherit_velocity = false;
   pemd_impact.impulse_center_offset_min = vec3(0.f);
   pemd_impact.impulse_center_offset_max = vec3(0.0f);
   pemd_impact.hammersley_radius = .5f;
@@ -1062,15 +1061,15 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   Particle_Physics_Method_Descriptor ppmd_impact;
   ppmd_impact.type = wind;
   ppmd_impact.wind_intensity = 0.f;
-    ppmd_impact.static_geometry_collision = true;
+  ppmd_impact.static_geometry_collision = true;
   ppmd_impact.static_octree = &state->scene.collision_octree;
-  ppmd_impact.bounce_min = .99528f;
-  ppmd_impact.bounce_max = .99935f;
+  ppmd_impact.bounce_min = .5099528f;
+  ppmd_impact.bounce_max = .8099935f;
   ppmd_impact.size_multiply_uniform_min = 1.0f;
-  ppmd_impact.size_multiply_uniform_max = 1.1f;
-  ppmd_impact.die_when_size_smaller_than = vec3(0.2f);
-  ppmd_impact.friction = vec3(1.f);
-  ppmd_impact.gravity = vec3(0);
+  ppmd_impact.size_multiply_uniform_max = 1.0f;
+  ppmd_impact.die_when_size_smaller_than = vec3(0.1f);
+  ppmd_impact.friction = vec3(.99);
+  ppmd_impact.gravity = vec3(0,0,-9.8);
 
   Particle_Emitter_Descriptor ped_impact;
   ped_impact.emission_descriptor = pemd_impact;
@@ -1083,8 +1082,8 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
 bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
 {
   Flat_Scene_Graph_Node *node = &owning_state->scene.nodes[crystal];
-  Particle_Emitter* stream_emitter = nullptr;
-  Particle_Emitter* impact_emitter = nullptr;
+  Particle_Emitter *stream_emitter = nullptr;
+  Particle_Emitter *impact_emitter = nullptr;
   if (owning_state->scene.particle_emitters.size() > stream_particle_emitter_index)
   {
     stream_emitter = &owning_state->scene.particle_emitters[stream_particle_emitter_index];
@@ -1098,14 +1097,13 @@ bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
     if (stream_emitter)
     {
       stream_emitter->clear();
-    }    
+    }
     if (impact_emitter)
     {
       impact_emitter->clear();
     }
     return true;
   }
-
 
   bool dst_reached = false;
   if (length(target - position) < dt * speed)
@@ -1130,10 +1128,6 @@ bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
   vec3 randdir =
       vec3(random_between(0.9f, 1.1f) * dir.x, random_between(0.9f, 1.1f) * dir.y, random_between(0.9f, 1.1f) * dir.z);
 
-
-
-
-
   float32 sintime2 = wrap_to_range(rotation + 3.1f * owning_state->current_time, 0, two_pi<float32>());
   stream_emitter->descriptor.emission_descriptor.billboard_initial_angle = sintime2;
   stream_emitter->descriptor.emission_descriptor.initial_velocity = 0.5f * -randdir;
@@ -1141,7 +1135,7 @@ bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
 
   if (dst_reached)
   {
-    impact_emitter->descriptor.position = target;
+    impact_emitter->descriptor.position = target + (-5.f*dt * dir);
     impact_emitter->descriptor.velocity = node->velocity;
     impact_emitter->descriptor.emission_descriptor.boom_t = 1 * dt;
     // impact_emitter->descriptor.emission_descriptor.generate_particles = true;

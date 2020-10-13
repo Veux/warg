@@ -47,7 +47,7 @@
 #ifdef NDEBUG
 #define HEIGHTMAP_RESOLUTION 256
 #else
-#define HEIGHTMAP_RESOLUTION 64
+#define HEIGHTMAP_RESOLUTION 32
 #endif
 
 
@@ -89,6 +89,8 @@ extern const std::string BASE_MODEL_PATH;
 extern const std::string ERROR_TEXTURE_PATH;
 extern Timer PERF_TIMER;
 extern Timer FRAME_TIMER;
+extern std::atomic<float64> TICK_START_TIME;
+float64 get_time_left_in_this_tick();
 extern Timer SWAP_TIMER;
 extern Config CONFIG;
 extern Image_Loader IMAGE_LOADER;

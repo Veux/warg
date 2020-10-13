@@ -672,6 +672,7 @@ struct Particle
   float32 billboard_angle;
   float32 billboard_rotation_velocity;
   float32 distance_to_camera;
+  glm::vec3 spawn_approach_velocity;
 
   // generic shader-specific per-particle attributes
   glm::vec4 attribute0;
@@ -699,10 +700,9 @@ struct Particle_Array
   Particle_Array &operator=(Particle_Array &rhs);
   Particle_Array &operator=(Particle_Array &&rhs);
 
-  void compute_attributes(mat4 projection, mat4 camera);
+  void compute_attributes(mat4 projection, mat4 camera,Timer* active);
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
   std::vector<Particle> particles;
-
   std::vector<mat4> MVP_Matrices;
   std::vector<mat4> Model_Matrices;
   std::vector<vec4> billboard_locations;
@@ -810,7 +810,7 @@ struct Particle_Emission_Method_Descriptor
   float32 particles_per_second = 10.f;
 
   // explosion
-  uint32 explosion_particle_count = 1000;
+  uint32 explosion_particle_count = 100;
   float32 boom_t = 0.f;
   float32 power = 1.0f;
   bool low_discrepency_position_variance = false;
@@ -860,6 +860,13 @@ struct Particle_Physics_Method_Descriptor
   Octree* static_octree = nullptr;
   Octree* dynamic_octree = nullptr;
 
+  //the probe size will match the scale of the particle up until this value
+  //you can set larger probes for larger collision geometry
+  //however it may touch many, many triangles per octree test
+  //larger probe sizes will necessitate a lower particle count
+  //in order to meet frame times
+  float32 maximum_octree_probe_size = 3.0;
+
   // simple
 
   // wind
@@ -891,8 +898,12 @@ struct Physics_Shared_Data
   mat4 camera;
   Timer idle = Timer(100u);
   Timer active = Timer(100u);
-  Timer per_static_octree_test = Timer(100000);
-  Timer per_dynamic_octree_test = Timer(100000);
+  Timer per_static_octree_test = Timer(1000);
+  Timer per_dynamic_octree_test = Timer(1000);
+  Timer time_allocations = Timer(100u);
+  Timer attribute_timer = Timer(100u);
+  float32 physics_percent_finished = 0.f;
+  float32 attributes_percent_finished = 0.f;
 
   uint32 static_collider_count_max = 0;
   uint32 static_collider_count_sum = 0;
@@ -979,6 +990,8 @@ struct Particle_Emitter
   //don't actually use these as timers directly, they are being overwritten by the thread's timers when we fence
   Timer idle = Timer(100u);
   Timer active = Timer(100u);
+  Timer time_allocations = Timer(100u);
+  Timer attribute_times = Timer(100u);
   Timer per_static_octree_test = Timer(100000);
   Timer per_dynamic_octree_test = Timer(100000);
   uint32 static_collider_count_max = 0;

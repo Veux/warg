@@ -3451,6 +3451,8 @@ void Particle_Emitter::fence()
   }
   idle = shared_data->idle;
   active = shared_data->active;
+  time_allocations = shared_data->time_allocations;
+  attribute_times = shared_data->attribute_timer;
 
   per_static_octree_test = shared_data->per_static_octree_test;
   per_dynamic_octree_test = shared_data->per_dynamic_octree_test;
@@ -3507,6 +3509,16 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
       continue;
     }
     shared_data->idle.stop();
+
+    // make the vertical slider bois in the renderer imgui window
+    // to auto assign to every shader as general 'knob0' 'knob1'... etc
+    // make the actual values global so that shader.use can see them and
+    // literally all shaders auto-set those uniforms
+
+    float64 last_attribute_calc_time_taken = clamp(shared_data->attribute_timer.get_last(), 0., float64(dt));
+    float64 time_left_for_tick = glm::clamp(get_time_left_in_this_tick(), 0., float64(dt));
+    float64 time_to_give = time_left_for_tick - last_attribute_calc_time_taken;
+    shared_data->time_allocations.insert_time(time_to_give);
     shared_data->active.start();
 
     if (emission_type != shared_data->descriptor->emission_descriptor.type)
@@ -3517,13 +3529,6 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
     emission_type = shared_data->descriptor->emission_descriptor.type;
     physics_type = shared_data->descriptor->physics_descriptor.type;
 
-#ifndef NDEBUG
-    shared_data->descriptor->emission_descriptor.particles_per_second =
-        min(shared_data->descriptor->emission_descriptor.particles_per_second, 5.f);
-    shared_data->descriptor->emission_descriptor.explosion_particle_count =
-        min(shared_data->descriptor->emission_descriptor.explosion_particle_count, 15u);
-#endif
-
     const float32 time = shared_data->completed_update * dt;
     vec3 pos = shared_data->descriptor->position;
     vec3 vel = shared_data->descriptor->velocity;
@@ -3532,7 +3537,7 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
         shared_data.get());
     physics->step(&shared_data->particles, &shared_data->descriptor->physics_descriptor, time, dt, shared_data.get());
     // delete expired particles:
-
+    shared_data->attribute_timer.start();
     for (uint i = 0; i < shared_data->particles.particles.size(); ++i)
     {
       shared_data->particles.particles[i].time_left_to_live -= dt;
@@ -3543,8 +3548,8 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
         --i;
       }
     }
-    shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera);
-
+    shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera, &shared_data->active);
+    shared_data->attribute_timer.stop();
     shared_data->active.stop();
     shared_data->completed_update += 1;
   }
@@ -3656,7 +3661,7 @@ void Simple_Particle_Physics::step(
   {
     if (d->abort_when_late)
     {
-      if (data->active.get_current() > 0.9f * dt)
+      if (data->active.get_current() > (0.7 * dt) || SPIRAL_OF_DEATH)
       {
         return;
       }
@@ -3679,29 +3684,52 @@ void Wind_Particle_Physics::step(
     // bounce_loss = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
     // bounce_loss = lerp(d->bounce_min, d->bounce_max, rand);
   }
+
+  bool want_out = false;
   for (Particle &particle : p->particles)
   {
     // bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
     // bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
 
-    if (d->abort_when_late)
+    if (!want_out && d->abort_when_late)
     {
-
-      if (data->active.get_current() > 0.9f * dt)
+      if (data->active.get_current() > (0.75f * data->time_allocations.get_last()) || SPIRAL_OF_DEATH)
       {
-        return;
+        want_out = true;
+        return; // sponge
       }
     }
 
-    vec3 ray = dt * particle.velocity;
-    AABB probe(vec3(0));
-    probe.min = particle.position - 0.5f * particle.scale;
-    probe.max = particle.position + 0.5f * particle.scale;
+    if (want_out)
+    {
+      if (particle.billboard)
+      {
+        // physics_billboard_step(particle, d, current_time);//sponge
+      }
+      continue;
+    }
 
+    misc_particle_attribute_iteration_step(particle, d, current_time);
+
+    vec3 ray = (dt * particle.velocity) + (dt * d->gravity);
+
+    AABB probe(vec3(0));
+
+    // if the probe is too big it grabs too many triangles
+    vec3 half_probe_scale = 0.5f * min(particle.scale, vec3(d->maximum_octree_probe_size));
+
+    probe.min = particle.position - half_probe_scale;
+    probe.max = particle.position + half_probe_scale;
+
+    ASSERT(!isnan(particle.position.x));
+    ASSERT(!isnan(particle.velocity.x));
+    // tests all possible triangles for an entire tick
+    // significantly more expensive if the velocity is high
+    // maybe this should be limited to the size of the max depth node...
     vec3 min = probe.min;
     vec3 max = probe.max;
-    push_aabb(probe, min + ray);
-    push_aabb(probe, max + ray);
+    push_aabb(probe, min + 1.01f * ray);
+    push_aabb(probe, max + 1.01f * ray);
 
     uint32 counter = 0;
     thread_local static std::vector<Triangle_Normal> colliders;
@@ -3715,6 +3743,13 @@ void Wind_Particle_Physics::step(
       data->per_static_octree_test.stop();
 
       static_collider_count = (uint32)colliders.size();
+      static_collider_count = counter;
+      // if (static_collider_count > 1000)
+      //{
+      //  std::vector<Triangle_Normal> colliderstest;
+      //  d->static_octree->test_all(probe, &counter, &colliderstest);
+      //}
+
       data->static_collider_count_max = glm::max(data->static_collider_count_max, static_collider_count);
       data->static_collider_count_samples += 1;
       data->static_collider_count_sum = data->static_collider_count_sum + static_collider_count;
@@ -3737,6 +3772,10 @@ void Wind_Particle_Physics::step(
     {
       simple_physics_step(particle, d, current_time);
       particle.position = particle.position + wind;
+
+      ASSERT(!isnan(particle.position.x));
+      ASSERT(!isnan(particle.velocity.x));
+
       continue;
     }
 
@@ -3772,10 +3811,14 @@ void Wind_Particle_Physics::step(
 
     // bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
 
+    vec3 approach_velocity = particle.velocity;
     vec3 reflection_normal = vec3(0);
     vec3 collider_velocity = vec3(0);
 
     // jank way to 'identify' different objects instead of using an id
+    // this was meant to cull multiple triangles of the same object
+    // but if there are multiple triangles of the same mesh it will select a random one
+    // whic his not good because one could even be a backface
     std::vector<vec3> velocities_found;
     for (uint32 i = 0; i < colliders.size(); ++i)
     {
@@ -3788,11 +3831,15 @@ void Wind_Particle_Physics::step(
           break;
         }
       }
-      if (!found)
+      // if (!found)
       {
-        velocities_found.push_back(colliders[i].v);
-        reflection_normal = reflection_normal + colliders[i].n;
-        collider_velocity = collider_velocity + colliders[i].v;
+        vec3 approach_velocity = particle.velocity - colliders[i].v;
+        if (dot(-approach_velocity, colliders[i].n) > 0.f)
+        {
+          velocities_found.push_back(colliders[i].v);
+          reflection_normal = reflection_normal + colliders[i].n;
+          collider_velocity = collider_velocity + colliders[i].v;
+        }
       }
     }
 
@@ -3803,50 +3850,67 @@ void Wind_Particle_Physics::step(
     reflection_normal = normalize(reflection_normal);
 
     float32 t = 0.5f;
-    particle.position = particle.position + (t * ray);
-    particle.velocity = reflect(particle.velocity, reflection_normal);
-    particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
-    particle.velocity = bounce_loss * particle.velocity + collider_velocity;
-
-    particle.position += 0.004f * reflection_normal;
-    bool colliding = true;
-
-    for (uint32 i = 0; i < 1; ++i)
+    bool moving = length(particle.velocity) > d->stiction_velocity;
+    if (moving)
     {
-      probe.min = particle.position - 0.5f * particle.scale;
-      probe.max = particle.position + 0.5f * particle.scale;
+      particle.position = particle.position + (t * ray);
+      particle.velocity = reflect(particle.velocity, reflection_normal);
+      particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
+      particle.velocity = bounce_loss * particle.velocity + collider_velocity;
+      particle.angular_velocity = bounce_loss * particle.angular_velocity;
+      particle.billboard_rotation_velocity = bounce_loss * particle.billboard_rotation_velocity;
+      particle.position += 0.004f * reflection_normal;
 
-      colliders.clear();
-      if (d->static_octree && d->static_geometry_collision)
-      {
-        //data->per_static_octree_test.start();
-        d->static_octree->test_all(probe, &counter, &colliders);
-        //data->per_static_octree_test.stop();
-      }
-      if (d->dynamic_octree && d->dynamic_geometry_collision)
-      {
-        //data->per_dynamic_octree_test.start();
-        d->dynamic_octree->test_all(probe, &counter, &colliders);
-       // data->per_dynamic_octree_test.stop();
-      }
-      if (colliders.size() == 0)
-        break;
+      bool colliding = true;
 
-      for (Triangle_Normal &collider : colliders)
+      float32 offset = 0.05f;
+      for (uint32 i = 0; i < 11; ++i)
       {
-        particle.position += 0.02f * collider.n;
+        probe.min = particle.position - half_probe_scale;
+        probe.max = particle.position + half_probe_scale;
+
+        colliders.clear();
+        if (d->static_octree && d->static_geometry_collision)
+        {
+          // data->per_static_octree_test.start();
+          d->static_octree->test_all(probe, &counter, &colliders);
+          // data->per_static_octree_test.stop();
+        }
+        if (d->dynamic_octree && d->dynamic_geometry_collision)
+        {
+          // data->per_dynamic_octree_test.start();
+          d->dynamic_octree->test_all(probe, &counter, &colliders);
+          // data->per_dynamic_octree_test.stop();
+        }
+        if (colliders.size() == 0)
+          break;
+
+        for (Triangle_Normal &collider : colliders)
+        {
+          // if (dot(-approach_velocity, collider.n) > 0.f)
+          {
+            particle.position += offset * collider.n;
+          }
+        }
+        offset = 2.f * offset;
+
+        // particle.position += dt * particle.velocity; no: we did it just above
+        particle.velocity *= d->friction;
+        particle.velocity += dt * d->gravity;
+        particle.velocity += wind;
+
+        ASSERT(!isnan(particle.velocity.x));
+        ASSERT(!isnan(particle.position.x));
       }
     }
-    // particle.position += dt * particle.velocity; no: we did it just above
-    particle.velocity *= d->friction;
-    particle.velocity += dt * d->gravity;
-    particle.velocity += wind;
-    bool moving = length(particle.velocity) > d->stiction_velocity;
-    particle.velocity *= float32(moving);
-    misc_particle_attribute_iteration_step(particle, d, current_time);
+    else
+    {
+      particle.velocity = vec3(0.f);
+      particle.billboard_rotation_velocity = 0.f;
+      particle.angular_velocity = vec3(0.f);
+    }
   }
 }
-
 float32 radicalInverse_VdC(uint bits)
 {
   bits = (bits << 16u) | (bits >> 16u);
@@ -3960,7 +4024,12 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
   //  std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
   //  std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), std::mt19937{ std::random_device{}() });
   //}
-  for (uint32 i = 0; i < d->explosion_particle_count; ++i)
+  float32 epc = d->explosion_particle_count;
+#ifndef NDEBUG
+  epc = 0.1 * epc;
+#endif
+
+  for (uint32 i = 0; i < epc; ++i)
   {
     Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
 
@@ -3993,12 +4062,17 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
       new_particle.position = pos + dist * normalize(hammersley_pos);
 
       vec3 dir = normalize(new_particle.position - impulse_p);
-      new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
+      if (isnan(dir.x))
+      {
+        dir = vec3(0.f, 0.f, 0.0001f);
+      }
+      new_particle.velocity = new_particle.velocity + (d->power / glm::max(dist, 0.1f)) * dir;
 
       if (d->enforce_velocity_position_offset_match)
       {
         new_particle.velocity = length(new_particle.velocity) * (new_particle.position - pos);
       }
+      ASSERT(!isnan(new_particle.velocity.x));
       p->particles.push_back(new_particle);
       continue;
     }
@@ -4008,6 +4082,10 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
     if (new_particle.position == impulse_p)
     {
       new_particle.position += 0.1f * random_3D_unit_vector();
+    }
+    if (isnan(dir.x))
+    {
+      dir = vec3(0.f, 0.f, 0.0001f);
     }
 
     float32 dist = length(new_particle.position - impulse_p);
@@ -4021,6 +4099,8 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
     {
       new_particle.velocity = length(new_particle.velocity) * normalize((new_particle.position - pos));
     }
+    ASSERT(!isnan(new_particle.velocity.x));
+    ASSERT(!isnan(new_particle.position.x));
     p->particles.push_back(new_particle);
   }
 }
@@ -4039,8 +4119,13 @@ void Particle_Stream_Emission::update(Particle_Array *p, Particle_Emission_Metho
 
   // perhaps a simple way would to be loop n times per dt and do the same thing here
   // do this spawns loop "spawns per dt"+1 times per visit to this function
-  const uint32 particles_before_tick = (uint32)floor(d->particles_per_second * time);
-  const uint32 particles_after_tick = (uint32)floor(d->particles_per_second * (time + dt));
+  float32 sps = d->particles_per_second;
+#ifndef NDEBUG
+  sps = 0.1 * sps;
+#endif
+
+  const uint32 particles_before_tick = (uint32)floor(sps * time);
+  const uint32 particles_after_tick = (uint32)floor(sps * (time + dt));
   const uint32 spawns = particles_after_tick - particles_before_tick;
 
   if (!d->generate_particles)
@@ -4104,7 +4189,7 @@ void Particle_Array::destroy()
 
 Particle_Array::Particle_Array(Particle_Array &&rhs) {}
 
-void Particle_Array::compute_attributes(mat4 projection, mat4 view)
+void Particle_Array::compute_attributes(mat4 projection, mat4 view, Timer *active)
 {
   MVP_Matrices.clear();
   Model_Matrices.clear();
@@ -4131,8 +4216,8 @@ void Particle_Array::compute_attributes(mat4 projection, mat4 view)
   //  i.distance_to_camera = length(p-camera_location);
   //}
 
-  // sort(particles.begin(),particles.end(),[](const Particle& p1, const Particle& p2){return p1.distance_to_camera >
-  // p2.distance_to_camera;});
+  // sort(particles.begin(),particles.end(),[](const Particle& p1, const Particle& p2){return p1.distance_to_camera
+  // > p2.distance_to_camera;});
 
   for (Particle &i : particles)
   {
@@ -4208,7 +4293,9 @@ bool Particle_Array::prepare_instance(std::vector<Render_Instance> *accumulator)
   }
 
   Render_Instance result;
-  uint32 num_instances = particles.size();
+  // use model matrices size instead of particles
+  // because we might have early-outted from the compute attributes function
+  uint32 num_instances = Model_Matrices.size();
   if (num_instances == 0)
     return false;
 
@@ -4431,7 +4518,8 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   const ImVec2 windowp = ImGui::GetWindowPos();
   const ImVec2 window_size = ImGui::GetWindowSize();
   ivec2 window_mouse_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
-  // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0 ||
+  // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0
+  // ||
   //                    window_cursor_pos.y > window_size.y;
   window_mouse_pos = clamp(window_mouse_pos, ivec2(0), ivec2(window_size.x, window_size.y));
   Texture *surface = &textures[selected_texture];

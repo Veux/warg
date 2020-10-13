@@ -25,6 +25,11 @@ std::string SCRATCH_STRING;
 Timer PERF_TIMER = Timer(1000);
 Timer FRAME_TIMER = Timer(60);
 Timer SWAP_TIMER = Timer(60);
+std::atomic<float64> TICK_START_TIME = 0.;
+float64 get_time_left_in_this_tick()
+{
+  return dt - (get_real_time() - TICK_START_TIME);
+}
 Config CONFIG;
 bool WARG_SERVER;
 bool WARG_RUNNING = true;

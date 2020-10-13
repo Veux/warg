@@ -619,6 +619,7 @@ int main(int argc, char *argv[])
     float64 imgui_dt_accumulator = 0;
     while (current_time + dt < last_time + elapsed_time)
     {
+      TICK_START_TIME = get_real_time();
       first_update = true;
       current_time += dt;
       imgui_dt_accumulator += dt;
@@ -769,6 +770,8 @@ int main(int argc, char *argv[])
           }
         }
       }
+      
+
 
       uint32 count = 0;
       for (uint32 i = 0; i < states.size(); ++i)
