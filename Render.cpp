@@ -3529,6 +3529,25 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
     emission_type = shared_data->descriptor->emission_descriptor.type;
     physics_type = shared_data->descriptor->physics_descriptor.type;
 
+    shared_data->descriptor->emission_descriptor.dynamic_octree = shared_data->descriptor->dynamic_octree;
+    shared_data->descriptor->physics_descriptor.dynamic_octree = shared_data->descriptor->dynamic_octree;
+    shared_data->descriptor->emission_descriptor.static_octree = shared_data->descriptor->static_octree;
+    shared_data->descriptor->physics_descriptor.static_octree = shared_data->descriptor->static_octree;
+
+    shared_data->descriptor->emission_descriptor.static_geometry_collision =
+        shared_data->descriptor->static_geometry_collision;
+    shared_data->descriptor->physics_descriptor.static_geometry_collision =
+        shared_data->descriptor->static_geometry_collision;
+    shared_data->descriptor->emission_descriptor.dynamic_geometry_collision =
+        shared_data->descriptor->dynamic_geometry_collision;
+    shared_data->descriptor->physics_descriptor.dynamic_geometry_collision =
+        shared_data->descriptor->dynamic_geometry_collision;
+
+    shared_data->descriptor->emission_descriptor.maximum_octree_probe_size =
+        shared_data->descriptor->maximum_octree_probe_size;
+    shared_data->descriptor->physics_descriptor.maximum_octree_probe_size =
+        shared_data->descriptor->maximum_octree_probe_size;
+
     const float32 time = shared_data->completed_update * dt;
     vec3 pos = shared_data->descriptor->position;
     vec3 vel = shared_data->descriptor->velocity;
@@ -3677,8 +3696,8 @@ void Wind_Particle_Physics::step(
   ASSERT(d);
 
   float32 current_time = get_real_time();
+  //
   // float32 bounce_loss = 0.75;
-  float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
   if (p->particles.size() > 0)
   {
     // bounce_loss = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
@@ -3709,27 +3728,27 @@ void Wind_Particle_Physics::step(
       continue;
     }
 
-    misc_particle_attribute_iteration_step(particle, d, current_time);
-
-    vec3 ray = (dt * particle.velocity) + (dt * d->gravity);
+    // vec3 ray = (dt * particle.velocity) + (dt * d->gravity);
 
     AABB probe(vec3(0));
 
+    // we are testing only the next position
+    Particle old_particle = particle;
+    vec3 wind = dt * d->wind_intensity * d->direction;
+    particle.velocity = particle.velocity + wind;
+    simple_physics_step(particle, d, current_time);
+
     // if the probe is too big it grabs too many triangles
     vec3 half_probe_scale = 0.5f * min(particle.scale, vec3(d->maximum_octree_probe_size));
-
     probe.min = particle.position - half_probe_scale;
     probe.max = particle.position + half_probe_scale;
 
     ASSERT(!isnan(particle.position.x));
     ASSERT(!isnan(particle.velocity.x));
-    // tests all possible triangles for an entire tick
-    // significantly more expensive if the velocity is high
-    // maybe this should be limited to the size of the max depth node...
-    vec3 min = probe.min;
-    vec3 max = probe.max;
-    push_aabb(probe, min + 1.01f * ray);
-    push_aabb(probe, max + 1.01f * ray);
+    // vec3 min = probe.min;
+    // vec3 max = probe.max;
+    // push_aabb(probe, min + 1.01f * ray);
+    // push_aabb(probe, max + 1.01f * ray);
 
     uint32 counter = 0;
     thread_local static std::vector<Triangle_Normal> colliders;
@@ -3767,47 +3786,18 @@ void Wind_Particle_Physics::step(
       data->dynamic_collider_count_samples += 1;
       data->dynamic_collider_count_sum += dynamic_collider_count;
     }
-    vec3 wind = dt * d->wind_intensity * d->direction;
-    if (colliders.size() == 0)
+    if (colliders.size() == 0) //|| particle.last_frame_collided)
     {
-      simple_physics_step(particle, d, current_time);
-      particle.position = particle.position + wind;
-
+      // if (colliders.size() == 0)
+      //{
+      // particle.last_frame_collided = false;
+      // particle.last_frame_collision_normal = vec3(0);
+      //}
       ASSERT(!isnan(particle.position.x));
       ASSERT(!isnan(particle.velocity.x));
 
       continue;
     }
-
-    // float32 t = 0.5f; //% of dt we collide at
-    // float32 tt = 0.25f;
-    // bool high = true;
-    // AABB probe2;
-    // for (uint32 i = 0; i < 0; ++i)
-    //{
-    //  vec3 new_pos = particle.position + t * ray;
-    //  probe2.min = new_pos - 0.5f * particle.scale;
-    //  probe2.max = new_pos + 0.5f * particle.scale;
-    //  high = aabb_triangle_intersection(probe2, *collider);
-
-    //  if (high)
-    //  {
-    //    t = t - tt;
-    //  }
-    //  else
-    //  {
-    //    t = t + tt;
-    //  }
-    //  tt = 0.5f * tt;
-
-    //}
-    // if (high)
-    //  t = t - (2.f*tt);
-
-    // vec3 new_pos = particle.position + t * ray;
-    // probe2.min = new_pos - 0.5f * particle.scale;
-    // probe2.max = new_pos + 0.5f * particle.scale;
-    // high = aabb_triangle_intersection(probe2, *collider);
 
     // bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
 
@@ -3817,20 +3807,23 @@ void Wind_Particle_Physics::step(
 
     // jank way to 'identify' different objects instead of using an id
     // this was meant to cull multiple triangles of the same object
-    // but if there are multiple triangles of the same mesh it will select a random one
-    // whic his not good because one could even be a backface
+    // for the purpose of avoiding adding the velocity of a single (multitriangle) object more than once
+    // however it is technically broken when there is more than one object with the same velocity
+    // which is not common for moving objects, but stationary ones....
+
+    // for now we are just using it to cull triangles we are approaching from behind
     std::vector<vec3> velocities_found;
     for (uint32 i = 0; i < colliders.size(); ++i)
     {
-      bool found = false;
-      for (uint32 j = 0; j < velocities_found.size(); ++j)
-      {
-        if (velocities_found[j] == colliders[i].v)
-        {
-          found = true;
-          break;
-        }
-      }
+      // bool found = false;
+      // for (uint32 j = 0; j < velocities_found.size(); ++j)
+      //{
+      //  if (velocities_found[j] == colliders[i].v)
+      //  {
+      //    found = true;
+      //    break;
+      //  }
+      //}
       // if (!found)
       {
         vec3 approach_velocity = particle.velocity - colliders[i].v;
@@ -3845,26 +3838,124 @@ void Wind_Particle_Physics::step(
 
     if (reflection_normal == vec3(0))
     {
-      reflection_normal = vec3(0, 0, 1);
+      // all the colliders were backfaces
+      // ... return?
+      return;
+      // reflection_normal = vec3(0, 0, 1);
     }
     reflection_normal = normalize(reflection_normal);
 
-    float32 t = 0.5f;
+    // if we get here, our next position isn't valid, we intersected a triangle facing us
+
+    // the goal of this part of the code is to not re-reflect off the same surface if the particle grew in size
+    // and re-touched a trinalge it just exited from..?? but that should be culled anyway with the dot product?
+    // i think i forgot why i was doing this
+
+    // if after our binary search and physics step we are still intersecting the world
+    // we should reflect velocity and use this... or instead recurse on this function itself
+    // with the smaller t
+    // or just delete the stupid particle
+    // particle.last_frame_collided = true;
+    // bool normal_change_is_new_added_collider = colliders.size() > particle.last_frame_collision_count;
+    // particle.last_frame_collision_count = colliders.size();
+
+    // vec3 new_colliding_normal = reflection_normal - particle.last_frame_collision_normal;
+
+    // if (normal_change_is_new_added_collider)
+    //{//need to reflect
+    //  particle.last_frame_collision_normal += new_colliding_normal;
+    //  particle.last_frame_collision_normal = normalize(particle.last_frame_collision_normal);
+    //}
+    // else
+    //{//no need to reflect
+    //  new_colliding_normal = vec3(0); //disables reflecting
+    //  particle.last_frame_collision_normal = reflection_normal; //keep the normal because we may still be inside the
+    //  object working outwards
+    //}
+
+    bool need_reflection = true; // new_colliding_normal != vec3(0);
+
     bool moving = length(particle.velocity) > d->stiction_velocity;
     if (moving)
     {
-      particle.position = particle.position + (t * ray);
+
+      vec3 full_step_ray = particle.position - old_particle.position;
+
+      float32 shortest_non_colliding_t = 0.f;
+      float32 t = 0.5f; //% of dt we collide at
+      float32 dt = 0.25f;
+      bool high = true;
+      AABB probe2(vec3(0));
+      for (uint32 i = 0; i < 4; ++i)
+      {
+        vec3 new_pos = particle.position + t * full_step_ray;
+        probe2.min = new_pos - 0.5f * particle.scale;
+        probe2.max = new_pos + 0.5f * particle.scale;
+        colliders.clear();
+
+        if (d->static_geometry_collision && d->static_octree)
+          d->static_octree->test_all(probe, &counter, &colliders);
+        if (d->dynamic_geometry_collision && d->dynamic_octree)
+          d->dynamic_octree->test_all(probe, &counter, &colliders);
+
+        high = colliders.size() > 0;
+
+        if (high)
+        {
+          t = t - dt;
+        }
+        else
+        {
+          t = t + dt;
+          shortest_non_colliding_t = t;
+        }
+        dt = 0.5f * dt;
+      }
+
+      if (high)
+      {
+        t = shortest_non_colliding_t;
+      }
+
+      float32 before_reflect_t = t;
+      float32 after_reflect_t = 1.0f - t;
+      float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
+
+      // revert our state to before we stepped into colliding geometry
+      particle = old_particle;
+
+      // time step forward until we hit the surface
+      particle.position += before_reflect_t * (dt)*particle.velocity;
+      particle.velocity += before_reflect_t * dt * d->gravity;
+
+      // instantaneous surface interaction
       particle.velocity = reflect(particle.velocity, reflection_normal);
-      particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
       particle.velocity = bounce_loss * particle.velocity + collider_velocity;
-      particle.angular_velocity = bounce_loss * particle.angular_velocity;
       particle.billboard_rotation_velocity = bounce_loss * particle.billboard_rotation_velocity;
-      particle.position += 0.004f * reflection_normal;
+      particle.angular_velocity = bounce_loss * particle.angular_velocity;
 
-      bool colliding = true;
+      // time step forward after interaction
+      particle.position += after_reflect_t * (dt)*particle.velocity;
+      particle.velocity += after_reflect_t * dt * d->gravity;
 
+      // misc
+      particle.velocity *= d->friction;
+      particle.velocity = particle.velocity + wind;
+
+      // scale change etc
+      // this might enlarge the particle and make us intersect again...
+      misc_particle_attribute_iteration_step(particle, d, current_time);
+      if (particle.billboard)
+      {
+        physics_billboard_step(particle, d, current_time);
+      }
+
+
+#if 0
+      // final step, if we are still inside something, lets just push ourselves
+      // out in the direction of the normal
       float32 offset = 0.05f;
-      for (uint32 i = 0; i < 11; ++i)
+      for (uint32 i = 0; i < 0; ++i)
       {
         probe.min = particle.position - half_probe_scale;
         probe.max = particle.position + half_probe_scale;
@@ -3887,27 +3978,26 @@ void Wind_Particle_Physics::step(
 
         for (Triangle_Normal &collider : colliders)
         {
-          // if (dot(-approach_velocity, collider.n) > 0.f)
+          if (dot(-approach_velocity, collider.n) > 0.f)
           {
             particle.position += offset * collider.n;
           }
         }
-        offset = 2.f * offset;
+        // offset = 2.f * offset;
 
         // particle.position += dt * particle.velocity; no: we did it just above
-        particle.velocity *= d->friction;
-        particle.velocity += dt * d->gravity;
-        particle.velocity += wind;
 
         ASSERT(!isnan(particle.velocity.x));
         ASSERT(!isnan(particle.position.x));
       }
+#endif
     }
     else
     {
       particle.velocity = vec3(0.f);
       particle.billboard_rotation_velocity = 0.f;
       particle.angular_velocity = vec3(0.f);
+      simple_physics_step(particle, d, current_time);
     }
   }
 }
@@ -3998,6 +4088,7 @@ Particle misc_particle_emitter_step(
   new_particle.lifespan = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
 
   new_particle.time_left_to_live = new_particle.lifespan;
+
   return new_particle;
 }
 void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
@@ -4101,6 +4192,28 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
     }
     ASSERT(!isnan(new_particle.velocity.x));
     ASSERT(!isnan(new_particle.position.x));
+
+    AABB probe(vec3(0));
+    vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
+    probe.min = new_particle.position - half_probe_scale;
+    probe.max = new_particle.position + half_probe_scale;
+    thread_local static std::vector<Triangle_Normal> colliders;
+    colliders.clear();
+    uint32 counter = 0;
+    if (d->static_octree && d->static_geometry_collision)
+    {
+      d->static_octree->test_all(probe, &counter, &colliders);
+    }
+    if (d->dynamic_octree && d->dynamic_geometry_collision)
+    {
+      d->dynamic_octree->test_all(probe, &counter, &colliders);
+    }
+
+    if (colliders.size() != 0)
+    {
+      new_particle.time_left_to_live = 0.f;
+    }
+
     p->particles.push_back(new_particle);
   }
 }
@@ -4140,6 +4253,27 @@ void Particle_Stream_Emission::update(Particle_Array *p, Particle_Emission_Metho
       return;
     }
     Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
+
+    AABB probe(vec3(0));
+    vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
+    probe.min = new_particle.position - half_probe_scale;
+    probe.max = new_particle.position + half_probe_scale;
+    thread_local static std::vector<Triangle_Normal> colliders;
+    colliders.clear();
+    uint32 counter = 0;
+    if (d->static_octree && d->static_geometry_collision)
+    {
+      d->static_octree->test_all(probe, &counter, &colliders);
+    }
+    if (d->dynamic_octree && d->dynamic_geometry_collision)
+    {
+      d->dynamic_octree->test_all(probe, &counter, &colliders);
+    }
+
+    if (colliders.size() != 0)
+    {
+      new_particle.time_left_to_live = 0.f;
+    }
     p->particles.push_back(new_particle);
   }
 }

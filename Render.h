@@ -673,6 +673,9 @@ struct Particle
   float32 billboard_rotation_velocity;
   float32 distance_to_camera;
   glm::vec3 spawn_approach_velocity;
+  bool last_frame_collided = false;
+  vec3 last_frame_collision_normal = vec3(0);
+  uint32 last_frame_collision_count = 0;
 
   // generic shader-specific per-particle attributes
   glm::vec4 attribute0;
@@ -700,7 +703,7 @@ struct Particle_Array
   Particle_Array &operator=(Particle_Array &rhs);
   Particle_Array &operator=(Particle_Array &&rhs);
 
-  void compute_attributes(mat4 projection, mat4 camera,Timer* active);
+  void compute_attributes(mat4 projection, mat4 camera, Timer *active);
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
   std::vector<Particle> particles;
   std::vector<mat4> MVP_Matrices;
@@ -770,16 +773,21 @@ struct Particle_Emission_Method_Descriptor
 {
   Particle_Emission_Type type = Particle_Emission_Type::stream;
 
+  bool static_geometry_collision = true;
+  bool dynamic_geometry_collision = true;
+  Octree *static_octree = nullptr;
+  Octree *dynamic_octree = nullptr;
+  float32 maximum_octree_probe_size = 3.0;
+
   // available to all types:
-  bool snap_to_basis = false;   // particles 'follow' the emitter
-  bool inherit_velocity = true; // particles gain the velocity of the emitter when spawned
+  bool snap_to_basis = false;                 // particles 'follow' the emitter
+  bool inherit_velocity = true;               // particles gain the velocity of the emitter when spawned
   float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
                                               // when emitter is initialized, this is useful for things like fog or any
                                               // object that constantly emits particles
   float32 minimum_time_to_live = 4.0f;
   float32 extra_time_to_live_variance = 1.0f;
   vec3 initial_position_variance = vec3(0);
- 
 
   // first generated orientation - use to orient within a cone or an entire unit sphere
   // these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
@@ -799,8 +807,8 @@ struct Particle_Emission_Method_Descriptor
   glm::vec3 initial_angular_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
 
   float32 billboard_initial_angle = 0.f;
-  float32 billboard_rotation_velocity = 0.f; //spin the billboard
-  float32 initial_billboard_rotation_velocity_variance = 0.f; //spin the billboard
+  float32 billboard_rotation_velocity = 0.f;                  // spin the billboard
+  float32 initial_billboard_rotation_velocity_variance = 0.f; // spin the billboard
   bool billboard_lock_z = false;
   bool billboarding = false;
   uint32 particles_per_spawn = 1;
@@ -814,14 +822,13 @@ struct Particle_Emission_Method_Descriptor
   float32 boom_t = 0.f;
   float32 power = 1.0f;
   bool low_discrepency_position_variance = false;
-  bool hammersley_sphere = true; //true for sphere, false for hemisphere
-  vec3 impulse_center_offset_min = vec3(0);//centered on emitter position
-  vec3 impulse_center_offset_max = vec3(0);//centered on emitter position
+  bool hammersley_sphere = true;            // true for sphere, false for hemisphere
+  vec3 impulse_center_offset_min = vec3(0); // centered on emitter position
+  vec3 impulse_center_offset_max = vec3(0); // centered on emitter position
   float32 hammersley_radius = 1.0f;
   bool enforce_velocity_position_offset_match = false; // all particles will go 'exactly out' from emitter
 
-
-  //generics
+  // generics
   bool use_attribute0 = false;
   bool use_attribute1 = false;
   bool use_attribute2 = false;
@@ -830,19 +837,31 @@ struct Particle_Emission_Method_Descriptor
   vec4 initial_state_of_attribute1 = vec4(0);
   vec4 initial_state_of_attribute2 = vec4(0);
   vec4 initial_state_of_attribute3 = vec4(0);
-  void* data0 = nullptr;
+  void *data0 = nullptr;
   uint32 size0 = 0;
-  void* data1 = nullptr;
+  void *data1 = nullptr;
   uint32 size1 = 0;
 };
 struct Particle_Physics_Method_Descriptor
 {
   Particle_Physics_Type type = Particle_Physics_Type::simple;
 
+
+  //all of these are overwritten by the emitter:
   bool static_geometry_collision = true;
   bool dynamic_geometry_collision = true;
-  bool abort_when_late = true;
+  Octree *static_octree = nullptr;
+  Octree *dynamic_octree = nullptr;
+  float32 maximum_octree_probe_size = 3.0;
+  // the probe size will match the scale of the particle up until this value
+  // you can set larger probes for larger collision geometry
+  // however it may touch many, many triangles per octree test
+  // larger probe sizes will necessitate a lower particle count
+  // in order to meet frame times
 
+
+
+  bool abort_when_late = true;
 
   // available to all types
   float32 mass = 1.0f;
@@ -856,16 +875,7 @@ struct Particle_Physics_Method_Descriptor
   vec3 die_when_size_smaller_than = vec3(0);
   vec3 friction = vec3(1);
   float32 stiction_velocity = 0.005f;
-  float32 billboard_rotation_velocity_multiply = 1.f; //should be good for growing smoke particles
-  Octree* static_octree = nullptr;
-  Octree* dynamic_octree = nullptr;
-
-  //the probe size will match the scale of the particle up until this value
-  //you can set larger probes for larger collision geometry
-  //however it may touch many, many triangles per octree test
-  //larger probe sizes will necessitate a lower particle count
-  //in order to meet frame times
-  float32 maximum_octree_probe_size = 3.0;
+  float32 billboard_rotation_velocity_multiply = 1.f; // should be good for growing smoke particles
 
   // simple
 
@@ -873,23 +883,21 @@ struct Particle_Physics_Method_Descriptor
   vec3 direction = vec3(1, .4, .3);
   float32 wind_intensity = 1.0f;
 
-
-
-  //generics
+  // generics
   vec4 iteration_of_attribute0 = vec4(0);
   vec4 iteration_of_attribute1 = vec4(0);
   vec4 iteration_of_attribute2 = vec4(0);
   vec4 iteration_of_attribute3 = vec4(0);
-  void* data0 = nullptr;
+  void *data0 = nullptr;
   uint32 size0 = 0;
-  void* data1 = nullptr;
+  void *data1 = nullptr;
   uint32 size1 = 0;
 };
-//todo make an emission method "onto heightmap"
-//can spawn them all in one go, but then turn them on/off each frame based on dist?
-//alternatively deterministically spawn them each frame in a radius..
-//and a physics method that locks them in place but shears with wind
-//and fades/despawns at distance
+// todo make an emission method "onto heightmap"
+// can spawn them all in one go, but then turn them on/off each frame based on dist?
+// alternatively deterministically spawn them each frame in a radius..
+// and a physics method that locks them in place but shears with wind
+// and fades/despawns at distance
 
 struct Particle_Emitter_Descriptor;
 struct Physics_Shared_Data
@@ -913,47 +921,49 @@ struct Physics_Shared_Data
   uint32 dynamic_collider_count_sum = 0;
   uint32 dynamic_collider_count_samples = 0;
 
-  Particle_Emitter_Descriptor* descriptor = nullptr;        // thread reads/writes
-  std::atomic<bool> request_thread_exit = false; // thread reads
-  std::atomic<uint64> requested_tick = 0;        // thread reads
-  std::atomic<uint64> completed_update = 0;      // thread reads/writes
-  Particle_Array particles;                      // thread reads/writes
+  Particle_Emitter_Descriptor *descriptor = nullptr; // thread reads/writes
+  std::atomic<bool> request_thread_exit = false;     // thread reads
+  std::atomic<uint64> requested_tick = 0;            // thread reads
+  std::atomic<uint64> completed_update = 0;          // thread reads/writes
+  Particle_Array particles;                          // thread reads/writes
 };
 
-//a warning about these - the methods are allowed to modify the descriptors themselves
-//however we should never modify the descriptors elsewhere if the emitter is not spun up to date
-//or else there will be race conditions on the descriptor values
-//only change values in the descriptors if you are certain that the emitter is up to date
-//for example, it is a new state update tick and you have yet to call update on the emitter - the
-//emitter would have been synchronized at the end of the update...?
+// a warning about these - the methods are allowed to modify the descriptors themselves
+// however we should never modify the descriptors elsewhere if the emitter is not spun up to date
+// or else there will be race conditions on the descriptor values
+// only change values in the descriptors if you are certain that the emitter is up to date
+// for example, it is a new state update tick and you have yet to call update on the emitter - the
+// emitter would have been synchronized at the end of the update...?
 struct Particle_Emission_Method
 {
-  virtual void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
-      quat o, float32 time, float32 dt, Physics_Shared_Data* data) = 0;
+  virtual void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
+      float32 time, float32 dt, Physics_Shared_Data *data) = 0;
 };
 struct Particle_Stream_Emission : Particle_Emission_Method
 {
   void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
-      float32 time, float32 dt, Physics_Shared_Data* data) final override;
+      float32 time, float32 dt, Physics_Shared_Data *data) final override;
 };
 struct Particle_Explosion_Emission : Particle_Emission_Method
 {
   void update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
-      float32 dt, Physics_Shared_Data* data) final override;
+      float32 dt, Physics_Shared_Data *data) final override;
 };
-
 
 struct Particle_Physics_Method
 {
-  virtual void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data* data) = 0;
+  virtual void step(
+      Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data *data) = 0;
 };
 struct Wind_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data* data) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt,
+      Physics_Shared_Data *data) final override;
 };
 struct Simple_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data* data) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt,
+      Physics_Shared_Data *data) final override;
 };
 
 struct Particle_Emitter_Descriptor
@@ -965,6 +975,12 @@ struct Particle_Emitter_Descriptor
   glm::vec3 position = glm::vec3(0);
   glm::vec3 velocity = glm::vec3(0);
   glm::quat orientation = angleAxis(0.f, vec3(1, 0, 0)); // glm::quat(0, 0, 1, 0);
+
+  bool static_geometry_collision = true;
+  bool dynamic_geometry_collision = true;
+  Octree *static_octree = nullptr;
+  Octree *dynamic_octree = nullptr;
+  float32 maximum_octree_probe_size = 3.0;
 };
 
 struct Particle_Emitter
@@ -987,7 +1003,7 @@ struct Particle_Emitter
   Material_Index material_index = NODE_NULL;
   Particle_Emitter_Descriptor descriptor;
 
-  //don't actually use these as timers directly, they are being overwritten by the thread's timers when we fence
+  // don't actually use these as timers directly, they are being overwritten by the thread's timers when we fence
   Timer idle = Timer(100u);
   Timer active = Timer(100u);
   Timer time_allocations = Timer(100u);
@@ -1000,12 +1016,10 @@ struct Particle_Emitter
   uint32 dynamic_collider_count_max = 0;
   uint32 dynamic_collider_count_sum = 0;
   uint32 dynamic_collider_count_samples = 0;
-  
 
   // private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
-
 
   static void thread(std::shared_ptr<Physics_Shared_Data> shared_data);
   bool thread_launched = false;
@@ -1153,13 +1167,13 @@ struct Renderer
   // the way it seems to work is that lights themselves are placed into a voxelized frustrum
   // strong lights will touch more than 1 voxel, but each light will only be placed
   // into the voxels it is likely to affect
-  // and then the pixels in the pixel shader only ask for the lights in the voxel it actually 
-  // occupies and instead of the actual light data being duplicated, its an index into a 
+  // and then the pixels in the pixel shader only ask for the lights in the voxel it actually
+  // occupies and instead of the actual light data being duplicated, its an index into a
   // buffer array, a 'pointer' to the light data it wants
 
-  //if you have a hundred teeny tiny lights in the distance, and one big sun that touches all
-  //pixels, almost all pixels will do only 1 light computation, and only the ones close to the lights will do 2 or very rarely more
-
+  // if you have a hundred teeny tiny lights in the distance, and one big sun that touches all
+  // pixels, almost all pixels will do only 1 light computation, and only the ones close to the lights will do 2 or very
+  // rarely more
 
   // todo: irradiance map generation
   // todo: skeletal animation

@@ -981,6 +981,8 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
     Particle_Emission_Method_Descriptor *pemd = &pe->descriptor.emission_descriptor;
     Particle_Physics_Method_Descriptor *ppmd = &pe->descriptor.physics_descriptor;
 
+
+
     ImGui::Indent(5);
     ImGui::Text("Mesh_Index:[");
     ImGui::SameLine();
@@ -1001,6 +1003,10 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
     ImGui::Text("]");
 
     ImGui::Unindent(5);
+
+    Checkbox("static_geometry_collision", &pe->descriptor.static_geometry_collision);
+    Checkbox("dynamic_geometry_collision", &pe->descriptor.dynamic_geometry_collision);
+    DragFloat("maximum_octree_probe_size", &pe->descriptor.maximum_octree_probe_size);
 
     const char *emission_label = "Emission Method";
     bool node_open = push_color_text_if_tree_label_open(emission_label, ImVec4(0, 255, 0, 1), ImVec4(255, 0, 0, 1));
@@ -1167,12 +1173,9 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         ImGui::EndCombo();
       }
 
-      Checkbox("static_geometry_collision", &ppmd->static_geometry_collision);
-      Checkbox("dynamic_geometry_collision", &ppmd->dynamic_geometry_collision);
 
       TextColored(imgui_purple, "Misc:");
       Checkbox("abort_when_late", &ppmd->abort_when_late);
-      DragFloat("maximum_octree_probe_size", &ppmd->maximum_octree_probe_size);
       DragFloat("mass", &ppmd->mass);
       DragFloat3("gravity", &ppmd->gravity[0]);
       DragFloat("bounce_min", &ppmd->bounce_min);
@@ -1725,7 +1728,8 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
       active[j] = active64[j];
       time_allocs[j] = inv_dt * time_allocs64[j];
       attribute_times[j] = inv_dt * attribute_times64[j];
-      load[dst_index] = active[j] / (active[j] + idle[j]);
+      //load[dst_index] = active[j] / (active[j] + idle[j]); 
+      load[dst_index] = active[j] / time_allocs64[j];
     }
     if (size != 0)
     {

@@ -1061,8 +1061,6 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   Particle_Physics_Method_Descriptor ppmd_impact;
   ppmd_impact.type = wind;
   ppmd_impact.wind_intensity = 0.f;
-  ppmd_impact.static_geometry_collision = true;
-  ppmd_impact.static_octree = &state->scene.collision_octree;
   ppmd_impact.bounce_min = .5099528f;
   ppmd_impact.bounce_max = .8099935f;
   ppmd_impact.size_multiply_uniform_min = 1.0f;
@@ -1074,6 +1072,10 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   Particle_Emitter_Descriptor ped_impact;
   ped_impact.emission_descriptor = pemd_impact;
   ped_impact.physics_descriptor = ppmd_impact;
+
+
+  ped_impact.static_geometry_collision = true;
+  ped_impact.static_octree = &state->scene.collision_octree;
 
   state->scene.particle_emitters.emplace_back(ped_impact, mesh_i, mat_i);
   impact_particle_emitter_index = state->scene.particle_emitters.size() - 1;
