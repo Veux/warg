@@ -33,8 +33,12 @@ uniform mat4 projection;
 uniform vec3 additional_ambient;
 uniform float time;
 uniform vec3 camera_position;
+uniform float dielectric_reflectivity;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
+uniform float discard_threshold;
+uniform bool multiply_albedo_by_a;
+uniform bool multiply_result_by_a;
 struct Light
 {
   vec3 position;
@@ -406,11 +410,11 @@ void main()
   vec3 result = vec3(0);
   vec4 debug = vec4(-1);
 
-  vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
+  vec4 albedo_tex = texture0_mod * texture2D(texture0, frag_uv);
   if (discard_on_alpha)
   {
-    // if (texture0_mod.a*albedo_tex.a < 0.3)
-    // discard;
+    if (albedo_tex.a < discard_threshold)
+      discard;
   }
   gather_shadow_moments();
 
@@ -438,10 +442,15 @@ void main()
     see' and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or
     reflected back out
   */
-  float premultiply_alpha = albedo_tex.a;
-  premultiply_alpha *= texture0_mod.a;
-
-  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+  float alpha = albedo_tex.a;
+  if (multiply_albedo_by_a)
+  {
+    m.albedo = alpha * albedo_tex.rgb;
+  }
+  else
+  {
+    m.albedo = albedo_tex.rgb;
+  }
   // m.albedo = pow(m.albedo,vec3(1/2.2));
   m.normal = TBN * normalize(texture3_mod.rgb * texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
@@ -454,7 +463,7 @@ void main()
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.04); // default dielectrics
+  vec3 F0 = vec3(dielectric_reflectivity); // default dielectrics
   // todo: could put dielectric reflectivity in a uniform
   // this would let us specify more light absorbant materials
   F0 = mix(F0, m.albedo, m.metalness);
@@ -467,8 +476,6 @@ void main()
   metal should mul specular by albedo because albedo map means F0
 
   plastic should not mul specular by albedo
-
-
   */
 
   vec3 direct_ambient = vec3(0);
@@ -599,5 +606,11 @@ void main()
   // result = vec3(premultiply_alpha);
   // result = m.albedo;
   // out0 = vec4(texture0_mod.a*result, premultiply_alpha);
-  out0 = vec4(result, premultiply_alpha);
+  // result = ambient;
+
+  if (multiply_result_by_a)
+  {
+    result = alpha * result;
+  }
+  out0 = vec4(result, alpha);
 }

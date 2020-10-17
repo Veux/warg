@@ -382,11 +382,11 @@ void push_log_to_disk()
 }
 std::string to_string(glm::vec2 v)
 {
-  return s("(",v.x,",", v.y,")");
+  return s("(", v.x, ",", v.y, ")");
 }
 std::string to_string(glm::vec3 v)
 {
-  return s("(", v.x, ",", v.y,",", v.z, ")");
+  return s("(", v.x, ",", v.y, ",", v.z, ")");
 }
 std::string to_string(glm::vec4 v)
 {
@@ -412,7 +412,7 @@ std::string qtos(glm::quat v)
   return result;
 }
 
-std::string to_string(Particle_Physics_Type& t)
+std::string to_string(Particle_Physics_Type &t)
 {
   if (t == Particle_Physics_Type::simple)
   {
@@ -487,18 +487,38 @@ string to_string(Light_Type &value)
 
   return "s(): Unknown Light_Type";
 }
-
-std::string to_string(Particle_Emission_Type& t)
+std::string to_string(Material_Blend_Mode& mode)
 {
-    if (t == Particle_Emission_Type::stream)
-    {
-        return "Stream";
-    }
-    if (t == Particle_Emission_Type::explosion)
-    {
-        return "Explosion";
-    }
-    return "Unknown";
+  if (mode == Material_Blend_Mode::premultiplied_alpha_texture)
+  {
+    return "premultiplied_alpha_texture";
+  }
+  if (mode == Material_Blend_Mode::premultiplied_alpha)
+  {
+    return "premultiplied_alpha";
+  }
+  if (mode == Material_Blend_Mode::alpha_blend)
+  {
+    return "alpha_blend";
+  }
+  if (mode == Material_Blend_Mode::add)
+  {
+    return "add";
+  }
+  return "Unknown";
+}
+
+std::string to_string(Particle_Emission_Type &t)
+{
+  if (t == Particle_Emission_Type::stream)
+  {
+    return "Stream";
+  }
+  if (t == Particle_Emission_Type::explosion)
+  {
+    return "Explosion";
+  }
+  return "Unknown";
 }
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
@@ -511,24 +531,24 @@ UID uid()
   return i++;
 }
 
-const char* filter_format_to_string(GLenum filter_format)
+const char *filter_format_to_string(GLenum filter_format)
 {
   switch (filter_format)
   {
-  case GL_NEAREST:
-    return "GL_NEAREST";
-  case GL_NEAREST_MIPMAP_LINEAR:
-    return "GL_NEAREST_MIPMAP_LINEAR";
-  case GL_NEAREST_MIPMAP_NEAREST:
-    return "GL_NEAREST_MIPMAP_NEAREST";
-  case GL_LINEAR_MIPMAP_NEAREST:
-    return "GL_LINEAR_MIPMAP_NEAREST";
-  case GL_LINEAR_MIPMAP_LINEAR:
-    return "GL_LINEAR_MIPMAP_LINEAR";
-  case GL_LINEAR:
-    return "GL_LINEAR";
-  default:
-    return "UNKNOWN";
+    case GL_NEAREST:
+      return "GL_NEAREST";
+    case GL_NEAREST_MIPMAP_LINEAR:
+      return "GL_NEAREST_MIPMAP_LINEAR";
+    case GL_NEAREST_MIPMAP_NEAREST:
+      return "GL_NEAREST_MIPMAP_NEAREST";
+    case GL_LINEAR_MIPMAP_NEAREST:
+      return "GL_LINEAR_MIPMAP_NEAREST";
+    case GL_LINEAR_MIPMAP_LINEAR:
+      return "GL_LINEAR_MIPMAP_LINEAR";
+    case GL_LINEAR:
+      return "GL_LINEAR";
+    default:
+      return "UNKNOWN";
   }
 }
 
@@ -653,7 +673,7 @@ std::string find_free_filename(std::string filename, std::string extension)
   uint32 i = 0;
   while (exists)
   {
-    exists = std::filesystem::exists(s(filename, i,extension));
+    exists = std::filesystem::exists(s(filename, i, extension));
     ++i;
   }
   return s(filename, i);
@@ -704,7 +724,7 @@ void Config::load(string filename)
   if ((i = j.find("Render Simple")) != j.end())
     render_simple = *i;
 
-    if ((i = j.find("Fullscreen")) != j.end())
+  if ((i = j.find("Fullscreen")) != j.end())
     fullscreen = *i;
 }
 
@@ -727,7 +747,6 @@ void Config::save(string filename)
 Image_Data load_image(string path, GLenum desiredinternalformat)
 {
   Image_Data data;
-
 
   uint32 p = path.find("Assets/");
   if (p == -1)
@@ -774,7 +793,7 @@ void Image_Loader::loader_loop(Image_Loader *loader)
     string filename = task.substr(0, back);
     string fmt = task.substr(back + 1);
     GLenum gl_texture_internalformat = stoi(fmt);
-    Image_Data data = load_image(filename,gl_texture_internalformat);
+    Image_Data data = load_image(filename, gl_texture_internalformat);
 
     if (data.data_type != GL_FLOAT)
     {

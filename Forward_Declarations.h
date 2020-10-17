@@ -17,6 +17,7 @@ struct Warg_State;
 struct Render_Test_State;
 struct Resource_Manager;
 enum struct Light_Type;
+enum struct Material_Blend_Mode;
 struct Timer;
 struct Config;
 struct Octree;

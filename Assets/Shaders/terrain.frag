@@ -37,6 +37,7 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
+uniform float dielectric_reflectivity;
 uniform float alpha_albedo_override;
 struct Light
 {
@@ -592,9 +593,7 @@ void main()
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.04); // default dielectrics
-  // todo: could put dielectric reflectivity in a uniform
-  // this would let us specify more light absorbant materials
+  vec3 F0 = vec3(dielectric_reflectivity);
   F0 = mix(F0, m.albedo, m.metalness);
 
   float ndotv = saturate(dot(m.normal, v));

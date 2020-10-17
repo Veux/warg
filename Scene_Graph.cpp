@@ -213,14 +213,32 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
 
   ImGui::DragFloat2("UV Scale", &ptr->descriptor.uv_scale[0]);
   ImGui::DragFloat2("Normal UV Scale", &ptr->descriptor.normal_uv_scale[0]);
-  ImGui::DragFloat("Albedo Alpha Override", &ptr->descriptor.albedo_alpha_override);
+  ImGui::DragFloat("Dielectric Reflectivity", &ptr->descriptor.dielectric_reflectivity);
   ImGui::Checkbox("Backface Culling", &ptr->descriptor.backface_culling);
-  ImGui::Checkbox("Uses Transparency", &ptr->descriptor.translucent_pass);
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
+  ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold);
   ImGui::SliderFloat("Derivative offset", &ptr->descriptor.derivative_offset, 0.001f, 0.5f);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
-  ImGui::Checkbox("Fixed Function Blending", &ptr->descriptor.fixed_function_blending);
+
+  ImGui::Checkbox("Translucent Pass", &ptr->descriptor.translucent_pass);
+  if (ptr->descriptor.translucent_pass)
+  {
+    if (ImGui::BeginCombo("Blend Mode", s(ptr->descriptor.blendmode).c_str()))
+    {
+      const uint count = uint(Material_Blend_Mode::end);
+      for (int i = 0; i < count; i++)
+      {
+        std::string list_type_n = s(Material_Blend_Mode(i));
+        bool is_selected = (ptr->descriptor.blendmode == Material_Blend_Mode(i));
+        if (ImGui::Selectable(list_type_n.c_str(), is_selected))
+          ptr->descriptor.blendmode = Material_Blend_Mode(i);
+        if (is_selected)
+          ImGui::SetItemDefaultFocus();
+      }
+      ImGui::EndCombo();
+    }
+  }
   ImGui::PopItemWidth();
 }
 
@@ -866,43 +884,43 @@ void Flat_Scene_Graph::draw_active_nodes()
 
 const char *imgui_pane_to_string(imgui_pane p)
 {
-  if (p == node_tree)
+  if (p == imgui_pane::node_tree)
   {
     return "Nodes";
   }
-  if (p == resource_man)
+  if (p == imgui_pane::resource_man)
   {
     return "Resource Manager";
   }
-  if (p == light_array)
+  if (p == imgui_pane::light_array)
   {
     return "Light Array";
   }
-  if (p == selected_node)
+  if (p == imgui_pane::selected_node)
   {
     return "Selected Node";
   }
-  if (p == selected_mes)
+  if (p == imgui_pane::selected_mes)
   {
     return "Selected Mesh";
   }
-  if (p == selected_mat)
+  if (p == imgui_pane::selected_mat)
   {
     return "Selected Material";
   }
-  if (p == particle_emit)
+  if (p == imgui_pane::particle_emit)
   {
     return "Particle Emitter";
   }
-  if (p == octree)
+  if (p == imgui_pane::octree)
   {
     return "Octree";
   }
-  if (p == console)
+  if (p == imgui_pane::console)
   {
     return "Console";
   }
-  if (p == blank)
+  if (p == imgui_pane::blank)
   {
     return "Blank";
   }
@@ -933,7 +951,7 @@ void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
     TextColored(ImVec4(0, 1, 1, 1), "Pane:");
     ImGui::Separator();
 
-    for (uint32 i = 0; i < imgui_pane::end; ++i)
+    for (uint32 i = 0; i < (uint32)imgui_pane::end; ++i)
     {
       if (ImGui::Selectable(imgui_pane_to_string(imgui_pane(i))))
       {
@@ -944,6 +962,18 @@ void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
     ImGui::EndPopup();
   }
   PopID();
+}
+
+void imgui_node_element(Node_Index node)
+{
+  ImGui::Text("Node_Index:[");
+  ImGui::SameLine();
+  if (node == NODE_NULL)
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+  else
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node).c_str());
+  ImGui::SameLine();
+  ImGui::Text("]");
 }
 
 void Flat_Scene_Graph::draw_imgui_particle_emitter()
@@ -981,8 +1011,6 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
     Particle_Emission_Method_Descriptor *pemd = &pe->descriptor.emission_descriptor;
     Particle_Physics_Method_Descriptor *ppmd = &pe->descriptor.physics_descriptor;
 
-
-
     ImGui::Indent(5);
     ImGui::Text("Mesh_Index:[");
     ImGui::SameLine();
@@ -1007,6 +1035,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
     Checkbox("static_geometry_collision", &pe->descriptor.static_geometry_collision);
     Checkbox("dynamic_geometry_collision", &pe->descriptor.dynamic_geometry_collision);
     DragFloat("maximum_octree_probe_size", &pe->descriptor.maximum_octree_probe_size);
+    InputFloat("simulate_for_n_secs_on_init - todo", &pe->descriptor.simulate_for_n_secs_on_init);
 
     const char *emission_label = "Emission Method";
     bool node_open = push_color_text_if_tree_label_open(emission_label, ImVec4(0, 255, 0, 1), ImVec4(255, 0, 0, 1));
@@ -1035,6 +1064,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
       // input* is text-entry
       PushItemWidth(-1);
       Checkbox("generate_particles", &pemd->generate_particles);
+      Checkbox("allow_colliding_spawns", &pemd->allow_colliding_spawns);
       TextColored(imgui_purple, "Position:");
       Text("initial_position_variance:");
       DragFloat3("initial_position_variance", &pemd->initial_position_variance[0]);
@@ -1059,6 +1089,13 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
       DragFloat3("intitial_orientation_axis", &pemd->intitial_orientation_axis[0]);
       Text("initial_orientation_angle:");
       DragFloat("initial_orientation_angle", &pemd->initial_orientation_angle);
+      Separator();
+
+      Text("billboard_rotation_velocity:");
+      DragFloat("billboard_rotation_velocity", &pemd->billboard_rotation_velocity);
+      Separator();
+      Text("initial_billboard_rotation_velocity_variance:");
+      DragFloat("initial_billboard_rotation_velocity_variance", &pemd->initial_billboard_rotation_velocity_variance);
       Separator();
 
       TextColored(imgui_teal, "Scale:");
@@ -1132,7 +1169,6 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
       Text("snap_to_basis - todo:");
       Checkbox("snap_to_basis - todo", &pemd->snap_to_basis);
       Text("simulate_for_n_secs_on_init - todo:");
-      InputFloat("simulate_for_n_secs_on_init - todo", &pemd->simulate_for_n_secs_on_init);
       ImGui::PopItemWidth();
 
       // ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
@@ -1173,9 +1209,9 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
         ImGui::EndCombo();
       }
 
-
       TextColored(imgui_purple, "Misc:");
       Checkbox("abort_when_late", &ppmd->abort_when_late);
+      SliderInt("collision_binary_search_iterations", (int32 *)&ppmd->collision_binary_search_iterations, 0, 25);
       DragFloat("mass", &ppmd->mass);
       DragFloat3("gravity", &ppmd->gravity[0]);
       DragFloat("bounce_min", &ppmd->bounce_min);
@@ -1209,6 +1245,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
 
       DragFloat("stiction_velocity", &ppmd->stiction_velocity);
       DragFloat("billboard_rotation_velocity_multiply", &ppmd->billboard_rotation_velocity_multiply);
+      DragFloat("billboard_rotation_time_factor", &ppmd->billboard_rotation_time_factor);
 
       TextColored(imgui_teal, "Type Specific settings:");
       TextColored(imgui_teal, "Simple Settings:");
@@ -1539,7 +1576,7 @@ void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
 {
   const float32 horizontal_tile_size = 350;
   const float32 vertical_tile_size = 400;
-  if (p == node_tree)
+  if (p == imgui_pane::node_tree)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Active Scene Graph Nodes:");
     ImGui::BeginChild("Active Nodes:");
@@ -1547,63 +1584,63 @@ void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
     ImGui::EndChild();
   }
 
-  if (p == resource_man)
+  if (p == imgui_pane::resource_man)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Resource Manager:");
     ImGui::BeginChild("Resource Manager:");
     draw_imgui_resource_manager();
     ImGui::EndChild();
   }
-  if (p == light_array)
+  if (p == imgui_pane::light_array)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Light Array:");
     ImGui::BeginChild("Light Array");
     draw_imgui_light_array();
     ImGui::EndChild();
   }
-  if (p == selected_node)
+  if (p == imgui_pane::selected_node)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Scene Graph Node:");
     ImGui::BeginChild("Selected Node:");
     draw_imgui_specific_node(imgui_selected_node);
     ImGui::EndChild();
   }
-  if (p == selected_mes)
+  if (p == imgui_pane::selected_mes)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Mesh:");
     ImGui::BeginChild("Selected Mesh:");
     draw_imgui_specific_mesh(imgui_selected_mesh);
     ImGui::EndChild();
   }
-  if (p == selected_mat)
+  if (p == imgui_pane::selected_mat)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Selected Material:");
     ImGui::BeginChild("Selected Material:");
     draw_imgui_specific_material(imgui_selected_material);
     ImGui::EndChild();
   }
-  if (p == particle_emit)
+  if (p == imgui_pane::particle_emit)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Particle Emitters:");
     ImGui::BeginChild("Particle Emitters:");
     draw_imgui_particle_emitter();
     ImGui::EndChild();
   }
-  if (p == octree)
+  if (p == imgui_pane::octree)
   {
     // ImGui::TextColored(ImVec4(1, 0, 0, 1), "Octree:");
     ImGui::BeginChild("Octree:");
     draw_imgui_octree();
     ImGui::EndChild();
   }
-  if (p == console)
+  if (p == imgui_pane::console)
   {
     ImGui::BeginChild("Console:");
     draw_imgui_console(ImVec2(horizontal_tile_size, vertical_tile_size));
     ImGui::EndChild();
   }
 
-  if (p == blank)
+  if (p == imgui_pane::blank)
   {
     ImGui::BeginChild("Blank:");
     ImGui::TextColored(ImVec4(1, 0, 0, 1), "Blank Pane:");
@@ -1649,12 +1686,12 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   {
     if (imgui_rows.size() < imgui_rows_count + 1)
     { // need to add an entire row
-      imgui_rows.push_back({blank});
+      imgui_rows.push_back({ imgui_pane::blank});
     }
     // now lets make sure it has enough columns
     while (imgui_rows.back().size() < imgui_col_count)
     {
-      imgui_rows.back().push_back(blank);
+      imgui_rows.back().push_back(imgui_pane::blank);
     }
     imgui_rows_count += 1;
   }
@@ -1670,7 +1707,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     {
       if (imgui_rows[i].size() < imgui_col_count + 1)
       {
-        imgui_rows[i].push_back(blank);
+        imgui_rows[i].push_back(imgui_pane::blank);
       }
     }
     imgui_col_count += 1;
@@ -1728,7 +1765,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
       active[j] = active64[j];
       time_allocs[j] = inv_dt * time_allocs64[j];
       attribute_times[j] = inv_dt * attribute_times64[j];
-      //load[dst_index] = active[j] / (active[j] + idle[j]); 
+      // load[dst_index] = active[j] / (active[j] + idle[j]);
       load[dst_index] = active[j] / time_allocs64[j];
     }
     if (size != 0)
@@ -2910,7 +2947,7 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
     material.wireframe = true;
     material.backface_culling = true;
     material.translucent_pass = false;
-    material.fixed_function_blending = false;
+    material.blendmode = Material_Blend_Mode::alpha_blend;
 
     material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
     mat1 = scene->resource_manager->push_custom_material(&material);
@@ -3376,7 +3413,6 @@ inline const Triangle_Normal *Octree_Node::test(const AABB &probe, uint8 depth, 
     }
   }
 
-  int a = 3;
 #ifndef OCTREE_VECTOR_STYLE
   if (requires_self)
   {

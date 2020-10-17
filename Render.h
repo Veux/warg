@@ -340,6 +340,58 @@ struct Uniform_Set_Descriptor
   }
 };
 
+enum Material_Pass
+{
+  //normal opaque pass
+  //uses: stone, metal, plastic etc
+  pbr_opaque, 
+
+  //traditional alpha blending
+  //uses: simple blending effects, alpha-stenciled textures such as tree leaves or grass or ui elements
+  translucent, 
+
+  //same as above, but with refraction effects based on surface normal
+  translucent_refract,
+
+  //specific case of the volumetric renderer
+  pbr_water,
+
+  //supports refraction
+  //supports volumetric absorbtion
+  //
+  //renders each object with backfaces first to figure out its depth, then renders its front face and samples the depth texture
+  //use case: translucent materials that have a look of 'depth' to them such as murky water or 
+  pbr_specular_volumetric, 
+
+  
+  //okay so if we split the translucent passes up like this.... then they arent sorted properly
+  //they all need to be sorted and the state needs to be set up for each type of translucent rendering step
+
+};
+
+enum struct Material_Blend_Mode
+{
+
+  //dst = src + (1-a)*dst
+  //albedo = albedo_texture.rgb
+  //for translucent pbr materials that keep full specular: glass, translucent plastic etc
+  //for when albedo is already alpha multiplied in the source texture
+  premultiplied_alpha_texture,
+  
+  //albedo = a*albedo_texture.rgb
+  //for translucent pbr materials that keep full specular: glass, translucent plastic etc
+  premultiplied_alpha, 
+
+  //dst = a*src + (1-a)*dst
+  //for traditional blending effects - grass and leaves, simple smoke/fog effects
+  alpha_blend,
+
+  //dst = dst + src
+  //for additive lighting effects
+  add,
+  end
+};
+
 struct Material_Descriptor
 {
   // Material_Descriptor() {}
@@ -355,16 +407,20 @@ struct Material_Descriptor
   Uniform_Set_Descriptor uniform_set;
   std::string vertex_shader;
   std::string frag_shader;
+  float32 dielectric_reflectivity = 0.04f;
   vec2 uv_scale = vec2(1);
   vec2 normal_uv_scale = vec2(1);
-  float32 albedo_alpha_override = -1.f;
   float32 derivative_offset = 0.008;
-  bool backface_culling = true;
+
   bool translucent_pass = false;
+  Material_Blend_Mode blendmode = Material_Blend_Mode::premultiplied_alpha;
+  bool require_self_depth = false;
+
+  bool backface_culling = true;
   bool discard_on_alpha = true;
+  float32 discard_threshold = 0.3f;
   bool casts_shadows = true;
   bool wireframe = false;
-  bool fixed_function_blending = false;
 
   /*
 
@@ -775,6 +831,7 @@ struct Particle_Emission_Method_Descriptor
 
   bool static_geometry_collision = true;
   bool dynamic_geometry_collision = true;
+  bool allow_colliding_spawns = true;
   Octree *static_octree = nullptr;
   Octree *dynamic_octree = nullptr;
   float32 maximum_octree_probe_size = 3.0;
@@ -782,9 +839,7 @@ struct Particle_Emission_Method_Descriptor
   // available to all types:
   bool snap_to_basis = false;                 // particles 'follow' the emitter
   bool inherit_velocity = true;               // particles gain the velocity of the emitter when spawned
-  float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
-                                              // when emitter is initialized, this is useful for things like fog or any
-                                              // object that constantly emits particles
+
   float32 minimum_time_to_live = 4.0f;
   float32 extra_time_to_live_variance = 1.0f;
   vec3 initial_position_variance = vec3(0);
@@ -809,6 +864,7 @@ struct Particle_Emission_Method_Descriptor
   float32 billboard_initial_angle = 0.f;
   float32 billboard_rotation_velocity = 0.f;                  // spin the billboard
   float32 initial_billboard_rotation_velocity_variance = 0.f; // spin the billboard
+
   bool billboard_lock_z = false;
   bool billboarding = false;
   uint32 particles_per_spawn = 1;
@@ -853,6 +909,7 @@ struct Particle_Physics_Method_Descriptor
   Octree *static_octree = nullptr;
   Octree *dynamic_octree = nullptr;
   float32 maximum_octree_probe_size = 3.0;
+  uint32 collision_binary_search_iterations = 0;
   // the probe size will match the scale of the particle up until this value
   // you can set larger probes for larger collision geometry
   // however it may touch many, many triangles per octree test
@@ -874,8 +931,10 @@ struct Particle_Physics_Method_Descriptor
   vec3 size_multiply_max = vec3(1);
   vec3 die_when_size_smaller_than = vec3(0);
   vec3 friction = vec3(1);
+  vec3 drag = vec3(1); //hacked for now
   float32 stiction_velocity = 0.005f;
   float32 billboard_rotation_velocity_multiply = 1.f; // should be good for growing smoke particles
+  float32 billboard_rotation_time_factor = 0.f; //adds time to the rotation
 
   // simple
 
@@ -980,7 +1039,12 @@ struct Particle_Emitter_Descriptor
   bool dynamic_geometry_collision = true;
   Octree *static_octree = nullptr;
   Octree *dynamic_octree = nullptr;
-  float32 maximum_octree_probe_size = 3.0;
+  float32 maximum_octree_probe_size = 3.0;  
+  bool allow_colliding_spawns = true;
+
+  float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
+                                              // when emitter is initialized, this is useful for things like fog or any
+                                              // object that constantly emits particles
 };
 
 struct Particle_Emitter
@@ -1273,6 +1337,7 @@ struct Renderer
   void opaque_pass(float32 time);
   void instance_pass(float32 time);
   void translucent_pass(float32 time);
+  void pbr_specular_volumetric_pass(float32 time);
   void postprocess_pass(float32 time);
   void skybox_pass(float32 time);
   void copy_to_primary_framebuffer_and_txaa(float32 time);

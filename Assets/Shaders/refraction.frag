@@ -33,9 +33,12 @@ uniform mat4 projection;
 uniform vec3 additional_ambient;
 uniform float time;
 uniform vec3 camera_position;
+uniform float dielectric_reflectivity;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
-uniform float alpha_albedo_override;
+uniform float discard_threshold;
+uniform bool multiply_albedo_by_a;
+uniform bool multiply_result_by_a;
 uniform vec2 viewport_size;
 uniform float aspect_ratio;
 uniform float index_of_refraction;
@@ -317,10 +320,10 @@ void main()
   vec3 result = vec3(0);
   vec4 debug = vec4(-1);
 
-  vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
+  vec4 albedo_tex = texture0_mod * texture2D(texture0, frag_uv);
   if (discard_on_alpha)
   {
-    if (albedo_tex.a < 0.3)
+    if (albedo_tex.a < discard_threshold)
       discard;
   }
   gather_shadow_moments();
@@ -357,14 +360,15 @@ void main()
     the object will look traditionally transparent
 
   */
-  float premultiply_alpha = albedo_tex.a * texture0_mod.a;
-  if (alpha_albedo_override != -1.0f)
+  float alpha = albedo_tex.a;
+  if (multiply_albedo_by_a)
   {
-    premultiply_alpha = alpha_albedo_override;
+    m.albedo = alpha * albedo_tex.rgb;
   }
-  // premultiply_alpha *= texture0_mod.a;
-
-  m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
+  else
+  {
+    m.albedo = albedo_tex.rgb;
+  }
   m.normal = TBN * normalize(texture3_mod.rgb * texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
@@ -375,9 +379,7 @@ void main()
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.02); // default dielectrics
-  // todo: could put dielectric reflectivity in a uniform
-  // this would let us specify more light absorbant materials
+  vec3 F0 = vec3(dielectric_reflectivity);
   F0 = mix(F0, m.albedo, m.metalness);
 
   float ndotv = clamp(dot(m.normal, v), 0, 1);
@@ -529,7 +531,7 @@ void main()
   // result = vec3(0,1,0);
   if (length(offset) > 0.00001)
   {
-    result = result + ((1.0 - premultiply_alpha) * refraction_src.rgb);
+    result = result + ((1.0 - alpha) * refraction_src.rgb);
     // result = vec3(1,0,0);
   }
   else
@@ -539,5 +541,15 @@ void main()
   }
   // result = refraction_src.rgb;
 
-  out0 = vec4(result, premultiply_alpha);
+
+  
+  result = vec3(refraction_src);
+
+
+  if (multiply_result_by_a)
+  {
+    result = alpha * result;
+  }
+
+  out0 = vec4(result, alpha);
 }

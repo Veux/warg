@@ -531,6 +531,7 @@ void Warg_State::update_prediction_ghost()
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.translucent_pass = true;
+  material.blendmode = Material_Blend_Mode::alpha_blend;
   material.albedo.mod = vec4(1, 1, 1, 0.5);
 
   static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);

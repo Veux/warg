@@ -30,7 +30,7 @@ void main()
   vec3 n = normalize(instanced_model * vec4(normal, 0)).xyz;
   frag_TBN = mat3(t, b, n);
   frag_world_position = (instanced_model * vec4(position, 1)).xyz;
-  frag_uv = uv_scale * vec2(uv.x, uv.y);
+  frag_uv = uv_scale * vec2(uv.x, -uv.y);
   frag_normal_uv = normal_uv_scale * frag_uv;
   float s = sin(time);
 

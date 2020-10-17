@@ -1180,8 +1180,11 @@ void Material::bind()
     glDisable(GL_CULL_FACE);
 
   shader.use();
-
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
+  shader.set_uniform("discard_threshold", descriptor.discard_threshold);
+  shader.set_uniform("dielectric_reflectivity", descriptor.dielectric_reflectivity);
+
+
 
   // if (shader.vs == "displacement.vert")
   {
@@ -1229,6 +1232,52 @@ void Material::bind()
 
   success = ambient_occlusion.bind_for_sampling_at(Texture_Location::ambient_occlusion);
   shader.set_uniform("texture5_mod", ambient_occlusion.t.mod);
+
+  if (descriptor.translucent_pass)
+  {
+    if (descriptor.blendmode == Material_Blend_Mode::premultiplied_alpha_texture)
+    {
+      glDepthMask(GL_FALSE);
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      shader.set_uniform("multiply_albedo_by_a", false);
+      shader.set_uniform("multiply_result_by_a", false);
+    }
+    if (descriptor.blendmode == Material_Blend_Mode::premultiplied_alpha)
+    {
+      glDepthMask(GL_FALSE);
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      shader.set_uniform("multiply_albedo_by_a", false);
+      shader.set_uniform("multiply_result_by_a", true);
+    }
+    if (descriptor.blendmode == Material_Blend_Mode::alpha_blend)
+    {
+      glDepthMask(GL_FALSE);
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+      shader.set_uniform("multiply_albedo_by_a", false);
+      shader.set_uniform("multiply_result_by_a", true);
+    }
+    if (descriptor.blendmode == Material_Blend_Mode::add)
+    {
+      glDepthMask(GL_FALSE);
+      glEnable(GL_BLEND);
+      glBlendFunc(GL_ONE, GL_ONE);
+      shader.set_uniform("multiply_albedo_by_a", false);
+      shader.set_uniform("multiply_result_by_a", true);
+    }
+  }
+  if (descriptor.wireframe)
+  {
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  }
+  else
+  {
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  }
 
   for (auto &uniform : descriptor.uniform_set.float32_uniforms)
   {
@@ -1941,52 +1990,28 @@ void Renderer::instance_pass(float32 time)
   {
     entity.material->bind();
     ASSERT(entity.mesh);
-    Shader &shader = entity.material->shader;
-    ASSERT(shader.vs == "instance.vert");
+    Shader *shader = &entity.material->shader;
+    ASSERT(shader->vs == "instance.vert");
 
-    if (entity.material->descriptor.wireframe)
-    {
-      glDisable(GL_DEPTH_TEST);
-      glDepthMask(GL_FALSE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-
-    shader.set_uniform("time", time);
-    shader.set_uniform("txaa_jitter", txaa_jitter);
-    shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
-    shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
-    shader.set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
-    shader.set_uniform("viewport_size", vec2(render_target_size));
-    shader.set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
-    shader.set_uniform("camera_forward", forward_v);
-    shader.set_uniform("camera_right", right_v);
-    shader.set_uniform("camera_up", up_v);
-    shader.set_uniform("project", projection);
-    // shader.set_uniform("view", camera);
-    shader.set_uniform("use_billboarding", entity.use_billboarding);
-
-    lights.bind(shader);
+    shader->set_uniform("time", time);
+    shader->set_uniform("txaa_jitter", txaa_jitter);
+    shader->set_uniform("camera_position", camera_position);
+    shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+    shader->set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
+    shader->set_uniform("viewport_size", vec2(render_target_size));
+    shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
+    shader->set_uniform("camera_forward", forward_v);
+    shader->set_uniform("camera_right", right_v);
+    shader->set_uniform("camera_up", up_v);
+    shader->set_uniform("project", projection);
+    shader->set_uniform("use_billboarding", entity.use_billboarding);
+    lights.bind(*shader);
+    set_uniform_shadowmaps(*shader);
     environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
     entity.mesh->load();
 
-    if (entity.material->descriptor.translucent_pass)
-    {
-      glEnable(GL_BLEND);
-      glDepthMask(GL_FALSE);
-      if (entity.material->descriptor.fixed_function_blending)
-      {
-        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-      }
-      else
-      {
-        glBlendFunc(GL_ONE, GL_ONE);
-      }
-    }
-
     glBindVertexArray(entity.mesh->get_vao());
-    ASSERT(glGetAttribLocation(shader.program->program, "instanced_MVP") == 5);
+    ASSERT(glGetAttribLocation(shader->program->program, "instanced_MVP") == 5);
     glEnableVertexAttribArray(5);
     glEnableVertexAttribArray(6);
     glEnableVertexAttribArray(7);
@@ -2001,7 +2026,7 @@ void Renderer::instance_pass(float32 time)
     glVertexAttribDivisor(7, 1);
     glVertexAttribDivisor(8, 1);
 
-    GLint instanced_model_location = glGetAttribLocation(shader.program->program, "instanced_model");
+    GLint instanced_model_location = glGetAttribLocation(shader->program->program, "instanced_model");
     if (instanced_model_location != -1)
     {
       ASSERT(instanced_model_location == 9);
@@ -2020,7 +2045,7 @@ void Renderer::instance_pass(float32 time)
       glVertexAttribDivisor(12, 1);
     }
 
-    int32 loc_billboard_pos = glGetAttribLocation(shader.program->program, "billboard_position");
+    int32 loc_billboard_pos = glGetAttribLocation(shader->program->program, "billboard_position");
     if (loc_billboard_pos != -1)
     {
       ASSERT(loc_billboard_pos == 13);
@@ -2032,7 +2057,7 @@ void Renderer::instance_pass(float32 time)
 
     if (entity.use_attribute0)
     {
-      int32 loc0 = glGetAttribLocation(shader.program->program, "attribute0");
+      int32 loc0 = glGetAttribLocation(shader->program->program, "attribute0");
       if (loc0 != -1)
       {
         ASSERT(loc0 == 14);
@@ -2045,7 +2070,7 @@ void Renderer::instance_pass(float32 time)
 
     if (entity.use_attribute1)
     {
-      int32 loc1 = glGetAttribLocation(shader.program->program, "attribute1");
+      int32 loc1 = glGetAttribLocation(shader->program->program, "attribute1");
       if (loc1 != -1)
       {
         ASSERT(loc1 == 15);
@@ -2057,7 +2082,7 @@ void Renderer::instance_pass(float32 time)
     }
     if (entity.use_attribute2)
     {
-      int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
+      int32 loc2 = glGetAttribLocation(shader->program->program, "attribute2");
       if (loc2 != -1)
       {
         ASSERT(loc2 == 16);
@@ -2069,7 +2094,7 @@ void Renderer::instance_pass(float32 time)
     }
     if (entity.use_attribute3)
     {
-      int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
+      int32 loc2 = glGetAttribLocation(shader->program->program, "attribute2");
       if (loc2 != -1)
       {
         ASSERT(loc2 == 17);
@@ -2079,17 +2104,26 @@ void Renderer::instance_pass(float32 time)
         glVertexAttribDivisor(17, 1);
       }
     }
+
+    if (entity.material->descriptor.require_self_depth)
+    {
+      // depth info for this object's back faces
+      self_object_depth.bind_for_drawing_dst();
+      glCullFace(GL_FRONT);
+      glDrawBuffer(GL_NONE);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
+      glDrawElementsInstanced(
+          GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
+      self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
+    }
+
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
     glDrawElementsInstanced(
         GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
-
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
 
-    if (entity.material->descriptor.wireframe)
-    {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
     bind_white_to_all_textures();
 
     glDisableVertexAttribArray(6);
@@ -2122,47 +2156,46 @@ void Renderer::instance_pass(float32 time)
   glDisable(GL_BLEND);
 }
 
+// pseudocode for gaussian blur for textured roughness translucent object surfaces
+// such as foggy glass windows
+
+// possible to jitter sample based on roughness and average refraction map instead - slower
+
+//
+// ivec2 current_size = size;
+// bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
+// const uint32 min_width = 40;
+// while (size.x > min_width)
+//{
+//  // allocate texture if needed
+
+//  // render draw_target, blurred downscaled by 50% from previous resolution
+
+//  // blur needs to be resolution independent - kernel distance must be % of
+//  // resolution not fixed
+//}
+
+// put these in a mipmap like the specular convolution
+// sample these maps in the translucent pass - use the material roughness to
+// pick a LOD  overwrite all pixels touched by translucent objects of the
+// original render target with this new blurred-by-roughness value, as well as
+// blending on top with the object itself?
+
+// how to handle blurry window in front of blurry window?
+// you have to either let it be wrong, or re-do the downscaling after each
+// translucent object draw
+
+// touch all translucent object pixels
+// store the total accumulated roughness for each pixel into a texture
+// draw full screen quad, passthrough, but selecting lod blur level by the
+// accumulated roughness
+
+// render all translucent objects back to front
+// store
+// sample accumulated roughness for each
+
 void Renderer::translucent_pass(float32 time)
 {
-
-  // pseudocode for gaussian blur for textured roughness translucent object surfaces
-  // such as foggy glass windows
-
-  // possible to jitter sample based on roughness and average refraction map instead - slower
-
-  //
-  // ivec2 current_size = size;
-  // bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
-  // const uint32 min_width = 40;
-  // while (size.x > min_width)
-  //{
-  //  // allocate texture if needed
-
-  //  // render draw_target, blurred downscaled by 50% from previous resolution
-
-  //  // blur needs to be resolution independent - kernel distance must be % of
-  //  // resolution not fixed
-  //}
-
-  // put these in a mipmap like the specular convolution
-  // sample these maps in the translucent pass - use the material roughness to
-  // pick a LOD  overwrite all pixels touched by translucent objects of the
-  // original render target with this new blurred-by-roughness value, as well as
-  // blending on top with the object itself?
-
-  // how to handle blurry window in front of blurry window?
-  // you have to either let it be wrong, or re-do the downscaling after each
-  // translucent object draw
-
-  // touch all translucent object pixels
-  // store the total accumulated roughness for each pixel into a texture
-  // draw full screen quad, passthrough, but selecting lod blur level by the
-  // accumulated roughness
-
-  // render all translucent objects back to front
-  // store
-  // sample accumulated roughness for each
-
   brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
   environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
 
@@ -2192,14 +2225,6 @@ void Renderer::translucent_pass(float32 time)
     }
     ASSERT(entity.mesh);
     entity.material->bind();
-    if (entity.material->descriptor.wireframe)
-    {
-      glDisable(GL_DEPTH_TEST);
-      glDepthMask(GL_FALSE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-
     Shader *shader = &entity.material->shader;
     shader->set_uniform("camera_forward", forward_v);
     shader->set_uniform("camera_right", right_v);
@@ -2213,35 +2238,23 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("discard_on_alpha", false);
     shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader->set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
-    shader->set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
     shader->set_uniform("viewport_size", vec2(render_target_size));
     shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
 
-    // bool is_default = shader->fs == "fragment_shader.frag";
-    if (entity.material->descriptor.fixed_function_blending)
-    {
-      // glDisable(GL_DEPTH_TEST);
-      // glDisable(GL_CULL_FACE);
-      glDepthMask(GL_FALSE);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    }
+
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
 
-    //// depth info for this object's front onto the geometry in the world
-    // translucent_sample_source.bind_for_drawing_dst();
-    // glCullFace(GL_BACK);
-    // glDrawBuffer(GL_NONE);
-    // entity.mesh->draw();
-
-    // depth info for this object's back faces
-    self_object_depth.bind_for_drawing_dst();
-    glCullFace(GL_FRONT);
-    glDrawBuffer(GL_NONE);
-    glClear(GL_DEPTH_BUFFER_BIT);
-    entity.mesh->draw();
-
+    if (entity.material->descriptor.require_self_depth)
+    {
+      // depth info for this object's back faces
+      self_object_depth.bind_for_drawing_dst();
+      glCullFace(GL_FRONT);
+      glDrawBuffer(GL_NONE);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      entity.mesh->draw();
+      self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
+    }
     // depth of closest front face will be in the main rendering call below
     // depth of the world will be in translucent sample source - dont need to render to it
     // depth of closest back face is in self_object_depth
@@ -2249,26 +2262,14 @@ void Renderer::translucent_pass(float32 time)
     draw_target.bind_for_drawing_dst();
     translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
     translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_scene);
-    self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
     glNamedFramebufferDrawBuffers(draw_target.fbo->fbo, draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
     glCullFace(GL_BACK);
     entity.mesh->draw();
-
-    if (entity.material->descriptor.fixed_function_blending)
-    {
-      glDepthMask(GL_TRUE);
-      glDisable(GL_BLEND);
-    }
-    if (entity.material->descriptor.wireframe)
-    {
-      glEnable(GL_DEPTH_TEST);
-      glDepthMask(GL_TRUE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
   }
   bind_white_to_all_textures();
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, 0);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glEnable(GL_CULL_FACE);
   glDisable(GL_BLEND);
   glDepthMask(GL_TRUE);
@@ -3366,7 +3367,6 @@ void Material_Descriptor::mod_by(const Material_Descriptor *override)
     uv_scale = override->uv_scale;
     translucent_pass = override->translucent_pass;
     casts_shadows = override->casts_shadows;
-    albedo_alpha_override = override->albedo_alpha_override;
     discard_on_alpha = override->discard_on_alpha;
 
     uniform_set = override->uniform_set;
@@ -3631,7 +3631,8 @@ void physics_billboard_step(Particle &particle, const Particle_Physics_Method_De
   bool lock_z = particle.billboard_lock_z;
 
   particle.billboard_angle += particle.billboard_rotation_velocity;
-  float32 applying_angle = wrap_to_range(particle.billboard_angle + 1.1f * current_time, 0, two_pi<float32>());
+  float32 applying_angle =
+      wrap_to_range(particle.billboard_angle + d->billboard_rotation_time_factor * current_time, 0, two_pi<float32>());
   particle.orientation = angleAxis(applying_angle, vec3(0, 0, 1));
 }
 
@@ -3660,8 +3661,8 @@ void misc_particle_attribute_iteration_step(
 
 void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor *d, float32 current_time)
 {
-  particle.position += dt * particle.velocity;
-  particle.velocity *= d->friction;
+  particle.position += (dt * particle.velocity);
+  particle.velocity *= d->drag;
   particle.velocity += dt * d->gravity;
   misc_particle_attribute_iteration_step(particle, d, current_time);
   if (particle.billboard)
@@ -3733,9 +3734,8 @@ void Wind_Particle_Physics::step(
     AABB probe(vec3(0));
 
     // we are testing only the next position
-    Particle old_particle = particle;
+    Particle unmodified_particle = particle;
     vec3 wind = dt * d->wind_intensity * d->direction;
-    particle.velocity = particle.velocity + wind;
     simple_physics_step(particle, d, current_time);
 
     // if the probe is too big it grabs too many triangles
@@ -3796,12 +3796,13 @@ void Wind_Particle_Physics::step(
       ASSERT(!isnan(particle.position.x));
       ASSERT(!isnan(particle.velocity.x));
 
+      particle.velocity = particle.velocity + wind;
       continue;
     }
 
     // bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
 
-    vec3 approach_velocity = particle.velocity;
+    vec3 approach_velocity = unmodified_particle.velocity;
     vec3 reflection_normal = vec3(0);
     vec3 collider_velocity = vec3(0);
 
@@ -3839,108 +3840,85 @@ void Wind_Particle_Physics::step(
     if (reflection_normal == vec3(0))
     {
       // all the colliders were backfaces
-      // ... return?
-      return;
-      // reflection_normal = vec3(0, 0, 1);
+      continue;
     }
     reflection_normal = normalize(reflection_normal);
 
     // if we get here, our next position isn't valid, we intersected a triangle facing us
-
-    // the goal of this part of the code is to not re-reflect off the same surface if the particle grew in size
-    // and re-touched a trinalge it just exited from..?? but that should be culled anyway with the dot product?
-    // i think i forgot why i was doing this
-
-    // if after our binary search and physics step we are still intersecting the world
-    // we should reflect velocity and use this... or instead recurse on this function itself
-    // with the smaller t
-    // or just delete the stupid particle
-    // particle.last_frame_collided = true;
-    // bool normal_change_is_new_added_collider = colliders.size() > particle.last_frame_collision_count;
-    // particle.last_frame_collision_count = colliders.size();
-
-    // vec3 new_colliding_normal = reflection_normal - particle.last_frame_collision_normal;
-
-    // if (normal_change_is_new_added_collider)
-    //{//need to reflect
-    //  particle.last_frame_collision_normal += new_colliding_normal;
-    //  particle.last_frame_collision_normal = normalize(particle.last_frame_collision_normal);
-    //}
-    // else
-    //{//no need to reflect
-    //  new_colliding_normal = vec3(0); //disables reflecting
-    //  particle.last_frame_collision_normal = reflection_normal; //keep the normal because we may still be inside the
-    //  object working outwards
-    //}
-
-    bool need_reflection = true; // new_colliding_normal != vec3(0);
-
     bool moving = length(particle.velocity) > d->stiction_velocity;
     if (moving)
     {
+      vec3 full_step_ray = particle.position - unmodified_particle.position;
 
-      vec3 full_step_ray = particle.position - old_particle.position;
-
-      float32 shortest_non_colliding_t = 0.f;
+      float32 largest_non_colliding_t = 0.f;
       float32 t = 0.5f; //% of dt we collide at
-      float32 dt = 0.25f;
-      bool high = true;
+      float32 tt = 0.25f;
+      bool is_colliding = true;
       AABB probe2(vec3(0));
-      for (uint32 i = 0; i < 4; ++i)
+
+      ////sponge:testing to see if the old particle was colliding:
+      // colliders.clear();
+      // if (d->static_geometry_collision && d->static_octree)
+      //  d->static_octree->test_all(probe, &counter, &colliders);
+      // if (d->dynamic_geometry_collision && d->dynamic_octree)
+      //  d->dynamic_octree->test_all(probe, &counter, &colliders);
+
+      // if(colliders.size() > 0)
+      //{
+      //  int a  = 3;
+      //}
+
+      for (uint32 i = 0; i < d->collision_binary_search_iterations; ++i)
       {
-        vec3 new_pos = particle.position + t * full_step_ray;
-        probe2.min = new_pos - 0.5f * particle.scale;
-        probe2.max = new_pos + 0.5f * particle.scale;
+        // this probe is not completely correct if the size is increasing
+        vec3 new_pos = unmodified_particle.position + t * full_step_ray;
+        probe2.min = new_pos - half_probe_scale;
+        probe2.max = new_pos + half_probe_scale;
         colliders.clear();
 
         if (d->static_geometry_collision && d->static_octree)
-          d->static_octree->test_all(probe, &counter, &colliders);
+          d->static_octree->test_all(probe2, &counter, &colliders);
         if (d->dynamic_geometry_collision && d->dynamic_octree)
-          d->dynamic_octree->test_all(probe, &counter, &colliders);
+          d->dynamic_octree->test_all(probe2, &counter, &colliders);
 
-        high = colliders.size() > 0;
+        is_colliding = colliders.size() > 0;
 
-        if (high)
+        if (is_colliding)
         {
-          t = t - dt;
+          t = t - tt;
         }
         else
         {
-          t = t + dt;
-          shortest_non_colliding_t = t;
+          t = t + tt;
+          largest_non_colliding_t = t;
         }
-        dt = 0.5f * dt;
+        tt = 0.5f * tt;
       }
-
-      if (high)
-      {
-        t = shortest_non_colliding_t;
-      }
-
-      float32 before_reflect_t = t;
-      float32 after_reflect_t = 1.0f - t;
-      float32 bounce_loss = random_between(d->bounce_min, d->bounce_max);
+      float32 before_reflect_t = largest_non_colliding_t;
+      float32 after_reflect_t = 1.0f - largest_non_colliding_t;
 
       // revert our state to before we stepped into colliding geometry
-      particle = old_particle;
-
+      particle = unmodified_particle;
       // time step forward until we hit the surface
-      particle.position += before_reflect_t * (dt)*particle.velocity;
-      particle.velocity += before_reflect_t * dt * d->gravity;
+      particle.position = unmodified_particle.position + (before_reflect_t * dt * unmodified_particle.velocity);
+      particle.velocity += (before_reflect_t * dt * d->gravity);
 
       // instantaneous surface interaction
       particle.velocity = reflect(particle.velocity, reflection_normal);
-      particle.velocity = bounce_loss * particle.velocity + collider_velocity;
-      particle.billboard_rotation_velocity = bounce_loss * particle.billboard_rotation_velocity;
+      float32 ndotv = clamp(dot(reflection_normal, particle.velocity), 0.f, 1.f);
+      vec3 bounce_loss = vec3(random_between(d->bounce_min, d->bounce_max));
+      bounce_loss = mix(bounce_loss, d->friction, 1.0f - ndotv);
+      particle.velocity = (bounce_loss * particle.velocity) + collider_velocity;
+      particle.billboard_rotation_velocity = bounce_loss.z * particle.billboard_rotation_velocity;
       particle.angular_velocity = bounce_loss * particle.angular_velocity;
 
       // time step forward after interaction
-      particle.position += after_reflect_t * (dt)*particle.velocity;
-      particle.velocity += after_reflect_t * dt * d->gravity;
+      particle.position += (after_reflect_t * (dt)*particle.velocity);
+      particle.velocity += (after_reflect_t * dt * d->gravity);
 
       // misc
-      particle.velocity *= d->friction;
-      particle.velocity = particle.velocity + wind;
+      particle.velocity *= d->drag; // needs to scale with velocity squared
+      particle.velocity += wind;
 
       // scale change etc
       // this might enlarge the particle and make us intersect again...
@@ -3950,12 +3928,11 @@ void Wind_Particle_Physics::step(
         physics_billboard_step(particle, d, current_time);
       }
 
-
 #if 0
       // final step, if we are still inside something, lets just push ourselves
       // out in the direction of the normal
-      float32 offset = 0.05f;
-      for (uint32 i = 0; i < 0; ++i)
+      float32 offset = 0.105f;
+      for (uint32 i = 0; i < 1; ++i)
       {
         probe.min = particle.position - half_probe_scale;
         probe.max = particle.position + half_probe_scale;
@@ -3981,6 +3958,10 @@ void Wind_Particle_Physics::step(
           if (dot(-approach_velocity, collider.n) > 0.f)
           {
             particle.position += offset * collider.n;
+
+            //sponge
+            particle.position = vec3(0,0,4);
+            particle.velocity = vec3(0.f);
           }
         }
         // offset = 2.f * offset;
@@ -4146,7 +4127,7 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
       // misc emitter step and use its length as the distance from emitter origin
       float32 dist = length(new_particle.position - pos);
       dist = length(new_particle.position - impulse_p);
-      if (dist == 0)
+      // if (dist == 0)
       {
         dist = d->hammersley_radius;
       }
@@ -4193,27 +4174,30 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
     ASSERT(!isnan(new_particle.velocity.x));
     ASSERT(!isnan(new_particle.position.x));
 
-    AABB probe(vec3(0));
-    vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
-    probe.min = new_particle.position - half_probe_scale;
-    probe.max = new_particle.position + half_probe_scale;
-    thread_local static std::vector<Triangle_Normal> colliders;
-    colliders.clear();
-    uint32 counter = 0;
-    if (d->static_octree && d->static_geometry_collision)
+    if (!d->allow_colliding_spawns)
     {
-      d->static_octree->test_all(probe, &counter, &colliders);
-    }
-    if (d->dynamic_octree && d->dynamic_geometry_collision)
-    {
-      d->dynamic_octree->test_all(probe, &counter, &colliders);
-    }
 
-    if (colliders.size() != 0)
-    {
-      new_particle.time_left_to_live = 0.f;
-    }
+      AABB probe(vec3(0));
+      vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
+      probe.min = new_particle.position - half_probe_scale;
+      probe.max = new_particle.position + half_probe_scale;
+      thread_local static std::vector<Triangle_Normal> colliders;
+      colliders.clear();
+      uint32 counter = 0;
+      if (d->static_octree && d->static_geometry_collision)
+      {
+        d->static_octree->test_all(probe, &counter, &colliders);
+      }
+      if (d->dynamic_octree && d->dynamic_geometry_collision)
+      {
+        d->dynamic_octree->test_all(probe, &counter, &colliders);
+      }
 
+      if (colliders.size() != 0)
+      {
+        new_particle.time_left_to_live = 0.f;
+      }
+    }
     p->particles.push_back(new_particle);
   }
 }
@@ -4253,26 +4237,29 @@ void Particle_Stream_Emission::update(Particle_Array *p, Particle_Emission_Metho
       return;
     }
     Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
+    if (!d->allow_colliding_spawns)
+    {
+      AABB probe(vec3(0));
+      vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
+      probe.min = new_particle.position - half_probe_scale;
+      probe.max = new_particle.position + half_probe_scale;
+      thread_local static std::vector<Triangle_Normal> colliders;
+      colliders.clear();
+      uint32 counter = 0;
 
-    AABB probe(vec3(0));
-    vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
-    probe.min = new_particle.position - half_probe_scale;
-    probe.max = new_particle.position + half_probe_scale;
-    thread_local static std::vector<Triangle_Normal> colliders;
-    colliders.clear();
-    uint32 counter = 0;
-    if (d->static_octree && d->static_geometry_collision)
-    {
-      d->static_octree->test_all(probe, &counter, &colliders);
-    }
-    if (d->dynamic_octree && d->dynamic_geometry_collision)
-    {
-      d->dynamic_octree->test_all(probe, &counter, &colliders);
-    }
+      if (d->static_octree && d->static_geometry_collision)
+      {
+        d->static_octree->test_all(probe, &counter, &colliders);
+      }
+      if (d->dynamic_octree && d->dynamic_geometry_collision)
+      {
+        d->dynamic_octree->test_all(probe, &counter, &colliders);
+      }
 
-    if (colliders.size() != 0)
-    {
-      new_particle.time_left_to_live = 0.f;
+      if (colliders.size() != 0)
+      {
+        new_particle.time_left_to_live = 0.f;
+      }
     }
     p->particles.push_back(new_particle);
   }
@@ -5347,6 +5334,7 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   material.frag_shader = "water.frag";
   material.backface_culling = true;
   material.translucent_pass = true;
+  material.blendmode = Material_Blend_Mode::premultiplied_alpha;
   material.uniform_set.bool_uniforms["ground"] = false;
 
   water = state->scene.add_mesh("water", &mesh, &material);

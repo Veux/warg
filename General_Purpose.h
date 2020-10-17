@@ -129,7 +129,7 @@ std::string to_string(glm::vec2 v);
 std::string to_string(glm::vec3 v);
 //std::string to_string(glm::vec4 v);
 std::string qtos(glm::quat v);
-
+std::string to_string(Material_Blend_Mode& mode);
 enum Particle_Emission_Type;
 enum Particle_Physics_Type;
 std::string to_string(Light_Type &value);

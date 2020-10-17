@@ -13,7 +13,7 @@
 #include <atomic>
 #include <glm/glm.hpp>
 #include <unordered_map>
-enum imgui_pane
+enum struct imgui_pane
 {
   node_tree,
   resource_man,
@@ -446,7 +446,7 @@ private:
   bool showing_model = false;
   bool showing_mesh_data = false;
 
-  std::vector<std::vector<imgui_pane>> imgui_rows = { {node_tree ,selected_node} ,{selected_mat,light_array}};
+  std::vector<std::vector<imgui_pane>> imgui_rows = { {imgui_pane::node_tree ,imgui_pane::selected_node} ,{imgui_pane::selected_mat,imgui_pane::light_array}};
   uint32 imgui_rows_count = 1;
   uint32 imgui_col_count  = 1;
   //imgui_pane imgui_panes[6] = {node_tree, resource_man, light_array, selected_node, selected_mat, blank};

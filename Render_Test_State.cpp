@@ -212,7 +212,7 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
   material2.translucent_pass = true;
-  material2.fixed_function_blending = true;
+  material2.blendmode = Material_Blend_Mode::alpha_blend;
   material2.backface_culling = false;
   Node_Index triangle = scene->add_mesh("triangle", &md, &material2);
 
@@ -622,7 +622,7 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   material->emissive.source = "white";
   material->albedo.mod = vec4(.3, .3, .3, .3);
   material->translucent_pass = true;
-  material->fixed_function_blending = true;
+  material->blendmode = Material_Blend_Mode::alpha_blend;
   material->backface_culling = false;
 
   scene->collision_octree.clear();
@@ -775,6 +775,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         {
           material.casts_shadows = false;
           material.translucent_pass = true;
+          material.blendmode = Material_Blend_Mode::premultiplied_alpha;
           material.albedo.mod.a = mix(0.0f, 0.4f, float(k) / float(kcount - 1));
           material.roughness.mod = vec4(0);
           material.frag_shader = "refraction.frag";
@@ -786,6 +787,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
         {
           material.casts_shadows = false;
           material.translucent_pass = true;
+          material.blendmode = Material_Blend_Mode::premultiplied_alpha;
           material.albedo.mod.a = roughness;
           material.metalness.mod.a = 0.8f;
           small_object_water_settings(&material.uniform_set);
@@ -822,7 +824,7 @@ Frostbolt_Effect::Frostbolt_Effect(State *state, uint32 light_index)
   mat.roughness.mod.x = .0f;
   mat.metalness.mod.x = 0.5f;
   mat.translucent_pass = true;
-  mat.fixed_function_blending = true;
+  mat.blendmode = Material_Blend_Mode::alpha_blend;
   mat.frag_shader = "emission.frag";
   billboard_spawn_source = state->scene.add_mesh(cube, "frostbolt billboard source", &mat);
   Flat_Scene_Graph_Node *node = &state->scene.nodes[billboard_spawn_source];
@@ -839,7 +841,7 @@ Frostbolt_Effect::Frostbolt_Effect(State *state, uint32 light_index)
   material->emissive.mod = vec4(.15, 0.125, 0.25, 0);
   material->roughness.source = "white";
   material->roughness.mod.x = 0.15f;
-  material->fixed_function_blending = true;
+  material->blendmode = Material_Blend_Mode::alpha_blend;
   material->translucent_pass = true;
 
   node = &state->scene.nodes[crystalchild];
@@ -961,7 +963,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   mat.roughness.mod.x = .0f;
   mat.metalness.mod.x = 0.5f;
   mat.translucent_pass = true;
-  mat.fixed_function_blending = true;
+  mat.blendmode = Material_Blend_Mode::alpha_blend;
   mat.backface_culling = true;
   mat.vertex_shader = "instance.vert";
   mat.frag_shader = "emission.frag";
@@ -981,7 +983,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   material->emissive.mod = vec4(.15, 0.125, 0.25, 0);
   material->roughness.source = "white";
   material->roughness.mod.x = 0.15f;
-  material->fixed_function_blending = true;
+  material->blendmode = Material_Blend_Mode::alpha_blend;
   material->translucent_pass = true;
 
   node = &state->scene.nodes[crystalchild];
@@ -1066,8 +1068,10 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   ppmd_impact.size_multiply_uniform_min = 1.0f;
   ppmd_impact.size_multiply_uniform_max = 1.0f;
   ppmd_impact.die_when_size_smaller_than = vec3(0.1f);
-  ppmd_impact.friction = vec3(.99);
-  ppmd_impact.gravity = vec3(0,0,-9.8);
+  ppmd_impact.friction = vec3(.9);
+  ppmd_impact.drag = vec3(.99);
+  ppmd_impact.gravity = vec3(0,0,-9.8); 
+  ppmd_impact.billboard_rotation_time_factor = 1.1f;
 
   Particle_Emitter_Descriptor ped_impact;
   ped_impact.emission_descriptor = pemd_impact;

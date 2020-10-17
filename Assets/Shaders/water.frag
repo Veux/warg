@@ -39,6 +39,7 @@ uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
 uniform float alpha_albedo_override;
+uniform float dielectric_reflectivity;
 uniform vec2 viewport_size;
 uniform float aspect_ratio;
 uniform float index_of_refraction;
@@ -856,7 +857,7 @@ void main()
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.02); // 0.02 F0 for water
+  vec3 F0 = vec3(dielectric_reflectivity); // 0.02 F0 for water
   F0 = mix(F0, m.albedo, m.metalness);
   // F0 = vec3(0.9512);
   float ndotv = clamp(dot(m.normal, v), 0, 1); // allowing the backface ndotv to contribute for water
@@ -1085,6 +1086,13 @@ void main()
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   vec3 color = textureLod(texture6, v, 2).rgb; // mix(vec3(104,142,173)/vec3(255)
   result = mix(color, result, fogFactor);
+
+  /*
+    i think if you compare the pixel height to the height of the pixel sampled 1 lod lower u can get an idea for
+    if the pixel is generally lower or higher than the pixels around it and with this u can blend more towards green
+    than blue
+
+  */
 
   // result = total_specular;//total_diffuse;
   // result = m.normal;

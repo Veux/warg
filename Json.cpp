@@ -196,7 +196,6 @@ void to_json(json &result, const Material_Descriptor &p)
   j["Vertex Shader"] = p.vertex_shader;
   j["Fragment Shader"] = p.frag_shader;
   j["UV Scale"] = p.uv_scale;
-  j["Albedo Alpha Override"] = p.albedo_alpha_override;
   j["Backface Culling"] = p.backface_culling;
   j["Uses Transparency"] = p.translucent_pass;
   j["Casts Shadows"] = p.casts_shadows;
@@ -216,7 +215,6 @@ void from_json(const json &j, Material_Descriptor &p)
   result.vertex_shader = j.at("Vertex Shader").get<std::string>();
   result.frag_shader = j.at("Fragment Shader").get<std::string>();
   result.uv_scale = j.at("UV Scale");
-  result.albedo_alpha_override = j.at("Albedo Alpha Override");
   result.backface_culling = j.at("Backface Culling");
   result.translucent_pass = j.at("Uses Transparency");
   result.casts_shadows = j.at("Casts Shadows");
