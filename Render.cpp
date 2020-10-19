@@ -1184,8 +1184,6 @@ void Material::bind()
   shader.set_uniform("discard_threshold", descriptor.discard_threshold);
   shader.set_uniform("dielectric_reflectivity", descriptor.dielectric_reflectivity);
 
-
-
   // if (shader.vs == "displacement.vert")
   {
     shader.set_uniform("derivative_offset", descriptor.derivative_offset);
@@ -1233,51 +1231,9 @@ void Material::bind()
   success = ambient_occlusion.bind_for_sampling_at(Texture_Location::ambient_occlusion);
   shader.set_uniform("texture5_mod", ambient_occlusion.t.mod);
 
-  if (descriptor.translucent_pass)
-  {
-    if (descriptor.blendmode == Material_Blend_Mode::premultiplied_alpha_texture)
-    {
-      glDepthMask(GL_FALSE);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-      shader.set_uniform("multiply_albedo_by_a", false);
-      shader.set_uniform("multiply_result_by_a", false);
-    }
-    if (descriptor.blendmode == Material_Blend_Mode::premultiplied_alpha)
-    {
-      glDepthMask(GL_FALSE);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-      shader.set_uniform("multiply_albedo_by_a", false);
-      shader.set_uniform("multiply_result_by_a", true);
-    }
-    if (descriptor.blendmode == Material_Blend_Mode::alpha_blend)
-    {
-      glDepthMask(GL_FALSE);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-      shader.set_uniform("multiply_albedo_by_a", false);
-      shader.set_uniform("multiply_result_by_a", true);
-    }
-    if (descriptor.blendmode == Material_Blend_Mode::add)
-    {
-      glDepthMask(GL_FALSE);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE);
-      shader.set_uniform("multiply_albedo_by_a", false);
-      shader.set_uniform("multiply_result_by_a", true);
-    }
-  }
-  if (descriptor.wireframe)
-  {
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  }
-  else
-  {
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-  }
+  shader.set_uniform("multiply_albedo_by_a", descriptor.multiply_albedo_by_alpha);
+  shader.set_uniform("multiply_result_by_a", descriptor.multiply_result_by_alpha);
+  shader.set_uniform("multiply_pixelalpha_by_moda", descriptor.multiply_pixelalpha_by_moda);
 
   for (auto &uniform : descriptor.uniform_set.float32_uniforms)
   {
@@ -1874,6 +1830,7 @@ void Renderer::opaque_pass(float32 time)
   glCullFace(GL_BACK);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
   // todo: depth pre-pass
 
   // set_message("opaque_pass projection:", s(projection), 1.0f);
@@ -1918,20 +1875,6 @@ void Renderer::opaque_pass(float32 time)
     brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
     ASSERT(entity.mesh);
     entity.material->bind();
-    if (entity.material->descriptor.wireframe)
-    {
-      // glDisable(GL_CULL_FACE);
-      // glDisable(GL_DEPTH_TEST);
-      // glDepthMask(GL_TRUE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-    Material &material = *entity.material;
-    Texture &albedo = material.albedo;
-    if (albedo.texture)
-    {
-      // set_message(s("ALBEDObinding texture:", albedo.texture->texture), s(albedo.t.name), 155.0f);
-    }
 
     Shader &shader = entity.material->shader;
     shader.set_uniform("time", time);
@@ -1949,13 +1892,37 @@ void Renderer::opaque_pass(float32 time)
     set_uniform_shadowmaps(shader);
     // environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
 
-    entity.mesh->draw();
+    if (entity.material->descriptor.depth_test)
+    {
+      glEnable(GL_DEPTH_TEST);
+    }
+    else
+    {
+      glDisable(GL_DEPTH_TEST);
+    }
+
+    if (entity.material->descriptor.depth_mask)
+    {
+      glDepthMask(GL_TRUE);
+    }
+    else
+    {
+      glDepthMask(GL_FALSE);
+    }
     if (entity.material->descriptor.wireframe)
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
     {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+    entity.mesh->draw();
   }
 
+  glEnable(GL_DEPTH_TEST);
+  glDepthMask(GL_TRUE);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glDepthFunc(GL_LESS);
   bind_white_to_all_textures();
 }
@@ -1966,6 +1933,10 @@ void Renderer::instance_pass(float32 time)
   vec3 forward_v = normalize(camera_gaze - camera_position);
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
+
+  set_message("forward_v", s(forward_v), 1.0f);
+  set_message("right_v", s(right_v), 1.0f);
+  set_message("up_v", s(up_v), 1.0f);
 
   if (!use_txaa)
   {
@@ -2116,6 +2087,49 @@ void Renderer::instance_pass(float32 time)
       glDrawElementsInstanced(
           GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
       self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
+      draw_target.bind_for_drawing_dst();
+    }
+
+    if (entity.material->descriptor.depth_test)
+    {
+      glEnable(GL_DEPTH_TEST);
+    }
+    else
+    {
+      glDisable(GL_DEPTH_TEST);
+    }
+
+    if (entity.material->descriptor.depth_mask)
+    {
+      glDepthMask(GL_TRUE);
+    }
+    else
+    {
+      glDepthMask(GL_FALSE);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::blend)
+    {
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::add)
+    {
+      glBlendFunc(GL_ONE, GL_ONE);
+    }
+    if (entity.material->descriptor.wireframe)
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    if (entity.material->descriptor.translucent_pass)
+    {
+      glEnable(GL_BLEND);
+    }
+    else
+    {
+      glDisable(GL_BLEND);
     }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
@@ -2152,6 +2166,8 @@ void Renderer::instance_pass(float32 time)
     }
   }
 
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  glEnable(GL_DEPTH_TEST);
   glDepthMask(GL_TRUE);
   glDisable(GL_BLEND);
 }
@@ -2241,10 +2257,10 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("viewport_size", vec2(render_target_size));
     shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
 
-
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
 
+    glDepthMask(GL_FALSE);
     if (entity.material->descriptor.require_self_depth)
     {
       // depth info for this object's back faces
@@ -2254,6 +2270,7 @@ void Renderer::translucent_pass(float32 time)
       glClear(GL_DEPTH_BUFFER_BIT);
       entity.mesh->draw();
       self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
+      draw_target.bind_for_drawing_dst();
     }
     // depth of closest front face will be in the main rendering call below
     // depth of the world will be in translucent sample source - dont need to render to it
@@ -2264,6 +2281,40 @@ void Renderer::translucent_pass(float32 time)
     translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_scene);
     glNamedFramebufferDrawBuffers(draw_target.fbo->fbo, draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
     glCullFace(GL_BACK);
+    if (entity.material->descriptor.depth_test)
+    {
+      glEnable(GL_DEPTH_TEST);
+    }
+    else
+    {
+      glDisable(GL_DEPTH_TEST);
+    }
+
+    if (entity.material->descriptor.depth_mask)
+    {
+      glDepthMask(GL_TRUE);
+    }
+    else
+    {
+      glDepthMask(GL_FALSE);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::blend)
+    {
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::add)
+    {
+      glBlendFunc(GL_ONE, GL_ONE);
+    }
+    if (entity.material->descriptor.wireframe)
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    glEnable(GL_BLEND);
     entity.mesh->draw();
   }
   bind_white_to_all_textures();
@@ -3662,8 +3713,25 @@ void misc_particle_attribute_iteration_step(
 void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor *d, float32 current_time)
 {
   particle.position += (dt * particle.velocity);
-  particle.velocity *= d->drag;
-  particle.velocity += dt * d->gravity;
+  float32 len_v = length(particle.velocity);
+  if (len_v > 100000)
+  {
+    particle.time_left_to_live = 0.f;
+  }
+  else
+  {
+//#define GODS_WAY
+#ifdef GODS_WAY
+    float32 density_of_air = 1.0f;
+    float32 area_of_front = 1.0f;
+    vec3 velocity_n = normalize(particle.velocity);
+    float32 speedsq = len_v * len_v;
+    float32 drag = d->drag * area_of_front * 0.5f * density_of_air * speedsq;
+    particle.velocity = particle.velocity - dt * drag * velocity_n;
+#endif
+    particle.velocity = particle.velocity * (1.0f - dt * len_v * 0.5f * d->drag);
+    particle.velocity += dt * d->gravity;
+  }
   misc_particle_attribute_iteration_step(particle, d, current_time);
   if (particle.billboard)
   {
@@ -4036,8 +4104,8 @@ Particle misc_particle_emitter_step(
 
   vec3 vel_variance = random_within(d->initial_velocity_variance);
   vel_variance = vel_variance - 0.5f * d->initial_velocity_variance;
-  if (d->inherit_velocity)
-    new_particle.velocity = o * (vel + d->initial_velocity + vel_variance);
+  if (d->inherit_velocity != 0.f)
+    new_particle.velocity = o * (d->inherit_velocity * vel + d->initial_velocity + vel_variance);
   else
     new_particle.velocity = o * (d->initial_velocity + vel_variance);
 
@@ -4117,11 +4185,11 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
       vec3 hammersley_pos;
       if (d->hammersley_sphere)
       {
-        hammersley_pos = hammersley_sphere(i, d->explosion_particle_count);
+        hammersley_pos = hammersley_sphere(i, epc);
       }
       else
       {
-        hammersley_pos = hammersley_hemisphere(i, d->explosion_particle_count);
+        hammersley_pos = hammersley_hemisphere(i, epc);
       }
       // lets take the previously calculated random-offsetted position from the
       // misc emitter step and use its length as the distance from emitter origin
@@ -4146,37 +4214,36 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
       }
       ASSERT(!isnan(new_particle.velocity.x));
       p->particles.push_back(new_particle);
-      continue;
     }
-
-    vec3 dir = normalize(new_particle.position - impulse_p);
-
-    if (new_particle.position == impulse_p)
+    else
     {
-      new_particle.position += 0.1f * random_3D_unit_vector();
-    }
-    if (isnan(dir.x))
-    {
-      dir = vec3(0.f, 0.f, 0.0001f);
-    }
+      vec3 dir = normalize(new_particle.position - impulse_p);
 
-    float32 dist = length(new_particle.position - impulse_p);
-    if (dist == 0)
-    {
-      dist = 0.01f;
-    }
+      if (new_particle.position == impulse_p)
+      {
+        new_particle.position += 0.1f * random_3D_unit_vector();
+      }
+      if (isnan(dir.x))
+      {
+        dir = vec3(0.f, 0.f, 0.0001f);
+      }
 
-    new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
-    if (d->enforce_velocity_position_offset_match)
-    {
-      new_particle.velocity = length(new_particle.velocity) * normalize((new_particle.position - pos));
-    }
-    ASSERT(!isnan(new_particle.velocity.x));
-    ASSERT(!isnan(new_particle.position.x));
+      float32 dist = length(new_particle.position - impulse_p);
+      if (dist == 0)
+      {
+        dist = 0.01f;
+      }
 
+      new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
+      if (d->enforce_velocity_position_offset_match)
+      {
+        new_particle.velocity = length(new_particle.velocity) * normalize((new_particle.position - pos));
+      }
+      ASSERT(!isnan(new_particle.velocity.x));
+      ASSERT(!isnan(new_particle.position.x));
+    }
     if (!d->allow_colliding_spawns)
     {
-
       AABB probe(vec3(0));
       vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
       probe.min = new_particle.position - half_probe_scale;
@@ -5334,7 +5401,6 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   material.frag_shader = "water.frag";
   material.backface_culling = true;
   material.translucent_pass = true;
-  material.blendmode = Material_Blend_Mode::premultiplied_alpha;
   material.uniform_set.bool_uniforms["ground"] = false;
 
   water = state->scene.add_mesh("water", &mesh, &material);

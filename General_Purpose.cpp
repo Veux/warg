@@ -489,17 +489,9 @@ string to_string(Light_Type &value)
 }
 std::string to_string(Material_Blend_Mode& mode)
 {
-  if (mode == Material_Blend_Mode::premultiplied_alpha_texture)
+  if (mode == Material_Blend_Mode::blend)
   {
-    return "premultiplied_alpha_texture";
-  }
-  if (mode == Material_Blend_Mode::premultiplied_alpha)
-  {
-    return "premultiplied_alpha";
-  }
-  if (mode == Material_Blend_Mode::alpha_blend)
-  {
-    return "alpha_blend";
+    return "blend";
   }
   if (mode == Material_Blend_Mode::add)
   {

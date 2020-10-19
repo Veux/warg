@@ -31,8 +31,9 @@ struct Frostbolt_Effect
 struct Frostbolt_Effect_2
 {
   Frostbolt_Effect_2(State* state, uint32 available_light_index);
-  Node_Index crystal;
-  Node_Index billboard_spawn_source;
+  Node_Index crystal_node;
+  Node_Index trail_node;
+  Node_Index explosion_node;
   bool update(State* owning_state, vec3 target);
   vec3 position = vec3(0);
   float32 speed = 14.0f;

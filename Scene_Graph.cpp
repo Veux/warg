@@ -217,7 +217,19 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::Checkbox("Backface Culling", &ptr->descriptor.backface_culling);
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
-  ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold);
+  ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold,0.01f,0.f,1.f);
+
+
+  ImGui::Checkbox("require_self_depth", &ptr->descriptor.require_self_depth);
+  ImGui::Checkbox("multiply_albedo_by_alpha", &ptr->descriptor.multiply_albedo_by_alpha);
+  ImGui::Checkbox("multiply_result_by_alpha", &ptr->descriptor.multiply_result_by_alpha);
+  ImGui::Checkbox("multiply_pixelalpha_by_moda", &ptr->descriptor.multiply_pixelalpha_by_moda);
+
+  ImGui::Checkbox("depth_test", &ptr->descriptor.depth_test);
+  ImGui::Checkbox("depth_mask", &ptr->descriptor.depth_mask);
+
+
+
   ImGui::SliderFloat("Derivative offset", &ptr->descriptor.derivative_offset, 0.001f, 0.5f);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
 
@@ -1140,7 +1152,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
 
       TextColored(imgui_purple, "Misc:");
       Text("inherit_velocity:");
-      Checkbox("inherit_velocity", &pemd->inherit_velocity);
+      DragFloat("inherit_velocity", &pemd->inherit_velocity,0.05f);
       Text("minimum_time_to_live:");
       DragFloat("minimum_time_to_live", &pemd->minimum_time_to_live);
       Text("extra_time_to_live_variance:");
@@ -1214,6 +1226,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
       SliderInt("collision_binary_search_iterations", (int32 *)&ppmd->collision_binary_search_iterations, 0, 25);
       DragFloat("mass", &ppmd->mass);
       DragFloat3("gravity", &ppmd->gravity[0]);
+      DragFloat("drag", &ppmd->drag,0.01f,0.f,1.0f);
       DragFloat("bounce_min", &ppmd->bounce_min);
       DragFloat("bounce_max", &ppmd->bounce_max);
       if (ppmd->bounce_min > ppmd->bounce_max)
@@ -2947,7 +2960,6 @@ std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
     material.wireframe = true;
     material.backface_culling = true;
     material.translucent_pass = false;
-    material.blendmode = Material_Blend_Mode::alpha_blend;
 
     material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
     mat1 = scene->resource_manager->push_custom_material(&material);

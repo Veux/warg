@@ -101,15 +101,15 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   //scene.particle_emitters[3].mesh_index = mesh_index3;
   //scene.particle_emitters[3].material_index = material_index3;
 
-  scene.lights.light_count = 5;
+  scene.lights.light_count = 1;
 
-  Light* light4 = &scene.lights.lights[4];
+  Light* light4 = &scene.lights.lights[1];
   light4->position = vec3(1070.00000, -545.00000, 621.00000);
   light4->direction = vec3(3.00000, 0.00000, 6.00000);
   light4->brightness = 4580.93408;
   light4->color = vec3(1.00000, 1.00000, 0.99999);
   light4->attenuation = vec3(1.00000, 1.00000, 0.00000);
-  light4->ambient = 0.24995;
+  light4->ambient = 0.0024995;
   light4->radius = 33.24000;
   light4->cone_angle = 0.24000;
   light4->type = Light_Type::spot;
@@ -531,7 +531,6 @@ void Warg_State::update_prediction_ghost()
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.translucent_pass = true;
-  material.blendmode = Material_Blend_Mode::alpha_blend;
   material.albedo.mod = vec4(1, 1, 1, 0.5);
 
   static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);
@@ -826,10 +825,9 @@ void Warg_State::update()
   Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
   Mesh *meshptr = &scene.resource_manager->mesh_pool[meshindex];
   Mesh_Descriptor *blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
-  static Timer beatimer(100);
-  beatimer.start();
+
   // scene.collision_octree.push(blades_edge_mesh_descriptor);
-  beatimer.stop();
+
   // set_message("octree timer:", beatimer.string_report(), 1.0f);
 
   Character *me = get_character(&current_game_state, player_character_id);

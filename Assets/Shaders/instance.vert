@@ -6,7 +6,9 @@ uniform vec2 normal_uv_scale;
 uniform mat4 view;
 uniform mat4 project;
 uniform bool use_billboarding;
-
+uniform vec3 camera_forward;
+uniform vec3 camera_right;
+uniform vec3 camera_up;
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;

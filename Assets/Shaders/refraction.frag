@@ -532,19 +532,13 @@ void main()
   if (length(offset) > 0.00001)
   {
     result = result + ((1.0 - alpha) * refraction_src.rgb);
-    // result = vec3(1,0,0);
   }
   else
   {
-    // result = result + ((1.0-premultiply_alpha)*refraction_src.rgb);
-    // result = Ks;
+    // result = result + ((1.0-palpha)*refraction_src.rgb);
   }
-  // result = refraction_src.rgb;
 
-
-  
   result = vec3(refraction_src);
-
 
   if (multiply_result_by_a)
   {

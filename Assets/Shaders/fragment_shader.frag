@@ -39,6 +39,7 @@ uniform bool discard_on_alpha;
 uniform float discard_threshold;
 uniform bool multiply_albedo_by_a;
 uniform bool multiply_result_by_a;
+uniform bool multiply_pixelalpha_by_moda;
 struct Light
 {
   vec3 position;
@@ -410,11 +411,13 @@ void main()
   vec3 result = vec3(0);
   vec4 debug = vec4(-1);
 
-  vec4 albedo_tex = texture0_mod * texture2D(texture0, frag_uv);
+  vec4 albedo_tex = texture2D(texture0, frag_uv);
   if (discard_on_alpha)
   {
-    if (albedo_tex.a < discard_threshold)
+    if (texture0_mod.a * albedo_tex.a < discard_threshold)
+    {
       discard;
+    }
   }
   gather_shadow_moments();
 
@@ -442,14 +445,10 @@ void main()
     see' and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or
     reflected back out
   */
-  float alpha = albedo_tex.a;
+  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
   if (multiply_albedo_by_a)
   {
-    m.albedo = alpha * albedo_tex.rgb;
-  }
-  else
-  {
-    m.albedo = albedo_tex.rgb;
+    m.albedo = texture0_mod.a * albedo_tex.a * m.albedo;
   }
   // m.albedo = pow(m.albedo,vec3(1/2.2));
   m.normal = TBN * normalize(texture3_mod.rgb * texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
@@ -610,7 +609,13 @@ void main()
 
   if (multiply_result_by_a)
   {
-    result = alpha * result;
+    result = texture0_mod.a * albedo_tex.a * result;
   }
-  out0 = vec4(result, alpha);
+  float pixelalpha = albedo_tex.a;
+  if (multiply_pixelalpha_by_moda)
+  {
+    pixelalpha = texture0_mod.a * pixelalpha;
+  }
+
+  out0 = vec4(result, pixelalpha);
 }

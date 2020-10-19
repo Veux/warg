@@ -340,57 +340,49 @@ struct Uniform_Set_Descriptor
   }
 };
 
-enum Material_Pass
-{
-  //normal opaque pass
-  //uses: stone, metal, plastic etc
-  pbr_opaque, 
 
-  //traditional alpha blending
-  //uses: simple blending effects, alpha-stenciled textures such as tree leaves or grass or ui elements
-  translucent, 
 
-  //same as above, but with refraction effects based on surface normal
-  translucent_refract,
 
-  //specific case of the volumetric renderer
-  pbr_water,
+//cases:
 
-  //supports refraction
-  //supports volumetric absorbtion
-  //
-  //renders each object with backfaces first to figure out its depth, then renders its front face and samples the depth texture
-  //use case: translucent materials that have a look of 'depth' to them such as murky water or 
-  pbr_specular_volumetric, 
 
-  
-  //okay so if we split the translucent passes up like this.... then they arent sorted properly
-  //they all need to be sorted and the state needs to be set up for each type of translucent rendering step
+//texture should have been premultiplied by its alpha channel but it isnt
 
-};
+
+
+//render grass
+  //need no specular, so dst = a*src + (1-a)*dst after the lighting
+  //needs premultiplied alpha, for mipmapping
+
+//render glass
+  //needs specular, dst = src + (1-a)*dst, after lighting
+  //albedo texture is simply sampled directly
+  //mipmaps need premultiply alpha
+
+//if we mod by the constant, how does that interact
+  //grass:
+    //dim the grass entirely including specular - want
+      //no change - we just mod tex.a by constant
+    //dim just the leaves themselves, gives a 'glassy' transparent appearance - want
+      //not possible??
+      //pixelalpha = tex.a
+      //albedo = tex.rgba
+      //albedo.a = mod.a * albedo.a
+      //out = vec4(result,pixelalpha)
+      //whats different?
+      //we dont mul pixelalpha by mod.a
+      //lets just expose all  of these bools directly
+      
+
 
 enum struct Material_Blend_Mode
 {
-
-  //dst = src + (1-a)*dst
-  //albedo = albedo_texture.rgb
-  //for translucent pbr materials that keep full specular: glass, translucent plastic etc
-  //for when albedo is already alpha multiplied in the source texture
-  premultiplied_alpha_texture,
-  
-  //albedo = a*albedo_texture.rgb
-  //for translucent pbr materials that keep full specular: glass, translucent plastic etc
-  premultiplied_alpha, 
-
-  //dst = a*src + (1-a)*dst
-  //for traditional blending effects - grass and leaves, simple smoke/fog effects
-  alpha_blend,
-
-  //dst = dst + src
-  //for additive lighting effects
+  blend,
   add,
   end
 };
+
+
 
 struct Material_Descriptor
 {
@@ -413,14 +405,18 @@ struct Material_Descriptor
   float32 derivative_offset = 0.008;
 
   bool translucent_pass = false;
-  Material_Blend_Mode blendmode = Material_Blend_Mode::premultiplied_alpha;
-  bool require_self_depth = false;
-
+  Material_Blend_Mode blendmode = Material_Blend_Mode::blend;
+  bool require_self_depth = true;
+  bool multiply_albedo_by_alpha = true;
+  bool multiply_result_by_alpha = false;
+  bool multiply_pixelalpha_by_moda = true;
   bool backface_culling = true;
-  bool discard_on_alpha = true;
+  bool discard_on_alpha = false;
   float32 discard_threshold = 0.3f;
   bool casts_shadows = true;
   bool wireframe = false;
+  bool depth_test = true;
+  bool depth_mask = true;
 
   /*
 
@@ -838,7 +834,7 @@ struct Particle_Emission_Method_Descriptor
 
   // available to all types:
   bool snap_to_basis = false;                 // particles 'follow' the emitter
-  bool inherit_velocity = true;               // particles gain the velocity of the emitter when spawned
+  float32 inherit_velocity = 1.0f;               // particles gain the velocity of the emitter when spawned
 
   float32 minimum_time_to_live = 4.0f;
   float32 extra_time_to_live_variance = 1.0f;
@@ -931,7 +927,7 @@ struct Particle_Physics_Method_Descriptor
   vec3 size_multiply_max = vec3(1);
   vec3 die_when_size_smaller_than = vec3(0);
   vec3 friction = vec3(1);
-  vec3 drag = vec3(1); //hacked for now
+  float32 drag = 0.2f;
   float32 stiction_velocity = 0.005f;
   float32 billboard_rotation_velocity_multiply = 1.f; // should be good for growing smoke particles
   float32 billboard_rotation_time_factor = 0.f; //adds time to the rotation

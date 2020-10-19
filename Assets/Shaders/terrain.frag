@@ -37,8 +37,10 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
+uniform float discard_threshold;
 uniform float dielectric_reflectivity;
-uniform float alpha_albedo_override;
+uniform bool multiply_albedo_by_a;
+uniform bool multiply_result_by_a;
 struct Light
 {
   vec3 position;
@@ -499,14 +501,15 @@ void main()
     see' and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or
     reflected back out
   */
-  float premultiply_alpha = albedo_tex.a;
-  if (alpha_albedo_override != -1.0f)
+  float alpha = albedo_tex.a;
+  if (multiply_albedo_by_a)
   {
-    premultiply_alpha = alpha_albedo_override;
+    m.albedo = alpha * albedo_tex.rgb;
   }
-  premultiply_alpha *= texture0_mod.a;
-
-  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+  else
+  {
+    m.albedo = albedo_tex.rgb;
+  }
   // m.albedo = pow(m.albedo,vec3(1/2.2));
   m.normal = TBN * normalize(texture3_mod.rgb * texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
@@ -709,52 +712,12 @@ void main()
   randfog = 1;
   float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
-  vec3 color = textureLod(texture6, v, 2).rgb; // mix(vec3(104,142,173)/vec3(255)
+  vec3 color = textureLod(texture6, v, 2).rgb;
   result = mix(color, result, fogFactor);
-  // result = vec3(z);
-  // result = ambient_diffuse;
-  // result = vec3(is_soil*soil_t);
-  // result = m.emissive;
-  //  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
-  //  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
-  //  result = vec3(brdfc ,0);
-  // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
-  // result = (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
-  // result = vec3(ndotv);
-  // result = vec3(m.metalness);
-  // result = vec3(m.roughness);
-  // result = mix(vec3(1),F0,m.metalness)*prefilteredColor;
-  // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
-  // result = vec3(gl_FragCoord.x/1920);
-  // result = 0.05f*vec3(length(frag_world_position));
-  // result = m.albedo;
-  // result = max(m.normal,vec3(0));
 
-  // float ff = float(indebug.r >= 1.f && indebug.r <= 1.01f);
-
-  // result = vec3(ff);
-
-  // result = pow(result,vec3(2.2));
-  // result = clamp(result,vec3(0),vec3(1));
-  // result = prefilteredColor;
-  // result = vec3(texture2D(texture2, frag_uv).r);
-  // result = vec3(texture2_mod.r);
-  // result = directonly;
-  // result = vec3(Ks);
-  // result = textureLod(texture6, r, .8).rgb;
-  // result = vec3(texture2D(texture4, frag_uv).r);
-  // result = irradiance;
-  // result = m.albedo;
-  // result = m.emissive;
-  // result = texture3_mod.rgb;
-  // result = vec3(frag_normal_uv,0);
-  // result = texture2D(texture3, frag_normal_uv).rgb;
-  // result = vec3(albedo_tex.a);
-  // result = clamp(result,vec3(0),vec3(1));
-  // result = textureLod(texture6,r,4).rgb;
-  // result = pow(result,vec3(2.2));
-  // result = 1*result;
-  // result = vec3(ground_height);
-  // result = vec3(m.ambient_occlusion);
-  out0 = vec4(result, 1);
+  if (multiply_result_by_a)
+  {
+    result = alpha * result;
+  }
+  out0 = vec4(result, alpha);
 }
