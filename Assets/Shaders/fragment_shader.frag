@@ -40,6 +40,7 @@ uniform float discard_threshold;
 uniform bool multiply_albedo_by_a;
 uniform bool multiply_result_by_a;
 uniform bool multiply_pixelalpha_by_moda;
+uniform bool include_ao_in_uv_scale;
 struct Light
 {
   vec3 position;
@@ -59,11 +60,6 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
-in float blocking_terrain;
-in float water_depth;
-in float ground_height;
-flat in float biome;
-in vec4 indebug;
 
 layout(location = 0) out vec4 out0;
 
@@ -457,6 +453,12 @@ void main()
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
 
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
+  vec2 ao_uv = frag_uv;
+  if (!include_ao_in_uv_scale)
+  {
+    ao_uv = ao_uv / uv_scale;
+  }
+
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
   vec3 p = frag_world_position;

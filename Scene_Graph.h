@@ -27,6 +27,7 @@ enum struct imgui_pane
   blank,
   end
 };
+
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
 const uint32 default_assimp_flags = //aiProcess_FlipWindingOrder |
                                     // aiProcess_Triangulate |
@@ -251,6 +252,8 @@ struct Imported_Scene_Node
   std::vector<Imported_Scene_Node> children;
   std::vector<Mesh_Index> mesh_indices;
   glm::mat4 transform;
+
+
 };
 
 struct Imported_Scene_Data
@@ -258,6 +261,9 @@ struct Imported_Scene_Data
   std::string assimp_filename;
   std::vector<Imported_Scene_Node> children;
   std::vector<Mesh_Descriptor> meshes;
+  std::vector<Material_Descriptor> materials;
+  std::vector<Bone> bones;
+  std::vector<Skeletal_Animation> animations;
   bool valid = false;
   bool thread_working_on_import = false;
   float64 scale_factor = 1.;
@@ -279,7 +285,8 @@ struct Resource_Manager
 private:
   friend Flat_Scene_Graph;
   // opens assimp file using the importer, recursively calls _import_aiscene_node to build the Imported_Scene_Data
-  Imported_Scene_Data import_aiscene(std::string path, uint32 assimp_flags = default_assimp_flags);
+  Imported_Scene_Data import_aiscene_old(std::string path, uint32 assimp_flags = default_assimp_flags);
+  bool import_aiscene_new(std::string path, Imported_Scene_Data* result, uint32 assimp_flags = default_assimp_flags);
 
   // must be called from main thread
   // returns nullptr if busy loading
@@ -296,8 +303,11 @@ private:
   // pure
   Imported_Scene_Node _import_aiscene_node(std::string assimp_filename, const aiScene *scene, const aiNode *node);
 
+#if 0
   // pure - gets rid of nodes that have no meshes
   void propagate_transformations_of_empty_nodes(Imported_Scene_Node *this_node, std::vector<Imported_Scene_Node> *temp);
+#endif 
+
 
   // this holds the model data in system ram for all imports and isnt cleared
   // if the model data inside were to be cleared, then it would ruin the mesh cache
@@ -346,7 +356,12 @@ struct Flat_Scene_Graph
   // every call after the first of a given path will have its import read from a cache instead of disk
   // and should be somewhat quick but not good for doing over and over in realtime
   // instead, if possible, use deep_clone()
-  Node_Index add_aiscene(std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
+  Node_Index add_aiscene_old(std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
+
+
+
+
+  Node_Index add_aiscene_new(std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
 
   // todo: collider object grabbyhand thing
 

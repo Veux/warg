@@ -498,10 +498,12 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
+
+#ifndef NDEBUG
   glad_set_pre_callback(glad_callback);
   glad_set_post_callback(glad_callback);
-
-  Local_Session warg_session = Local_Session();
+#endif
+  
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
   ImGui::StyleColorsDark();
@@ -540,33 +542,6 @@ int main(int argc, char *argv[])
   freetype_test.FontsMultiply = 1.35;
   bool show_freetype_window = false;
 
-  //ImVec4 *colors = ImGui::GetStyle().Colors;
-  //colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-  //colors[ImGuiCol_TextDisabled] = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
-  //colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.84f);
-  //colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-  //colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.50f);
-  //colors[ImGuiCol_FrameBg] = ImVec4(0.00f, 0.16f, 0.26f, 1.00f);
-  //colors[ImGuiCol_FrameBgHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
-  //colors[ImGuiCol_FrameBgActive] = ImVec4(1.00f, 0.31f, 0.00f, 0.92f);
-  //colors[ImGuiCol_TitleBgActive] = ImVec4(1.00f, 0.28f, 0.00f, 1.00f);
-  //colors[ImGuiCol_CheckMark] = ImVec4(0.08f, 1.00f, 0.00f, 1.00f);
-  //colors[ImGuiCol_SliderGrab] = ImVec4(0.00f, 0.77f, 0.08f, 1.00f);
-  //colors[ImGuiCol_SliderGrabActive] = ImVec4(0.87f, 1.00f, 0.00f, 1.00f);
-  //colors[ImGuiCol_Button] = ImVec4(1.00f, 0.38f, 0.00f, 0.59f);
-  //colors[ImGuiCol_ButtonHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
-  //colors[ImGuiCol_ButtonActive] = ImVec4(1.00f, 0.31f, 0.00f, 1.00f);
-  //colors[ImGuiCol_Header] = ImVec4(0.94f, 0.36f, 0.00f, 0.31f);
-  //colors[ImGuiCol_HeaderHovered] = ImVec4(0.98f, 0.40f, 0.00f, 0.80f);
-  //colors[ImGuiCol_HeaderActive] = ImVec4(1.00f, 0.53f, 0.00f, 1.00f);
-  //colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 0.31f, 0.00f, 0.72f);
-  //colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 0.35f, 0.00f, 1.00f);
-  //colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
-  //colors[ImGuiCol_Tab] = ImVec4(0.81f, 0.33f, 0.00f, 0.81f);
-  //colors[ImGuiCol_TabHovered] = ImVec4(1.00f, 0.35f, 0.00f, 0.84f);
-  //colors[ImGuiCol_TabActive] = ImVec4(0.99f, 0.25f, 0.00f, 1.00f);
-  //colors[ImGuiCol_TextSelectedBg] = ImVec4(0.36f, 0.15f, 0.00f, 0.96f);
-  //colors[ImGuiCol_NavHighlight] = ImVec4(0.99f, 0.53f, 0.00f, 1.00f);
 
 
   orange_theme();
@@ -578,10 +553,10 @@ int main(int argc, char *argv[])
   timeBeginPeriod(1);
 
   std::vector<SDL_Event> imgui_event_accumulator;
-
+  Local_Session warg_session = Local_Session();
   std::vector<State *> states;
-  // states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
-  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
+  //states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
   states[0]->imgui_event_accumulator = &imgui_event_accumulator;

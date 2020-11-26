@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <array>
-#define MAX_ARRAY_STRING_LENGTH 64
+#define MAX_ARRAY_STRING_LENGTH 512
 struct Array_String
 {
   Array_String();

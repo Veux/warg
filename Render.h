@@ -401,6 +401,7 @@ struct Material_Descriptor
   std::string frag_shader;
   float32 dielectric_reflectivity = 0.04f;
   vec2 uv_scale = vec2(1);
+  bool include_ao_in_uv_scale = true;
   vec2 normal_uv_scale = vec2(1);
   float32 derivative_offset = 0.008;
 
@@ -928,7 +929,7 @@ struct Particle_Physics_Method_Descriptor
   vec3 die_when_size_smaller_than = vec3(0);
   vec3 friction = vec3(1);
   float32 drag = 0.2f;
-  float32 stiction_velocity = 0.005f;
+  float32 stiction_velocity = 0.5f;
   float32 billboard_rotation_velocity_multiply = 1.f; // should be good for growing smoke particles
   float32 billboard_rotation_time_factor = 0.f; //adds time to the rotation
 
@@ -1213,7 +1214,7 @@ struct Liquid_Surface
   uint32 current_buffer_size = 0;
 
   bool window_open = false;
-
+  bool want_texture_download = true;
   bool invalidated = true;
   bool initialized = false;
 };

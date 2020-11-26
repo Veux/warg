@@ -95,7 +95,7 @@ void spawn_ground(Flat_Scene_Graph *scene)
 
 void spawn_gun(Flat_Scene_Graph *scene, vec3 position)
 {
-  Node_Index gun = scene->add_aiscene("Cerberus/cerberus-warg.FBX", "gun");
+  Node_Index gun = scene->add_aiscene_old("Cerberus/cerberus-warg.FBX", "gun");
   scene->nodes[gun].position = position;
   scene->nodes[gun].scale = vec3(1);
 }
@@ -110,7 +110,7 @@ void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
   material_star.frag_shader = "water.frag";
   small_object_water_settings(&material_star.uniform_set);
 
-  Node_Index star = scene->add_aiscene("smoothsphere.fbx", "star");
+  Node_Index star = scene->add_aiscene_old("smoothsphere.fbx", "star");
   Node_Index spheremodel = scene->nodes[star].children[0];
   Material_Descriptor *mdp = scene->get_modifiable_material_pointer_for(spheremodel, 0);
   *mdp = material_star;
@@ -141,7 +141,7 @@ void spawn_grabbyarm(Flat_Scene_Graph *scene, vec3 position)
   scene->set_parent(shoulder_joint, grabbycube);
   scene->set_parent(arm_test, shoulder_joint);
 
-  Node_Index tiger = scene->add_aiscene("tiger/tiger.fbx", "grabbytiger");
+  Node_Index tiger = scene->add_aiscene_old("tiger/tiger.fbx", "grabbytiger");
 }
 
 void spawn_compass(Flat_Scene_Graph *scene)
@@ -237,13 +237,15 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
+  scene.add_aiscene_old("racharound/racharound.fbx");
+
   terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
   // spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
-  spawn_compass(&scene);
+  //spawn_compass(&scene);
   // spawn_test_spheres(scene);
 
   // spawn_map(&scene);
@@ -643,73 +645,14 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 }
 void Render_Test_State::update()
 {
-
-  // update_grabbyarm(&scene, current_time);
   // update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
   terrain.apply_geometry_to_octree_if_necessary(&scene);
-  // update_test_triangle(&scene);
 
-  // static vec3 wind_dir;
-  // if (fract(sin(current_time)) > .5)
-  //  wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  // scene.particle_emitters[1].descriptor.position = vec3(0, 0, 25);
-  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  // scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 255;
-  // scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
-  //// scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  // scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
-  // scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
-  // scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  // scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
-  // scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.02;
-  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.15;
 
-  // scene.particle_emitters[2].descriptor.position = vec3(1, 0, 25);
-  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  // scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 255;
-  // scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
-  //// scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  // scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
-  // scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
-  // scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  // scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
-  // scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.02;
-  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.15;
 
-  // scene.particle_emitters[3].descriptor.position = vec3(0, 1, 25);
-  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  // scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 255;
-  // scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
-  //// scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  // scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
-  // scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
-  // scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  // scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
-  // scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.02;
-  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.15;
-
-  // scene.particle_emitters[0].descriptor.position = vec3(.5, .5, 25);
-  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(70, 70, 0);
-  // scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 255;
-  // scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = vec3(.15f, .15f, .14f);
-  //// scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  // scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
-  // scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
-  // scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  // scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
-  // scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(21.f, 55.f);
-  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.02;
-  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
 }
 
 void Render_Test_State::draw_gui()
@@ -731,7 +674,7 @@ void Render_Test_State::draw_gui()
 
 bool spawn_test_spheres(Flat_Scene_Graph &scene)
 {
-  Node_Index test = scene.add_aiscene("smoothsphere.fbx", "spheretest", false);
+  Node_Index test = scene.add_aiscene_old("smoothsphere.fbx", "spheretest", false);
   if (test == NODE_NULL)
   {
     return false;
@@ -794,7 +737,7 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
           material.frag_shader = "water.frag";
         }
 
-        Node_Index index = scene.add_aiscene("smoothsphere.fbx", "Spherearray");
+        Node_Index index = scene.add_aiscene_old("smoothsphere.fbx", "Spherearray");
         Material_Index mi = scene.resource_manager->push_custom_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
         scene.nodes[scene.nodes[index].children[0]].name = s("sphere ", i, " ", j, " ", k);
@@ -825,7 +768,7 @@ Frostbolt_Effect::Frostbolt_Effect(State *state, uint32 light_index)
   Flat_Scene_Graph_Node *node = &state->scene.nodes[billboard_spawn_source];
   node->scale = vec3(0.0001, 3, 3);
 
-  crystal = state->scene.add_aiscene("sphere-1.fbx", "frostbolt crystal");
+  crystal = state->scene.add_aiscene_old("sphere-1.fbx", "frostbolt crystal");
   node = &state->scene.nodes[crystal];
   node->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal].children[0];
@@ -952,20 +895,22 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   //////////////////////////////////////////////////
   //////////////////////////////////////////////////
   //crystal node
-  crystal_node = state->scene.add_aiscene("sphere-1.fbx", "frostbolt crystal");
+  crystal_node = state->scene.add_aiscene_old("sphere-1.fbx", "frostbolt crystal");
   Flat_Scene_Graph_Node* crystal_node_ptr = &state->scene.nodes[crystal_node];
   crystal_node_ptr->position = position;
   crystal_node_ptr->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal_node].children[0];
   Material_Descriptor *crystal_material = state->scene.get_modifiable_material_pointer_for(crystalchild, 0);
-  crystal_material->albedo.source = "test_normal.png";
-  crystal_material->albedo.mod = vec4(1, 1, 1, .315);
-  crystal_material->emissive.source = "test_normal.png";
-  crystal_material->emissive.mod = vec4(.15, 0.125, 0.25, 0);
-  crystal_material->roughness.source = "white";
-  crystal_material->roughness.mod.x = 0.15f;
-  crystal_material->translucent_pass = true;
+
+  crystal_material->albedo.source = "Snow006_2K_Color.jpg";
+  crystal_material->albedo.mod = vec4(.10, .10, 1.0, .40);
+  crystal_material->roughness.source = "Snow006_2K_Roughness.jpg";
+  crystal_material->roughness.mod = vec4(.10, 1.0, 1.0, 1.0);
   crystal_material->normal.source = "test_normal.png";
+  crystal_material->normal.mod = vec4(1.0, 1.0, 1.0, 1.0);
+  crystal_material->ambient_occlusion.source = "Snow006_2K_AmbientOcclusion.jpg.jpg";
+  crystal_material->ambient_occlusion.mod = vec4(1.0, 1.0, 1.0, 1.0);
+  crystal_material->translucent_pass = true;
 
 
   //////////////////////////////////////////////////
@@ -1071,14 +1016,14 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   ppmd_impact.gravity = vec3(0,0,-9.8); 
   ppmd_impact.billboard_rotation_time_factor = 1.1f;
   //impact material
-  explosion_node = state->scene.add_aiscene("sphere-1.fbx", "frostbolt2 explosion source");
+  explosion_node = state->scene.add_aiscene_old("sphere-1.fbx", "frostbolt2 explosion source");
   Node_Index explosionchild = state->scene.nodes[explosion_node].children[0];
   Material_Descriptor* explosion_material = state->scene.get_modifiable_material_pointer_for(explosionchild, 0);
   *explosion_material = Material_Descriptor();
   explosion_material->albedo.source = "Snow006_2K_Color.jpg";
-  explosion_material->albedo.mod = vec4(.10, .10, 1.0, .10);
+  explosion_material->albedo.mod = vec4(.10, .10, 1.0, .40);
   explosion_material->roughness.source = "Snow006_2K_Roughness.jpg";
-  explosion_material->roughness.mod = vec4(1.0, 1.0, 1.0, 1.0);
+  explosion_material->roughness.mod = vec4(.10, 1.0, 1.0, 1.0);
   explosion_material->normal.source = "test_normal.png";
   explosion_material->normal.mod = vec4(1.0, 1.0, 1.0, 1.0);
   explosion_material->ambient_occlusion.source = "Snow006_2K_AmbientOcclusion.jpg.jpg";

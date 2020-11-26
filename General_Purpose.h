@@ -9,6 +9,17 @@
 enum struct Light_Type;
 #define ASSERT(x) _errr(x, __FILE__, __LINE__)
 
+void nop(bool i)
+{
+  return;
+}
+
+#ifdef NDEBUG
+#define DEBUGASSERT(x) nop(x)
+#else
+#define DEBUGASSERT(x) ASSERT(x)
+#endif
+
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *, uint32);
 #define CREATE_3(x, y, z) __set_message(x, y, z, __FILE__, __LINE__)
 #define CREATE_2(x, y) CREATE_3(x, y, 0.0)
@@ -124,6 +135,8 @@ vec3 rand(vec3 max);
 // probably need something better
 std::string fix_filename(std::string str);
 std::string copy(const aiString *str);
+vec3 copy(const aiVector3D v);
+quat copy(const aiQuaternion q);
 std::string read_file(const char *path);
 std::string to_string(glm::vec2 v);
 std::string to_string(glm::vec3 v);
@@ -140,6 +153,7 @@ std::string to_string(Array_String &s);
 std::string to_string(vec4 &value);
 // std::string to_string(ivec4& value);
 
+glm::mat4 copy(aiMatrix4x4 m);
 vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
 float64 random_between(float64 min, float64 max);
 int32 random_between(int32 min, int32 max);

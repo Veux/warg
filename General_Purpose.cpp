@@ -84,6 +84,41 @@ std::string copy(const aiString *str)
   return result;
 }
 
+vec3 copy(const aiVector3D v)
+{
+    vec3 result;
+    result.x = v.x;
+    result.y = v.y;
+    result.z = v.z;
+    return result;
+}
+
+quat copy(const aiQuaternion q)
+{
+    quat quat;
+    quat.x = q.x;
+    quat.y = q.y;
+    quat.z = q.z;
+    quat.w = q.w;
+    return quat;
+}
+
+glm::mat4 copy(aiMatrix4x4 m)
+{
+  // assimp is row-major
+  // glm is column-major
+  glm::mat4 result;
+  for (uint32 i = 0; i < 4; ++i)
+  {
+    for (uint32 j = 0; j < 4; ++j)
+    {
+      result[i][j] = m[j][i];
+    }
+  }
+  return result;
+}
+
+
 std::string read_file(const char *path)
 {
   std::string result;
