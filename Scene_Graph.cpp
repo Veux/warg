@@ -5,6 +5,7 @@
 #include "Physics.h"
 #include "assimp/metadata.h"
 #include <errno.h>
+#include <ranges>
 using json = nlohmann::json;
 using namespace std;
 using namespace ImGui;
@@ -2480,29 +2481,46 @@ void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
              // ptr - call delete_node() to recursively delete
 }
 
-std::unique_ptr<Imported_Scene_Data> Resource_Manager::import_aiscene_async(std::string path, uint32 assimp_flags)
+static mutex import_lock;
+static vector<tuple<string, Imported_Scene_Data *, uint32>> import_queue;
+
+static condition_variable import_thread_cv;
+void import_thread_loop()
 {
-  std::unique_ptr<Imported_Scene_Data> result = nullptr;
-  Imported_Scene_Data *eventual_dst = &import_data[path];
-  if (eventual_dst->thread_working_on_import)
+  while (true)
   {
-    bool thread_has_finished_work = true;
-    if (thread_has_finished_work)
+    std::vector<tuple<string, Imported_Scene_Data *, uint32>> arg_v;
     {
-      *result = import_aiscene_old(path, assimp_flags); // should just retrieve the finished async data
-      return result;
+      unique_lock<mutex> hold(import_lock);
+      import_thread_cv.wait(hold);
+      if (import_queue.size() == 0)
+      {
+        continue;
+      }
+      arg_v.push_back(import_queue.back());
+      import_queue.pop_back();
     }
 
-    return nullptr;
+    for (auto &args : arg_v | std::views::reverse)
+    {
+      auto [path, dst, assimp_flags] = args;
+      Resource_Manager::import_aiscene_new(path, dst, assimp_flags);
+    }
   }
+}
 
-  result = std::make_unique<Imported_Scene_Data>();
-
-  eventual_dst->thread_working_on_import = true;
-
-  // down here should be the actual threaded code, above must be main thread
-  *result = import_aiscene_old(path, assimp_flags);
-  return result;
+bool Resource_Manager::import_aiscene_async(std::string path, Imported_Scene_Data *dst, uint32 assimp_flags)
+{
+  ASSERT(dst->valid != true);
+  if (!thread_active)
+  {
+    import_thread = thread(import_thread_loop);
+    thread_active = true;
+  }
+  lock_guard<mutex> hold(import_lock);
+  import_queue.emplace_back(path, dst, assimp_flags);
+  import_thread_cv.notify_one();
+  return false;
 }
 
 Imported_Scene_Node Resource_Manager::_import_aiscene_node(
@@ -2682,41 +2700,34 @@ void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_
 {
   uint32 vertex_count = d->mesh_data.positions.size();
   d->mesh_data.bone_weights.resize(vertex_count);
-  
 
-
-
-
-  //all the bones this mesh is affected by
+  // all the bones this mesh is affected by
   for (uint32 i = 0; i < aimesh->mNumBones; ++i)
   {
     aiBone *aibone = aimesh->mBones[i];
     string name = aibone->mName.data;
     mat4 offsetmatrix = copy(aibone->mOffsetMatrix);
 
-
     // (!!!)
-    //since there may be multiple meshes, this function may be called multiple times
-    //this means we need to search for the name of the bone to see if we already have it in the vector before adding it
+    // since there may be multiple meshes, this function may be called multiple times
+    // this means we need to search for the name of the bone to see if we already have it in the vector before adding it
     int32 index_for_this_name_in_bone_vector = -1;
-    for(uint32 j = 0; j < bones->size();++j)
+    for (uint32 j = 0; j < bones->size(); ++j)
     {
-      if((*bones)[j].name == name)
+      if ((*bones)[j].name == name)
       {
         index_for_this_name_in_bone_vector = j;
         DEBUGASSERT((*bones)[j].offsetmatrix == offsetmatrix);
         break;
       }
     }
-    if(index_for_this_name_in_bone_vector == -1)
+    if (index_for_this_name_in_bone_vector == -1)
     {
       bones->emplace_back();
       bones->back().name = name;
       bones->back().offsetmatrix = offsetmatrix;
-      index_for_this_name_in_bone_vector = bones->size()-1;
+      index_for_this_name_in_bone_vector = bones->size() - 1;
     }
-
-
 
     uint32 num_of_vertices_affected_by_this_bone = aibone->mNumWeights;
     for (uint32 j = 0; j < num_of_vertices_affected_by_this_bone; ++j)
@@ -2790,7 +2801,6 @@ bool Resource_Manager::import_aiscene_new(std::string path, Imported_Scene_Data 
   ASSERT(scene->mRootNode);
   ASSERT(scene->mRootNode->mNumMeshes == 0);
 
-
   Imported_Scene_Data dst;
   dst.assimp_filename = path;
   scene->mMetaData->Get("UnitScaleFactor", dst.scale_factor);
@@ -2798,25 +2808,26 @@ bool Resource_Manager::import_aiscene_new(std::string path, Imported_Scene_Data 
   gather_meshes(scene, &dst);
   gather_animations(scene, &dst);
 
-
   for (uint32 i = 0; i < scene->mRootNode->mNumChildren; ++i)
   {
     const aiNode *node = scene->mRootNode->mChildren[i];
     Imported_Scene_Node child = _import_aiscene_node(path, scene, node);
     dst.children.push_back(child);
   }
-
   // dst is now imported just as it was given in assimp
-  // but now we process it and remove nodes that don't have any meshes in them
-  // we don't do this on import because maybe we need them later for something - not sure
-  // yep, they could be bones, not meshes
-
-  // todo: revisit this after skeletal animation is working:
-  // "But sometimes nodes have no name (which means there is not corresponding bone) and
-  // their job is simply to help the modeller decompose the model and place some
-  // intermediate transformation along the way."
+  return true;
 
 #if 0 
+
+  //an entire import will have its own empty root node i believe
+  //one place this is really handy is that there is a single root node for two trees of a single
+  //import that has a tree for the mesh data itself, and also an adjacent tree for the
+  //skeleton that animates it, we can use and move the blank root node for the entire import
+  //and the skeleton moves with it
+  //perhaps we can detect that there is only one child of this blank root and then
+  //get rid of it in just that case
+
+
   // since root here is almost guaranteed to be empty, all of the children of the entire import
   // are going to end up in this vector
   std::vector<Imported_Scene_Node> temp_new_children;
@@ -2843,139 +2854,6 @@ bool Resource_Manager::import_aiscene_new(std::string path, Imported_Scene_Data 
   std::move(std::begin(temp_new_children), std::end(temp_new_children), std::back_inserter(dst.children));
 
 #endif
-  dst.valid = true;
-  return dst;
-}
-
-Imported_Scene_Data Resource_Manager::import_aiscene_old(std::string path, uint32 assimp_flags)
-{
-  const aiScene *scene = IMPORTER.ReadFile(path.c_str(), assimp_flags);
-  if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-  {
-    set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
-    ASSERT(0); // todo: fail gracefully instead
-  }
-  Imported_Scene_Data dst;
-  dst.assimp_filename = path;
-
-  scene->mMetaData->Get("UnitScaleFactor", dst.scale_factor);
-  for (uint32 i = 0; i < scene->mNumMeshes; ++i)
-  {
-    dst.meshes.emplace_back(build_mesh_descriptor(scene, i, path));
-  }
-
-  // one for jump, one for walk, etc
-  for (uint32 i = 0; i < scene->mNumAnimations; ++i)
-  {
-    aiAnimation *anim = scene->mAnimations[i];
-    aiString *animation_name = &anim->mName;
-    float64 duration = anim->mDuration;
-    float64 tickspersec = anim->mTicksPerSecond;
-
-    Skeletal_Animation animation;
-    animation.name = copy(animation_name);
-    animation.duration = duration;
-    animation.ticks_per_sec = tickspersec;
-
-    // The channel contains a name which must match one of the nodes in the heirarchy and three transformation arrays.
-    // a channel is a bone
-    uint32 bone_count = anim->mNumChannels;
-    animation.bone_animations.reserve(bone_count);
-    for (uint32 i = 0; i < bone_count; ++i)
-    {
-      aiNodeAnim *nodeanim = anim->mChannels[i];
-
-      aiString *nodename = &nodeanim->mNodeName;
-      uint32 num_pos_keys = nodeanim->mNumPositionKeys;
-      aiVectorKey *pos_keys = nodeanim->mPositionKeys;
-
-      uint32 num_rot_keys = nodeanim->mNumRotationKeys;
-      aiQuatKey *quat_keys = nodeanim->mRotationKeys;
-
-      uint32 num_scale_keys = nodeanim->mNumScalingKeys;
-      aiVectorKey *scale_keys = nodeanim->mScalingKeys;
-
-      aiAnimBehaviour *prestate = &nodeanim->mPreState;
-      aiAnimBehaviour *poststate = &nodeanim->mPostState;
-
-      ASSERT(num_pos_keys == num_rot_keys);
-      ASSERT(num_pos_keys == num_scale_keys);
-
-      uint32 count = num_pos_keys;
-
-      Bone_Animation bone_animation;
-      bone_animation.name = copy(nodename);
-      bone_animation.translations.reserve(count);
-      bone_animation.scales.reserve(count);
-      bone_animation.rotations.reserve(count);
-      bone_animation.timestamp.reserve(count);
-      for (uint32 i = 0; i < count; ++i)
-      {
-        bone_animation.translations.push_back(copy(pos_keys[i].mValue));
-        bone_animation.scales.push_back(copy(scale_keys[i].mValue));
-        bone_animation.rotations.push_back(copy(quat_keys[i].mValue));
-        float64 pos_time = pos_keys[i].mTime;
-        float64 scale_time = scale_keys[i].mTime;
-        float64 rot_time = quat_keys[i].mTime;
-        ASSERT(scale_time == pos_time);
-        ASSERT(rot_time == pos_time);
-        bone_animation.timestamp.push_back(pos_time);
-      }
-      animation.bone_animations.push_back(bone_animation);
-    }
-  }
-
-  // should not be meshes in root, but if there ever is we can add support for it
-  ASSERT(scene->mRootNode);
-  ASSERT(scene->mRootNode->mNumMeshes == 0);
-
-  int32 number_of_children = scene->mRootNode->mNumChildren;
-  for (uint32 i = 0; i < number_of_children; ++i)
-  {
-    const aiNode *node = scene->mRootNode->mChildren[i];
-    Imported_Scene_Node child = _import_aiscene_node(path, scene, node);
-    dst.children.push_back(child);
-  }
-
-  // dst is now imported just as it was given in assimp
-  // but now we process it and remove nodes that don't have any meshes in them
-  // we don't do this on import because maybe we need them later for something - not sure
-  // yep, they could be bones, not meshes
-
-  // todo: revisit this after skeletal animation is working:
-  // "But sometimes nodes have no name (which means there is not corresponding bone) and
-  // their job is simply to help the modeller decompose the model and place some
-  // intermediate transformation along the way."
-
-#if 0 
-  // since root here is almost guaranteed to be empty, all of the children of the entire import
-  // are going to end up in this vector
-  std::vector<Imported_Scene_Node> temp_new_children;
-
-  for (int32 i = 0; i < number_of_children; ++i)
-  {
-    Imported_Scene_Node *child = &dst.children[i];
-    propagate_transformations_of_empty_nodes(child, &temp_new_children);
-
-    // delete this child if its empty
-    if (child->mesh_indices.size() == 0)
-    {
-      ASSERT(child->children.size() == 0);
-      int32 last_i = number_of_children - 1;
-      bool last = (i == last_i);
-      if (!last)
-        dst.children[i] = std::move(dst.children[last_i]);
-      dst.children.pop_back();
-      i -= 1;
-      number_of_children -= 1;
-    }
-  }
-  // put the children back in to the import root
-  std::move(std::begin(temp_new_children), std::end(temp_new_children), std::back_inserter(dst.children));
-
-#endif
-  dst.valid = true;
-  return dst;
 }
 
 Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
@@ -3003,43 +2881,27 @@ Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
 Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, bool wait_for_valid)
 {
   Imported_Scene_Data *import = &import_data[path];
-  bool requires_importing = !import->valid;
-  if (requires_importing)
+  if (!wait_for_valid)
   {
-    if (wait_for_valid)
+    bool finished = import_aiscene_async(path, import, default_assimp_flags);
+    if (finished)
     {
-      if (import->thread_working_on_import)
-      { // there was a previous call for async, and that load has started, but now we demand it
-        std::shared_ptr<Imported_Scene_Data> ptr = import_aiscene_async(path, default_assimp_flags);
-        while (!ptr)
-        {
-          ptr = import_aiscene_async(path, default_assimp_flags);
-        }
-        *import = *ptr;
-        ASSERT(import->valid);
-        ASSERT(import->assimp_filename == path);
-        return import;
-      }
-
-      *import = import_aiscene_old(path, default_assimp_flags);
-      ASSERT(import->valid);
+      ASSERT(import->valid == true);
       ASSERT(import->assimp_filename == path);
       return import;
     }
     else
     {
-      std::shared_ptr<Imported_Scene_Data> ptr = import_aiscene_async(path, default_assimp_flags);
-      if (ptr)
-      {
-        *import = *ptr;
-        ASSERT(import->valid);
-        ASSERT(import->assimp_filename == path);
-        return import;
-      }
       return nullptr;
     }
   }
-  return import;
+
+  if (wait_for_valid)
+  {
+    Imported_Scene_Data *import = &import_data[path];
+    bool success = import_aiscene_new(path, import, default_assimp_flags);
+    return import;
+  }
 }
 
 Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()
