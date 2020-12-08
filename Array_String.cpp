@@ -1,17 +1,18 @@
-#pragma once
+
 #include "stdafx.h"
 #include "Array_String.h"
 #include "Globals.h"
-#include <SDL2/SDL.h>
 #include <glm/glm.hpp>
 Array_String::Array_String()
 {
   str[0] = '\0';
 }
-Array_String::Array_String(std::string &rhs)
+Array_String::Array_String(const std::string &rhs)
 {
-  ASSERT(rhs.size() <= MAX_ARRAY_STRING_LENGTH);
-  SDL_strlcpy(&str[0], &rhs[0], rhs.size() + 1);
+  const char *cstr = rhs.c_str();
+  uint32 len = strlen(cstr);
+  ASSERT(len <= MAX_ARRAY_STRING_LENGTH);
+  strcpy_s(&str[0], MAX_ARRAY_STRING_LENGTH + 1, cstr);
 }
 bool Array_String::operator==(Array_String &rhs)
 {
@@ -36,14 +37,25 @@ Array_String &Array_String::operator=(std::string &rhs)
 
 bool Array_String::operator==(const char *rhs)
 {
-  Array_String r = s(rhs);
-  return *this == r;
+  return strncmp(&str[0], rhs, MAX_ARRAY_STRING_LENGTH + 1) == 0;
+}
+
+Array_String::operator const char *()
+{
+  return &str[0];
 }
 
 Array_String &Array_String::operator=(const char *rhs)
 {
-  *this = std::string(rhs);
+  uint32 len = strnlen_s(rhs, MAX_ARRAY_STRING_LENGTH + 1);
+  ASSERT(len <= MAX_ARRAY_STRING_LENGTH);
+  strcpy(&str[0], rhs);
   return *this;
 }
 
-Array_String::Array_String(const char *rhs) : Array_String(std::string(rhs)) {}
+Array_String::Array_String(const char *rhs)
+{
+  uint32 len = strnlen_s(rhs, MAX_ARRAY_STRING_LENGTH + 1);
+  ASSERT(len <= MAX_ARRAY_STRING_LENGTH);
+  strcpy(&str[0], rhs);
+}

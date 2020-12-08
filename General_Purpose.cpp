@@ -502,6 +502,8 @@ std::string to_string(vec4 &value)
   string a = to_string(value.a);
   return "(" + r + "," + g + "," + b + "," + a + ")";
 }
+
+
 template <> string s<const char *>(const char *value)
 {
   return string(value);

@@ -1,16 +1,16 @@
-#pragma once
+
 #include "stdafx.h"
 #include "Animation_Utilities.h"
 #include "Warg_Common.h"
 
-template <typename V, typename T> V lerp(V &v1, V &v2, T &t)
-{
-  return v1 + t * (v2 - v1);
-}
-float lerp(float v1, float v2, float t)
-{
-  return v1 + t * (v2 - v1);
-}
+//template <typename V, typename T> V lerp(V &v1, V &v2, T &t)
+//{
+//  return v1 + t * (v2 - v1);
+//}
+//float lerp(float v1, float v2, float t)
+//{
+//  return v1 + t * (v2 - v1);
+//}
 
 // struct Bezier_Curve
 //{

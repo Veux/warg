@@ -1893,6 +1893,49 @@ Node_Index Flat_Scene_Graph::add_aiscene_new(std::string scene_file_path, std::s
   root_node->filename_of_import = scene_file_path;
   root_node->name = name;
 
+
+
+
+  // all meshes with the same name will get the same mesh_index and material_index
+  unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
+
+  for (uint32 i = 0; i < resource->meshes.size(); ++i)
+  {
+    string& name = resource->meshes[i].name;
+    uint32 last_dot = name.find_last_of('.');
+    std::string name_before_dot = name.substr(0, last_dot);
+    if (!indices.contains(name_before_dot))
+    {
+      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
+      std::string path = resource->assimp_filename;
+      Material_Descriptor material;
+      path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
+      if (name_before_dot.find("collide_") != std::string::npos)
+      {
+        material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
+        material.frag_shader = "emission.frag";
+        material.wireframe = true;
+        material.backface_culling = false;
+        this->collision_octree.push(&resource->meshes[i]);
+      }
+      else
+      {
+        material.albedo = path + name_before_dot + "_albedo.png";
+        material.normal = path + name_before_dot + "_normal.png";
+        material.roughness = path + name_before_dot + "_roughness.png";
+        material.metalness = path + name_before_dot + "_metalness.png";
+        material.emissive = path + name_before_dot + "_emissive.png";
+        material.ambient_occlusion = path + name_before_dot + "_ao.png";
+        material.vertex_shader = "vertex_shader.vert";
+        material.frag_shader = "fragment_shader.frag";
+      }
+      Material_Index mat_i = resource_manager->push_custom_material(&material);
+      indices[name_before_dot] = { mesh_i, mat_i };
+    }
+  }
+
+
+
   const uint32 number_of_children = resource->children.size();
   for (uint32 i = 0; i < number_of_children; ++i)
   {
@@ -1990,7 +2033,9 @@ Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Data *scene, Importe
   Flat_Scene_Graph_Node *node = &nodes[node_index];
   node->filename_of_import = assimp_filename;
   node->name = import_node->name;
-  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, vec3(), vec4());
+  vec3 skew;
+  vec4 perspective;
+  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, skew, perspective);
   node->orientation = conjugate(node->orientation);
   node->scale = float32(scene->scale_factor) * node->scale;
   uint32 number_of_mesh_indices = import_node->mesh_indices.size();
@@ -2160,7 +2205,9 @@ void Flat_Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
   vec3 scale;
   quat orientation;
   vec3 translation;
-  decompose(M_to_Mchild, scale, orientation, translation, vec3(), vec4());
+  vec3 skew;
+  vec4 perspective;
+  decompose(M_to_Mchild, scale, orientation, translation, skew, perspective);
   orientation = conjugate(orientation);
   set_parent(grabee, grabber);
   nodes[grabee].position = translation;
@@ -2174,7 +2221,9 @@ void Flat_Scene_Graph::drop(Node_Index child)
   vec3 scale;
   quat orientation;
   vec3 translation;
-  decompose(M, scale, orientation, translation, vec3(), vec4());
+  vec3 skew;
+  vec4 perspective;
+  decompose(M, scale, orientation, translation, skew, perspective);
   orientation = conjugate(orientation);
 
   set_parent(child);
@@ -2463,6 +2512,7 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
     visit_nodes(child, STACK, accumulator);
   }
 }
+
 
 void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
 {
@@ -2814,7 +2864,6 @@ bool Resource_Manager::import_aiscene_new(std::string path, Imported_Scene_Data 
     Imported_Scene_Node child = _import_aiscene_node(path, scene, node);
     dst.children.push_back(child);
   }
-  // dst is now imported just as it was given in assimp
   return true;
 
 #if 0 

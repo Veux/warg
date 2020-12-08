@@ -1050,8 +1050,8 @@ struct Particle_Emitter
   Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, Material_Index mat);
   Particle_Emitter(Particle_Emitter &rhs);
   Particle_Emitter(Particle_Emitter &&rhs);
-  Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &rhs);
-  Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs);
+  Particle_Emitter &operator=(Particle_Emitter &rhs);
+  Particle_Emitter &operator=(Particle_Emitter &&rhs);
   void init()
   {
     shared_data->particles.init();

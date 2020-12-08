@@ -294,8 +294,7 @@ struct Resource_Manager
   // eventually produce the Imported_Scene_Data
   Imported_Scene_Data *request_valid_resource(std::string assimp_path, bool wait_for_valid = true);
 
-  // pure
-  Imported_Scene_Node _import_aiscene_node(std::string assimp_filename, const aiScene *scene, const aiNode *node);
+  static Imported_Scene_Node _import_aiscene_node(std::string assimp_filename, const aiScene *scene, const aiNode *node);
 
 #if 0
   // pure - gets rid of nodes that have no meshes
