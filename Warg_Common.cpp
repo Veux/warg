@@ -17,7 +17,7 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   if (CONFIG.render_simple)
     material.albedo.mod = vec4(0.4f);
 
-  node = scene.add_aiscene("Blades_Edge/bea2.fbx","Blades Edge");
+  node = scene.add_aiscene_old("Blades_Edge/bea2.fbx","Blades Edge");
 
 }
 

@@ -5,6 +5,7 @@
 #include "Physics.h"
 #include "assimp/metadata.h"
 #include <errno.h>
+#include <ranges>
 using json = nlohmann::json;
 using namespace std;
 using namespace ImGui;
@@ -30,20 +31,6 @@ bool push_color_text_if_tree_label_open(const char *label, ImVec4 color_true, Im
     ImGui::PushStyleColor(ImGuiCol_Text, color_false);
   }
   return node_is_open;
-}
-glm::mat4 copy(aiMatrix4x4 m)
-{
-  // assimp is row-major
-  // glm is column-major
-  glm::mat4 result;
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    for (uint32 j = 0; j < 4; ++j)
-    {
-      result[i][j] = m[j][i];
-    }
-  }
-  return result;
 }
 
 Node_Index Flat_Scene_Graph::add_mesh(std::string name, Mesh_Descriptor *d, Material_Descriptor *md)
@@ -217,8 +204,8 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::Checkbox("Backface Culling", &ptr->descriptor.backface_culling);
   ImGui::Checkbox("Wireframe", &ptr->descriptor.wireframe);
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
-  ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold,0.01f,0.f,1.f);
-
+  ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold, 0.01f, 0.f, 1.f);
+  ImGui::Checkbox("include_AO_in_uv_scale", &ptr->descriptor.include_ao_in_uv_scale);
 
   ImGui::Checkbox("require_self_depth", &ptr->descriptor.require_self_depth);
   ImGui::Checkbox("multiply_albedo_by_alpha", &ptr->descriptor.multiply_albedo_by_alpha);
@@ -227,8 +214,6 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
 
   ImGui::Checkbox("depth_test", &ptr->descriptor.depth_test);
   ImGui::Checkbox("depth_mask", &ptr->descriptor.depth_mask);
-
-
 
   ImGui::SliderFloat("Derivative offset", &ptr->descriptor.derivative_offset, 0.001f, 0.5f);
   ImGui::Checkbox("Casts Shadows", &ptr->descriptor.casts_shadows);
@@ -1152,7 +1137,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
 
       TextColored(imgui_purple, "Misc:");
       Text("inherit_velocity:");
-      DragFloat("inherit_velocity", &pemd->inherit_velocity,0.05f);
+      DragFloat("inherit_velocity", &pemd->inherit_velocity, 0.05f);
       Text("minimum_time_to_live:");
       DragFloat("minimum_time_to_live", &pemd->minimum_time_to_live);
       Text("extra_time_to_live_variance:");
@@ -1226,7 +1211,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
       SliderInt("collision_binary_search_iterations", (int32 *)&ppmd->collision_binary_search_iterations, 0, 25);
       DragFloat("mass", &ppmd->mass);
       DragFloat3("gravity", &ppmd->gravity[0]);
-      DragFloat("drag", &ppmd->drag,0.01f,0.f,1.0f);
+      DragFloat("drag", &ppmd->drag, 0.01f, 0.f, 1.0f);
       DragFloat("bounce_min", &ppmd->bounce_min);
       DragFloat("bounce_max", &ppmd->bounce_max);
       if (ppmd->bounce_min > ppmd->bounce_max)
@@ -1521,7 +1506,7 @@ void Flat_Scene_Graph::handle_console_command(std::string_view cmd)
       {
         object_name = args[1];
       }
-      add_aiscene(*filename, object_name);
+      add_aiscene_old(*filename, object_name);
     }
   }
 
@@ -1699,7 +1684,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   {
     if (imgui_rows.size() < imgui_rows_count + 1)
     { // need to add an entire row
-      imgui_rows.push_back({ imgui_pane::blank});
+      imgui_rows.push_back({imgui_pane::blank});
     }
     // now lets make sure it has enough columns
     while (imgui_rows.back().size() < imgui_col_count)
@@ -1885,20 +1870,38 @@ void Flat_Scene_Graph::clear()
   lights = Light_Array();
 }
 
-Node_Index Flat_Scene_Graph::add_aiscene(std::string scene_file_path, std::string name, bool wait_on_resource)
+Node_Index Flat_Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string name, bool wait_on_resource)
 {
   scene_file_path = BASE_MODEL_PATH + scene_file_path;
   Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
+  if (!resource)
+  {
+    ASSERT(!wait_on_resource);
+    return NODE_NULL;
+  }
 
   uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
   uint32 base_material_import_index = resource_manager->current_material_pool_size;
+
+  for (uint32 i = 0; i < resource->meshes.size(); ++i)
+  {
+    string &name = resource->meshes[i].name;
+  }
+
+  Node_Index root_for_import = new_node();
+  Flat_Scene_Graph_Node *root_node = &nodes[root_for_import];
+  root_node->filename_of_import = scene_file_path;
+  root_node->name = name;
+
+
+
 
   // all meshes with the same name will get the same mesh_index and material_index
   unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
 
   for (uint32 i = 0; i < resource->meshes.size(); ++i)
   {
-    string &name = resource->meshes[i].name;
+    string& name = resource->meshes[i].name;
     uint32 last_dot = name.find_last_of('.');
     std::string name_before_dot = name.substr(0, last_dot);
 
@@ -1939,119 +1942,79 @@ Node_Index Flat_Scene_Graph::add_aiscene(std::string scene_file_path, std::strin
         material.frag_shader = "fragment_shader.frag";
       }
       Material_Index mat_i = resource_manager->push_custom_material(&material);
-      indices[name_before_dot] = {mesh_i, mat_i};
+      indices[name_before_dot] = { mesh_i, mat_i };
     }
   }
 
-  /*
-  Node_Index{
-  ...
-  vec3 position
-  Node_Index collider = NODE_NULL;
-  children[0] = that collider
-  }
-  */
 
-  // this would mean that any mesh could be used as a collider since theyre stored the same
-  // however, moving a rendered node doesnt move its collider...
-  // unless we set it as a child as well...
-  // which would work for rendering but how would all of this interface with a spatial partition?
-  // no problem for static geometry, we dont move the node, and we insert the node into the partition on startup
-  // for dynamic, the partition needs to be cleared completely and all dynamic objects need to be reinserted
-  // every tick
 
-  // block direct access to positional data
-
-  // Scene_Graph::move_node, orient_node, etc - they internally will update their status in the spatial partition
-
-  // now how do we store the spatial partition and how do we compute it properly
-
-  // simple version:
-
-  /*
-  struct Chunk
+  const uint32 number_of_children = resource->children.size();
+  for (uint32 i = 0; i < number_of_children; ++i)
   {
-    vector<Node_Index> occupying_nodes;
+    Node_Index child_index = add_import_node(resource, &resource->children[i], scene_file_path, &indices);
+    set_parent(child_index, root_for_import);
+
+    // assimp is giving us a scale of vec3(100) for blender fbx exports with scale:meters and Unit Scale: 1.0....
+    // but only for the un-parented objects of the import
+    // technically there is no root node for a blender export but we are grouping all objects in the import
+    // under a single root for convenience, so this is where we scale from cm to meters
+    const float32 cm_to_meters = 0.01f;
+    nodes[child_index].scale = cm_to_meters * nodes[child_index].scale;
   }
-  or
+  return root_for_import;
+}
 
-  Chunk[size][size][size]; //say 10x10x10
-
-  or
-
-  struct Chunk2
-  {
-  vector<Triangle> occupying_triangles;
-  }
-  Chunk2[size][size][size];
-
-
-
-  //ok for static geometry it is trivial to do the per-triangle version
-  //because we can just process it once on import and leave it
-
-
-  but for dynamic objects moving themselves in the partition
-  perhaps we use a separate partition for dynamic objects
-  and objects that want to check for collision
-  would check both static geometry and dynamic
-  but if we implemented both why would we bother with the static one anyway
-  maybe the dynamic objects use a list of primitives only, while the static geometry can be done per triangle
-
-  //okay so static is solved enough, we can do something more clever than just a 3d array, like an octree or something
-  //but what about dynamics
-
-  //
-  we want to move a node through our spatial partition
-  how do you figure out which chunks our
-
-  //we can either recompute the partition every frame
-
-  //or move objects within it
-
-  //if they are dynamic objects, lets assume they are all moving every frame anyway
-  //is shifting them inside the partition faster or slower than just recomputing it from scratch
-
-  //the collider can have a bounding box
-  //the box can be recomputed from the pose every frame
-  //and then the corners of the box can easily 'touch' the spatial partition very simply
-
-
-    //when a dynamic colliding object wants to test other dynamic colliding objects in the partition:
-    spatial_partition* partition = ...
-    for(obj : dynamicobjs)
-    dynamic_collider_pack* mycollider = &obj.collider
-
-    my_touching_partition_elements* = intersect(mycollider,partition); //this needs to be cheap, it will be done per
-  object for(elem : partition_elements) //the smaller this number the better..
-    {
-      occupying_objects* = elem.occupying_objects; //this should very often be zero unless we're very close to another
-  object for(other_obj : occupying_objects)
-      {
-        do_collision(obj,other_obj);
-      }
-    }
-
-  */
-
-  /*
-
-
-    okay so an octree does have to be rebuilt every frame from scratch apparently
-
-    oooohhh okay so there is a maximum number of items per tree node
-    and if the node exceeds that, it is divided again until no node has more than n items in it
-
-
-
-
-
-  */
-
+Node_Index Flat_Scene_Graph::add_aiscene_old(std::string scene_file_path, std::string name, bool wait_on_resource)
+{
+  scene_file_path = BASE_MODEL_PATH + scene_file_path;
+  Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
   if (!resource)
   {
     ASSERT(!wait_on_resource);
     return NODE_NULL;
+  }
+
+  uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
+  uint32 base_material_import_index = resource_manager->current_material_pool_size;
+
+  // all meshes with the same name will get the same mesh_index and material_index
+  // because we are using the mesh name to select the textures for it so why not
+  // we cant because theres no guarantee that the names are unique
+  unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
+
+  for (uint32 i = 0; i < resource->meshes.size(); ++i)
+  {
+    string &name = resource->meshes[i].name;
+    uint32 last_dot = name.find_last_of('.');
+    std::string name_before_dot = name.substr(0, last_dot);
+    if (!indices.contains(name_before_dot))
+    {
+      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
+      std::string path = resource->assimp_filename;
+      Material_Descriptor material;
+      path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
+      if (name_before_dot.find("collide_") != std::string::npos)
+      {
+        material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
+        material.frag_shader = "emission.frag";
+        material.wireframe = true;
+        material.backface_culling = false;
+        this->collision_octree.push(&resource->meshes[i]);
+      }
+      else
+      {
+        material.albedo = path + name_before_dot + "_albedo.png";
+        material.normal = path + name_before_dot + "_normal.png";
+        material.roughness = path + name_before_dot + "_roughness.png";
+        material.metalness = path + name_before_dot + "_metalness.png";
+        material.emissive = path + name_before_dot + "_emissive.png";
+        material.ambient_occlusion = path + name_before_dot + "_ao.png";
+        material.vertex_shader = "vertex_shader.vert";
+        material.frag_shader = "fragment_shader.frag";
+      }
+      Material_Index mat_i = resource_manager->push_custom_material(&material);
+      indices[name_before_dot] = {mesh_i, mat_i};
+    }
   }
 
   Node_Index root_for_import = new_node();
@@ -2082,22 +2045,22 @@ Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Data *scene, Importe
   Flat_Scene_Graph_Node *node = &nodes[node_index];
   node->filename_of_import = assimp_filename;
   node->name = import_node->name;
-  vec3 scale;
-  quat orientation;
-  vec3 translation;
   vec3 skew;
   vec4 perspective;
-  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, skew,perspective);
+  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, skew, perspective);
   node->orientation = conjugate(node->orientation);
   node->scale = float32(scene->scale_factor) * node->scale;
   uint32 number_of_mesh_indices = import_node->mesh_indices.size();
-  ASSERT(number_of_mesh_indices == 1); // maybe we should get rid of the mesh array and just use a single mesh per node
   for (uint32 i = 0; i < number_of_mesh_indices; ++i)
   {
     uint32 import_mesh_index = import_node->mesh_indices[i];
     std::string mesh_name = scene->meshes[import_mesh_index].name;
-    uint32 last_dot = mesh_name.find_last_of('.');
-    std::string name_before_dot = mesh_name.substr(0, last_dot);
+    int32 last_dot = mesh_name.find_last_of('.');
+    std::string name_before_dot = mesh_name;
+    if (last_dot != -1)
+    {
+      name_before_dot = mesh_name.substr(0, last_dot);
+    }
     node->model[i] = (*indices)[name_before_dot];
   }
   const uint32 number_of_children = import_node->children.size();
@@ -2446,7 +2409,7 @@ void Flat_Scene_Graph::initialize_lighting(std::string radiance, std::string irr
       material.roughness.mod = vec4(1);
       Material_Index mi = resource_manager->push_custom_material(&material);
 
-      Node_Index temp = add_aiscene("sphere-2.fbx", s("Light", i));
+      Node_Index temp = add_aiscene_old("sphere-2.fbx", s("Light", i));
       Node_Index actual_model = nodes[temp].children[0];
       set_parent(actual_model, root_for_lights);
       delete_node(temp);
@@ -2562,6 +2525,7 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
   }
 }
 
+
 void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
 {
   Flat_Scene_Graph_Node *entity = &nodes[node_index];
@@ -2579,29 +2543,46 @@ void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
              // ptr - call delete_node() to recursively delete
 }
 
-std::unique_ptr<Imported_Scene_Data> Resource_Manager::import_aiscene_async(std::string path, uint32 assimp_flags)
+static mutex import_lock;
+static vector<tuple<string, Imported_Scene_Data *, uint32>> import_queue;
+
+static condition_variable import_thread_cv;
+void import_thread_loop()
 {
-  std::unique_ptr<Imported_Scene_Data> result = nullptr;
-  Imported_Scene_Data *eventual_dst = &import_data[path];
-  if (eventual_dst->thread_working_on_import)
+  while (true)
   {
-    bool thread_has_finished_work = true;
-    if (thread_has_finished_work)
+    std::vector<tuple<string, Imported_Scene_Data *, uint32>> arg_v;
     {
-      *result = import_aiscene(path, assimp_flags); // should just retrieve the finished async data
-      return result;
+      unique_lock<mutex> hold(import_lock);
+      import_thread_cv.wait(hold);
+      if (import_queue.size() == 0)
+      {
+        continue;
+      }
+      arg_v.push_back(import_queue.back());
+      import_queue.pop_back();
     }
 
-    return nullptr;
+    for (auto &args : arg_v | std::views::reverse)
+    {
+      auto [path, dst, assimp_flags] = args;
+      Resource_Manager::import_aiscene_new(path, dst, assimp_flags);
+    }
   }
+}
 
-  result = std::make_unique<Imported_Scene_Data>();
-
-  eventual_dst->thread_working_on_import = true;
-
-  // down here should be the actual threaded code, above must be main thread
-  *result = import_aiscene(path, assimp_flags);
-  return result;
+bool Resource_Manager::import_aiscene_async(std::string path, Imported_Scene_Data *dst, uint32 assimp_flags)
+{
+  ASSERT(dst->valid != true);
+  if (!thread_active)
+  {
+    import_thread = thread(import_thread_loop);
+    thread_active = true;
+  }
+  lock_guard<mutex> hold(import_lock);
+  import_queue.emplace_back(path, dst, assimp_flags);
+  import_thread_cv.notify_one();
+  return false;
 }
 
 Imported_Scene_Node Resource_Manager::_import_aiscene_node(
@@ -2613,6 +2594,7 @@ Imported_Scene_Node Resource_Manager::_import_aiscene_node(
   {
     uint32 mesh_index = ainode->mMeshes[i];
     const aiMesh *aimesh = scene->mMeshes[mesh_index];
+
     Mesh_Index mesh_result{mesh_index};
     node.mesh_indices.push_back(mesh_result);
   }
@@ -2636,6 +2618,7 @@ std::string name_from_ai_type(aiMaterial *ai_material, aiTextureType type)
   return fix_filename(copy(&name));
 }
 
+#if 0
 /*
 Algorithm: recurse depth first and work back up
 if the node is empty but has children, the node concatenates the matrices and
@@ -2691,37 +2674,220 @@ void Resource_Manager::propagate_transformations_of_empty_nodes(
   }
 }
 
-Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 assimp_flags)
+#endif
+
+void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
 {
+  for (uint32 i = 0; i < scene->mNumAnimations; ++i)
+  {
+    aiAnimation *anim = scene->mAnimations[i];
+    aiString *animation_name = &anim->mName;
+    float64 duration = anim->mDuration;
+    float64 tickspersec = anim->mTicksPerSecond;
+
+    Skeletal_Animation animation;
+    animation.name = copy(animation_name);
+    animation.duration = duration;
+    animation.ticks_per_sec = tickspersec;
+
+    // The channel contains a name which must match one of the nodes in the heirarchy and three transformation arrays.
+    // a channel is a bone
+    uint32 bone_count = anim->mNumChannels;
+    animation.bone_animations.reserve(bone_count);
+    for (uint32 i = 0; i < bone_count; ++i)
+    {
+      aiNodeAnim *nodeanim = anim->mChannels[i];
+
+      aiString *nodename = &nodeanim->mNodeName;
+      uint32 num_pos_keys = nodeanim->mNumPositionKeys;
+      aiVectorKey *pos_keys = nodeanim->mPositionKeys;
+
+      uint32 num_rot_keys = nodeanim->mNumRotationKeys;
+      aiQuatKey *quat_keys = nodeanim->mRotationKeys;
+
+      uint32 num_scale_keys = nodeanim->mNumScalingKeys;
+      aiVectorKey *scale_keys = nodeanim->mScalingKeys;
+
+      aiAnimBehaviour *prestate = &nodeanim->mPreState;
+      aiAnimBehaviour *poststate = &nodeanim->mPostState;
+
+      ASSERT(num_pos_keys == num_rot_keys);
+      ASSERT(num_pos_keys == num_scale_keys);
+
+      uint32 count = num_pos_keys;
+
+      Bone_Animation bone_animation;
+      bone_animation.name = copy(nodename);
+      bone_animation.translations.reserve(count);
+      bone_animation.scales.reserve(count);
+      bone_animation.rotations.reserve(count);
+      bone_animation.timestamp.reserve(count);
+      for (uint32 i = 0; i < count; ++i)
+      {
+        bone_animation.translations.push_back(copy(pos_keys[i].mValue));
+        bone_animation.scales.push_back(copy(scale_keys[i].mValue));
+        bone_animation.rotations.push_back(copy(quat_keys[i].mValue));
+        float64 pos_time = pos_keys[i].mTime;
+        float64 scale_time = scale_keys[i].mTime;
+        float64 rot_time = quat_keys[i].mTime;
+        ASSERT(scale_time == pos_time);
+        ASSERT(rot_time == pos_time);
+        bone_animation.timestamp.push_back(pos_time);
+      }
+      animation.bone_animations.push_back(bone_animation);
+    }
+    dst->animations.push_back(animation);
+  }
+}
+
+void assert_valid_aimesh(const aiMesh *aimesh, const aiScene *scene)
+{
+  ASSERT(aimesh);
+  ASSERT(aimesh->HasNormals());
+  ASSERT(aimesh->HasPositions());
+  ASSERT(aimesh->GetNumUVChannels() == 1);
+  ASSERT(aimesh->HasTextureCoords(0));
+  if (!aimesh->HasTangentsAndBitangents())
+  {
+    const aiScene *s = aiApplyPostProcessing(scene, aiProcess_CalcTangentSpace);
+    std::string err = aiGetErrorString();
+    ASSERT(s == scene); // post process failed
+  }
+  ASSERT(aimesh->HasTangentsAndBitangents());
+  ASSERT(aimesh->HasVertexColors(0) == false); // TODO: add support for vertex colors
+  ASSERT(aimesh->mNumUVComponents[0] == 2);
+}
+
+void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *bones)
+{
+  uint32 vertex_count = d->mesh_data.positions.size();
+  d->mesh_data.bone_weights.resize(vertex_count);
+
+  // all the bones this mesh is affected by
+  for (uint32 i = 0; i < aimesh->mNumBones; ++i)
+  {
+    aiBone *aibone = aimesh->mBones[i];
+    string name = aibone->mName.data;
+    mat4 offsetmatrix = copy(aibone->mOffsetMatrix);
+
+    // (!!!)
+    // since there may be multiple meshes, this function may be called multiple times
+    // this means we need to search for the name of the bone to see if we already have it in the vector before adding it
+    int32 index_for_this_name_in_bone_vector = -1;
+    for (uint32 j = 0; j < bones->size(); ++j)
+    {
+      if ((*bones)[j].name == name)
+      {
+        index_for_this_name_in_bone_vector = j;
+        DEBUGASSERT((*bones)[j].offsetmatrix == offsetmatrix);
+        break;
+      }
+    }
+    if (index_for_this_name_in_bone_vector == -1)
+    {
+      bones->emplace_back();
+      bones->back().name = name;
+      bones->back().offsetmatrix = offsetmatrix;
+      index_for_this_name_in_bone_vector = bones->size() - 1;
+    }
+
+    uint32 num_of_vertices_affected_by_this_bone = aibone->mNumWeights;
+    for (uint32 j = 0; j < num_of_vertices_affected_by_this_bone; ++j)
+    {
+      aiVertexWeight weight = aibone->mWeights[j];
+      uint32 vertex_index = weight.mVertexId;
+      uint32 open_vertex_bone_slot = d->mesh_data.bone_weights[vertex_index].count;
+      ASSERT(open_vertex_bone_slot < MAX_BONES_PER_VERTEX);
+      d->mesh_data.bone_weights[vertex_index].count += 1;
+      d->mesh_data.bone_weights[vertex_index].indices[open_vertex_bone_slot] = index_for_this_name_in_bone_vector;
+      d->mesh_data.bone_weights[vertex_index].weights[open_vertex_bone_slot] = weight.mWeight;
+    }
+  }
+}
+
+void gather_mesh_indices(std::vector<uint32> &indices, const aiMesh *aimesh)
+{
+  for (uint32 i = 0; i < aimesh->mNumFaces; i++)
+  {
+    aiFace face = aimesh->mFaces[i];
+    if (face.mNumIndices == 3)
+    {
+      for (GLuint j = 0; j < 3; j++)
+      {
+        indices.push_back(face.mIndices[j]);
+      }
+    }
+    else
+    {
+      // set_message("non-triangle error", "", 5);
+    }
+  }
+  if (indices.size() < 3)
+  {
+    set_message("Error: No triangles in mesh:", aimesh->mName.data);
+    ASSERT(0); // will fail to upload
+  }
+}
+
+void gather_meshes(const aiScene *scene, Imported_Scene_Data *dst)
+{
+  for (uint32 i = 0; i < scene->mNumMeshes; ++i)
+  {
+    const aiMesh *aimesh = scene->mMeshes[i];
+    assert_valid_aimesh(aimesh, scene);
+    dst->meshes.emplace_back(Mesh_Descriptor{});
+    Mesh_Descriptor &d = dst->meshes.back();
+
+    d.name = aimesh->mName.data;
+    const int32 num_vertices = aimesh->mNumVertices;
+    copy_mesh_data(d.mesh_data.positions, aimesh->mVertices, num_vertices);
+    copy_mesh_data(d.mesh_data.normals, aimesh->mNormals, num_vertices);
+    copy_mesh_data(d.mesh_data.tangents, aimesh->mTangents, num_vertices);
+    copy_mesh_data(d.mesh_data.bitangents, aimesh->mBitangents, num_vertices);
+    copy_mesh_data(d.mesh_data.texture_coordinates, aimesh->mTextureCoords[0], num_vertices);
+    gather_mesh_indices(d.mesh_data.indices, aimesh);
+
+    gather_bones_for_scene_and_weights_for_vertices(aimesh, &d, &dst->bones);
+  }
+}
+
+bool Resource_Manager::import_aiscene_new(std::string path, Imported_Scene_Data *result, uint32 assimp_flags)
+{
+  ASSERT(result);
   const aiScene *scene = IMPORTER.ReadFile(path.c_str(), assimp_flags);
   if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
   {
     set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
-    ASSERT(0); // todo: fail gracefully instead
+    return false;
   }
-  Imported_Scene_Data dst;
-  dst.assimp_filename = path;
-
-  scene->mMetaData->Get("UnitScaleFactor", dst.scale_factor);
-  for (uint32 i = 0; i < scene->mNumMeshes; ++i)
-  {
-    dst.meshes.emplace_back(build_mesh_descriptor(scene, i, path));
-  }
-  // should not be meshes in root, but if there ever is we can add support for it
   ASSERT(scene->mRootNode);
   ASSERT(scene->mRootNode->mNumMeshes == 0);
 
-  int32 number_of_children = scene->mRootNode->mNumChildren;
-  for (uint32 i = 0; i < number_of_children; ++i)
+  Imported_Scene_Data dst;
+  dst.assimp_filename = path;
+  scene->mMetaData->Get("UnitScaleFactor", dst.scale_factor);
+
+  gather_meshes(scene, &dst);
+  gather_animations(scene, &dst);
+
+  for (uint32 i = 0; i < scene->mRootNode->mNumChildren; ++i)
   {
     const aiNode *node = scene->mRootNode->mChildren[i];
     Imported_Scene_Node child = _import_aiscene_node(path, scene, node);
     dst.children.push_back(child);
   }
+  return true;
 
-  // dst is now imported just as it was given in assimp
-  // but now we process it and remove nodes that don't have any meshes in them
-  // we don't do this on import because maybe we need them later for something - not sure
+#if 0 
+
+  //an entire import will have its own empty root node i believe
+  //one place this is really handy is that there is a single root node for two trees of a single
+  //import that has a tree for the mesh data itself, and also an adjacent tree for the
+  //skeleton that animates it, we can use and move the blank root node for the entire import
+  //and the skeleton moves with it
+  //perhaps we can detect that there is only one child of this blank root and then
+  //get rid of it in just that case
+
 
   // since root here is almost guaranteed to be empty, all of the children of the entire import
   // are going to end up in this vector
@@ -2729,7 +2895,7 @@ Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 as
 
   for (int32 i = 0; i < number_of_children; ++i)
   {
-    Imported_Scene_Node *child = &dst.children[i];
+    Imported_Scene_Node* child = &dst.children[i];
     propagate_transformations_of_empty_nodes(child, &temp_new_children);
 
     // delete this child if its empty
@@ -2748,8 +2914,7 @@ Imported_Scene_Data Resource_Manager::import_aiscene(std::string path, uint32 as
   // put the children back in to the import root
   std::move(std::begin(temp_new_children), std::end(temp_new_children), std::back_inserter(dst.children));
 
-  dst.valid = true;
-  return dst;
+#endif
 }
 
 Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
@@ -2777,43 +2942,27 @@ Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
 Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, bool wait_for_valid)
 {
   Imported_Scene_Data *import = &import_data[path];
-  bool requires_importing = !import->valid;
-  if (requires_importing)
+  if (!wait_for_valid)
   {
-    if (wait_for_valid)
+    bool finished = import_aiscene_async(path, import, default_assimp_flags);
+    if (finished)
     {
-      if (import->thread_working_on_import)
-      { // there was a previous call for async, and that load has started, but now we demand it
-        std::shared_ptr<Imported_Scene_Data> ptr = import_aiscene_async(path, default_assimp_flags);
-        while (!ptr)
-        {
-          ptr = import_aiscene_async(path, default_assimp_flags);
-        }
-        *import = *ptr;
-        ASSERT(import->valid);
-        ASSERT(import->assimp_filename == path);
-        return import;
-      }
-
-      *import = import_aiscene(path, default_assimp_flags);
-      ASSERT(import->valid);
+      ASSERT(import->valid == true);
       ASSERT(import->assimp_filename == path);
       return import;
     }
     else
     {
-      std::shared_ptr<Imported_Scene_Data> ptr = import_aiscene_async(path, default_assimp_flags);
-      if (ptr)
-      {
-        *import = *ptr;
-        ASSERT(import->valid);
-        ASSERT(import->assimp_filename == path);
-        return import;
-      }
       return nullptr;
     }
   }
-  return import;
+
+  if (wait_for_valid)
+  {
+    Imported_Scene_Data *import = &import_data[path];
+    bool success = import_aiscene_new(path, import, default_assimp_flags);
+    return import;
+  }
 }
 
 Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()

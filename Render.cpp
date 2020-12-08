@@ -1181,6 +1181,7 @@ void Material::bind()
 
   shader.use();
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
+  shader.set_uniform("include_ao_in_uv_scale", descriptor.include_ao_in_uv_scale);
   shader.set_uniform("discard_threshold", descriptor.discard_threshold);
   shader.set_uniform("dielectric_reflectivity", descriptor.dielectric_reflectivity);
 
@@ -3729,8 +3730,35 @@ void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor 
     float32 drag = d->drag * area_of_front * 0.5f * density_of_air * speedsq;
     particle.velocity = particle.velocity - dt * drag * velocity_n;
 #endif
+
+#if 1
     particle.velocity = particle.velocity * (1.0f - dt * len_v * 0.5f * d->drag);
     particle.velocity += dt * d->gravity;
+
+#endif
+
+#if 0
+    vec3 vel_squared = particle.velocity*particle.velocity;
+    
+
+    if(particle.velocity.x < 0)
+    {
+      vel_squared.x = -vel_squared.x;
+    }
+    if (particle.velocity.y < 0)
+    {
+      vel_squared.y = -vel_squared.y;
+    }
+    if (particle.velocity.z < 0)
+    {
+      vel_squared.z = -vel_squared.z;
+    }
+
+    vec3 drag = dt * d->drag * 0.5f * vel_squared;
+    particle.velocity = particle.velocity - drag; 
+    particle.velocity += dt * d->gravity;
+#endif
+
   }
   misc_particle_attribute_iteration_step(particle, d, current_time);
   if (particle.billboard)
@@ -3985,7 +4013,7 @@ void Wind_Particle_Physics::step(
       particle.velocity += (after_reflect_t * dt * d->gravity);
 
       // misc
-      particle.velocity *= d->drag; // needs to scale with velocity squared
+      //particle.velocity *= d->drag; // needs to scale with velocity squared
       particle.velocity += wind;
 
       // scale change etc
@@ -4047,6 +4075,7 @@ void Wind_Particle_Physics::step(
       particle.billboard_rotation_velocity = 0.f;
       particle.angular_velocity = vec3(0.f);
       simple_physics_step(particle, d, current_time);
+      particle.velocity = vec3(0.f);
     }
   }
 }
@@ -4130,7 +4159,14 @@ Particle misc_particle_emitter_step(
   quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
   new_particle.orientation = o * second_orientation * first_orientation;
 
-  new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
+  vec3 extra_scale;
+  std::normal_distribution<float32> dist(0.f,d->initial_extra_scale_variance.x);
+  extra_scale.x = dist(generator);
+  dist = std::normal_distribution<float32>(0.f,d->initial_extra_scale_variance.y);
+  extra_scale.y = dist(generator);
+  dist = std::normal_distribution<float32>(0.f,d->initial_extra_scale_variance.z);
+  extra_scale.z = dist(generator);
+  new_particle.scale = d->initial_scale + extra_scale;
   new_particle.scale =
       new_particle.scale + random_between(0.f, d->initial_extra_scale_uniform_variance) * d->initial_scale;
 
@@ -5628,7 +5664,8 @@ void Liquid_Surface::zero_velocity()
 }
 bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph *scene)
 {
-  if (last_applied_terrain_tick < last_generated_terrain_tick)
+
+  if ((last_applied_terrain_tick < last_generated_terrain_tick))
   {
     scene->collision_octree.clear();
     mat4 m = scene->build_transformation(ground);
@@ -5767,14 +5804,20 @@ void Liquid_Surface::run(State *state)
     painter.clear = 2;
   }
   ImGui::SameLine();
-  if (ImGui::Button("Generate Terrain Octree"))
+  if (ImGui::Button("Generate Terrain Octree") || want_texture_download)
   {
     start_texture_download();
+    want_texture_download = false;
   }
   if (read_sync != 0)
   { // if finish is successful, read_sync will be 0 until the next download request
-    finish_texture_download_and_generate_geometry();
+    bool success = finish_texture_download_and_generate_geometry();
   }
+
+  //if the grid is smaller than the source heightmap
+  //we will resize the texture to the size of the grid
+  //and put that texture in the painter
+  //rather than leaving the oversized one in there
   if (ImGui::Button("Set Heightmap To Downloaded"))
   {
     start_texture_download();

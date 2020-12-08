@@ -13,6 +13,65 @@ enum Mesh_Primitive
   plane,
   cube
 };
+
+
+
+#define MAX_BONES_PER_VERTEX 4
+struct Vertex_Bone_Data
+{
+  uint32 count = 0;
+  uint32 indices[MAX_BONES_PER_VERTEX];
+  uint32 weights[MAX_BONES_PER_VERTEX];
+};
+
+typedef uint32 Skeletal_Animation_Keyframe_Index;
+typedef uint32 Bone_Index;
+#define MAX_BONE_CHILDREN 15
+
+//is a tree structure, indices reference keyframe mat4's
+struct Bone_Animation
+{
+  //this name must/will match the name in the node heirarchy
+  //not sure why exactly
+  std::string name;
+
+  //all the keyframes
+  std::vector<vec3> translations;
+  std::vector<vec3> scales;
+  std::vector<quat> rotations;
+  std::vector<float32> timestamp;
+};
+
+
+//one for walk, one for jump, etc
+struct Skeletal_Animation
+{
+  std::string name;
+  float64 duration;
+  float64 ticks_per_sec;
+  std::vector<Bone_Animation> bone_animations;
+};
+
+
+//specific for each entity in the game
+struct Skeletal_Animation_System
+{
+  uint32 currently_playing_animation = 0;
+  float32 time = 0.f;
+
+  std::vector<Skeletal_Animation> animation_set;
+};
+
+
+//this bone has a name, which tells us which of the
+//bones in the heirarchy it is
+struct Bone
+{
+  std::string name;
+  mat4 offsetmatrix;
+};
+
+
 struct Mesh_Data
 {
   std::vector<vec3> positions;
@@ -21,7 +80,9 @@ struct Mesh_Data
   std::vector<vec3> tangents;
   std::vector<vec3> bitangents;
   std::vector<uint32> indices;
-  
+  std::vector<Vertex_Bone_Data> bone_weights;
+
+
   void reserve(uint32 size)
   {
     positions.reserve(size);
@@ -30,6 +91,7 @@ struct Mesh_Data
     tangents.reserve(size);
     bitangents.reserve(size);
     indices.reserve(size);
+    bone_weights.reserve(size);
   }
 
   std::string build_unique_identifier() const
@@ -88,4 +150,3 @@ struct Mesh_Descriptor
  // }
 };
 
-Mesh_Descriptor build_mesh_descriptor(const aiScene *scene, uint32 i, std::string path);

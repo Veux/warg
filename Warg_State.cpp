@@ -821,10 +821,10 @@ void Warg_State::update()
   // scene.collision_octree.clear();
 
   Node_Index arena = scene.nodes[map->node].children[0];
-  Node_Index arena_collider = scene.nodes[arena].collider;
-  Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
-  Mesh *meshptr = &scene.resource_manager->mesh_pool[meshindex];
-  Mesh_Descriptor *blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
+  //Node_Index arena_collider = scene.nodes[arena].collider;
+  //Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
+ //Mesh *meshptr = &scene.resource_manager->mesh_pool[meshindex];
+  //Mesh_Descriptor *blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
 
   // scene.collision_octree.push(blades_edge_mesh_descriptor);
 
@@ -1006,7 +1006,7 @@ void Warg_State::update()
   if (terrain.apply_geometry_to_octree_if_necessary(&scene))
   {
     mat4 M = scene.build_transformation(map->node);
-    scene.collision_octree.push(blades_edge_mesh_descriptor, &M);
+    //scene.collision_octree.push(blades_edge_mesh_descriptor, &M);
    
     M = scene.build_transformation(terrain.ground);
     scene.collision_octree.push(&terrain.terrain_geometry, &M);

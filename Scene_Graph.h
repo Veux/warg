@@ -27,22 +27,23 @@ enum struct imgui_pane
   blank,
   end
 };
+
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
-const uint32 default_assimp_flags = //aiProcess_FlipWindingOrder |
+const uint32 default_assimp_flags = // aiProcess_FlipWindingOrder |
                                     // aiProcess_Triangulate |
                                     // aiProcess_FlipUVs |
-                                    aiProcess_CalcTangentSpace |
-                                    // aiProcess_MakeLeftHanded|
-                                    // aiProcess_JoinIdenticalVertices |
-                                    // aiProcess_PreTransformVertices |
-                                    // aiProcess_GenUVCoords |
-                                    // aiProcess_OptimizeGraph|
-                                    // aiProcess_ImproveCacheLocality|
-                                    // aiProcess_OptimizeMeshes|
-                                    // aiProcess_GenNormals|
-                                    // aiProcess_GenSmoothNormals|
-                                    // aiProcess_FixInfacingNormals |
-                                    0;
+    aiProcess_CalcTangentSpace |
+    // aiProcess_MakeLeftHanded|
+    // aiProcess_JoinIdenticalVertices |
+    // aiProcess_PreTransformVertices |
+    // aiProcess_GenUVCoords |
+    // aiProcess_OptimizeGraph|
+    // aiProcess_ImproveCacheLocality|
+    // aiProcess_OptimizeMeshes|
+    // aiProcess_GenNormals|
+    // aiProcess_GenSmoothNormals|
+    // aiProcess_FixInfacingNormals |
+    0;
 
 struct Plane_nd
 {
@@ -71,9 +72,9 @@ bool point_within_square(vec3 p, vec3 ps, float32 size);
 #endif
 #define TRIANGLES_PER_NODE 4096
 
-//if split style is on, then triangles are stored in each max-depth node that they touch only
-//if the nodes are too small relative to the triangles, then there is excess storage required
-//if split style is off, then triangles are only stored in the node that entirely contains them
+// if split style is on, then triangles are stored in each max-depth node that they touch only
+// if the nodes are too small relative to the triangles, then there is excess storage required
+// if split style is off, then triangles are only stored in the node that entirely contains them
 #define OCTREE_SPLIT_STYLE
 
 #define OCTREE_VECTOR_STYLE
@@ -97,7 +98,8 @@ bool point_within_square(vec3 p, vec3 ps, float32 size);
 
 struct AABB
 {
-  AABB(vec3 center) {
+  AABB(vec3 center)
+  {
     min = center;
     max = center;
   }
@@ -108,7 +110,7 @@ struct AABB
 bool aabb_intersection(const vec3 &mina, const vec3 &maxa, const vec3 &minb, const vec3 &maxb);
 bool aabb_intersection(const AABB &a, const AABB &b);
 
-bool aabb_plane_intersection(const AABB& b, const vec3& n, float32 d);
+bool aabb_plane_intersection(const AABB &b, const vec3 &n, float32 d);
 
 void push_aabb(AABB &aabb, const vec3 &p);
 
@@ -130,27 +132,27 @@ enum Octree_Child_Index
 struct Octree_Node
 {
   bool insert_triangle(const Triangle_Normal &tri) noexcept;
-  bool push(const Triangle_Normal &triangle, uint8 depth,Octree* owner) noexcept;
+  bool push(const Triangle_Normal &triangle, uint8 depth, Octree *owner) noexcept;
   const Triangle_Normal *test_this(const AABB &probe, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const;
   const Triangle_Normal *test(const AABB &probe, uint8 depth, uint32 *counter) const;
   void testall(const AABB &probe, uint8 depth, uint32 *counter, std::vector<Triangle_Normal> *accumulator) const;
   void clear();
-  
+
   std::array<Octree_Node *, 8> children = {nullptr};
-  #ifdef OCTREE_VECTOR_STYLE
-  std::vector<Triangle_Normal>occupying_triangles;
-  #else
+#ifdef OCTREE_VECTOR_STYLE
+  std::vector<Triangle_Normal> occupying_triangles;
+#else
   std::array<Triangle_Normal, TRIANGLES_PER_NODE> occupying_triangles;
   uint32 free_triangle_index = 0;
-  #endif
+#endif
 
   // std::array<AABB, 256> occupying_aabbs;
   vec3 minimum;
   vec3 center;
   float32 size;
-  //float32 halfsize;
+  // float32 halfsize;
   // warning about some reallocating owning object...
-  //Octree *owner = nullptr;
+  // Octree *owner = nullptr;
   uint8 mydepth;
 };
 
@@ -167,7 +169,7 @@ struct Octree
     return colliders;
   }
 
- void test_all(const AABB& probe, uint32* counter, std::vector<Triangle_Normal>* acc) const
+  void test_all(const AABB &probe, uint32 *counter, std::vector<Triangle_Normal> *acc) const
   {
     root->testall(probe, 0, counter, acc);
   }
@@ -177,14 +179,14 @@ struct Octree
     clear();
     root = &nodes[0];
     root->size = size;
-    //root->halfsize = 0.5f*size;
+    // root->halfsize = 0.5f*size;
     root->minimum = -vec3(0.5 * root->size);
     root->center = root->minimum + vec3(0.5 * root->size);
   }
 
   Octree_Node *root;
-  //std::array<Octree_Node, 65536> nodes;
-  std::vector<Octree_Node> nodes; //size is constant, set in constructor
+  // std::array<Octree_Node, 65536> nodes;
+  std::vector<Octree_Node> nodes; // size is constant, set in constructor
   Octree_Node *new_node(vec3 p, float32 size, uint8 parent_depth) noexcept;
   void clear();
   std::vector<Render_Entity> get_render_entities(Flat_Scene_Graph *owner);
@@ -235,8 +237,6 @@ struct Octree
 
   uint32 pushed_triangle_count = 0;
   uint32 stored_triangle_count = 0;
-
-
 };
 
 struct Imported_Scene_Node
@@ -258,17 +258,18 @@ struct Imported_Scene_Data
   std::string assimp_filename;
   std::vector<Imported_Scene_Node> children;
   std::vector<Mesh_Descriptor> meshes;
-  bool valid = false;
-  bool thread_working_on_import = false;
+  std::vector<Material_Descriptor> materials;
+  std::vector<Bone> bones;
+  std::vector<Skeletal_Animation> animations;
   float64 scale_factor = 1.;
+  std::atomic<bool> valid = false;
+  bool import_failure = false;
 };
-
 
 struct Resource_Manager
 {
   Material_Index push_custom_material(Material_Descriptor *d);
   Mesh_Index push_custom_mesh(Mesh_Descriptor *d);
-
 
 #define MAX_POOL_SIZE 5000
   std::array<Mesh, MAX_POOL_SIZE> mesh_pool;
@@ -276,15 +277,15 @@ struct Resource_Manager
   uint32 current_mesh_pool_size = 0;
   uint32 current_material_pool_size = 0;
 
-private:
-  friend Flat_Scene_Graph;
+  bool thread_active = false;
+  std::thread import_thread;
+
   // opens assimp file using the importer, recursively calls _import_aiscene_node to build the Imported_Scene_Data
-  Imported_Scene_Data import_aiscene(std::string path, uint32 assimp_flags = default_assimp_flags);
+  static bool import_aiscene_new(std::string path, Imported_Scene_Data *result, uint32 assimp_flags = default_assimp_flags);
 
   // must be called from main thread
   // returns nullptr if busy loading
-  std::unique_ptr<Imported_Scene_Data> import_aiscene_async(
-      std::string path, uint32 assimp_flags = default_assimp_flags);
+  bool import_aiscene_async(std::string path, Imported_Scene_Data *dst, uint32 assimp_flags = default_assimp_flags);
 
   // begins loading of the assimp resource
   // returns pointer to the import if it is ready, else returns null
@@ -293,11 +294,12 @@ private:
   // eventually produce the Imported_Scene_Data
   Imported_Scene_Data *request_valid_resource(std::string assimp_path, bool wait_for_valid = true);
 
-  // pure
-  Imported_Scene_Node _import_aiscene_node(std::string assimp_filename, const aiScene *scene, const aiNode *node);
+  static Imported_Scene_Node _import_aiscene_node(std::string assimp_filename, const aiScene *scene, const aiNode *node);
 
+#if 0
   // pure - gets rid of nodes that have no meshes
   void propagate_transformations_of_empty_nodes(Imported_Scene_Node *this_node, std::vector<Imported_Scene_Node> *temp);
+#endif
 
   // this holds the model data in system ram for all imports and isnt cleared
   // if the model data inside were to be cleared, then it would ruin the mesh cache
@@ -316,7 +318,7 @@ struct Flat_Scene_Graph_Node
   vec3 position = {0, 0, 0};
   quat orientation = glm::angleAxis(0.f, glm::vec3(0, 0, 1));
   vec3 scale = {1, 1, 1};
-  vec3 oriented_scale = {1,1,1};
+  vec3 oriented_scale = {1, 1, 1};
   vec3 scale_vertex = {1, 1, 1};
   vec3 velocity = {0, 0, 0};
   // mat4 import_basis = mat4(1);
@@ -326,7 +328,7 @@ struct Flat_Scene_Graph_Node
   Node_Index collider = NODE_NULL;
   bool exists = false;
   bool visible = true;
-  bool propagate_visibility = true; 
+  bool propagate_visibility = true;
   bool wait_on_resource = true;
 
   // require the mesh and materials to be available immediately
@@ -346,7 +348,11 @@ struct Flat_Scene_Graph
   // every call after the first of a given path will have its import read from a cache instead of disk
   // and should be somewhat quick but not good for doing over and over in realtime
   // instead, if possible, use deep_clone()
-  Node_Index add_aiscene(std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
+  Node_Index add_aiscene_old(
+      std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
+
+  Node_Index add_aiscene_new(
+      std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
 
   // todo: collider object grabbyhand thing
 
@@ -446,10 +452,11 @@ private:
   bool showing_model = false;
   bool showing_mesh_data = false;
 
-  std::vector<std::vector<imgui_pane>> imgui_rows = { {imgui_pane::node_tree ,imgui_pane::selected_node} ,{imgui_pane::selected_mat,imgui_pane::light_array}};
+  std::vector<std::vector<imgui_pane>> imgui_rows = {
+      {imgui_pane::node_tree, imgui_pane::selected_node}, {imgui_pane::selected_mat, imgui_pane::light_array}};
   uint32 imgui_rows_count = 1;
-  uint32 imgui_col_count  = 1;
-  //imgui_pane imgui_panes[6] = {node_tree, resource_man, light_array, selected_node, selected_mat, blank};
+  uint32 imgui_col_count = 1;
+  // imgui_pane imgui_panes[6] = {node_tree, resource_man, light_array, selected_node, selected_mat, blank};
 
   void draw_imgui_specific_mesh(Mesh_Index mesh_index);
   void draw_imgui_specific_material(Material_Index material_index);

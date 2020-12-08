@@ -22,8 +22,8 @@
 #define SHOW_UV_TEST_GRID 0
 #define POSTPROCESSING 1
 #define NODE_NULL uint32(-1)
-#define MAX_MESHES_PER_NODE uint32(10)
-#define MAX_CHILDREN uint32(30)
+#define MAX_MESHES_PER_NODE uint32(50)
+#define MAX_CHILDREN uint32(330)
 #define MAX_NODES uint32(10000)
 #define INPUT_BUFFER_SIZE 100
 #define MAX_CHARACTERS 100
@@ -57,7 +57,6 @@
 #define ROOT_PATH std::string("")
 #endif
 
-#define MAX_ARRAY_STRING_LENGTH 64
 
 
 template <typename T> std::string s(T value)
