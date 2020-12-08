@@ -142,7 +142,6 @@ template <typename V> struct Animation
     }
 
     _current = lerp(_v1, _v2, _t);
-    _t = t;
   }
   void set_new_points(V &v1, V &v2)
   {

@@ -8,7 +8,7 @@ Array_String::Array_String()
 {
   str[0] = '\0';
 }
-Array_String::Array_String(std::string &rhs)
+Array_String::Array_String(std::string rhs)
 {
   ASSERT(rhs.size() <= MAX_ARRAY_STRING_LENGTH);
   SDL_strlcpy(&str[0], &rhs[0], rhs.size() + 1);

@@ -4729,7 +4729,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::SameLine();
   ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
   ImGui::InputFloat("Zoom", &zoom, 0.01);
-  char *selected_blendmode = "";
+  Array_String selected_blendmode = "";
   if (blendmode == 0)
     selected_blendmode = "Mix";
   if (blendmode == 1)
@@ -4760,7 +4760,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::Checkbox("A", (bool *)&mask.a);
 
   ImGui::PushID("blendmode");
-  if (ImGui::BeginCombo("", selected_blendmode))
+  if (ImGui::BeginCombo("", &selected_blendmode.str[0]))
   {
     if (ImGui::Selectable("Blend"))
     {

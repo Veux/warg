@@ -1901,7 +1901,19 @@ Node_Index Flat_Scene_Graph::add_aiscene(std::string scene_file_path, std::strin
     string &name = resource->meshes[i].name;
     uint32 last_dot = name.find_last_of('.');
     std::string name_before_dot = name.substr(0, last_dot);
-    if (!indices.contains(name_before_dot))
+
+
+    bool contains = false;
+    for(auto& elem : indices)
+    {
+      if(elem.first == name_before_dot)
+      {
+        contains = true;
+        break;
+      }
+    }
+
+    if (!contains)
     {
       Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
       std::string path = resource->assimp_filename;
@@ -2073,7 +2085,9 @@ Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Data *scene, Importe
   vec3 scale;
   quat orientation;
   vec3 translation;
-  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, vec3(), vec4());
+  vec3 skew;
+  vec4 perspective;
+  bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, skew,perspective);
   node->orientation = conjugate(node->orientation);
   node->scale = float32(scene->scale_factor) * node->scale;
   uint32 number_of_mesh_indices = import_node->mesh_indices.size();
@@ -2240,7 +2254,9 @@ void Flat_Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
   vec3 scale;
   quat orientation;
   vec3 translation;
-  decompose(M_to_Mchild, scale, orientation, translation, vec3(), vec4());
+  vec3 skew;
+  vec4 perspective;
+  decompose(M_to_Mchild, scale, orientation, translation, skew, perspective);
   orientation = conjugate(orientation);
   set_parent(grabee, grabber);
   nodes[grabee].position = translation;
@@ -2254,7 +2270,9 @@ void Flat_Scene_Graph::drop(Node_Index child)
   vec3 scale;
   quat orientation;
   vec3 translation;
-  decompose(M, scale, orientation, translation, vec3(), vec4());
+  vec3 skew;
+  vec4 perspective;
+  decompose(M, scale, orientation, translation, skew, perspective);
   orientation = conjugate(orientation);
 
   set_parent(child);

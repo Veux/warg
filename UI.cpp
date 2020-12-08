@@ -132,7 +132,19 @@ bool File_Picker::run()
         }
       }
     }
-    if (!FILE_PICKER_TEXTURE_CACHE.contains(td.name))
+
+
+    bool contains = false;
+    for (auto& elem : FILE_PICKER_TEXTURE_CACHE)
+    {
+      if (elem.first == td.name)
+      {
+        contains = true;
+        break;
+      }
+    }
+
+    if (!contains)
     {
       FILE_PICKER_TEXTURE_CACHE[td.name] = Texture(td);
     }
