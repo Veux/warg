@@ -155,5 +155,5 @@ void buff_on_damage_dispatch(
     BuffDef *formula, Buff *buff, Game_State *game_state, Character *subject, Character *object, float32 damage);
 void buff_on_tick_dispatch(BuffDef *formula, Buff *buff, Game_State *game_state, Character *character);
 void spell_object_on_hit_dispatch(
-    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Flat_Scene_Graph* scene);
-void spell_on_release_dispatch(Spell_Formula *formula, Game_State *game_state, Character *caster, Flat_Scene_Graph* scene);
+    Spell_Object_Formula *formula, Spell_Object *object, Game_State *game_state, Scene_Graph* scene);
+void spell_on_release_dispatch(Spell_Formula *formula, Game_State *game_state, Character *caster, Scene_Graph* scene);

@@ -4,7 +4,7 @@
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
 
-Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
+Blades_Edge::Blades_Edge(Scene_Graph &scene)
 {
   spawn_pos[0] = { 0, 0, 15 };
   spawn_pos[1] = { 45, 45, 5 };
@@ -17,7 +17,7 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   if (CONFIG.render_simple)
     material.albedo.mod = vec4(0.4f);
 
-  node = scene.add_aiscene_old("Blades_Edge/bea2.fbx","Blades Edge");
+  node = scene.add_aiscene_new("Blades_Edge/bea2.fbx","Blades Edge");
 
 }
 
@@ -130,7 +130,7 @@ void Character::remove_debuff(Spell_ID debuff_id)
   }
 }
 
-void move_char(Character &character, Input command, Flat_Scene_Graph* scene)
+void move_char(Character &character, Input command, Scene_Graph* scene)
 {
   //return;
   vec3 &pos = character.physics.position;
@@ -213,7 +213,7 @@ void move_char(Character &character, Input command, Flat_Scene_Graph* scene)
 
 
 
-void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
+void check_collision(Collision_Packet &colpkt, Scene_Graph* scene)
 {
 
   AABB box(colpkt.pos_r3);
@@ -237,7 +237,7 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph* scene)
 }
 
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
-    Flat_Scene_Graph* scene)
+    Scene_Graph* scene)
 {
   float epsilon = 0.005f;
 
@@ -289,7 +289,7 @@ vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_
 }
 
 void collide_and_slide_char(Character_Physics &physics, vec3 &radius, const vec3 &vel, const vec3 &gravity,
-    Flat_Scene_Graph* scene)
+    Scene_Graph* scene)
 {
 
   Collision_Packet colpkt;

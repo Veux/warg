@@ -1171,7 +1171,7 @@ struct Liquid_Surface
   void start_texture_download();
   bool finish_texture_download();
   void zero_velocity();
-  bool apply_geometry_to_octree_if_necessary(Flat_Scene_Graph *scene);
+  bool apply_geometry_to_octree_if_necessary(Scene_Graph *scene);
   Texture_Paint painter;
   Node_Index ground = NODE_NULL;
   Node_Index water = NODE_NULL;
@@ -1235,6 +1235,9 @@ struct Renderer
   // if you have a hundred teeny tiny lights in the distance, and one big sun that touches all
   // pixels, almost all pixels will do only 1 light computation, and only the ones close to the lights will do 2 or very
   // rarely more
+
+
+  
 
   // todo: irradiance map generation
   // todo: skeletal animation
@@ -1331,14 +1334,14 @@ struct Renderer
   std::vector<Render_Entity> translucent_entities;
   void set_uniform_shadowmaps(Shader &shader);
   void build_shadow_maps();
-  void opaque_pass(float32 time);
-  void instance_pass(float32 time);
-  void translucent_pass(float32 time);
-  void pbr_specular_volumetric_pass(float32 time);
-  void postprocess_pass(float32 time);
-  void skybox_pass(float32 time);
-  void copy_to_primary_framebuffer_and_txaa(float32 time);
-  void use_fxaa_shader(float32 state_time);
+  void opaque_pass(float64 time);
+  void instance_pass(float64 time);
+  void translucent_pass(float64 time);
+  void pbr_specular_volumetric_pass(float64 time);
+  void postprocess_pass(float64 time);
+  void skybox_pass(float64 time);
+  void copy_to_primary_framebuffer_and_txaa(float64 time);
+  void use_fxaa_shader(float64 state_time);
   Texture bloom_target;
   Texture bloom_result;
   Texture bloom_intermediate;

@@ -5,7 +5,6 @@
 #include "Physics.h"
 #include "assimp/metadata.h"
 #include <errno.h>
-#include <ranges>
 using json = nlohmann::json;
 using namespace std;
 using namespace ImGui;
@@ -33,19 +32,19 @@ bool push_color_text_if_tree_label_open(const char *label, ImVec4 color_true, Im
   return node_is_open;
 }
 
-Node_Index Flat_Scene_Graph::add_mesh(std::string name, Mesh_Descriptor *d, Material_Descriptor *md)
+Node_Index Scene_Graph::add_mesh(std::string name, Mesh_Descriptor *d, Material_Descriptor *md)
 {
   Mesh_Index mesh_index = resource_manager->push_custom_mesh(d);
   Material_Index material_index = resource_manager->push_custom_material(md);
 
   Node_Index node_index = new_node();
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  Scene_Graph_Node *node = &nodes[node_index];
   node->model[0] = {mesh_index, material_index};
   node->name = name;
   return node_index;
 }
 
-Node_Index Flat_Scene_Graph::add_mesh(Mesh_Primitive p, std::string name, Material_Descriptor *md)
+Node_Index Scene_Graph::add_mesh(Mesh_Primitive p, std::string name, Material_Descriptor *md)
 {
   Mesh_Descriptor d(p, name);
   return add_mesh(name, &d, md);
@@ -76,7 +75,7 @@ Node_Index Flat_Scene_Graph::add_mesh(Mesh_Primitive p, std::string name, Materi
 //  return new_index;
 //}
 
-void Flat_Scene_Graph::modify_material(
+void Scene_Graph::modify_material(
     Material_Index material_index, Material_Descriptor *material, bool modify_or_overwrite)
 {
   Material_Descriptor *current_descriptor = resource_manager->material_pool[material_index].get_modifiable_descriptor();
@@ -94,12 +93,12 @@ void Flat_Scene_Graph::modify_material(
   }
 }
 
-void Flat_Scene_Graph::modify_all_materials(
+void Scene_Graph::modify_all_materials(
     Node_Index node_index, Material_Descriptor *m, bool modify_or_overwrite, bool children_too)
 {
   if (node_index == NODE_NULL)
     return;
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  Scene_Graph_Node *node = &nodes[node_index];
 
   for (uint32 i = 0; i < node->model.size(); ++i)
   {
@@ -116,7 +115,7 @@ void Flat_Scene_Graph::modify_all_materials(
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_specific_mesh(Mesh_Index mesh_index)
+void Scene_Graph::draw_imgui_specific_mesh(Mesh_Index mesh_index)
 {
   std::unordered_map<std::string, Imported_Scene_Data> *import_data = &resource_manager->import_data;
   std::array<Mesh, MAX_POOL_SIZE> *mesh_pool = &resource_manager->mesh_pool;
@@ -149,7 +148,7 @@ void Flat_Scene_Graph::draw_imgui_specific_mesh(Mesh_Index mesh_index)
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_index)
+void Scene_Graph::draw_imgui_specific_material(Material_Index material_index)
 {
   std::unordered_map<std::string, Imported_Scene_Data> *import_data = &resource_manager->import_data;
 
@@ -239,7 +238,7 @@ void Flat_Scene_Graph::draw_imgui_specific_material(Material_Index material_inde
   ImGui::PopItemWidth();
 }
 
-void Flat_Scene_Graph::draw_imgui_light_array()
+void Scene_Graph::draw_imgui_light_array()
 {
   static bool open = false;
   const uint32 initial_height = 130;
@@ -443,7 +442,7 @@ void Flat_Scene_Graph::draw_imgui_light_array()
   // ImGui::End();
 }
 
-void Flat_Scene_Graph::draw_imgui_command_interface()
+void Scene_Graph::draw_imgui_command_interface()
 {
   if (ImGui::Button("Console"))
   {
@@ -458,7 +457,7 @@ void Flat_Scene_Graph::draw_imgui_command_interface()
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
+void Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
 {
   // vec3 velocity = { 0, 0, 0 };
   // std::array<std::pair<Mesh_Index, Material_Index>, MAX_MESHES_PER_NODE> model;
@@ -477,7 +476,7 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
     return;
   }
 
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  Scene_Graph_Node *node = &nodes[node_index];
   ImGui::Text("Node:[");
   ImGui::SameLine();
   ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node_index).c_str());
@@ -523,14 +522,14 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   ImGui::SameLine();
   ImGui::Text("]");
 
-  ImGui::Text("Collider:[");
-  ImGui::SameLine();
-  if (node->collider == NODE_NULL)
-    ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
-  else
-    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->collider).c_str());
-  ImGui::SameLine();
-  ImGui::Text("]");
+  //ImGui::Text("Collider:[");
+  //ImGui::SameLine();
+  //if (node->collider == NODE_NULL)
+  //  ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+  //else
+  //  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->collider).c_str());
+  //ImGui::SameLine();
+  //ImGui::Text("]");
 
   if (!showing_model)
   {
@@ -618,14 +617,14 @@ void Flat_Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
+void Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
 {
   if (node_index == NODE_NULL)
   {
     return;
   }
 
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  Scene_Graph_Node *node = &nodes[node_index];
   if (!node->exists)
     return;
 
@@ -695,7 +694,7 @@ void Flat_Scene_Graph::draw_imgui_tree_node(Node_Index node_index)
   }
 }
 
-bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr, uint32 slot)
+bool Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr, uint32 slot)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   Array_String str = ptr->t.name;
@@ -744,7 +743,7 @@ bool Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture *ptr
   return reload;
 }
 
-void Flat_Scene_Graph::draw_imgui_const_texture_element(const char *name, Texture_Descriptor *ptr)
+void Scene_Graph::draw_imgui_const_texture_element(const char *name, Texture_Descriptor *ptr)
 {
   if (ImGui::TreeNode(name))
   {
@@ -761,7 +760,7 @@ void Flat_Scene_Graph::draw_imgui_const_texture_element(const char *name, Textur
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_resource_manager()
+void Scene_Graph::draw_imgui_resource_manager()
 {
   std::unordered_map<std::string, Imported_Scene_Data> *import_data = &resource_manager->import_data;
   std::array<Mesh, MAX_POOL_SIZE> *mesh_pool = &resource_manager->mesh_pool;
@@ -863,11 +862,11 @@ void Flat_Scene_Graph::draw_imgui_resource_manager()
   }
 }
 
-void Flat_Scene_Graph::draw_active_nodes()
+void Scene_Graph::draw_active_nodes()
 {
   for (uint32 i = 0; i < MAX_NODES; ++i)
   {
-    Flat_Scene_Graph_Node *node = &nodes[i];
+    Scene_Graph_Node *node = &nodes[i];
 
     if (node->parent == NODE_NULL)
     {
@@ -924,7 +923,7 @@ const char *imgui_pane_to_string(imgui_pane p)
   return "Unknown";
 }
 
-void Flat_Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
+void Scene_Graph::draw_imgui_pane_selection_button(imgui_pane *modifying)
 {
   PushID(uint32(modifying));
 
@@ -973,7 +972,7 @@ void imgui_node_element(Node_Index node)
   ImGui::Text("]");
 }
 
-void Flat_Scene_Graph::draw_imgui_particle_emitter()
+void Scene_Graph::draw_imgui_particle_emitter()
 {
 
   if (ImGui::Button("Push Emitter"))
@@ -1362,7 +1361,7 @@ void Flat_Scene_Graph::draw_imgui_particle_emitter()
   ImGui::EndChild();
 }
 
-void Flat_Scene_Graph::draw_imgui_octree()
+void Scene_Graph::draw_imgui_octree()
 {
 
   ImGui::Text(s("Pushed Triangles: ", collision_octree.pushed_triangle_count).c_str());
@@ -1469,12 +1468,12 @@ void extract_args(std::string_view str, vector<string> *args)
 
   // asd,etfg,asd(),sgd -> [[asd],[etfg],[asd()],[sgd]]
 
-  uint32 end = args_view.size();
+  size_t end = args_view.size();
   uint32 cursor = 0;
   while (true)
   {
     args_view.remove_prefix(cursor);
-    uint32 i = args_view.find_first_of(',');
+    size_t i = args_view.find_first_of(',');
 
     if (i == -1)
     {
@@ -1487,7 +1486,7 @@ void extract_args(std::string_view str, vector<string> *args)
   }
 }
 
-void Flat_Scene_Graph::handle_console_command(std::string_view cmd)
+void Scene_Graph::handle_console_command(std::string_view cmd)
 {
 
   graph_console_log.append(s(">>", string(cmd), "\n"));
@@ -1506,7 +1505,7 @@ void Flat_Scene_Graph::handle_console_command(std::string_view cmd)
       {
         object_name = args[1];
       }
-      add_aiscene_old(*filename, object_name);
+      add_aiscene_new(*filename, object_name);
     }
   }
 
@@ -1530,7 +1529,7 @@ void Flat_Scene_Graph::handle_console_command(std::string_view cmd)
   }
 }
 
-void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
+void Scene_Graph::draw_imgui_console(ImVec2 section_size)
 {
   ImGuiWindowFlags childflags = ImGuiWindowFlags_None;
   ImGui::BeginChild("Console_Log:", ImVec2(section_size.x, 260), true, childflags);
@@ -1546,11 +1545,11 @@ void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
   ImGui::BeginChild("Console_Cmd:");
   static std::string buf;
   buf.resize(512);
-  uint32 size = buf.size();
+  size_t size = buf.size();
   ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_EnterReturnsTrue;
   // ImGui::InputTextMultiline("blah", &buf[0], size, section_size, flags);
   ImGui::SetNextItemWidth(section_size.x);
-  if (ImGui::InputText("", &buf[0], size, flags, console_callback))
+  if (ImGui::InputText("", &buf[0], int(size), flags, console_callback))
   {
     string_view sv = {buf.c_str(), strlen(buf.c_str())};
     handle_console_command(sv);
@@ -1570,7 +1569,7 @@ void Flat_Scene_Graph::draw_imgui_console(ImVec2 section_size)
   ImGui::EndChild();
 }
 
-void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
+void Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
 {
   const float32 horizontal_tile_size = 350;
   const float32 vertical_tile_size = 400;
@@ -1647,7 +1646,7 @@ void Flat_Scene_Graph::draw_imgui_selected_pane(imgui_pane p)
 }
 // uses assimp's defined material if assimp import, else a default-constructed material
 
-void Flat_Scene_Graph::draw_imgui(std::string name)
+void Scene_Graph::draw_imgui(std::string name)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   const float32 selected_node_draw_height = 340;
@@ -1721,7 +1720,7 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
   ImVec2 after = ImGui::GetCursorPos();
   float32 width_of_arrow_group = after.x - before.x;
 
-  uint32 emitter_count = particle_emitters.size();
+  size_t emitter_count = particle_emitters.size();
   float32 window_width = GetWindowWidth();
   std::mt19937 generator2 = generator;
   generator.seed(0);
@@ -1748,30 +1747,30 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
     std::vector<float64> time_allocs64 = particle_emitters[i].time_allocations.get_times();
     std::vector<float64> attribute_times64 = particle_emitters[i].attribute_times.get_times();
 
-    uint32 size = idle64.size();
+    size_t size = idle64.size();
     std::vector<float32> idle(size);
     std::vector<float32> active(size);
     std::vector<float32> load(size);
     std::vector<float32> time_allocs(size);
     std::vector<float32> attribute_times(size);
-    float32 inv_dt = 1.0f / dt;
-    for (uint32 j = 0; j < size; ++j)
+    float64 inv_dt = 1.0 / dt;
+    for (size_t j = 0; j < size; ++j)
     {
-      uint32 dst_index = j;
+      size_t dst_index = j;
       // dst_index = (size - 1) - j; //??
-      idle[j] = idle64[j];
-      active[j] = active64[j];
-      time_allocs[j] = inv_dt * time_allocs64[j];
-      attribute_times[j] = inv_dt * attribute_times64[j];
+      idle[j] = float32(idle64[j]);
+      active[j] = float32(active64[j]);
+      time_allocs[j] = float32(inv_dt * time_allocs64[j]);
+      attribute_times[j] = float32(inv_dt * attribute_times64[j]);
       // load[dst_index] = active[j] / (active[j] + idle[j]);
-      load[dst_index] = active[j] / time_allocs64[j];
+      load[dst_index] = active[j] / float32(time_allocs64[j]);
     }
     if (size != 0)
     {
 
       PushID(s("histogram", i).c_str());
       ImVec2 cursor_pos_for_this_graph = ImGui::GetCursorPos();
-      ImGui::PlotHistogram("", &load[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
+      ImGui::PlotHistogram("", &load[0], int(size), 0, NULL, 0.0f, 1.0f, each_emitter_size);
       PopID();
       // ImGui::PushStyleColor(ImGuiCol_Text, color_true);
       PushStyleColor(ImGuiCol_FrameBg, ImVec4(0, 0, 0, 0));
@@ -1779,14 +1778,14 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
       PushStyleColor(ImGuiCol_PlotLines, imgui_red);
       PushID(s("histogram2", i).c_str());
       ImGui::SetCursorPos(cursor_pos_for_this_graph);
-      ImGui::PlotLines("", &time_allocs[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
+      ImGui::PlotLines("", &time_allocs[0], int(size), 0, NULL, 0.0f, 1.0f, each_emitter_size);
       PopStyleColor();
       PopID();
 
       PushStyleColor(ImGuiCol_PlotLines, imgui_blue);
       PushID(s("histogram3", i).c_str());
       ImGui::SetCursorPos(cursor_pos_for_this_graph);
-      ImGui::PlotLines("", &attribute_times[0], size, 0, NULL, 0.0f, 1.0f, each_emitter_size);
+      ImGui::PlotLines("", &attribute_times[0], int(size), 0, NULL, 0.0f, 1.0f, each_emitter_size);
       PopStyleColor();
       PopID();
 
@@ -1859,57 +1858,33 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
 //  }
 //}
 
-Flat_Scene_Graph::Flat_Scene_Graph(Resource_Manager *manager) : resource_manager(manager) {}
+Scene_Graph::Scene_Graph(Resource_Manager *manager) : resource_manager(manager) {}
 
-void Flat_Scene_Graph::clear()
+void Scene_Graph::clear()
 {
   for (uint32 i = 0; i < nodes.size(); ++i)
   {
-    nodes[i] = Flat_Scene_Graph_Node();
+    nodes[i] = Scene_Graph_Node();
   }
   lights = Light_Array();
 }
 
-Node_Index Flat_Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string name, bool wait_on_resource)
+unordered_map<string, pair<Mesh_Index, Material_Index>> create_import_pool_data(Imported_Scene_Data* resource, Resource_Manager* resource_manager, Octree* collision_octree)
 {
-  scene_file_path = BASE_MODEL_PATH + scene_file_path;
-  Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
-  if (!resource)
-  {
-    ASSERT(!wait_on_resource);
-    return NODE_NULL;
-  }
-
-  uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
-  uint32 base_material_import_index = resource_manager->current_material_pool_size;
-
-  for (uint32 i = 0; i < resource->meshes.size(); ++i)
-  {
-    string &name = resource->meshes[i].name;
-  }
-
-  Node_Index root_for_import = new_node();
-  Flat_Scene_Graph_Node *root_node = &nodes[root_for_import];
-  root_node->filename_of_import = scene_file_path;
-  root_node->name = name;
-
-
-
-
   // all meshes with the same name will get the same mesh_index and material_index
   unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
 
-  for (uint32 i = 0; i < resource->meshes.size(); ++i)
+  for (size_t i = 0; i < resource->meshes.size(); ++i)
   {
     string& name = resource->meshes[i].name;
-    uint32 last_dot = name.find_last_of('.');
+    size_t last_dot = name.find_last_of('.');
     std::string name_before_dot = name.substr(0, last_dot);
 
 
     bool contains = false;
-    for(auto& elem : indices)
+    for (auto& elem : indices)
     {
-      if(elem.first == name_before_dot)
+      if (elem.first == name_before_dot)
       {
         contains = true;
         break;
@@ -1922,13 +1897,13 @@ Node_Index Flat_Scene_Graph::add_aiscene_new(std::string scene_file_path, std::s
       std::string path = resource->assimp_filename;
       Material_Descriptor material;
       path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
-      if (name_before_dot.find("collide_") != std::string::npos)
+      if (name_before_dot.find("collide_") != std::string::npos && collision_octree)
       {
         material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
         material.frag_shader = "emission.frag";
         material.wireframe = true;
-        material.backface_culling = false;
-        this->collision_octree.push(&resource->meshes[i]);
+        material.backface_culling = false;        
+        collision_octree->push(&resource->meshes[i]);
       }
       else
       {
@@ -1945,26 +1920,11 @@ Node_Index Flat_Scene_Graph::add_aiscene_new(std::string scene_file_path, std::s
       indices[name_before_dot] = { mesh_i, mat_i };
     }
   }
-
-
-
-  const uint32 number_of_children = resource->children.size();
-  for (uint32 i = 0; i < number_of_children; ++i)
-  {
-    Node_Index child_index = add_import_node(resource, &resource->children[i], scene_file_path, &indices);
-    set_parent(child_index, root_for_import);
-
-    // assimp is giving us a scale of vec3(100) for blender fbx exports with scale:meters and Unit Scale: 1.0....
-    // but only for the un-parented objects of the import
-    // technically there is no root node for a blender export but we are grouping all objects in the import
-    // under a single root for convenience, so this is where we scale from cm to meters
-    const float32 cm_to_meters = 0.01f;
-    nodes[child_index].scale = cm_to_meters * nodes[child_index].scale;
-  }
-  return root_for_import;
+  return indices;
 }
 
-Node_Index Flat_Scene_Graph::add_aiscene_old(std::string scene_file_path, std::string name, bool wait_on_resource)
+
+Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string name, bool wait_on_resource)
 {
   scene_file_path = BASE_MODEL_PATH + scene_file_path;
   Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
@@ -1974,120 +1934,162 @@ Node_Index Flat_Scene_Graph::add_aiscene_old(std::string scene_file_path, std::s
     return NODE_NULL;
   }
 
+
+
+  ////simple auto material assignment based on mesh name
+  ////also detects collision meshes and adds them to the octree
+  //unordered_map<string, pair<Mesh_Index, Material_Index>> indices = create_import_pool_data(resource, resource_manager,&collision_octree);
+
   uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
   uint32 base_material_import_index = resource_manager->current_material_pool_size;
 
-  // all meshes with the same name will get the same mesh_index and material_index
-  // because we are using the mesh name to select the textures for it so why not
-  // we cant because theres no guarantee that the names are unique
-  unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
-
   for (uint32 i = 0; i < resource->meshes.size(); ++i)
   {
-    string &name = resource->meshes[i].name;
-    uint32 last_dot = name.find_last_of('.');
-    std::string name_before_dot = name.substr(0, last_dot);
-    if (!indices.contains(name_before_dot))
-    {
-      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
-      std::string path = resource->assimp_filename;
-      Material_Descriptor material;
-      path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
-      if (name_before_dot.find("collide_") != std::string::npos)
-      {
-        material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
-        material.frag_shader = "emission.frag";
-        material.wireframe = true;
-        material.backface_culling = false;
-        this->collision_octree.push(&resource->meshes[i]);
-      }
-      else
-      {
-        material.albedo = path + name_before_dot + "_albedo.png";
-        material.normal = path + name_before_dot + "_normal.png";
-        material.roughness = path + name_before_dot + "_roughness.png";
-        material.metalness = path + name_before_dot + "_metalness.png";
-        material.emissive = path + name_before_dot + "_emissive.png";
-        material.ambient_occlusion = path + name_before_dot + "_ao.png";
-        material.vertex_shader = "vertex_shader.vert";
-        material.frag_shader = "fragment_shader.frag";
-      }
-      Material_Index mat_i = resource_manager->push_custom_material(&material);
-      indices[name_before_dot] = {mesh_i, mat_i};
-    }
+    string& name = resource->meshes[i].name;
   }
 
-  Node_Index root_for_import = new_node();
-  Flat_Scene_Graph_Node *root_node = &nodes[root_for_import];
+  //the reason you got rid of the map here is because
+  //the wow model import doesnt obey the rules of unique names
+  //and we do need to read them all out individually and
+  //assign each one their requested mesh/mat
+  //we really should obey the fbx material import structure
+  Node_Index root_for_import = add_import_node(resource, &resource->root_node, &indices);
+  Scene_Graph_Node* root_node = &nodes[root_for_import];
+
+  root_node->scale = float32(resource->scale_factor) * root_node->scale;
   root_node->filename_of_import = scene_file_path;
-  root_node->name = name;
 
-  const uint32 number_of_children = resource->children.size();
-  for (uint32 i = 0; i < number_of_children; ++i)
-  {
-    Node_Index child_index = add_import_node(resource, &resource->children[i], scene_file_path, &indices);
-    set_parent(child_index, root_for_import);
+  //still needed or did we just miss this the whole time in the root node itself?
+  //const float32 cm_to_meters = 0.01f;
+  //root_node->scale = cm_to_meters * root_node->scale;
 
-    // assimp is giving us a scale of vec3(100) for blender fbx exports with scale:meters and Unit Scale: 1.0....
-    // but only for the un-parented objects of the import
-    // technically there is no root node for a blender export but we are grouping all objects in the import
-    // under a single root for convenience, so this is where we scale from cm to meters
-    const float32 cm_to_meters = 0.01f;
-    nodes[child_index].scale = cm_to_meters * nodes[child_index].scale;
-  }
+
+
   return root_for_import;
 }
 
-Node_Index Flat_Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *import_node,
-    std::string assimp_filename, unordered_map<std::string, pair<Mesh_Index, Material_Index>> *indices)
+//Node_Index Scene_Graph::add_aiscene_old1(std::string scene_file_path, std::string name, bool wait_on_resource)
+//{
+//  scene_file_path = BASE_MODEL_PATH + scene_file_path;
+//  Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
+//  if (!resource)
+//  {
+//    ASSERT(!wait_on_resource);
+//    return NODE_NULL;
+//  }
+//
+//  uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
+//  uint32 base_material_import_index = resource_manager->current_material_pool_size;
+//
+//  // all meshes with the same name will get the same mesh_index and material_index
+//  // because we are using the mesh name to select the textures for it so why not
+//  // we cant because theres no guarantee that the names are unique
+//  unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
+//
+//  for (size_t i = 0; i < resource->meshes.size(); ++i)
+//  {
+//    string &name = resource->meshes[i].name;
+//    size_t last_dot = name.find_last_of('.');
+//    std::string name_before_dot = name.substr(0, last_dot);
+//    if (!indices.contains(name_before_dot))
+//    {
+//      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
+//      std::string path = resource->assimp_filename;
+//      Material_Descriptor material;
+//      path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
+//      if (name_before_dot.find("collide_") != std::string::npos)
+//      {
+//        material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
+//        material.frag_shader = "emission.frag";
+//        material.wireframe = true;
+//        material.backface_culling = false;
+//        this->collision_octree.push(&resource->meshes[i]);
+//      }
+//      else
+//      {
+//        material.albedo = path + name_before_dot + "_albedo.png";
+//        material.normal = path + name_before_dot + "_normal.png";
+//        material.roughness = path + name_before_dot + "_roughness.png";
+//        material.metalness = path + name_before_dot + "_metalness.png";
+//        material.emissive = path + name_before_dot + "_emissive.png";
+//        material.ambient_occlusion = path + name_before_dot + "_ao.png";
+//        material.vertex_shader = "vertex_shader.vert";
+//        material.frag_shader = "fragment_shader.frag";
+//      }
+//      Material_Index mat_i = resource_manager->push_custom_material(&material);
+//      indices[name_before_dot] = {mesh_i, mat_i};
+//    }
+//  }
+//
+//  Node_Index root_for_import = new_node();
+//  Scene_Graph_Node *root_node = &nodes[root_for_import];
+//  root_node->filename_of_import = scene_file_path;
+//  root_node->name = name;
+//
+//  const size_t number_of_children = resource->root_node.size();
+//  for (size_t i = 0; i < number_of_children; ++i)
+//  {
+//    Node_Index child_index = add_import_node(resource, &resource->root_node[i], scene_file_path, &indices);
+//    set_parent(child_index, root_for_import);
+//
+//    // assimp is giving us a scale of vec3(100) for blender fbx exports with scale:meters and Unit Scale: 1.0....
+//    // but only for the un-parented objects of the import
+//    // technically there is no root node for a blender export but we are grouping all objects in the import
+//    // under a single root for convenience, so this is where we scale from cm to meters
+//    const float32 cm_to_meters = 0.01f;
+//    nodes[child_index].scale = cm_to_meters * nodes[child_index].scale;
+//  }
+//  return root_for_import;
+//}
+
+Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *import_node,
+    unordered_map<std::string, pair<Mesh_Index, Material_Index>> *indices)
 {
   Node_Index node_index = new_node();
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
-  node->filename_of_import = assimp_filename;
+  Scene_Graph_Node *node = &nodes[node_index];
   node->name = import_node->name;
   vec3 skew;
   vec4 perspective;
   bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, skew, perspective);
   node->orientation = conjugate(node->orientation);
-  node->scale = float32(scene->scale_factor) * node->scale;
-  uint32 number_of_mesh_indices = import_node->mesh_indices.size();
-  for (uint32 i = 0; i < number_of_mesh_indices; ++i)
+  size_t number_of_mesh_indices = import_node->mesh_indices.size();
+  for (size_t i = 0; i < number_of_mesh_indices; ++i)
   {
     uint32 import_mesh_index = import_node->mesh_indices[i];
     std::string mesh_name = scene->meshes[import_mesh_index].name;
-    int32 last_dot = mesh_name.find_last_of('.');
-    std::string name_before_dot = mesh_name;
+    size_t last_dot = mesh_name.find_last_of('.');
+    std::string_view name_before_dot = mesh_name;
     if (last_dot != -1)
     {
       name_before_dot = mesh_name.substr(0, last_dot);
     }
-    node->model[i] = (*indices)[name_before_dot];
+    node->model[i] = (*indices)[string(name_before_dot)];
   }
-  const uint32 number_of_children = import_node->children.size();
-  for (uint32 i = 0; i < number_of_children; ++i)
+
+  const size_t number_of_children = import_node->children.size();
+  for (size_t i = 0; i < number_of_children; ++i)
   {
     Imported_Scene_Node *child_node = &import_node->children[i];
-    Node_Index child_index = add_import_node(scene, child_node, assimp_filename, indices);
+    Node_Index child_index = add_import_node(scene, child_node, indices);
     set_parent(child_index, node_index);
-    Flat_Scene_Graph_Node *child_ptr = &nodes[child_index];
-    std::string test = s("collide_", node->name);
-    bool child_is_collider = strcmp(&child_ptr->name.str[0], test.c_str()) == 0;
+    Scene_Graph_Node *child_ptr = &nodes[child_index];
+    bool child_is_collider = strncmp(&child_ptr->name.str[0], "collide_",8) == 0;
     if (child_is_collider)
     {
-      node->collider = child_index;
       child_ptr->visible = false;
+      child_ptr->propagate_visibility = false;
     }
   }
   return node_index;
 }
 
-Node_Index Flat_Scene_Graph::new_node()
+Node_Index Scene_Graph::new_node()
 {
   for (uint32 i = 0; i < nodes.size(); ++i)
   {
     if (nodes[i].exists == false)
     {
-      nodes[i] = Flat_Scene_Graph_Node();
+      nodes[i] = Scene_Graph_Node();
       nodes[i].exists = true;
       set_message("Scene_Graph allocating new node:", s(i), 1.0f);
       if (highest_allocated_node < i)
@@ -2101,7 +2103,7 @@ Node_Index Flat_Scene_Graph::new_node()
   return NODE_NULL;
 }
 
-Node_Index Flat_Scene_Graph::new_node(std::string name, std::pair<Mesh_Index, Material_Index> model0, Node_Index parent)
+Node_Index Scene_Graph::new_node(std::string name, std::pair<Mesh_Index, Material_Index> model0, Node_Index parent)
 {
   Node_Index node = new_node();
   nodes[node].name = name;
@@ -2112,7 +2114,7 @@ Node_Index Flat_Scene_Graph::new_node(std::string name, std::pair<Mesh_Index, Ma
 
 // todo: accelerate these with spatial partitioning
 
-Node_Index Flat_Scene_Graph::ray_intersects_node(vec3 p, vec3 dir, Node_Index node, vec3 &result)
+Node_Index Scene_Graph::ray_intersects_node(vec3 p, vec3 dir, Node_Index node, vec3 &result)
 {
   if (!ray_intersects_node_aabb(p, dir, node))
   {
@@ -2120,7 +2122,7 @@ Node_Index Flat_Scene_Graph::ray_intersects_node(vec3 p, vec3 dir, Node_Index no
   }
   vec3 closest_intersection = vec3(99999999999);
   float32 length_of_closest_intersection = length(closest_intersection);
-  Flat_Scene_Graph_Node *node_ptr = &nodes[node];
+  Scene_Graph_Node *node_ptr = &nodes[node];
   mat4 model_to_world = build_transformation(node);
   mat4 world_to_node_model = inverse(model_to_world);
   p = world_to_node_model * vec4(p, 1);
@@ -2165,7 +2167,7 @@ Node_Index Flat_Scene_Graph::ray_intersects_node(vec3 p, vec3 dir, Node_Index no
     return NODE_NULL;
   }
 }
-Node_Index Flat_Scene_Graph::find_by_name(Node_Index parent, const char *name)
+Node_Index Scene_Graph::find_by_name(Node_Index parent, const char *name)
 {
   bool warned = false;
   if (parent == NODE_NULL)
@@ -2178,7 +2180,7 @@ Node_Index Flat_Scene_Graph::find_by_name(Node_Index parent, const char *name)
         set_message("perf warning in find_by_name(), this gets slow with lots of nodes", "", 10.f);
       }
 
-      Flat_Scene_Graph_Node *ptr = &nodes[i];
+      Scene_Graph_Node *ptr = &nodes[i];
 
       if (ptr->parent != NODE_NULL)
         continue;
@@ -2191,13 +2193,13 @@ Node_Index Flat_Scene_Graph::find_by_name(Node_Index parent, const char *name)
     return NODE_NULL;
   }
 
-  Flat_Scene_Graph_Node *ptr = &nodes[parent];
+  Scene_Graph_Node *ptr = &nodes[parent];
   for (uint32 i = 0; i < ptr->children.size(); ++i)
   {
     Node_Index child = ptr->children[i];
     if (child != NODE_NULL)
     {
-      Flat_Scene_Graph_Node *cptr = &nodes[child];
+      Scene_Graph_Node *cptr = &nodes[child];
       if (cptr->name == Array_String(name))
       {
         return child;
@@ -2206,7 +2208,7 @@ Node_Index Flat_Scene_Graph::find_by_name(Node_Index parent, const char *name)
   }
   return NODE_NULL;
 }
-void Flat_Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
+void Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
 {
   if (nodes[grabee].parent != NODE_NULL)
     drop(grabee);
@@ -2227,7 +2229,7 @@ void Flat_Scene_Graph::grab(Node_Index grabber, Node_Index grabee)
   nodes[grabee].orientation = orientation;
   // nodes[grabee].import_basis = mat4(1);
 }
-void Flat_Scene_Graph::drop(Node_Index child)
+void Scene_Graph::drop(Node_Index child)
 {
   mat4 M = build_transformation(child);
   vec3 scale;
@@ -2245,27 +2247,27 @@ void Flat_Scene_Graph::drop(Node_Index child)
   // nodes[child].import_basis = mat4(1);
 }
 
-void Flat_Scene_Graph::delete_node(Node_Index i)
+void Scene_Graph::delete_node(Node_Index i)
 {
   if (i == NODE_NULL)
     return;
-  nodes[i] = Flat_Scene_Graph_Node();
+  nodes[i] = Scene_Graph_Node();
   for (Node_Index &child : nodes[i].children)
   {
     delete_node(child);
   }
 }
 
-void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
+void Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
 {
   ASSERT(i != NODE_NULL);
-  Flat_Scene_Graph_Node *node = &nodes[i];
+  Scene_Graph_Node *node = &nodes[i];
   Node_Index current_parent_index = node->parent;
 
   if (current_parent_index != NODE_NULL)
   {
     bool found_i = false;
-    Flat_Scene_Graph_Node *current_parent = &nodes[current_parent_index];
+    Scene_Graph_Node *current_parent = &nodes[current_parent_index];
     for (auto &child : current_parent->children)
     {
       if (child == i)
@@ -2280,7 +2282,7 @@ void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
   if (desired_parent != NODE_NULL)
   {
     bool found_new_slot = false;
-    Flat_Scene_Graph_Node *new_parent = &nodes[desired_parent];
+    Scene_Graph_Node *new_parent = &nodes[desired_parent];
     for (auto &child : new_parent->children)
     {
       if (child == NODE_NULL)
@@ -2325,12 +2327,12 @@ void Flat_Scene_Graph::set_parent(Node_Index i, Node_Index desired_parent)
   }
 }
 
-std::vector<Render_Entity> Flat_Scene_Graph::visit_nodes_start()
+std::vector<Render_Entity> Scene_Graph::visit_nodes_start()
 {
   accumulator.clear();
   for (uint32 i = 0; i < nodes.size(); ++i)
   {
-    Flat_Scene_Graph_Node *node = &nodes[i];
+    Scene_Graph_Node *node = &nodes[i];
     if (!node->exists)
       continue;
     if (node->parent == NODE_NULL)
@@ -2341,12 +2343,12 @@ std::vector<Render_Entity> Flat_Scene_Graph::visit_nodes_start()
   return accumulator;
 }
 
-glm::mat4 Flat_Scene_Graph::__build_transformation(Node_Index node_index)
+glm::mat4 Scene_Graph::__build_transformation(Node_Index node_index)
 {
   if (node_index == NODE_NULL)
     return mat4(1);
 
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  Scene_Graph_Node *node = &nodes[node_index];
   Node_Index parent = node->parent;
 
   mat4 M = __build_transformation(parent);
@@ -2361,11 +2363,11 @@ glm::mat4 Flat_Scene_Graph::__build_transformation(Node_Index node_index)
 }
 
 // use visit nodes if you need the transforms of all objects in the graph
-glm::mat4 Flat_Scene_Graph::build_transformation(Node_Index node_index, bool use_vertex_scale)
+glm::mat4 Scene_Graph::build_transformation(Node_Index node_index, bool use_vertex_scale)
 {
   ASSERT(node_index != NODE_NULL);
 
-  Flat_Scene_Graph_Node *node = &nodes[node_index];
+  Scene_Graph_Node *node = &nodes[node_index];
   Node_Index parent = node->parent;
 
   mat4 M = __build_transformation(parent);
@@ -2384,20 +2386,20 @@ glm::mat4 Flat_Scene_Graph::build_transformation(Node_Index node_index, bool use
   }
   return BASIS;
 }
-std::string Flat_Scene_Graph::serialize() const
+std::string Scene_Graph::serialize() const
 {
   std::string result;
 
   return result;
 }
-void Flat_Scene_Graph::deserialize(std::string src) {}
+void Scene_Graph::deserialize(std::string src) {}
 
-void Flat_Scene_Graph::initialize_lighting(std::string radiance, std::string irradiance, bool generate_light_spheres)
+void Scene_Graph::initialize_lighting(std::string radiance, std::string irradiance, bool generate_light_spheres)
 {
   if (generate_light_spheres)
   {
     Node_Index root_for_lights = new_node();
-    Flat_Scene_Graph_Node *node_ptr = &nodes[root_for_lights];
+    Scene_Graph_Node *node_ptr = &nodes[root_for_lights];
     node_ptr->exists = true;
     node_ptr->name = "Root for lights";
 
@@ -2409,7 +2411,7 @@ void Flat_Scene_Graph::initialize_lighting(std::string radiance, std::string irr
       material.roughness.mod = vec4(1);
       Material_Index mi = resource_manager->push_custom_material(&material);
 
-      Node_Index temp = add_aiscene_old("sphere-2.fbx", s("Light", i));
+      Node_Index temp = add_aiscene_new("sphere-2.fbx", s("Light", i));
       Node_Index actual_model = nodes[temp].children[0];
       set_parent(actual_model, root_for_lights);
       delete_node(temp);
@@ -2421,7 +2423,7 @@ void Flat_Scene_Graph::initialize_lighting(std::string radiance, std::string irr
   lights.environment.irradiance = irradiance;
 }
 
-void Flat_Scene_Graph::set_lights_for_renderer(Renderer *r)
+void Scene_Graph::set_lights_for_renderer(Renderer *r)
 {
   // make a button that calculates the shadow settings using the distance to point and the angle
 
@@ -2433,7 +2435,7 @@ void Flat_Scene_Graph::set_lights_for_renderer(Renderer *r)
     if (node == NODE_NULL)
       continue;
 
-    Flat_Scene_Graph_Node *node_ptr = &nodes[node];
+    Scene_Graph_Node *node_ptr = &nodes[node];
     node_ptr->position = light->position;
     node_ptr->scale = vec3(light->radius);
     if (!(i < lights.light_count))
@@ -2460,8 +2462,7 @@ void Flat_Scene_Graph::set_lights_for_renderer(Renderer *r)
     r->environment.load();
   }
 }
-
-void Flat_Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
+void Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
 {
   for (auto &emitter : particle_emitters)
   {
@@ -2475,11 +2476,11 @@ void Flat_Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
   }
 }
 
-void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<Render_Entity> &accumulator)
+void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<Render_Entity> &accumulator)
 {
   if (node_index == NODE_NULL)
     return;
-  Flat_Scene_Graph_Node *entity = &nodes[node_index];
+  Scene_Graph_Node *entity = &nodes[node_index];
   if (!entity->exists)
     return;
   if ((!entity->visible) && entity->propagate_visibility)
@@ -2501,8 +2502,8 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
   // this node specifically
   mat4 BASIS = RTM * S_prop * S_non;
 
-  const uint32 num_meshes = entity->model.size();
-  for (uint32 i = 0; i < num_meshes; ++i)
+  const size_t num_meshes = entity->model.size();
+  for (size_t i = 0; i < num_meshes; ++i)
   {
     Mesh_Index mesh_index = entity->model[i].first;
     Material_Index material_index = entity->model[i].second;
@@ -2526,12 +2527,12 @@ void Flat_Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::ve
 }
 
 
-void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
+void Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
 {
-  Flat_Scene_Graph_Node *entity = &nodes[node_index];
+  Scene_Graph_Node *entity = &nodes[node_index];
   if (entity->parent == NODE_NULL)
     return;
-  Flat_Scene_Graph_Node *parent = &nodes[entity->parent];
+  Scene_Graph_Node *parent = &nodes[entity->parent];
   for (uint32 i = 0; i < parent->children.size(); ++i)
   {
     if (parent->children[i] == node_index)
@@ -2544,14 +2545,14 @@ void Flat_Scene_Graph::assert_valid_parent_ptr(Node_Index node_index)
 }
 
 static mutex import_lock;
-static vector<tuple<string, Imported_Scene_Data *, uint32>> import_queue;
+static vector<Imported_Scene_Data *> import_queue;
 
 static condition_variable import_thread_cv;
 void import_thread_loop()
 {
   while (true)
   {
-    std::vector<tuple<string, Imported_Scene_Data *, uint32>> arg_v;
+    std::vector<Imported_Scene_Data *> arg_v;
     {
       unique_lock<mutex> hold(import_lock);
       import_thread_cv.wait(hold);
@@ -2563,15 +2564,14 @@ void import_thread_loop()
       import_queue.pop_back();
     }
 
-    for (auto &args : arg_v | std::views::reverse)
+    for(auto it = arg_v.rbegin(); it != arg_v.rend();++it)
     {
-      auto [path, dst, assimp_flags] = args;
-      Resource_Manager::import_aiscene_new(path, dst, assimp_flags);
+      Resource_Manager::import_aiscene_new(*it);
     }
   }
 }
 
-bool Resource_Manager::import_aiscene_async(std::string path, Imported_Scene_Data *dst, uint32 assimp_flags)
+bool Resource_Manager::import_aiscene_async(Imported_Scene_Data *dst)
 {
   ASSERT(dst->valid != true);
   if (!thread_active)
@@ -2580,7 +2580,7 @@ bool Resource_Manager::import_aiscene_async(std::string path, Imported_Scene_Dat
     thread_active = true;
   }
   lock_guard<mutex> hold(import_lock);
-  import_queue.emplace_back(path, dst, assimp_flags);
+  import_queue.emplace_back(dst);
   import_thread_cv.notify_one();
   return false;
 }
@@ -2760,7 +2760,7 @@ void assert_valid_aimesh(const aiMesh *aimesh, const aiScene *scene)
 
 void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *bones)
 {
-  uint32 vertex_count = d->mesh_data.positions.size();
+  size_t vertex_count = d->mesh_data.positions.size();
   d->mesh_data.bone_weights.resize(vertex_count);
 
   // all the bones this mesh is affected by
@@ -2774,7 +2774,7 @@ void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_
     // since there may be multiple meshes, this function may be called multiple times
     // this means we need to search for the name of the bone to see if we already have it in the vector before adding it
     int32 index_for_this_name_in_bone_vector = -1;
-    for (uint32 j = 0; j < bones->size(); ++j)
+    for (size_t j = 0; j < bones->size(); ++j)
     {
       if ((*bones)[j].name == name)
       {
@@ -2788,7 +2788,7 @@ void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_
       bones->emplace_back();
       bones->back().name = name;
       bones->back().offsetmatrix = offsetmatrix;
-      index_for_this_name_in_bone_vector = bones->size() - 1;
+      index_for_this_name_in_bone_vector = int32(bones->size()) - 1;
     }
 
     uint32 num_of_vertices_affected_by_this_bone = aibone->mNumWeights;
@@ -2851,31 +2851,25 @@ void gather_meshes(const aiScene *scene, Imported_Scene_Data *dst)
   }
 }
 
-bool Resource_Manager::import_aiscene_new(std::string path, Imported_Scene_Data *result, uint32 assimp_flags)
+bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
 {
-  ASSERT(result);
-  const aiScene *scene = IMPORTER.ReadFile(path.c_str(), assimp_flags);
-  if (!scene || scene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+  ASSERT(dst);
+  const aiScene *aiscene = IMPORTER.ReadFile(dst->assimp_filename.c_str(), dst->import_flags);
+  if (!aiscene || aiscene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
   {
     set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
     return false;
   }
-  ASSERT(scene->mRootNode);
-  ASSERT(scene->mRootNode->mNumMeshes == 0);
+  ASSERT(aiscene->mRootNode);
+  ASSERT(aiscene->mRootNode->mNumMeshes == 0);
 
-  Imported_Scene_Data dst;
-  dst.assimp_filename = path;
-  scene->mMetaData->Get("UnitScaleFactor", dst.scale_factor);
+  aiscene->mMetaData->Get("UnitScaleFactor", dst->scale_factor);
 
-  gather_meshes(scene, &dst);
-  gather_animations(scene, &dst);
+  gather_meshes(aiscene, dst);
+  gather_animations(aiscene, dst);
 
-  for (uint32 i = 0; i < scene->mRootNode->mNumChildren; ++i)
-  {
-    const aiNode *node = scene->mRootNode->mChildren[i];
-    Imported_Scene_Node child = _import_aiscene_node(path, scene, node);
-    dst.children.push_back(child);
-  }
+
+  dst->root_node = _import_aiscene_node(dst->assimp_filename, aiscene, aiscene->mRootNode);
   return true;
 
 #if 0 
@@ -2941,15 +2935,17 @@ Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
 
 Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, bool wait_for_valid)
 {
-  Imported_Scene_Data *import = &import_data[path];
+  Imported_Scene_Data *data_import = &import_data[path];
+  data_import->import_flags = default_assimp_flags;
+  data_import->assimp_filename = path;
   if (!wait_for_valid)
   {
-    bool finished = import_aiscene_async(path, import, default_assimp_flags);
+    bool finished = import_aiscene_async(data_import);
     if (finished)
     {
-      ASSERT(import->valid == true);
-      ASSERT(import->assimp_filename == path);
-      return import;
+      ASSERT(data_import->valid == true);
+      ASSERT(data_import->assimp_filename == path);
+      return data_import;
     }
     else
     {
@@ -2959,13 +2955,12 @@ Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, 
 
   if (wait_for_valid)
   {
-    Imported_Scene_Data *import = &import_data[path];
-    bool success = import_aiscene_new(path, import, default_assimp_flags);
-    return import;
+    bool success = import_aiscene_new(data_import);
+    return data_import;
   }
 }
 
-Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()
+Scene_Graph_Node::Scene_Graph_Node()
 {
   for (uint32 i = 0; i < children.size(); ++i)
   {
@@ -2977,7 +2972,7 @@ Flat_Scene_Graph_Node::Flat_Scene_Graph_Node()
   }
 }
 
-Material_Descriptor *Flat_Scene_Graph::get_modifiable_material_pointer_for(Node_Index node, Model_Index model)
+Material_Descriptor *Scene_Graph::get_modifiable_material_pointer_for(Node_Index node, Model_Index model)
 {
   Material_Index mi = nodes[node].model[model].second;
 
@@ -2992,8 +2987,8 @@ Octree::Octree()
   root = &nodes[0];
   root->size = 50;
   // root->halfsize = 0.5f * 50;
-  root->minimum = -vec3(0.5 * root->size);
-  root->center = root->minimum + vec3(0.5 * root->size);
+  root->minimum = -vec3(0.5f * root->size);
+  root->center = root->minimum + vec3(0.5f * root->size);
   free_node = 1;
   root->mydepth = 0;
 }
@@ -3069,7 +3064,7 @@ inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
   ptr->minimum = p;
   ptr->size = size;
   // ptr->halfsize = 0.5f * size;
-  ptr->center = p + vec3(0.5 * ptr->size);
+  ptr->center = p + vec3(0.5f * ptr->size);
   ptr->mydepth = depth + 1;
 #ifdef OCTREE_VECTOR_STYLE
   ptr->occupying_triangles.reserve(16);
@@ -3086,7 +3081,7 @@ void Octree::clear()
   update_render_entities = true;
 }
 
-std::vector<Render_Entity> Octree::get_render_entities(Flat_Scene_Graph *scene)
+std::vector<Render_Entity> Octree::get_render_entities(Scene_Graph *scene)
 {
   if (!update_render_entities)
   {
@@ -3283,7 +3278,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
   for (uint32 i = 0; i < 8; ++i)
   {
 
-    AABB box = aabb_from_octree_child_index(i, minimum, 0.5 * size, size);
+    AABB box = aabb_from_octree_child_index(i, minimum, 0.5f * size, size);
     bool intersects = aabb_triangle_intersection(box, triangle);
     if (intersects)
     {
@@ -3291,7 +3286,7 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octr
 
       if (!child)
       {
-        child = children[i] = owner->new_node(box.min, 0.5 * size, depth);
+        child = children[i] = owner->new_node(box.min, 0.5f * size, depth);
         ASSERT(child);
       }
 

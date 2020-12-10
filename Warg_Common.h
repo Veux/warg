@@ -125,7 +125,7 @@ struct Map
 
 struct Blades_Edge : public Map
 {
-  Blades_Edge(Flat_Scene_Graph &scene);
+  Blades_Edge(Scene_Graph &scene);
 };
 
 struct Game_State
@@ -143,9 +143,9 @@ struct Game_State
   uint8 spell_object_count = 0;
 };
 
-void move_char(Character &character, Input command, Flat_Scene_Graph* scene);
+void move_char(Character &character, Input command, Scene_Graph* scene);
 void collide_and_slide_char(Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity,
-   Flat_Scene_Graph* scene);
+   Scene_Graph* scene);
 void character_copy(Character *dst, Character *src);
 void game_state_copy(Game_State *dst, Game_State *src);
 Spell_Index get_casting_spell_formula_index(Character *character);

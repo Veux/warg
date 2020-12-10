@@ -7,8 +7,8 @@ using json = nlohmann::json;
 using namespace glm;
 #define JSON_INDENT 2
 
-void to_json(json &result, const Flat_Scene_Graph &p);
-void from_json(const json &j, Flat_Scene_Graph &p);
+void to_json(json &result, const Scene_Graph &p);
+void from_json(const json &j, Scene_Graph &p);
 
 void to_json(json &result, const Mesh_Data &p);
 void from_json(const json &j, Mesh_Data &p);

@@ -21,7 +21,7 @@ struct Vertex_Bone_Data
 {
   uint32 count = 0;
   uint32 indices[MAX_BONES_PER_VERTEX];
-  uint32 weights[MAX_BONES_PER_VERTEX];
+  float32 weights[MAX_BONES_PER_VERTEX];
 };
 
 typedef uint32 Skeletal_Animation_Keyframe_Index;

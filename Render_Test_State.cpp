@@ -6,7 +6,7 @@
 #include "State.h"
 #include "Animation_Utilities.h"
 using namespace glm;
-bool spawn_test_spheres(Flat_Scene_Graph &scene);
+bool spawn_test_spheres(Scene_Graph &scene);
 
 void world_water_settings(Uniform_Set_Descriptor *dst)
 {
@@ -69,9 +69,9 @@ void small_object_refraction_settings(Uniform_Set_Descriptor *dst)
   dst->float32_uniforms["refraction_offset_factor"] = 0.201;
 }
 
-void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos) {}
+void spawn_water(Scene_Graph *scene, vec3 scale, vec3 pos) {}
 
-void spawn_ground(Flat_Scene_Graph *scene)
+void spawn_ground(Scene_Graph *scene)
 {
   Material_Descriptor material;
   material.albedo = "grass_albedo.png";
@@ -93,14 +93,14 @@ void spawn_ground(Flat_Scene_Graph *scene)
   material.albedo.mod = vec4(1);
 }
 
-void spawn_gun(Flat_Scene_Graph *scene, vec3 position)
+void spawn_gun(Scene_Graph *scene, vec3 position)
 {
-  Node_Index gun = scene->add_aiscene_old("Cerberus/cerberus-warg.FBX", "gun");
+  Node_Index gun = scene->add_aiscene_new("Cerberus/cerberus-warg.FBX", "gun");
   scene->nodes[gun].position = position;
   scene->nodes[gun].scale = vec3(1);
 }
 
-void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
+void spawn_planets(Scene_Graph *scene, vec3 pos)
 {
   Material_Descriptor material_star;
 
@@ -110,7 +110,7 @@ void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
   material_star.frag_shader = "water.frag";
   small_object_water_settings(&material_star.uniform_set);
 
-  Node_Index star = scene->add_aiscene_old("smoothsphere.fbx", "star");
+  Node_Index star = scene->add_aiscene_new("smoothsphere.fbx", "star");
   Node_Index spheremodel = scene->nodes[star].children[0];
   Material_Descriptor *mdp = scene->get_modifiable_material_pointer_for(spheremodel, 0);
   *mdp = material_star;
@@ -132,7 +132,7 @@ void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
   scene->nodes[cube_moon].scale = vec3(moon_scale);
 }
 
-void spawn_grabbyarm(Flat_Scene_Graph *scene, vec3 position)
+void spawn_grabbyarm(Scene_Graph *scene, vec3 position)
 {
   Material_Descriptor material;
   Node_Index grabbycube = scene->add_mesh(cube, "grabbycube", &material);
@@ -141,10 +141,10 @@ void spawn_grabbyarm(Flat_Scene_Graph *scene, vec3 position)
   scene->set_parent(shoulder_joint, grabbycube);
   scene->set_parent(arm_test, shoulder_joint);
 
-  Node_Index tiger = scene->add_aiscene_old("tiger/tiger.fbx", "grabbytiger");
+  Node_Index tiger = scene->add_aiscene_new("tiger/tiger.fbx", "grabbytiger");
 }
 
-void spawn_compass(Flat_Scene_Graph *scene)
+void spawn_compass(Scene_Graph *scene)
 {
   Node_Index root = scene->new_node("compass");
   Material_Descriptor material;
@@ -174,12 +174,12 @@ void spawn_compass(Flat_Scene_Graph *scene)
   scene->nodes[zaxis].position = vec3(0.0125, 0.0125, 0.5);
 }
 
-void spawn_map(Flat_Scene_Graph *scene)
+void spawn_map(Scene_Graph *scene)
 {
   Blades_Edge map(*scene);
 }
 
-void spawn_test_triangle(Flat_Scene_Graph *scene)
+void spawn_test_triangle(Scene_Graph *scene)
 {
 
   Material_Descriptor material;
@@ -237,7 +237,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  scene.add_aiscene_old("racharound/racharound.fbx");
+  scene.add_aiscene_new("racharound/racharound.fbx");
 
   terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
@@ -512,7 +512,7 @@ void Render_Test_State::handle_input_events()
   previous_mouse_state = mouse_state;
 }
 
-void update_grabbyarm(Flat_Scene_Graph *scene, float64 current_time)
+void update_grabbyarm(Scene_Graph *scene, float64 current_time)
 {
   // build_transformation transfer child test
   static float32 last = (float32)current_time;
@@ -574,7 +574,7 @@ void update_grabbyarm(Flat_Scene_Graph *scene, float64 current_time)
   scene->nodes[arm_test].position = {0.5f * arm_radius, 0.0f, -0.75f};
 }
 
-void update_planets(Flat_Scene_Graph *scene, float64 current_time)
+void update_planets(Scene_Graph *scene, float64 current_time)
 {
   Node_Index cube_star = scene->find_by_name(NODE_NULL, "star");
   Node_Index cube_planet = scene->find_by_name(cube_star, "planet");
@@ -596,7 +596,7 @@ void update_planets(Flat_Scene_Graph *scene, float64 current_time)
   scene->nodes[cube_moon].orientation = angleAxis((float32)current_time / moon_day, vec3(0, 0, 1));
 }
 
-void update_test_triangle(Flat_Scene_Graph *scene)
+void update_test_triangle(Scene_Graph *scene)
 {
   Node_Index triangle = scene->find_by_name(NODE_NULL, "triangle");
   ASSERT(triangle != NODE_NULL);
@@ -672,9 +672,9 @@ void Render_Test_State::draw_gui()
   ImGui::End();
 }
 
-bool spawn_test_spheres(Flat_Scene_Graph &scene)
+bool spawn_test_spheres(Scene_Graph &scene)
 {
-  Node_Index test = scene.add_aiscene_old("smoothsphere.fbx", "spheretest", false);
+  Node_Index test = scene.add_aiscene_new("smoothsphere.fbx", "spheretest", false);
   if (test == NODE_NULL)
   {
     return false;
@@ -737,13 +737,13 @@ bool spawn_test_spheres(Flat_Scene_Graph &scene)
           material.frag_shader = "water.frag";
         }
 
-        Node_Index index = scene.add_aiscene_old("smoothsphere.fbx", "Spherearray");
+        Node_Index index = scene.add_aiscene_new("smoothsphere.fbx", "Spherearray");
         Material_Index mi = scene.resource_manager->push_custom_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
         scene.nodes[scene.nodes[index].children[0]].name = s("sphere ", i, " ", j, " ", k);
         material.uniform_set.clear();
 
-        Flat_Scene_Graph_Node *node = &scene.nodes[index];
+        Scene_Graph_Node *node = &scene.nodes[index];
         node->scale = vec3(0.5f);
         node->position = (node->scale * 2.f * vec3(i, k, j)) + vec3(0, 6, 1);
         scene.set_parent(index, NODE_NULL);
@@ -765,10 +765,10 @@ Frostbolt_Effect::Frostbolt_Effect(State *state, uint32 light_index)
   mat.translucent_pass = true;
   mat.frag_shader = "emission.frag";
   billboard_spawn_source = state->scene.add_mesh(cube, "frostbolt billboard source", &mat);
-  Flat_Scene_Graph_Node *node = &state->scene.nodes[billboard_spawn_source];
+  Scene_Graph_Node *node = &state->scene.nodes[billboard_spawn_source];
   node->scale = vec3(0.0001, 3, 3);
 
-  crystal = state->scene.add_aiscene_old("sphere-1.fbx", "frostbolt crystal");
+  crystal = state->scene.add_aiscene_new("sphere-1.fbx", "frostbolt crystal");
   node = &state->scene.nodes[crystal];
   node->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal].children[0];
@@ -810,7 +810,7 @@ Frostbolt_Effect::Frostbolt_Effect(State *state, uint32 light_index)
 
 bool Frostbolt_Effect::update(State *owning_state, vec3 target)
 {
-  Flat_Scene_Graph_Node *node = &owning_state->scene.nodes[crystal];
+  Scene_Graph_Node *node = &owning_state->scene.nodes[crystal];
 
   if (length(target - node->position) < 0.15f)
   {
@@ -842,7 +842,7 @@ bool Frostbolt_Effect::update(State *owning_state, vec3 target)
   uint32 size = billboards.size();
   for (uint32 i = 0; i < size; ++i)
   {
-    Flat_Scene_Graph_Node *node = &owning_state->scene.nodes[billboards[i].first];
+    Scene_Graph_Node *node = &owning_state->scene.nodes[billboards[i].first];
 
     // node->velocity = node->velocity + dt * vec3(0, 0, -9.8);
     node->velocity = .99f * node->velocity;
@@ -895,8 +895,8 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   //////////////////////////////////////////////////
   //////////////////////////////////////////////////
   //crystal node
-  crystal_node = state->scene.add_aiscene_old("sphere-1.fbx", "frostbolt crystal");
-  Flat_Scene_Graph_Node* crystal_node_ptr = &state->scene.nodes[crystal_node];
+  crystal_node = state->scene.add_aiscene_new("sphere-1.fbx", "frostbolt crystal");
+  Scene_Graph_Node* crystal_node_ptr = &state->scene.nodes[crystal_node];
   crystal_node_ptr->position = position;
   crystal_node_ptr->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal_node].children[0];
@@ -967,7 +967,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   trail_material.vertex_shader = "instance.vert";
   trail_material.frag_shader = "emission.frag";
   trail_node = state->scene.add_mesh(cube, "frostbolt2 trail_node", &trail_material);
-  Flat_Scene_Graph_Node* trail_node_ptr = &state->scene.nodes[trail_node];
+  Scene_Graph_Node* trail_node_ptr = &state->scene.nodes[trail_node];
   Mesh_Index trail_mesh_i = trail_node_ptr->model[0].first;
   Material_Index trail_mat_i = trail_node_ptr->model[0].second;
   //trail particle emitter
@@ -1016,7 +1016,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   ppmd_impact.gravity = vec3(0,0,-9.8); 
   ppmd_impact.billboard_rotation_time_factor = 1.1f;
   //impact material
-  explosion_node = state->scene.add_aiscene_old("sphere-1.fbx", "frostbolt2 explosion source");
+  explosion_node = state->scene.add_aiscene_new("sphere-1.fbx", "frostbolt2 explosion source");
   Node_Index explosionchild = state->scene.nodes[explosion_node].children[0];
   Material_Descriptor* explosion_material = state->scene.get_modifiable_material_pointer_for(explosionchild, 0);
   *explosion_material = Material_Descriptor();
@@ -1039,7 +1039,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   explosion_material->discard_on_alpha = false;
   explosion_material->vertex_shader = "instance.vert";
   explosion_material->frag_shader = "fragment_shader.frag";
-  Flat_Scene_Graph_Node* explosion_node_ptr = &state->scene.nodes[explosionchild];
+  Scene_Graph_Node* explosion_node_ptr = &state->scene.nodes[explosionchild];
   explosion_node_ptr->visible = false;
   Mesh_Index explosion_mesh_i = explosion_node_ptr->model[0].first;
   Material_Index explosion_mat_i = explosion_node_ptr->model[0].second;
@@ -1055,7 +1055,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
 
 bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
 {
-  Flat_Scene_Graph_Node *node = &owning_state->scene.nodes[crystal_node];
+  Scene_Graph_Node *node = &owning_state->scene.nodes[crystal_node];
   Particle_Emitter *stream_emitter = nullptr;
   Particle_Emitter *impact_emitter = nullptr;
   if (owning_state->scene.particle_emitters.size() > stream_particle_emitter_index)
@@ -1084,7 +1084,7 @@ bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
   {
     dst_reached = true;
   }
-  float32 sintime = 0.5 + 0.5 * sin(6 * owning_state->current_time);
+  float32 sintime = 0.5f + 0.5f * float32(sin(6 * owning_state->current_time));
   vec3 dir = normalize(target - position);
   vec3 pos = position + (dt * speed) * dir;
   node->velocity = speed * dir;

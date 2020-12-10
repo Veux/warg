@@ -17,8 +17,8 @@ bool WANT_SPAWN_OCTREE_BOX = false;
 bool WANT_CLEAR_OCTREE = false;
 
 extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
-extern void spawn_grabbyarm(Flat_Scene_Graph* scene, vec3 position);
-extern void update_grabbyarm(Flat_Scene_Graph* scene, float64 current_time);
+extern void spawn_grabbyarm(Scene_Graph* scene, vec3 position);
+extern void update_grabbyarm(Scene_Graph* scene, float64 current_time);
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
     : State(name, window, window_size)
 {
@@ -875,7 +875,7 @@ void Warg_State::update()
     scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
 
     
-    Flat_Scene_Graph_Node *newnodeptr = &scene.nodes[newnode];
+    Scene_Graph_Node *newnodeptr = &scene.nodes[newnode];
     Mesh_Index new_node_mesh_index = newnodeptr->model[0].first;
     Mesh *mp = &scene.resource_manager->mesh_pool[new_node_mesh_index];
     Mesh_Descriptor *mdp = &mp->mesh->descriptor;

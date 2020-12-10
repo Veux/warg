@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <vector>
 using namespace glm;
-struct Flat_Scene_Graph;
+struct Scene_Graph;
 
 struct Triangle
 {
@@ -17,7 +17,7 @@ struct Triangle_Normal
   vec3 v;
 };
 
-std::vector<Triangle_Normal> collect_colliders_with_normal(Flat_Scene_Graph &scene);
+std::vector<Triangle_Normal> collect_colliders_with_normal(Scene_Graph &scene);
 //typedef std::vector<Triangle> Colliders;
 
 struct Ellipsoid

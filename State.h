@@ -78,7 +78,7 @@ struct State
 
   // data
   Resource_Manager resource_manager;
-  Flat_Scene_Graph scene;
+  Scene_Graph scene;
 
   // utility
 

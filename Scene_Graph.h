@@ -180,8 +180,8 @@ struct Octree
     root = &nodes[0];
     root->size = size;
     // root->halfsize = 0.5f*size;
-    root->minimum = -vec3(0.5 * root->size);
-    root->center = root->minimum + vec3(0.5 * root->size);
+    root->minimum = -vec3(0.5f * root->size);
+    root->center = root->minimum + vec3(0.5f * root->size);
   }
 
   Octree_Node *root;
@@ -189,7 +189,7 @@ struct Octree
   std::vector<Octree_Node> nodes; // size is constant, set in constructor
   Octree_Node *new_node(vec3 p, float32 size, uint8 parent_depth) noexcept;
   void clear();
-  std::vector<Render_Entity> get_render_entities(Flat_Scene_Graph *owner);
+  std::vector<Render_Entity> get_render_entities(Scene_Graph *owner);
   void pack_chosen_entities()
   {
     chosen_render_entities.clear();
@@ -256,12 +256,13 @@ struct Imported_Scene_Node
 struct Imported_Scene_Data
 {
   std::string assimp_filename;
-  std::vector<Imported_Scene_Node> children;
+  Imported_Scene_Node root_node;
   std::vector<Mesh_Descriptor> meshes;
   std::vector<Material_Descriptor> materials;
   std::vector<Bone> bones;
   std::vector<Skeletal_Animation> animations;
   float64 scale_factor = 1.;
+  uint32 import_flags = default_assimp_flags;
   std::atomic<bool> valid = false;
   bool import_failure = false;
 };
@@ -281,11 +282,11 @@ struct Resource_Manager
   std::thread import_thread;
 
   // opens assimp file using the importer, recursively calls _import_aiscene_node to build the Imported_Scene_Data
-  static bool import_aiscene_new(std::string path, Imported_Scene_Data *result, uint32 assimp_flags = default_assimp_flags);
+  static bool import_aiscene_new(Imported_Scene_Data *result);
 
   // must be called from main thread
   // returns nullptr if busy loading
-  bool import_aiscene_async(std::string path, Imported_Scene_Data *dst, uint32 assimp_flags = default_assimp_flags);
+  bool import_aiscene_async(Imported_Scene_Data *dst);
 
   // begins loading of the assimp resource
   // returns pointer to the import if it is ready, else returns null
@@ -294,7 +295,8 @@ struct Resource_Manager
   // eventually produce the Imported_Scene_Data
   Imported_Scene_Data *request_valid_resource(std::string assimp_path, bool wait_for_valid = true);
 
-  static Imported_Scene_Node _import_aiscene_node(std::string assimp_filename, const aiScene *scene, const aiNode *node);
+  static Imported_Scene_Node _import_aiscene_node(
+      std::string assimp_filename, const aiScene *scene, const aiNode *node);
 
 #if 0
   // pure - gets rid of nodes that have no meshes
@@ -308,9 +310,9 @@ struct Resource_Manager
   std::unordered_map<std::string, Imported_Scene_Data> import_data;
 };
 
-struct Flat_Scene_Graph_Node
+struct Scene_Graph_Node
 {
-  Flat_Scene_Graph_Node();
+  Scene_Graph_Node();
 
   // todo: billboarding in visit_nodes
   // todo: frustrum culling
@@ -325,7 +327,6 @@ struct Flat_Scene_Graph_Node
   std::array<std::pair<Mesh_Index, Material_Index>, MAX_MESHES_PER_NODE> model;
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
-  Node_Index collider = NODE_NULL;
   bool exists = false;
   bool visible = true;
   bool propagate_visibility = true;
@@ -338,9 +339,9 @@ struct Flat_Scene_Graph_Node
   Array_String filename_of_import;
 };
 
-struct Flat_Scene_Graph
+struct Scene_Graph
 {
-  Flat_Scene_Graph(Resource_Manager *manager);
+  Scene_Graph(Resource_Manager *manager);
 
   void clear();
 
@@ -348,8 +349,8 @@ struct Flat_Scene_Graph
   // every call after the first of a given path will have its import read from a cache instead of disk
   // and should be somewhat quick but not good for doing over and over in realtime
   // instead, if possible, use deep_clone()
-  Node_Index add_aiscene_old(
-      std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
+  // Node_Index add_aiscene_old1(
+  //    std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
 
   Node_Index add_aiscene_new(
       std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
@@ -410,7 +411,7 @@ struct Flat_Scene_Graph
 
   bool draw_collision_octree = false;
   Octree collision_octree;
-  std::array<Flat_Scene_Graph_Node, MAX_NODES> nodes;
+  std::array<Scene_Graph_Node, MAX_NODES> nodes;
   Light_Array lights;
 
   void initialize_lighting(std::string radiance, std::string irradiance, bool generate_light_spheres = true);
@@ -435,7 +436,7 @@ private:
   void visit_nodes(Node_Index Node_Index, const mat4 &M, std::vector<Render_Entity> &accumulator);
   glm::mat4 __build_transformation(Node_Index node_index);
   void assert_valid_parent_ptr(Node_Index child);
-  Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node, std::string assimp_filename,
+  Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node,
       std::unordered_map<std::string, std::pair<Mesh_Index, Material_Index>> *indices);
 
   // imgui:

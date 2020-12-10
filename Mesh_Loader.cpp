@@ -10,10 +10,10 @@ Mesh_Data generate_grid(ivec2 vertex_count)
   ivec2 tile_count = vertex_count -ivec2(1);
   Mesh_Data data;
 
-  for (uint32 y = 0; y < tile_count.y + 1; ++y)
+  for (uint32 y = 0; y < (uint32)tile_count.y + 1; ++y)
   {
 
-    for (uint32 x = 0; x < tile_count.x + 1; ++x)
+    for (uint32 x = 0; x < (uint32)tile_count.x + 1; ++x)
     {
       data.positions.push_back(vec3(vec2(x, y), 0));
       data.normals.push_back(vec3(0, 0, 1));
@@ -23,14 +23,14 @@ Mesh_Data generate_grid(ivec2 vertex_count)
     }
   }
 
-  for (uint32 y = 0; y < tile_count.y; ++y)
+  for (uint32 y = 0; y < (uint32)tile_count.y; ++y)
   {
 
-    for (uint32 x = 0; x < tile_count.x; ++x)
+    for (uint32 x = 0; x < (uint32)tile_count.x; ++x)
     {
-      uint32 lower_left = y * (tile_count.x+1) + x;
+      uint32 lower_left = y * ((uint32)tile_count.x+1) + x;
       uint32 lower_right = lower_left + 1;
-      uint32 upper_left = lower_left + (tile_count.x+1);
+      uint32 upper_left = lower_left + ((uint32)tile_count.x+1);
       uint32 upper_right = upper_left + 1;
 
       data.indices.push_back(upper_left);

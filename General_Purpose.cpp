@@ -348,6 +348,10 @@ std::string get_message_log()
   return message_log;
 }
 std::mutex SET_MESSAGE_MUTEX;
+void nop(bool i)
+{
+  return;
+}
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
   lock_guard<mutex> l(SET_MESSAGE_MUTEX);

@@ -38,7 +38,7 @@ struct Warg_Server
   std::atomic<bool> running = false;
   Map *map;
   Resource_Manager resource_manager;
-  Flat_Scene_Graph scene;
+  Scene_Graph scene;
   Spell_Database spell_db;
   Game_State game_state;
 };

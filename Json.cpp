@@ -68,7 +68,7 @@ std::string pretty_dump(const json &j)
   return result;
 }
 
-void to_json(json &result, const Flat_Scene_Graph &p)
+void to_json(json &result, const Scene_Graph &p)
 {
   json j;
   j["Light_Array"] = p.lights;

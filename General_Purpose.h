@@ -9,10 +9,7 @@
 enum struct Light_Type;
 #define ASSERT(x) _errr(x, __FILE__, __LINE__)
 
-void nop(bool i)
-{
-  return;
-}
+void nop(bool i);
 
 #ifdef NDEBUG
 #define DEBUGASSERT(x) nop(x)

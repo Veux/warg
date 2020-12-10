@@ -111,7 +111,7 @@ void Framebuffer::init()
   GLint current_fbo;
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-  glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
+  glDrawBuffers(uint32(draw_buffers.size()), &draw_buffers[0]);
   glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
   if (depth_enabled)
   {
@@ -297,8 +297,8 @@ int32 save_texture(Texture *texture, std::string filename, uint32 level)
   if (is_float_format(texture->texture->internalformat))
   {
     uint32 comp = 4;
-    std::vector<float32> data(width * height * comp);
-    uint32 size = data.size() * sizeof(float32);
+    std::vector<float32> data((uint32)(width * height * comp));
+    uint32 size = uint32(data.size()) * (uint32)sizeof(float32);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
 
@@ -308,8 +308,8 @@ int32 save_texture(Texture *texture, std::string filename, uint32 level)
   else
   {
     uint32 comp = 4;
-    std::vector<uint8> data(width * height * comp);
-    uint32 size = data.size() * sizeof(uint8);
+    std::vector<uint8> data((uint32)(width * height * comp));
+    uint32 size = uint32(data.size()) * (uint32)sizeof(uint8);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
 
@@ -358,7 +358,7 @@ int32 save_texture_type(Texture *texture, std::string filename, std::string type
   {
     uint32 comp = 4;
     std::vector<float32> data(width * height * comp);
-    uint32 size = data.size() * sizeof(float32);
+    uint32 size = uint32(data.size()) * sizeof(float32);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
 
@@ -369,7 +369,7 @@ int32 save_texture_type(Texture *texture, std::string filename, std::string type
   {
     uint32 comp = 4;
     std::vector<uint8> data(width * height * comp);
-    uint32 size = data.size() * sizeof(uint8);
+    uint32 size = uint32(data.size()) * sizeof(uint8);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
 
@@ -576,13 +576,13 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
   {
     uint32 width = (uint32)floor(size.x * pow(0.5, mip_level));
     uint32 height = (uint32)floor(size.y * pow(0.5, mip_level));
-    uint32 xf = floor(width / ibl_tile_max);
+    uint32 xf = (uint32)floor(width / ibl_tile_max);
     uint32 x = tilex * xf;
-    uint32 draw_width = ceil(float32(width) / ibl_tile_max);
+    uint32 draw_width = (uint32)ceil(float32(width) / ibl_tile_max);
 
-    uint32 yf = floor(height / ibl_tile_max);
+    uint32 yf = (uint32)floor(height / ibl_tile_max);
     uint32 y = tiley * yf;
-    uint32 draw_height = ceil(float32(height) / ibl_tile_max);
+    uint32 draw_height = (uint32)ceil(float32(height) / ibl_tile_max);
 
     glViewport(0, 0, width, height);
 
@@ -978,42 +978,42 @@ void Mesh_Handle::upload_data()
   glGenBuffers(1, &tangents_buffer);
   glGenBuffers(1, &bitangents_buffer);
 
-  uint32 positions_buffer_size = mesh_data.positions.size();
-  uint32 normal_buffer_size = mesh_data.normals.size();
-  uint32 uv_buffer_size = mesh_data.texture_coordinates.size();
-  uint32 tangents_size = mesh_data.tangents.size();
-  uint32 bitangents_size = mesh_data.bitangents.size();
-  uint32 indices_buffer_size = mesh_data.indices.size();
+  uint32 positions_buffer_size = uint32(mesh_data.positions.size());
+  uint32 normal_buffer_size = uint32(mesh_data.normals.size());
+  uint32 uv_buffer_size = uint32(mesh_data.texture_coordinates.size());
+  uint32 tangents_size = uint32(mesh_data.tangents.size());
+  uint32 bitangents_size = uint32(mesh_data.bitangents.size());
+  uint32 indices_buffer_size = uint32(mesh_data.indices.size());
 
   ASSERT(all_equal(positions_buffer_size, normal_buffer_size, uv_buffer_size, tangents_size, bitangents_size));
 
   // positions
-  uint32 buffer_size = mesh_data.positions.size() * sizeof(decltype(mesh_data.positions)::value_type);
+  uint32 buffer_size = (uint32)mesh_data.positions.size() * (uint32)sizeof(decltype(mesh_data.positions)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.positions[0], GL_STATIC_DRAW);
 
   // normals
-  buffer_size = mesh_data.normals.size() * sizeof(decltype(mesh_data.normals)::value_type);
+  buffer_size = (uint32)mesh_data.normals.size() * (uint32)sizeof(decltype(mesh_data.normals)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.normals[0], GL_STATIC_DRAW);
 
   // texture_coordinates
-  buffer_size = mesh_data.texture_coordinates.size() * sizeof(decltype(mesh_data.texture_coordinates)::value_type);
+  buffer_size = (uint32)mesh_data.texture_coordinates.size() * (uint32)sizeof(decltype(mesh_data.texture_coordinates)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.texture_coordinates[0], GL_STATIC_DRAW);
 
   // indices
-  buffer_size = mesh_data.indices.size() * sizeof(decltype(mesh_data.indices)::value_type);
+  buffer_size = (uint32)mesh_data.indices.size() * (uint32)sizeof(decltype(mesh_data.indices)::value_type);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_buffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer_size, &mesh_data.indices[0], GL_STATIC_DRAW);
 
   // tangents
-  buffer_size = mesh_data.tangents.size() * sizeof(decltype(mesh_data.tangents)::value_type);
+  buffer_size = (uint32)mesh_data.tangents.size() * (uint32)sizeof(decltype(mesh_data.tangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.tangents[0], GL_STATIC_DRAW);
 
   // bitangents
-  buffer_size = mesh_data.bitangents.size() * sizeof(decltype(mesh_data.bitangents)::value_type);
+  buffer_size = (uint32)mesh_data.bitangents.size() * (uint32)sizeof(decltype(mesh_data.bitangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0], GL_STATIC_DRAW);
 
@@ -1818,7 +1818,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   }
 }
 
-void Renderer::opaque_pass(float32 time)
+void Renderer::opaque_pass(float64 time)
 {
 
   // set_message("opaque_pass()");
@@ -1837,7 +1837,7 @@ void Renderer::opaque_pass(float32 time)
   // set_message("opaque_pass projection:", s(projection), 1.0f);
   // set_message("opaque_pass camera:", s(camera), 1.0f);
   bind_white_to_all_textures();
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
   brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
   glViewport(0, 0, render_target_size.x, render_target_size.y);
 
@@ -1854,7 +1854,7 @@ void Renderer::opaque_pass(float32 time)
       }
       entity.material->bind();
       Shader &shader = entity.material->shader;
-      shader.set_uniform("time", time);
+      shader.set_uniform("time", (float32)time);
       shader.set_uniform("txaa_jitter", txaa_jitter);
       shader.set_uniform("camera_position", camera_position);
       shader.set_uniform("MVP", projection * camera * entity.transformation);
@@ -1866,19 +1866,19 @@ void Renderer::opaque_pass(float32 time)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
       }
     }
-    glDrawBuffers(draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
+    glDrawBuffers((uint32)draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
     glDepthFunc(GL_EQUAL);
   }
   for (Render_Entity &entity : render_entities)
   {
     bind_white_to_all_textures();
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
     brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
     ASSERT(entity.mesh);
     entity.material->bind();
 
     Shader &shader = entity.material->shader;
-    shader.set_uniform("time", time);
+    shader.set_uniform("time", (float32)time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
@@ -1928,7 +1928,7 @@ void Renderer::opaque_pass(float32 time)
   bind_white_to_all_textures();
 }
 
-void Renderer::instance_pass(float32 time)
+void Renderer::instance_pass(float64 time)
 {
   glDisable(GL_BLEND);
   vec3 forward_v = normalize(camera_gaze - camera_position);
@@ -1965,7 +1965,7 @@ void Renderer::instance_pass(float32 time)
     Shader *shader = &entity.material->shader;
     ASSERT(shader->vs == "instance.vert");
 
-    shader->set_uniform("time", time);
+    shader->set_uniform("time", (float32)time);
     shader->set_uniform("txaa_jitter", txaa_jitter);
     shader->set_uniform("camera_position", camera_position);
     shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
@@ -1979,7 +1979,7 @@ void Renderer::instance_pass(float32 time)
     shader->set_uniform("use_billboarding", entity.use_billboarding);
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
     entity.mesh->load();
 
     glBindVertexArray(entity.mesh->get_vao());
@@ -2211,10 +2211,10 @@ void Renderer::instance_pass(float32 time)
 // store
 // sample accumulated roughness for each
 
-void Renderer::translucent_pass(float32 time)
+void Renderer::translucent_pass(float64 time)
 {
   brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
 
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
@@ -2246,7 +2246,7 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("camera_forward", forward_v);
     shader->set_uniform("camera_right", right_v);
     shader->set_uniform("camera_up", up_v);
-    shader->set_uniform("time", time);
+    shader->set_uniform("time", (float32)time);
     shader->set_uniform("txaa_jitter", txaa_jitter);
     shader->set_uniform("camera_position", camera_position);
     shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
@@ -2327,7 +2327,7 @@ void Renderer::translucent_pass(float32 time)
   glDepthMask(GL_TRUE);
 }
 
-void Renderer::postprocess_pass(float32 time)
+void Renderer::postprocess_pass(float64 time)
 {
   // Scene Luminance
 
@@ -2355,8 +2355,8 @@ void Renderer::postprocess_pass(float32 time)
     resolutions.push_back(resolutions.back() / 2);
   }
 
-  const uint32 levels = resolutions.size();
-  const uint32 dst_mip_level_count = resolutions.size() - 1;
+  const uint32 levels = uint32(resolutions.size());
+  const uint32 dst_mip_level_count = uint32(resolutions.size()) - 1;
 
   if (need_to_allocate_textures)
   {
@@ -2463,7 +2463,7 @@ void Renderer::postprocess_pass(float32 time)
   glDisable(GL_BLEND);
 }
 
-void Renderer::skybox_pass(float32 time)
+void Renderer::skybox_pass(float64 time)
 {
 
   vec3 scalev = vec3(4000);
@@ -2476,7 +2476,7 @@ void Renderer::skybox_pass(float32 time)
   glViewport(0, 0, render_target_size.x, render_target_size.y);
   glBindVertexArray(cube.get_vao());
   skybox.use();
-  skybox.set_uniform("time", time);
+  skybox.set_uniform("time", (float32)time);
   skybox.set_uniform("txaa_jitter", txaa_jitter);
   skybox.set_uniform("camera_position", camera_position);
   skybox.set_uniform("MVP", projection * camera * transformation);
@@ -2494,7 +2494,7 @@ void Renderer::skybox_pass(float32 time)
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
-void Renderer::copy_to_primary_framebuffer_and_txaa(float32 time)
+void Renderer::copy_to_primary_framebuffer_and_txaa(float64 time)
 {
   txaa_jitter = get_next_TXAA_sample();
   // TODO: implement motion vector vertex attribute
@@ -2538,7 +2538,7 @@ void Renderer::copy_to_primary_framebuffer_and_txaa(float32 time)
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void Renderer::use_fxaa_shader(float32 state_time)
+void Renderer::use_fxaa_shader(float64 state_time)
 {
   static float EDGE_THRESHOLD_MIN = 0.0312;
   static float EDGE_THRESHOLD_MAX = 0.125;
@@ -3140,7 +3140,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   glNamedFramebufferRenderbuffer(fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
   glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &handle->texture);
-  uint32 level_count = 1 + floor(glm::log2(float32(glm::max(size.x, size.y))));
+  uint32 level_count = 1 + uint32(floor(glm::log2(float32(glm::max(size.x, size.y)))));
   glTextureStorage2D(handle->texture, level_count, GL_RGB16F, size.x, size.y);
 
   mat4 rot = toMat4(quat(1, 0, 0, radians(0.f)));
@@ -3529,6 +3529,7 @@ std::unique_ptr<Particle_Physics_Method> Particle_Emitter::construct_physics_met
   {
     return std::make_unique<Wind_Particle_Physics>();
   }
+  return nullptr;
 }
 
 std::unique_ptr<Particle_Emission_Method> Particle_Emitter::construct_emission_method(Particle_Emitter_Descriptor d)
@@ -3541,6 +3542,7 @@ std::unique_ptr<Particle_Emission_Method> Particle_Emitter::construct_emission_m
   {
     return std::make_unique<Particle_Explosion_Emission>();
   }
+  return nullptr;
 }
 
 void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
@@ -3772,7 +3774,7 @@ void Simple_Particle_Physics::step(
 {
   ASSERT(p);
   ASSERT(d);
-  float32 current_time = get_real_time();
+  float32 current_time = (float32)get_real_time();
   for (auto &particle : p->particles)
   {
     if (d->abort_when_late)
@@ -3792,7 +3794,7 @@ void Wind_Particle_Physics::step(
   ASSERT(p);
   ASSERT(d);
 
-  float32 current_time = get_real_time();
+  float32 current_time = (float32)get_real_time();
   //
   // float32 bounce_loss = 0.75;
   if (p->particles.size() > 0)
@@ -4079,7 +4081,7 @@ void Wind_Particle_Physics::step(
     }
   }
 }
-float32 radicalInverse_VdC(uint bits)
+float32 radicalInverse_VdC(uint32 bits)
 {
   bits = (bits << 16u) | (bits >> 16u);
   bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
@@ -4088,7 +4090,7 @@ float32 radicalInverse_VdC(uint bits)
   bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
   return float32(bits) * 2.3283064365386963e-10; // / 0x100000000
 }
-vec2 hammersley2d(uint i, uint N)
+vec2 hammersley2d(uint32 i, uint32 N)
 {
   return vec2(float32(i) / float32(N), radicalInverse_VdC(i));
 }
@@ -4096,20 +4098,20 @@ vec2 hammersley2d(uint i, uint N)
 vec3 hemisphere_sample_uniform(vec2 uv)
 {
   float32 phi = uv.y * two_pi<float32>();
-  float32 cos_theta = 1.0 - uv.x;
-  float32 sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+  float32 cos_theta = 1.0f - uv.x;
+  float32 sin_theta = sqrt(1.0f - cos_theta * cos_theta);
   return vec3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
 }
 
-vec3 hammersley_hemisphere(uint i, uint n)
+vec3 hammersley_hemisphere(uint32 i, uint32 n)
 {
   return hemisphere_sample_uniform(hammersley2d(i, n));
 }
 
-vec3 hammersley_sphere(uint i, uint n)
+vec3 hammersley_sphere(uint32 i, uint32 n)
 {
   uint32 extra_index = n % 2 != 0; // if n is odd, we do one extra on the top hemisphere
-  uint half_n = n / 2;
+  uint32 half_n = n / 2;
   vec3 result;
   if (i < half_n)
     result = vec3(1, 1, -1) * hammersley_hemisphere(i, half_n); // bottom
@@ -4200,12 +4202,12 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
   //  std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
   //  std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), std::mt19937{ std::random_device{}() });
   //}
-  float32 epc = d->explosion_particle_count;
+  float32 epc = (float32)d->explosion_particle_count;
 #ifndef NDEBUG
-  epc = 0.1 * epc;
+  epc = 0.1f * epc;
 #endif
 
-  for (uint32 i = 0; i < epc; ++i)
+  for (uint32 i = 0; i < (uint32)epc; ++i)
   {
     Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
 
@@ -4221,11 +4223,11 @@ void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Me
       vec3 hammersley_pos;
       if (d->hammersley_sphere)
       {
-        hammersley_pos = hammersley_sphere(i, epc);
+        hammersley_pos = hammersley_sphere(i, (uint32)epc);
       }
       else
       {
-        hammersley_pos = hammersley_hemisphere(i, epc);
+        hammersley_pos = hammersley_hemisphere(i, (uint32)epc);
       }
       // lets take the previously calculated random-offsetted position from the
       // misc emitter step and use its length as the distance from emitter origin
@@ -4321,7 +4323,7 @@ void Particle_Stream_Emission::update(Particle_Array *p, Particle_Emission_Metho
   // do this spawns loop "spawns per dt"+1 times per visit to this function
   float32 sps = d->particles_per_second;
 #ifndef NDEBUG
-  sps = 0.1 * sps;
+  sps = 0.1f * sps;
 #endif
 
   const uint32 particles_before_tick = (uint32)floor(sps * time);
@@ -4713,7 +4715,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ASSERT(imgui_event_accumulator);
   if (!window_open)
     return;
-  float32 time = get_real_time();
+  float32 time = (float32)get_real_time();
   if (!initialized)
   {
     Mesh_Descriptor md(plane, "Texture_Paint's quad");
@@ -5208,7 +5210,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
           fbo_drawing.bind_for_drawing_dst();
           intermediate.bind_for_sampling_at(0);
 
-          uint32 smoothing_iterations = float32(smoothing_count) * d_curve;
+          uint32 smoothing_iterations = uint32(floor(float32(smoothing_count) * d_curve));
           smoothing_iterations = glm::max(smoothing_iterations, (uint32)1);
           set_message("smoothing_iterations", s(smoothing_iterations), 1.0f);
           for (uint32 i = 0; i < smoothing_iterations; ++i)
@@ -5551,7 +5553,7 @@ void Liquid_Surface::set_heightmap(Texture texture)
   velocity_resize_fbo.color_attachments[0] = velocity_dst;
   velocity_resize_fbo.init();
 
-  Flat_Scene_Graph_Node *node = &state->scene.nodes[water];
+  Scene_Graph_Node *node = &state->scene.nodes[water];
   Material_Index mi = node->model[0].second;
   Material *mat = &state->scene.resource_manager->material_pool[mi];
   if (mat->descriptor.derivative_offset == 0.0)
@@ -5624,15 +5626,11 @@ void Liquid_Surface::generate_geometry_from_heightmap(vec4 *heightmap_pixel_arra
     3 4 5
     0 1 2
     */
-    uint32 rows = sample_p.y;
-    uint32 cols = sample_p.x;
+    uint32 rows = (uint32)sample_p.y;
+    uint32 cols = (uint32)sample_p.x;
 
-    bool out_of_bounds = (cols > heightmap.t.size.x - 1) || (rows > heightmap.t.size.y - 1);
+    bool out_of_bounds = (cols > uint32(heightmap.t.size.x) - 1) || (rows > uint32(heightmap.t.size.y) - 1);
 
-    if (out_of_bounds)
-    {
-      int a = 3;
-    }
 
     uint32 index = rows * uint32(size.x) + cols;
 
@@ -5662,7 +5660,7 @@ void Liquid_Surface::zero_velocity()
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 }
-bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Flat_Scene_Graph *scene)
+bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Scene_Graph *scene)
 {
 
   if ((last_applied_terrain_tick < last_generated_terrain_tick))
@@ -5826,7 +5824,7 @@ void Liquid_Surface::run(State *state)
     }
     painter.new_texture_size = heightmap_resize_fbo.color_attachments[0].t.size;
     painter.textures.push_back(heightmap_resize_fbo.color_attachments[0]);
-    painter.change_texture_to(painter.textures.size() - 1);
+    painter.change_texture_to(uint32(painter.textures.size()) - 1);
     set_heightmap(heightmap_resize_fbo.color_attachments[0]);
   }
 
@@ -5856,7 +5854,7 @@ void Liquid_Surface::run(State *state)
       }
     }
   }
-  for (uint32 i = 0; i < iterations; ++i)
+  for (int32 i = 0; i < iterations; ++i)
   {
     my_time = my_time + dt;
 

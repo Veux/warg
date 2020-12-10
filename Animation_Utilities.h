@@ -235,4 +235,4 @@
 //};
 
 void fire_emitter(Renderer *renderer, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size);
-void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size);
+void fire_emitter2(Renderer *renderer, Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size);
