@@ -1308,6 +1308,13 @@ Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat
   ASSERT(mesh);
   ASSERT(material);
 }
+Render_Entity::Render_Entity(Array_String n, Mesh* mesh, Material* material, Skeletal_Animation_State* animation, mat4 world_to_model, Node_Index node_index)
+  : mesh(mesh), material(material), animation(animation), transformation(world_to_model), name(n), node(node_index)
+{
+  ASSERT(mesh);
+  ASSERT(material);
+  ASSERT(animation)
+}
 
 Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 {

@@ -53,13 +53,20 @@ struct Skeletal_Animation
 };
 
 
+struct Skeletal_Animation_Set
+{
+  std::vector<Skeletal_Animation> animation_set;
+};
+
+
 //specific for each entity in the game
-struct Skeletal_Animation_System
+struct Skeletal_Animation_State
 {
   uint32 currently_playing_animation = 0;
   float32 time = 0.f;
 
-  std::vector<Skeletal_Animation> animation_set;
+  uint32 animation_set_index = NODE_NULL;
+  std::vector<Bone> calculated_bone_data;
 };
 
 
@@ -69,6 +76,7 @@ struct Bone
 {
   std::string name;
   mat4 offsetmatrix;
+  mat4 final_transform;
 };
 
 

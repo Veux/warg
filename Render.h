@@ -573,10 +573,12 @@ struct Light_Array
 struct Render_Entity
 {
   Render_Entity() {}
-  Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index);
+  Render_Entity(Array_String name, Mesh *mesh, Material *material, Skeletal_Animation_State* animation, mat4 world_to_model, Node_Index node_index);
+  Render_Entity(Array_String name, Mesh* mesh, Material* material, mat4 world_to_model, Node_Index node_index);
   mat4 transformation;
   Mesh *mesh;
   Material *material;
+  Skeletal_Animation_State* animation;
   Array_String name;
   uint32 ID;
   Node_Index node = NODE_NULL;
@@ -1236,8 +1238,10 @@ struct Renderer
   // pixels, almost all pixels will do only 1 light computation, and only the ones close to the lights will do 2 or very
   // rarely more
 
-
+  //alternatively just do traditional deferred rendering - a lot easier
   
+  //fxaa should probably be done after the scene is resized to the screen
+  //when dragging the render scale, going higher can sometimes make it look worse
 
   // todo: irradiance map generation
   // todo: skeletal animation

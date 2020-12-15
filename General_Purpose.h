@@ -147,7 +147,8 @@ std::string to_string(Particle_Emission_Type& t);
 std::string to_string(Particle_Physics_Type& t);
 std::string to_string(glm::mat4 &m);
 std::string to_string(Array_String &s);
-std::string to_string(vec4 &value);
+std::string to_string(vec4& value);
+std::string to_string(std::string_view& value);
 // std::string to_string(ivec4& value);
 
 glm::mat4 copy(aiMatrix4x4 m);

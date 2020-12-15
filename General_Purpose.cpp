@@ -725,6 +725,11 @@ string to_string(Array_String &s)
   return result;
 }
 
+string to_string(string_view& s)
+{
+  return string(s);
+}
+
 void Config::load(string filename)
 {
   json j;

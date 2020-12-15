@@ -250,6 +250,7 @@ struct Imported_Scene_Node
   std::string name;
   std::vector<Imported_Scene_Node> children;
   std::vector<Mesh_Index> mesh_indices;
+  std::vector<Material_Index> material_indices;
   glm::mat4 transform;
 };
 
@@ -272,11 +273,21 @@ struct Resource_Manager
   Material_Index push_custom_material(Material_Descriptor *d);
   Mesh_Index push_custom_mesh(Mesh_Descriptor *d);
 
+  //todo: not the best, refactor these so they dont copy
+  uint32 push_animation_state(std::vector<Bone>* bones);
+  uint32 push_animation_set(std::vector<Skeletal_Animation>* animation_set);
 #define MAX_POOL_SIZE 5000
   std::array<Mesh, MAX_POOL_SIZE> mesh_pool;
   std::array<Material, MAX_POOL_SIZE> material_pool;
+  std::array<Skeletal_Animation_Set, MAX_POOL_SIZE> animation_set_pool;
+  std::array<Skeletal_Animation_State, MAX_POOL_SIZE> animation_state_pool;
+
   uint32 current_mesh_pool_size = 0;
   uint32 current_material_pool_size = 0;
+  uint32 current_animation_set_pool_size = 0;
+  uint32 current_animation_state_pool_size = 0;
+
+  Material default_material;
 
   bool thread_active = false;
   std::thread import_thread;
@@ -325,6 +336,18 @@ struct Scene_Graph_Node
   vec3 velocity = {0, 0, 0};
   // mat4 import_basis = mat4(1);
   std::array<std::pair<Mesh_Index, Material_Index>, MAX_MESHES_PER_NODE> model;
+
+  
+  //our animation state - selected animation, time, etc
+  uint32 animation_state_pool_index = NODE_NULL;
+
+  //if the name of this node is found in the animation bone pool
+  //then this node is a bone, and we will fill this index
+  //this index is the specific bone in the above state that
+  //this node refers to
+  uint32 bone_pool_index = NODE_NULL;
+
+
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
   bool exists = false;
@@ -437,7 +460,7 @@ private:
   glm::mat4 __build_transformation(Node_Index node_index);
   void assert_valid_parent_ptr(Node_Index child);
   Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node,
-      std::unordered_map<std::string, std::pair<Mesh_Index, Material_Index>> *indices);
+    const std::pair<Mesh_Index, Material_Index>& base_indices, uint32 bone_pool_index);
 
   // imgui:
   Node_Index imgui_selected_node = NODE_NULL;
