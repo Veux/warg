@@ -26,7 +26,6 @@ struct Vertex_Bone_Data
 
 typedef uint32 Skeletal_Animation_Keyframe_Index;
 typedef uint32 Bone_Index;
-#define MAX_BONE_CHILDREN 15
 
 //is a tree structure, indices reference keyframe mat4's
 struct Bone_Animation
@@ -69,12 +68,45 @@ struct Skeletal_Animation_State
   std::vector<Bone> calculated_bone_data;
 };
 
+//struct Frame
+//{
+//  string Name; // the frame or "bone" name 
+//  Matrix TransformationMatrix; // to be used for local animation matrix 
+//  MeshContainer MeshData; // perhaps only one or two frames will have mesh data 
+//  FrameArray Children; // pointers or references to each child frame of this frame 
+//  Matrix ToParent; // the local transform from bone-space to bone's parent-space 
+//  Matrix ToRoot; // from bone-space to root-frame space 
+//}; 
 
 //this bone has a name, which tells us which of the
 //bones in the heirarchy it is
 struct Bone
 {
   std::string name;
+
+
+  //the offsetmatrix is the matrix that takes us from model space to bone space
+  //so, think : 
+  //1 :when we want to rotate a bone, it has to be at origin
+  //2 :the bone for say, a hand, is not at the origin even in the default pose
+  
+  //think about what has to be done to pose the mesh from the default pose
+  //to the desired
+
+  //we must move the hand bone to the origin using the inverse offset matrix
+  //then we calculate its animated orientation
+  
+  //questions:
+  //??:
+  //then we put it back out by multiplying the offset matrix back in?
+  //i think so yes-
+
+  //what do we use as our actual final matrix?
+  //does this replace the 'model matrix'?
+  //i think that our set of 1-4 bones replaces the 'model' matrix
+  //in the shader, we have to weight blend them in the vertex sahder
+
+
   mat4 offsetmatrix;
   mat4 final_transform;
 };

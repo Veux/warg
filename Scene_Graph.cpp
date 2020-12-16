@@ -2520,87 +2520,62 @@ mat4 animation_resolve(const mat4& M, Skeletal_Animation_State* anim_state, Skel
 
 
 
-  //this is probably way overcomplicated
-  //im sure they all make sure that the last frame equals the first
-  //and that they both clamp to the animation duration
-  //just copy the website
-
+  //not sure exactly why its calculated using 'ticks'...
+  const float32 ticks_per_sec = skeletal_animation->ticks_per_sec != 0 ? skeletal_animation->ticks_per_sec : 60;
+  const float time_in_ticks = anim_state->time * ticks_per_sec;
+  const float animation_time = fmod(time_in_ticks, skeletal_animation->duration);
   
-  const float32 desired_animation_time = wrap_to_range(anim_state->time,0.f,skeletal_animation->duration);
 
-  int32 most_recently_passed_i = 0;
-  float32 most_recently_passed_t = 0.f;
+  size_t left_i = 0;
+  size_t right_i = 0;
 
-  size_t next_to_pass_i = 0;
-  float32 next_to_pass_t = 0.f;
-
-  bool found_recently_passed = false;
-  bool found_next_to_pass = false;
-
-  //case of index 0 is ahead of our time
-  if (desired_animation_time < bone_animation->timestamp[0])
+  for (size_t i = 0; i < bone_animation->timestamp.size()-1; ++i)
   {
-    most_recently_passed_i = bone_animation->timestamp.size() - 1;
-    most_recently_passed_t = bone_animation->timestamp[most_recently_passed_t];
-    found_recently_passed = true;
-  }
-  //case of our time is ahead of the last index
-  if (desired_animation_time > bone_animation->timestamp.back())
-  {
-    next_to_pass_i = 0;
-    next_to_pass_t = bone_animation->timestamp[next_to_pass_i];
-    found_next_to_pass = true;
-    most_recently_passed_i = bone_animation->timestamp.size() - 1;
-    most_recently_passed_t = bone_animation->timestamp[most_recently_passed_t];
-    found_recently_passed = true;
-  }
-  const int32 count = (int32)bone_animation->timestamp.size();
-  for (int32 i = 0; i < count; ++i)
-  {    
-    if (found_recently_passed && found_next_to_pass)
+    left_i = i;
+    float32 next_time = bone_animation->timestamp[i+1];
+    if (animation_time < next_time)
     {
+      right_i = i + 1;
       break;
     }
-    size_t current = i;
-    size_t next = i + 1;
-    float32 current_t = bone_animation->timestamp[current];
-    float32 next_t = bone_animation->timestamp[next];
-
-    if (desired_animation_time < next_t)
-    {
-      if (!found_recently_passed)
-      {
-        found_recently_passed = true;
-        most_recently_passed_i = current;
-      }
-      next_to_pass_i = next;
-      found_next_to_pass = true;
-    }
   }
 
+  const float32 left_time = bone_animation->timestamp[left_i];
+  const float32 right_time = bone_animation->timestamp[right_i];
+
+
+  float32 t = animation_time - left_time;
+  float32 max_time = right_time - left_time;
+  t = t / max_time;
+  ASSERT(t >= 0.f && t <= 1.0f);
+  const vec3 translation_result = mix(bone_animation->translations[left_i], bone_animation->translations[right_i], t);
+  const vec3 scale_result = mix(bone_animation->scales[left_i], bone_animation->scales[right_i], t);
+  const quat rotation_result = lerp(bone_animation->rotations[left_i], bone_animation->rotations[right_i], t);
+  
+
+
+  //this will only work correctly when M is the same for the bones as well as the mesh itself
+  //so we cant play with the graph node transformations of the bones and expect them to work
+
+  //if you wanted that sort of effect to happen youd also need to 
+  //pass down a stack of 
+  mat4& M_offset_matrix = M*anim_state->calculated_bone_data[bone_pool_index].offsetmatrix;
+  mat4 inverse_offset = inverse(M_offset_matrix);
+
+
+
+
+
+  const mat4 oriented_bone = translate(translation_result) * toMat4(rotation_result) * scale(scale_result);
+
+
+  return M_offset_matrix * oriented_bone * inverse_offset;
 
 
 
 
 
 
-
-
-  ASSERT(previous_t)
-
-
-
-
-
-
-
-
-
-  mat4& offset_matrix = anim_state->calculated_bone_data[bone_pool_index].offsetmatrix;
-
-
-
-  //* globalinversetransform*globaltransform*bone_state->offsetmatrix;
 }
 
 //note: the node with the character mesh in it may visit first
@@ -2634,8 +2609,7 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
   mat4 STACK = RTM * S_prop;
 
   // this node specifically
-  mat4 BASIS = RTM * S_prop * S_non;
-
+  mat4 BASIS = RTM * S_prop * S_non;  
 
   if (entity->bone_pool_index != NODE_NULL)
   {//we are a bone
