@@ -998,7 +998,8 @@ void Mesh_Handle::upload_data()
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.normals[0], GL_STATIC_DRAW);
 
   // texture_coordinates
-  buffer_size = (uint32)mesh_data.texture_coordinates.size() * (uint32)sizeof(decltype(mesh_data.texture_coordinates)::value_type);
+  buffer_size = (uint32)mesh_data.texture_coordinates.size() *
+                (uint32)sizeof(decltype(mesh_data.texture_coordinates)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.texture_coordinates[0], GL_STATIC_DRAW);
 
@@ -1308,12 +1309,13 @@ Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat
   ASSERT(mesh);
   ASSERT(material);
 }
-Render_Entity::Render_Entity(Array_String n, Mesh* mesh, Material* material, Skeletal_Animation_State* animation, mat4 world_to_model, Node_Index node_index)
-  : mesh(mesh), material(material), animation(animation), transformation(world_to_model), name(n), node(node_index)
+Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, Skeletal_Animation_State *animation,
+    mat4 world_to_model, Node_Index node_index)
+    : mesh(mesh), material(material), animation(animation), transformation(world_to_model), name(n), node(node_index)
 {
   ASSERT(mesh);
   ASSERT(material);
-  ASSERT(animation)
+  ASSERT(animation);
 }
 
 Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
@@ -1890,12 +1892,35 @@ void Renderer::opaque_pass(float64 time)
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
-    shader.set_uniform("MVP", projection * camera * entity.transformation);
+    if (entity.material->shader.vs == "skeletal_animation.vert")
+    {
+      ASSERT(entity.animation);
+      shader.set_uniform("VP", projection * camera);
+    }
+    else
+    {
+      shader.set_uniform("MVP", projection * camera * entity.transformation);
+    }
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
-#if SHOW_UV_TEST_GRID
-    shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
-#endif
+
+    if (entity.animation)
+    {
+      ASSERT(entity.material->shader.vs == "skeletal_animation.vert");
+      Skeletal_Animation_State *animation = entity.animation;
+      const std::vector<mat4> *bones = &animation->final_bone_transforms;
+      const mat4 *m = &(*bones)[0];
+      shader.set_uniform_array("bones[0]", m, bones->size());
+    }
+    else
+    {
+      if (entity.material->shader.vs == "skeletal_animation.vert")
+      {
+        static mat4 identity[MAX_BONES] = {mat4(1)};
+        shader.set_uniform_array("bones[0]", &identity[0], MAX_BONES);
+      }
+    }
+
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
     // environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
@@ -3767,7 +3792,6 @@ void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor 
     particle.velocity = particle.velocity - drag; 
     particle.velocity += dt * d->gravity;
 #endif
-
   }
   misc_particle_attribute_iteration_step(particle, d, current_time);
   if (particle.billboard)
@@ -4022,7 +4046,7 @@ void Wind_Particle_Physics::step(
       particle.velocity += (after_reflect_t * dt * d->gravity);
 
       // misc
-      //particle.velocity *= d->drag; // needs to scale with velocity squared
+      // particle.velocity *= d->drag; // needs to scale with velocity squared
       particle.velocity += wind;
 
       // scale change etc
@@ -4169,11 +4193,11 @@ Particle misc_particle_emitter_step(
   new_particle.orientation = o * second_orientation * first_orientation;
 
   vec3 extra_scale;
-  std::normal_distribution<float32> dist(0.f,d->initial_extra_scale_variance.x);
+  std::normal_distribution<float32> dist(0.f, d->initial_extra_scale_variance.x);
   extra_scale.x = dist(generator);
-  dist = std::normal_distribution<float32>(0.f,d->initial_extra_scale_variance.y);
+  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.y);
   extra_scale.y = dist(generator);
-  dist = std::normal_distribution<float32>(0.f,d->initial_extra_scale_variance.z);
+  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.z);
   extra_scale.z = dist(generator);
   new_particle.scale = d->initial_scale + extra_scale;
   new_particle.scale =
@@ -5638,7 +5662,6 @@ void Liquid_Surface::generate_geometry_from_heightmap(vec4 *heightmap_pixel_arra
 
     bool out_of_bounds = (cols > uint32(heightmap.t.size.x) - 1) || (rows > uint32(heightmap.t.size.y) - 1);
 
-
     uint32 index = rows * uint32(size.x) + cols;
 
     float32 ground_height = 0;
@@ -5819,10 +5842,10 @@ void Liquid_Surface::run(State *state)
     bool success = finish_texture_download_and_generate_geometry();
   }
 
-  //if the grid is smaller than the source heightmap
-  //we will resize the texture to the size of the grid
-  //and put that texture in the painter
-  //rather than leaving the oversized one in there
+  // if the grid is smaller than the source heightmap
+  // we will resize the texture to the size of the grid
+  // and put that texture in the painter
+  // rather than leaving the oversized one in there
   if (ImGui::Button("Set Heightmap To Downloaded"))
   {
     start_texture_download();

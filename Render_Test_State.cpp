@@ -738,7 +738,7 @@ bool spawn_test_spheres(Scene_Graph &scene)
         }
 
         Node_Index index = scene.add_aiscene_new("smoothsphere.fbx", "Spherearray");
-        Material_Index mi = scene.resource_manager->push_custom_material(&material);
+        Material_Index mi = scene.resource_manager->push_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
         scene.nodes[scene.nodes[index].children[0]].name = s("sphere ", i, " ", j, " ", k);
         material.uniform_set.clear();

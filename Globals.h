@@ -11,6 +11,7 @@
 #define MAX_INSTANCE_COUNT 40000
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS 10 // reminder to change the Texture_Location::s1...sn shadow map enums
+#define MAX_BONES 50
 #define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define ENABLE_ASSERTS 1
@@ -19,7 +20,6 @@
 #define MAX_TEXTURE_SAMPLERS 20
 #define MAX_ANISOTROPY 8
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
-#define SHOW_UV_TEST_GRID 0
 #define POSTPROCESSING 1
 #define NODE_NULL uint32(-1)
 #define MAX_MESHES_PER_NODE uint32(50)

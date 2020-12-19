@@ -1131,14 +1131,14 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   Mesh_Descriptor md(cube, "some generic cube");
 
   // add it as a referencable object to the resource manager
-  Mesh_Index cube_mesh_index = scene.resource_manager->push_custom_mesh(&md);
+  Mesh_Index cube_mesh_index = scene.resource_manager->push_mesh(&md);
 
   // add the materials as referencable objects to the resource manager
-  Material_Index skin_material_index = scene.resource_manager->push_custom_material(&skin_material);
-  Material_Index suit_material_index = scene.resource_manager->push_custom_material(&suit_material);
-  Material_Index shirt_material_index = scene.resource_manager->push_custom_material(&shirt_material);
-  Material_Index shoe_material_index = scene.resource_manager->push_custom_material(&shoe_material);
-  Material_Index hair_material_index = scene.resource_manager->push_custom_material(&hair_material);
+  Material_Index skin_material_index = scene.resource_manager->push_material(&skin_material);
+  Material_Index suit_material_index = scene.resource_manager->push_material(&suit_material);
+  Material_Index shirt_material_index = scene.resource_manager->push_material(&shirt_material);
+  Material_Index shoe_material_index = scene.resource_manager->push_material(&shoe_material);
+  Material_Index hair_material_index = scene.resource_manager->push_material(&hair_material);
 
   // now, instead of add_mesh, we do:
   /*
@@ -1407,12 +1407,12 @@ void Warg_State::add_character_mesh(UID character_id)
   Material_Descriptor solid_material = shirt_material;
 
   Mesh_Descriptor md(cube, "girl's cube");
-  Mesh_Index cube_mesh_index = scene.resource_manager->push_custom_mesh(&md);
-  Material_Index skin_material_index = scene.resource_manager->push_custom_material(&skin_material);
-  Material_Index suit_material_index = scene.resource_manager->push_custom_material(&suit_material);
-  Material_Index shirt_material_index = scene.resource_manager->push_custom_material(&shirt_material);
-  Material_Index shoe_material_index = scene.resource_manager->push_custom_material(&shoe_material);
-  Material_Index hair_material_index = scene.resource_manager->push_custom_material(&hair_material);
+  Mesh_Index cube_mesh_index = scene.resource_manager->push_mesh(&md);
+  Material_Index skin_material_index = scene.resource_manager->push_material(&skin_material);
+  Material_Index suit_material_index = scene.resource_manager->push_material(&suit_material);
+  Material_Index shirt_material_index = scene.resource_manager->push_material(&shirt_material);
+  Material_Index shoe_material_index = scene.resource_manager->push_material(&shoe_material);
+  Material_Index hair_material_index = scene.resource_manager->push_material(&hair_material);
 
   std::pair<Mesh_Index, Material_Index> skin_pair = {cube_mesh_index, skin_material_index};
   std::pair<Mesh_Index, Material_Index> suit_pair = {cube_mesh_index, suit_material_index};

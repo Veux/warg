@@ -576,9 +576,9 @@ struct Render_Entity
   Render_Entity(Array_String name, Mesh *mesh, Material *material, Skeletal_Animation_State* animation, mat4 world_to_model, Node_Index node_index);
   Render_Entity(Array_String name, Mesh* mesh, Material* material, mat4 world_to_model, Node_Index node_index);
   mat4 transformation;
-  Mesh *mesh;
-  Material *material;
-  Skeletal_Animation_State* animation;
+  Mesh *mesh = nullptr;
+  Material *material = nullptr;
+  Skeletal_Animation_State* animation = nullptr;
   Array_String name;
   uint32 ID;
   Node_Index node = NODE_NULL;

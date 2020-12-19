@@ -14,12 +14,24 @@ enum Mesh_Primitive
   cube
 };
 
+//just the import data of a single bone - its name and offset matrices
+struct Bone
+{
+  //must be the unique assimp-given name because we have to search for it
+  std::string name;
+
+  //translations to and from our bone's model space position
+  mat4 offset; //model to bone
+  mat4 inverse_offset;//bone to model
+};
 
 
+
+//not all the bones in the draw call - only for this specific vert
 #define MAX_BONES_PER_VERTEX 4
 struct Vertex_Bone_Data
 {
-  uint32 count = 0;
+  uint32 count = 0; //used only for checking overflow for the arrays below
   uint32 indices[MAX_BONES_PER_VERTEX];
   float32 weights[MAX_BONES_PER_VERTEX];
 };
@@ -27,12 +39,25 @@ struct Vertex_Bone_Data
 typedef uint32 Skeletal_Animation_Keyframe_Index;
 typedef uint32 Bone_Index;
 
-//is a tree structure, indices reference keyframe mat4's
+
+//this is a named bone with keyframes 
+//is a constant - does not change - reference data
 struct Bone_Animation
 {
   //this name must/will match the name in the node heirarchy
   //not sure why exactly
-  std::string name;
+  
+  //our import_bone_data bones have names
+
+  //we search for it inside of animation_resolve
+  std::string bone_node_name;
+
+
+
+  //should the offset matrices be in here?
+  //no - we might have tons of animations
+  //yet we still only have a few bones per model
+
 
   //all the keyframes
   std::vector<vec3> translations;
@@ -41,8 +66,8 @@ struct Bone_Animation
   std::vector<float32> timestamp;
 };
 
-
 //one for walk, one for jump, etc
+//is a constant - does not change - reference data
 struct Skeletal_Animation
 {
   std::string name;
@@ -51,65 +76,38 @@ struct Skeletal_Animation
   std::vector<Bone_Animation> bone_animations;
 };
 
-
+//a set of available animations that a model can use
+//is a constant - does not change - reference data
 struct Skeletal_Animation_Set
 {
   std::vector<Skeletal_Animation> animation_set;
 };
 
-
 //specific for each entity in the game
+//points at an animation set, and contains the entity's
+//computed pose result
 struct Skeletal_Animation_State
 {
   uint32 currently_playing_animation = 0;
   float32 time = 0.f;
 
-  uint32 animation_set_index = NODE_NULL;
-  std::vector<Bone> calculated_bone_data;
+  //pointer to our available animations
+  uint32 animation_set_index = NODE_NULL;  
+
+  //pointer to our model's bones
+  uint32 model_bone_set_index = NODE_NULL;
+
+  //bone transforms posed and packed for uniform binding
+  std::vector<mat4> final_bone_transforms;
 };
 
-//struct Frame
-//{
-//  string Name; // the frame or "bone" name 
-//  Matrix TransformationMatrix; // to be used for local animation matrix 
-//  MeshContainer MeshData; // perhaps only one or two frames will have mesh data 
-//  FrameArray Children; // pointers or references to each child frame of this frame 
-//  Matrix ToParent; // the local transform from bone-space to bone's parent-space 
-//  Matrix ToRoot; // from bone-space to root-frame space 
-//}; 
 
-//this bone has a name, which tells us which of the
-//bones in the heirarchy it is
-struct Bone
+struct Model_Bone_Set
 {
-  std::string name;
-
-
-  //the offsetmatrix is the matrix that takes us from model space to bone space
-  //so, think : 
-  //1 :when we want to rotate a bone, it has to be at origin
-  //2 :the bone for say, a hand, is not at the origin even in the default pose
-  
-  //think about what has to be done to pose the mesh from the default pose
-  //to the desired
-
-  //we must move the hand bone to the origin using the inverse offset matrix
-  //then we calculate its animated orientation
-  
-  //questions:
-  //??:
-  //then we put it back out by multiplying the offset matrix back in?
-  //i think so yes-
-
-  //what do we use as our actual final matrix?
-  //does this replace the 'model matrix'?
-  //i think that our set of 1-4 bones replaces the 'model' matrix
-  //in the shader, we have to weight blend them in the vertex sahder
-
-
-  mat4 offsetmatrix;
-  mat4 final_transform;
+  std::vector<Bone> import_bone_data;
 };
+
+
 
 
 struct Mesh_Data

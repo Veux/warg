@@ -34,8 +34,8 @@ bool push_color_text_if_tree_label_open(const char *label, ImVec4 color_true, Im
 
 Node_Index Scene_Graph::add_mesh(std::string name, Mesh_Descriptor *d, Material_Descriptor *md)
 {
-  Mesh_Index mesh_index = resource_manager->push_custom_mesh(d);
-  Material_Index material_index = resource_manager->push_custom_material(md);
+  Mesh_Index mesh_index = resource_manager->push_mesh(d);
+  Material_Index material_index = resource_manager->push_material(md);
 
   Node_Index node_index = new_node();
   Scene_Graph_Node *node = &nodes[node_index];
@@ -1893,7 +1893,7 @@ unordered_map<string, pair<Mesh_Index, Material_Index>> create_import_pool_data(
 
     if (!contains)
     {
-      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
+      Mesh_Index mesh_i = resource_manager->push_mesh(&resource->meshes[i]);
       std::string path = resource->assimp_filename;
       Material_Descriptor material;
       path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
@@ -1916,14 +1916,15 @@ unordered_map<string, pair<Mesh_Index, Material_Index>> create_import_pool_data(
         material.vertex_shader = "vertex_shader.vert";
         material.frag_shader = "fragment_shader.frag";
       }
-      Material_Index mat_i = resource_manager->push_custom_material(&material);
+      Material_Index mat_i = resource_manager->push_material(&material);
       indices[name_before_dot] = {mesh_i, mat_i};
     }
   }
   return indices;
 }
 
-Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string name, bool wait_on_resource)
+Node_Index Scene_Graph::add_aiscene_new(
+    std::string scene_file_path, std::string name, bool wait_on_resource)
 {
   scene_file_path = BASE_MODEL_PATH + scene_file_path;
   Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
@@ -1933,24 +1934,34 @@ Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string
     return NODE_NULL;
   }
 
-
   pair<Mesh_Index, Material_Index> base_indices = {
       resource_manager->current_mesh_pool_size, resource_manager->current_material_pool_size};
 
   for (uint32 i = 0; i < resource->materials.size(); ++i)
   {
-    Material_Index mat_i = resource_manager->push_custom_material(&resource->materials[i]);
+    Material_Index mat_i = resource_manager->push_material(&resource->materials[i]);
   }
   for (uint32 i = 0; i < resource->meshes.size(); ++i)
   {
-    Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
+    Mesh_Index mesh_i = resource_manager->push_mesh(&resource->meshes[i]);
   }
 
-  uint32 animation_set_index = resource_manager->push_animation_set(&resource->animations);
-  uint32 animation_state_index = resource_manager->push_animation_state(&resource->bones);
-  resource_manager->animation_state_pool[animation_state_index].animation_set_index = animation_set_index;
 
-  Node_Index root_for_import = add_import_node(resource, &resource->root_node, base_indices, animation_state_index);
+  //these indices should be the same for all nodes of this import
+  uint32 animation_set_index = NODE_NULL;
+  uint32 bone_set_index = NODE_NULL;
+  uint32 animation_state_pool_index = NODE_NULL;
+  if (resource->animations.size())
+  {
+    animation_set_index = resource_manager->push_animation_set(&resource->animations);
+    bone_set_index = resource_manager->push_bone_set(&resource->bones);
+    animation_state_pool_index = resource_manager->push_animation_state();
+    Skeletal_Animation_State* anim = &resource_manager->animation_state_pool[animation_state_pool_index];
+    anim->animation_set_index = animation_set_index;
+    anim->model_bone_set_index = bone_set_index;
+  }
+
+  Node_Index root_for_import = add_import_node(resource, &resource->root_node, base_indices, bone_set_index);
   Scene_Graph_Node *root_node = &nodes[root_for_import];
 
   root_node->scale = float32(resource->scale_factor) * root_node->scale;
@@ -2037,48 +2048,52 @@ Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string
 //  return root_for_import;
 //}
 
-Node_Index Scene_Graph::add_import_node(
-    Imported_Scene_Data *scene, Imported_Scene_Node *import_node, const pair<Mesh_Index, Material_Index> &base_indices, uint32 animation_state_pool_index)
+Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *import_node,
+    const pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_set_index)
 {
   Node_Index node_index = new_node();
   Scene_Graph_Node *node = &nodes[node_index];
   node->name = import_node->name;
+
   vec3 skew;
   vec4 perspective;
   bool b = decompose(import_node->transform, node->scale, node->orientation, node->position, skew, perspective);
   node->orientation = conjugate(node->orientation);
+
   const size_t number_of_mesh_indices = import_node->mesh_indices.size();
   const size_t number_of_material_indices = import_node->material_indices.size();
   const auto &[mesh_offset, material_offset] = base_indices;
 
+  // if we are a node, search for our bone index by the name of this node
+  if (bone_set_index != NODE_NULL)
+  { // our import had some bones - theyre all in resource_manager->model_bone_set_pool
 
-  if (animation_state_pool_index != NODE_NULL)
-  {//our import had some bones - theyre all in this pool index
-    node->animation_state_pool_index = animation_state_pool_index;
-    //if we find our name in the pool, we're a bone
-    vector<Bone>* bones = &resource_manager->animation_state_pool[animation_state_pool_index].calculated_bone_data;
-    for(size_t i = 0; i < bones->size();++i)
+    // if we find our name in the pool, we're a bone
+    vector<Bone> *bones = &resource_manager->model_bone_set_pool[bone_set_index].import_bone_data;
+    for (size_t i = 0; i < bones->size(); ++i)
     {
-      const char* bname = (*bones)[i].name.c_str();
-      const char* nname = node->name;
-      if (strcmp(bname,nname)==0)
+      const char *bname = (*bones)[i].name.c_str();
+      const char *nname = node->name;
+      if (strcmp(bname, nname) == 0)
       {
-        node->bone_pool_index = i;
+        node->bone_index = i;
         break;
       }
     }
   }
 
-
+  // just gathering the mesh and material indices
   for (size_t i = 0; i < number_of_mesh_indices; ++i)
   {
     Mesh_Index mesh_index = mesh_offset + import_node->mesh_indices[i];
     Material_Index material_index = NODE_NULL;
     if (i < number_of_material_indices)
-    {//some meshes might not have a material
+    { // some meshes might not have a material
       material_index = material_offset + import_node->material_indices[i];
     }
-    //std::string mesh_name = scene->meshes[import_node->mesh_indices[i]].name;
+
+    // we dont really have anywhere to put the mesh name, do we need it?
+    // std::string mesh_name = scene->meshes[import_node->mesh_indices[i]].name;
     node->model[i] = {mesh_index, material_index};
   }
 
@@ -2086,7 +2101,7 @@ Node_Index Scene_Graph::add_import_node(
   for (size_t i = 0; i < number_of_children; ++i)
   {
     Imported_Scene_Node *child_node = &import_node->children[i];
-    Node_Index child_index = add_import_node(scene, child_node, base_indices, animation_state_pool_index);
+    Node_Index child_index = add_import_node(scene, child_node, base_indices, bone_set_index);
     set_parent(child_index, node_index);
     Scene_Graph_Node *child_ptr = &nodes[child_index];
     bool child_is_collider = strncmp(&child_ptr->name.str[0], "collide_", 8) == 0;
@@ -2425,7 +2440,7 @@ void Scene_Graph::initialize_lighting(std::string radiance, std::string irradian
       material.casts_shadows = false;
       material.albedo.mod = vec4(0, 0, 0, 1);
       material.roughness.mod = vec4(1);
-      Material_Index mi = resource_manager->push_custom_material(&material);
+      Material_Index mi = resource_manager->push_material(&material);
 
       Node_Index temp = add_aiscene_new("sphere-2.fbx", s("Light", i));
       Node_Index actual_model = nodes[temp].children[0];
@@ -2492,24 +2507,19 @@ void Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
   }
 }
 
-
-
-//we should be guaranteed that all bones above us are already computed 
-//for this frame in the calculated_bone_data vector...
-mat4 animation_resolve(const mat4& M, Skeletal_Animation_State* anim_state, Skeletal_Animation_Set* anim_set, uint32 bone_pool_index)
+// we should be guaranteed that all bones above us are already computed
+// for this frame in the calculated_bone_data vector...
+mat4 animation_resolve(Skeletal_Animation_State *anim_state, Skeletal_Animation_Set *anim_set, Bone *bone)
 {
-
   mat4 result = mat4(1);
-  string_view bone_name = anim_state->calculated_bone_data[bone_pool_index].name;
+  string_view bone_name = bone->name;
+  Skeletal_Animation *skeletal_animation = &anim_set->animation_set[anim_state->currently_playing_animation];
+  Bone_Animation *bone_animation = nullptr;
 
-
-  Skeletal_Animation* skeletal_animation = &anim_set->animation_set[anim_state->currently_playing_animation];
-  Bone_Animation* bone_animation = nullptr;
-
-  //find bone in animation by name of bone we want to compute
+  // find bone in animation by name of bone we want to compute
   for (size_t i = 0; i < skeletal_animation->bone_animations.size(); ++i)
   {
-    string_view test_bone_name = skeletal_animation->bone_animations[i].name;
+    string_view test_bone_name = skeletal_animation->bone_animations[i].bone_node_name;
     if (test_bone_name == bone_name)
     {
       bone_animation = &skeletal_animation->bone_animations[i];
@@ -2518,73 +2528,51 @@ mat4 animation_resolve(const mat4& M, Skeletal_Animation_State* anim_state, Skel
   }
   ASSERT(bone_animation);
 
-
-
-  //not sure exactly why its calculated using 'ticks'...
+  // not sure exactly why its calculated using 'ticks'...
   const float32 ticks_per_sec = skeletal_animation->ticks_per_sec != 0 ? skeletal_animation->ticks_per_sec : 60;
-  const float time_in_ticks = anim_state->time * ticks_per_sec;
-  const float animation_time = fmod(time_in_ticks, skeletal_animation->duration);
-  
+  const float32 time_in_ticks = anim_state->time * ticks_per_sec;
+  const float32 animation_time = fmod(time_in_ticks, skeletal_animation->duration);
 
   size_t left_i = 0;
   size_t right_i = 0;
 
-  for (size_t i = 0; i < bone_animation->timestamp.size()-1; ++i)
+  for (size_t i = 0; i < bone_animation->timestamp.size() - 1; ++i)
   {
     left_i = i;
-    float32 next_time = bone_animation->timestamp[i+1];
+    float32 next_time = bone_animation->timestamp[i + 1];
     if (animation_time < next_time)
     {
       right_i = i + 1;
       break;
     }
   }
-
   const float32 left_time = bone_animation->timestamp[left_i];
   const float32 right_time = bone_animation->timestamp[right_i];
-
 
   float32 t = animation_time - left_time;
   float32 max_time = right_time - left_time;
   t = t / max_time;
   ASSERT(t >= 0.f && t <= 1.0f);
+
+  // component results
   const vec3 translation_result = mix(bone_animation->translations[left_i], bone_animation->translations[right_i], t);
   const vec3 scale_result = mix(bone_animation->scales[left_i], bone_animation->scales[right_i], t);
   const quat rotation_result = lerp(bone_animation->rotations[left_i], bone_animation->rotations[right_i], t);
-  
 
+  // result in bone space
+  const mat4 transformed_bone = translate(translation_result) * toMat4(rotation_result) * scale(scale_result);
 
-  //this will only work correctly when M is the same for the bones as well as the mesh itself
-  //so we cant play with the graph node transformations of the bones and expect them to work
-
-  //if you wanted that sort of effect to happen youd also need to 
-  //pass down a stack of 
-  mat4& M_offset_matrix = M*anim_state->calculated_bone_data[bone_pool_index].offsetmatrix;
-  mat4 inverse_offset = inverse(M_offset_matrix);
-
-
-
-
-
-  const mat4 oriented_bone = translate(translation_result) * toMat4(rotation_result) * scale(scale_result);
-
-
-  return M_offset_matrix * oriented_bone * inverse_offset;
-
-
-
-
-
-
+  // shift the vertex to bone space, transform it by the animation bone, put it back
+  return bone->offset * transformed_bone * bone->inverse_offset;
 }
 
-//note: the node with the character mesh in it may visit first
-//in which case the bone animations for it have not yet been applied
-//however, since it is a pointer to the animation state, it should eventually
-//be modified by visit nodes to be updated for this frame when the tree traversal gets there
+// note: the node with the character mesh in it may visit first
+// in which case the bone animations for it have not yet been applied
+// however, since it is a pointer to the animation state, it should eventually
+// be modified by visit nodes to be updated for this frame when the tree traversal gets there
 
-//this should not be a problem for child node models of a bone, because we modify the stack
-//as we go down the tree, so it will always be correct for children
+// this should not be a problem for child node models of a bone, because we modify the stack
+// as we go down the tree, so it will always be correct for children
 void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<Render_Entity> &accumulator)
 {
   if (node_index == NODE_NULL)
@@ -2592,7 +2580,7 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
   Scene_Graph_Node *entity = &nodes[node_index];
   if (!entity->exists)
     return;
-  if ((!entity->visible) && entity->propagate_visibility && entity->animation_state_pool_index ==NODE_NULL)
+  if ((!entity->visible) && entity->propagate_visibility && entity->animation_state_pool_index == NODE_NULL)
     return;
   assert_valid_parent_ptr(node_index);
 
@@ -2609,21 +2597,31 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
   mat4 STACK = RTM * S_prop;
 
   // this node specifically
-  mat4 BASIS = RTM * S_prop * S_non;  
+  mat4 BASIS = STACK * S_non;
 
-  if (entity->bone_pool_index != NODE_NULL)
-  {//we are a bone
+  if (entity->bone_index != NODE_NULL)
+  { // we are a bone
 
-    Skeletal_Animation_State* anim_state = &resource_manager->animation_state_pool[entity->animation_state_pool_index];
-    Skeletal_Animation_Set* anim_set = &resource_manager->animation_set_pool[anim_state->animation_set_index];
-    Bone* this_bone_data = &anim_state->calculated_bone_data[entity->bone_pool_index];
-    mat4 THIS_BONE = animation_resolve(M,anim_state, anim_set, entity->bone_pool_index);
-    STACK = STACK * THIS_BONE; 
-    (*this_bone_data).final_transform = STACK;
+    // the current user-set state of the animation
+    Skeletal_Animation_State *anim_state = &resource_manager->animation_state_pool[entity->animation_state_pool_index];
 
+    // the set of animations and their keyframe data
+    Skeletal_Animation_Set *anim_set = &resource_manager->animation_set_pool[anim_state->animation_set_index];
+
+    //find our bone
+    Model_Bone_Set *bone_set = &resource_manager->model_bone_set_pool[entity->model_bone_set_pool_index];
+    Bone *bone = &bone_set->import_bone_data[entity->bone_index];
+
+    // the result of the animation for this bone
+    // it shifts from vertex space to bone space, transforms by the animation, then shifts back to vertex space
+    mat4 THIS_BONE = animation_resolve(anim_state, anim_set, bone);
+
+    // pass it down so the next bones inherit
+    STACK = STACK * THIS_BONE;
+
+    // data that is bound in the uniform array in the vertex shader
+    anim_state->final_bone_transforms[entity->bone_index] = STACK;
   }
-
-
 
   const size_t num_meshes = entity->model.size();
   for (size_t i = 0; i < num_meshes; ++i)
@@ -2634,7 +2632,7 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
       continue;
     Mesh *mesh_ptr = nullptr;
     Material *material_ptr = nullptr;
-    Skeletal_Animation_State* animation_ptr = nullptr;
+    Skeletal_Animation_State *animation_ptr = nullptr;
     string assimp_filename = s(entity->filename_of_import);
     mesh_ptr = &resource_manager->mesh_pool[mesh_index];
 
@@ -2651,11 +2649,8 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
     {
       animation_ptr = &resource_manager->animation_state_pool[entity->animation_state_pool_index];
     }
-
-
-
     if (entity->visible)
-      accumulator.emplace_back(entity->name, mesh_ptr, material_ptr,animation_ptr, BASIS, node_index);
+      accumulator.emplace_back(entity->name, mesh_ptr, material_ptr, animation_ptr, BASIS, node_index);
   }
   for (uint32 i = 0; i < entity->children.size(); ++i)
   {
@@ -2729,7 +2724,7 @@ Imported_Scene_Node Resource_Manager::_import_aiscene_node(
   node.name = copy(&ainode->mName);
 
   if (node.name == "" && ainode->mNumChildren == 1 && ainode->mNumMeshes == 0)
-  {//blank node, skip it
+  { // blank node, skip it
     return _import_aiscene_node(assimp_filename, scene, ainode->mChildren[0]);
   }
 
@@ -2874,7 +2869,7 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
       uint32 count = num_pos_keys;
 
       Bone_Animation bone_animation;
-      bone_animation.name = copy(nodename);
+      bone_animation.bone_node_name = copy(nodename);
       bone_animation.translations.reserve(count);
       bone_animation.scales.reserve(count);
       bone_animation.rotations.reserve(count);
@@ -2925,9 +2920,9 @@ void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_
   {
     aiBone *aibone = aimesh->mBones[i];
 
-    //i believe it is correct that not all the bones in the scenegraph 
-    //will show up here - there can exist bones that do not affect any
-    //vertices directly - only transform other bones
+    // i believe it is correct that not all the bones in the scenegraph
+    // will show up here - there can exist bones that do not affect any
+    // vertices directly - only transform other bones
     string name = aibone->mName.data;
     mat4 offsetmatrix = copy(aibone->mOffsetMatrix);
 
@@ -2940,7 +2935,7 @@ void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_
       if ((*bones)[j].name == name)
       {
         index_for_this_name_in_bone_vector = j;
-        DEBUGASSERT((*bones)[j].offsetmatrix == offsetmatrix);
+        DEBUGASSERT((*bones)[j].offset == offsetmatrix);
         break;
       }
     }
@@ -2948,7 +2943,8 @@ void gather_bones_for_scene_and_weights_for_vertices(const aiMesh *aimesh, Mesh_
     {
       bones->emplace_back();
       bones->back().name = name;
-      bones->back().offsetmatrix = offsetmatrix;
+      bones->back().offset = offsetmatrix;
+      bones->back().inverse_offset = inverse(offsetmatrix);
       index_for_this_name_in_bone_vector = int32(bones->size()) - 1;
     }
 
@@ -3063,6 +3059,11 @@ Material_Descriptor build_material_descriptor(const aiScene *scene, uint32 i, co
     // only .fbx supported for now
     // helper function for material assignments:
     // void gather_all_assimp_materials(aiMaterial* m);
+  }
+
+  if (scene->mNumAnimations != 0)
+  {
+    d.vertex_shader = "skeletal_animation.vert";
   }
 
   Material_Descriptor defaults;
@@ -3182,7 +3183,7 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
 #endif
 }
 
-Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
+Material_Index Resource_Manager::push_material(Material_Descriptor *d)
 {
   ASSERT(d);
   Material_Index result;
@@ -3194,7 +3195,7 @@ Material_Index Resource_Manager::push_custom_material(Material_Descriptor *d)
   return result;
 }
 
-Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
+Mesh_Index Resource_Manager::push_mesh(Mesh_Descriptor *d)
 {
   Mesh_Index result;
   result = current_mesh_pool_size;
@@ -3204,31 +3205,38 @@ Mesh_Index Resource_Manager::push_custom_mesh(Mesh_Descriptor *d)
   return result;
 }
 
-uint32 Resource_Manager::push_animation_set(std::vector<Skeletal_Animation>* animation_set)
+uint32 Resource_Manager::push_animation_set(std::vector<Skeletal_Animation> *animation_set)
 {
-  ASSERT(current_animation_state_pool_size < MAX_POOL_SIZE);
+  ASSERT(current_animation_set_pool_size < MAX_POOL_SIZE);
   animation_set_pool[current_animation_set_pool_size].animation_set = *animation_set;
   current_animation_set_pool_size += 1;
   return current_animation_set_pool_size - 1;
 }
 
- uint32 Resource_Manager::push_animation_state(std::vector<Bone>* bones)
+uint32 Resource_Manager::push_animation_state()
 {
-   if (bones->size() == 0)
-   {
-     return NODE_NULL;
-   }
   ASSERT(current_animation_state_pool_size < MAX_POOL_SIZE);
-  animation_state_pool[current_animation_state_pool_size].calculated_bone_data = *bones;
   current_animation_state_pool_size += 1;
   return current_animation_state_pool_size - 1;
+}
+
+uint32 Resource_Manager::push_bone_set(std::vector<Bone> *bones)
+{
+  if (bones->size() == 0)
+  {
+    return NODE_NULL;
+  }
+  ASSERT(current_model_bone_set_pool_size < MAX_POOL_SIZE);
+  model_bone_set_pool[current_model_bone_set_pool_size].import_bone_data = *bones;
+  current_model_bone_set_pool_size += 1;
+  return current_model_bone_set_pool_size - 1;
 }
 
 Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, bool wait_for_valid)
 {
   if (import_data.contains(path))
   {
-    Imported_Scene_Data* data_import = &import_data[path];
+    Imported_Scene_Data *data_import = &import_data[path];
     ASSERT(data_import->assimp_filename == path);
     ASSERT(data_import->valid == true);
     return data_import;
@@ -3403,17 +3411,17 @@ std::vector<Render_Entity> Octree::get_render_entities(Scene_Graph *scene)
     Mesh_Descriptor md;
     md.mesh_data = load_mesh_plane();
     md.name = "octree_mesh_depth_1";
-    mesh_depth_1 = scene->resource_manager->push_custom_mesh(&md);
+    mesh_depth_1 = scene->resource_manager->push_mesh(&md);
     md.name = "octree_mesh_depth_2";
-    mesh_depth_2 = scene->resource_manager->push_custom_mesh(&md);
+    mesh_depth_2 = scene->resource_manager->push_mesh(&md);
     md.name = "octree_mesh_depth_3";
-    mesh_depth_3 = scene->resource_manager->push_custom_mesh(&md);
+    mesh_depth_3 = scene->resource_manager->push_mesh(&md);
     md.name = "octree_mesh_triangles";
-    mesh_triangles = scene->resource_manager->push_custom_mesh(&md);
+    mesh_triangles = scene->resource_manager->push_mesh(&md);
     md.name = "octree_mesh_normals";
-    mesh_normals = scene->resource_manager->push_custom_mesh(&md);
+    mesh_normals = scene->resource_manager->push_mesh(&md);
     md.name = "octree_mesh_velocities";
-    mesh_velocities = scene->resource_manager->push_custom_mesh(&md);
+    mesh_velocities = scene->resource_manager->push_mesh(&md);
 
     Material_Descriptor material;
     material.frag_shader = "emission.frag";
@@ -3423,24 +3431,24 @@ std::vector<Render_Entity> Octree::get_render_entities(Scene_Graph *scene)
     material.translucent_pass = false;
 
     material.emissive.mod = vec4(.10f, 0.0f, 0.0f, .10f);
-    mat1 = scene->resource_manager->push_custom_material(&material);
+    mat1 = scene->resource_manager->push_material(&material);
     material.emissive.mod = vec4(0.0f, .10f, 0.0f, .10f);
-    mat2 = scene->resource_manager->push_custom_material(&material);
+    mat2 = scene->resource_manager->push_material(&material);
     material.emissive.mod = vec4(0.0f, 0.0f, .10f, .10f);
-    mat3 = scene->resource_manager->push_custom_material(&material);
+    mat3 = scene->resource_manager->push_material(&material);
 
     material.wireframe = true;
     // material.translucent_pass = false;
     // material.fixed_function_blending = false;
     // material.frag_shader = "emission.frag";
     material.emissive.mod = vec4(2.0f, 0.0f, 0.0f, 1.0f);
-    mat_triangles = scene->resource_manager->push_custom_material(&material);
+    mat_triangles = scene->resource_manager->push_material(&material);
 
     material.emissive.mod = vec4(0.0f, 2.0f, 2.0f, 1.0f);
-    mat_normals = scene->resource_manager->push_custom_material(&material);
+    mat_normals = scene->resource_manager->push_material(&material);
 
     material.emissive.mod = vec4(2.0f, 0.0f, 2.0f, 1.0f);
-    mat_velocities = scene->resource_manager->push_custom_material(&material);
+    mat_velocities = scene->resource_manager->push_material(&material);
   }
 
   for (uint32 i = 0; i < free_node; ++i)
