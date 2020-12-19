@@ -949,6 +949,18 @@ void Mesh_Handle::enable_assign_attributes()
     glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
     glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
   }
+
+  if (bone_data_buffer)
+  {
+    glEnableVertexAttribArray(5);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_data_buffer);
+    glVertexAttribPointer(5, 4, GL_INT, GL_FALSE, sizeof(int32) * 8, 0);
+
+    glEnableVertexAttribArray(6);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_data_buffer);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(float32) * 8, (void*)(4 * sizeof(int32)));
+  }
+
 }
 
 void Mesh_Handle::upload_data()
@@ -984,7 +996,6 @@ void Mesh_Handle::upload_data()
   uint32 tangents_size = uint32(mesh_data.tangents.size());
   uint32 bitangents_size = uint32(mesh_data.bitangents.size());
   uint32 indices_buffer_size = uint32(mesh_data.indices.size());
-
   ASSERT(all_equal(positions_buffer_size, normal_buffer_size, uv_buffer_size, tangents_size, bitangents_size));
 
   // positions
@@ -1017,6 +1028,18 @@ void Mesh_Handle::upload_data()
   buffer_size = (uint32)mesh_data.bitangents.size() * (uint32)sizeof(decltype(mesh_data.bitangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0], GL_STATIC_DRAW);
+
+
+  if (mesh_data.bone_weights.size())
+  {
+    // bone_data_buffer
+    size_t bone_count = mesh_data.bone_weights.size();
+    buffer_size = bone_count * sizeof(Vertex_Bone_Data);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_data_buffer);
+    glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bone_weights[0], GL_STATIC_DRAW);
+
+  }
+
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
@@ -1315,7 +1338,6 @@ Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, Ske
 {
   ASSERT(mesh);
   ASSERT(material);
-  ASSERT(animation);
 }
 
 Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)

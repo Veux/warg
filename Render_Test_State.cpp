@@ -237,7 +237,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  scene.add_aiscene_new("racharound/racharound.fbx");
+  //rach = scene.add_aiscene_new("racharound/racharound.fbx");
 
   terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
@@ -245,7 +245,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
-  //spawn_compass(&scene);
+  // spawn_compass(&scene);
   // spawn_test_spheres(scene);
 
   // spawn_map(&scene);
@@ -650,9 +650,13 @@ void Render_Test_State::update()
   renderer.set_camera(camera.pos, camera.dir);
   terrain.apply_geometry_to_octree_if_necessary(&scene);
 
-
-
-
+  //Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
+  //if (rach_ptr->animation_state_pool_index != NODE_NULL)
+  //{
+  //  Skeletal_Animation_State *anim_ptr =
+  //      &scene.resource_manager->animation_state_pool[rach_ptr->animation_state_pool_index];
+  //  anim_ptr->time = current_time;
+  //}
 }
 
 void Render_Test_State::draw_gui()
@@ -894,9 +898,9 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
 {
   //////////////////////////////////////////////////
   //////////////////////////////////////////////////
-  //crystal node
+  // crystal node
   crystal_node = state->scene.add_aiscene_new("sphere-1.fbx", "frostbolt crystal");
-  Scene_Graph_Node* crystal_node_ptr = &state->scene.nodes[crystal_node];
+  Scene_Graph_Node *crystal_node_ptr = &state->scene.nodes[crystal_node];
   crystal_node_ptr->position = position;
   crystal_node_ptr->scale = vec3(.5);
   Node_Index crystalchild = state->scene.nodes[crystal_node].children[0];
@@ -912,10 +916,9 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   crystal_material->ambient_occlusion.mod = vec4(1.0, 1.0, 1.0, 1.0);
   crystal_material->translucent_pass = true;
 
-
   //////////////////////////////////////////////////
   //////////////////////////////////////////////////
-  //light
+  // light
   this->light_index = light_index;
   Light *light6 = &state->scene.lights.lights[6];
   light6->position = vec3(-4.89832, -18.04270, 2.22558);
@@ -938,7 +941,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
 
   //////////////////////////////////////////////////
   //////////////////////////////////////////////////
-  //trail emitter:
+  // trail emitter:
   Particle_Emission_Method_Descriptor pemd_trail;
   Particle_Physics_Method_Descriptor ppmd_trail;
   pemd_trail.type = stream;
@@ -947,13 +950,13 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   pemd_trail.initial_scale = vec3(3.f);
   pemd_trail.billboarding = true;
   pemd_trail.billboard_rotation_velocity = dt;
-  //trail physics
+  // trail physics
   ppmd_trail.type = simple;
   ppmd_trail.gravity = vec3(0);
   ppmd_trail.friction = vec3(0.99f);
   ppmd_trail.size_multiply_uniform_min = 0.97f;
   ppmd_trail.size_multiply_uniform_max = 0.99f;
-  //trail material
+  // trail material
   Material_Descriptor trail_material;
   trail_material.albedo.source = "white";
   trail_material.albedo.mod = vec4(0.0, 0., 0., 0.);
@@ -967,10 +970,10 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   trail_material.vertex_shader = "instance.vert";
   trail_material.frag_shader = "emission.frag";
   trail_node = state->scene.add_mesh(cube, "frostbolt2 trail_node", &trail_material);
-  Scene_Graph_Node* trail_node_ptr = &state->scene.nodes[trail_node];
+  Scene_Graph_Node *trail_node_ptr = &state->scene.nodes[trail_node];
   Mesh_Index trail_mesh_i = trail_node_ptr->model[0].first;
   Material_Index trail_mat_i = trail_node_ptr->model[0].second;
-  //trail particle emitter
+  // trail particle emitter
   Particle_Emitter_Descriptor ped_trail;
   ped_trail.emission_descriptor = pemd_trail;
   ped_trail.physics_descriptor = ppmd_trail;
@@ -979,7 +982,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
 
   //////////////////////////////////////////////////
   //////////////////////////////////////////////////
-  //impact emitter:
+  // impact emitter:
   Particle_Emission_Method_Descriptor pemd_impact;
   pemd_impact.allow_colliding_spawns = false;
   pemd_impact.type = explosion;
@@ -1002,7 +1005,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   pemd_impact.impulse_center_offset_max = vec3(0.0f);
   pemd_impact.hammersley_radius = .1f;
   pemd_impact.initial_velocity = vec3(0);
-  //impact physics
+  // impact physics
   Particle_Physics_Method_Descriptor ppmd_impact;
   ppmd_impact.type = wind;
   ppmd_impact.wind_intensity = 0.f;
@@ -1013,12 +1016,12 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   ppmd_impact.die_when_size_smaller_than = vec3(0.0f);
   ppmd_impact.friction = vec3(.9);
   ppmd_impact.drag = .25f;
-  ppmd_impact.gravity = vec3(0,0,-9.8); 
+  ppmd_impact.gravity = vec3(0, 0, -9.8);
   ppmd_impact.billboard_rotation_time_factor = 1.1f;
-  //impact material
+  // impact material
   explosion_node = state->scene.add_aiscene_new("sphere-1.fbx", "frostbolt2 explosion source");
   Node_Index explosionchild = state->scene.nodes[explosion_node].children[0];
-  Material_Descriptor* explosion_material = state->scene.get_modifiable_material_pointer_for(explosionchild, 0);
+  Material_Descriptor *explosion_material = state->scene.get_modifiable_material_pointer_for(explosionchild, 0);
   *explosion_material = Material_Descriptor();
   explosion_material->albedo.source = "Snow006_2K_Color.jpg";
   explosion_material->albedo.mod = vec4(.10, .10, 1.0, .40);
@@ -1029,8 +1032,8 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   explosion_material->ambient_occlusion.source = "Snow006_2K_AmbientOcclusion.jpg.jpg";
   explosion_material->ambient_occlusion.mod = vec4(1.0, 1.0, 1.0, 1.0);
 
-  //explosion_material->emissive.source = "frostbolt_explosion.png";
-  //explosion_material->emissive.mod = vec4(.01, .25, .5, 0);
+  // explosion_material->emissive.source = "frostbolt_explosion.png";
+  // explosion_material->emissive.mod = vec4(.01, .25, .5, 0);
   explosion_material->roughness.mod.x = .1f;
   explosion_material->metalness.mod.x = 0.0f;
   explosion_material->emissive.mod = vec4(0);
@@ -1039,11 +1042,11 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   explosion_material->discard_on_alpha = false;
   explosion_material->vertex_shader = "instance.vert";
   explosion_material->frag_shader = "fragment_shader.frag";
-  Scene_Graph_Node* explosion_node_ptr = &state->scene.nodes[explosionchild];
+  Scene_Graph_Node *explosion_node_ptr = &state->scene.nodes[explosionchild];
   explosion_node_ptr->visible = false;
   Mesh_Index explosion_mesh_i = explosion_node_ptr->model[0].first;
   Material_Index explosion_mat_i = explosion_node_ptr->model[0].second;
-  //impact particle emitter
+  // impact particle emitter
   Particle_Emitter_Descriptor ped_impact;
   ped_impact.emission_descriptor = pemd_impact;
   ped_impact.physics_descriptor = ppmd_impact;
@@ -1080,7 +1083,7 @@ bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
   }
 
   bool dst_reached = false;
-  if (length(target - position) < (10.f*dt) * speed)
+  if (length(target - position) < (10.f * dt) * speed)
   {
     dst_reached = true;
   }
@@ -1109,7 +1112,7 @@ bool Frostbolt_Effect_2::update(State *owning_state, vec3 target)
 
   if (dst_reached)
   {
-    impact_emitter->descriptor.position = pos;//target + (dt * dir);
+    impact_emitter->descriptor.position = pos; // target + (dt * dir);
     impact_emitter->descriptor.velocity = node->velocity;
     impact_emitter->descriptor.emission_descriptor.boom_t = 1 * dt;
     // impact_emitter->descriptor.emission_descriptor.generate_particles = true;

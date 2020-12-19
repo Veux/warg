@@ -31,9 +31,8 @@ struct Bone
 #define MAX_BONES_PER_VERTEX 4
 struct Vertex_Bone_Data
 {
-  uint32 count = 0; //used only for checking overflow for the arrays below
-  uint32 indices[MAX_BONES_PER_VERTEX];
-  float32 weights[MAX_BONES_PER_VERTEX];
+  std::array<uint32, MAX_BONES_PER_VERTEX> indices;
+  std::array<float32, MAX_BONES_PER_VERTEX> weights;
 };
 
 typedef uint32 Skeletal_Animation_Keyframe_Index;
@@ -99,12 +98,14 @@ struct Skeletal_Animation_State
 
   //bone transforms posed and packed for uniform binding
   std::vector<mat4> final_bone_transforms;
+  //std::array<mat4, MAX_BONES>final_bone_transforms;
 };
 
 
 struct Model_Bone_Set
 {
-  std::vector<Bone> import_bone_data;
+  //std::array<Bone, MAX_BONES>import_bone_data;
+ std::vector<Bone> import_bone_data;
 };
 
 

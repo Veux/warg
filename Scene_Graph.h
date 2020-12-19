@@ -279,8 +279,6 @@ struct Resource_Manager
   uint32 push_animation_state();
 
 
-
-
 #define MAX_POOL_SIZE 5000
   std::array<Mesh, MAX_POOL_SIZE> mesh_pool;
   uint32 current_mesh_pool_size = 0;
@@ -336,7 +334,6 @@ struct Resource_Manager
 struct Scene_Graph_Node
 {
   Scene_Graph_Node();
-
   // todo: billboarding in visit_nodes
   // todo: frustrum culling
   Array_String name;
