@@ -6,6 +6,7 @@
 #include <assimp/scene.h>
 #include <assimp/types.h>
 #include <assimp/cimport.h>
+#include <compare>
 #include <cstring>
 #include <enet/enet.h>
 #include <fstream>

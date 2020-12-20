@@ -5,58 +5,14 @@
 #include "Physics.h"
 #include <string>
 #include <vector>
-
-typedef uint32 Spell_Index;
-
-struct Spell_Effect_Formula;
-struct BuffDef;
-struct Character;
-struct Game_State;
-struct Spell_Object;
-struct Buff;
-
-enum class Spell_ID
-{
-  Frostbolt,
-  Sprint,
-  Icy_Veins,
-  Blink,
-  Shadow_Word_Pain,
-  Demonic_Circle_Summon,
-  Demonic_Circle_Teleport,
-  Corruption,
-  Seed_of_Corruption,
-  COUNT
-};
-
-struct Spell_Object_Formula
-{
-  Spell_ID _id;
-  Spell_Index index;
-  std::string name;
-  float32 speed;
-};
+#include <unordered_set>
+#include <unordered_map>
 
 enum class Spell_Targets
 {
   Self,
   Ally,
-  Hostile,
-  Terrain
-};
-
-struct Spell_Formula
-{
-  Spell_ID _id;
-  Spell_Index index;
-  std::string name;
-  Texture_Descriptor icon;
-  uint32 mana_cost = 0;
-  float32 range = 0.f;
-  Spell_Targets targets = Spell_Targets::Self;
-  float32 cooldown = 0.f;
-  float32 cast_time = 0.f;
-  bool on_global_cooldown = true;
+  Hostile
 };
 
 struct Character_Stats
@@ -75,54 +31,43 @@ struct Character_Stats
   float32 atk_speed = 1.f;
 };
 
-struct BuffDef
+struct Spell_Database
 {
-  Spell_Index index;
-  Spell_ID _id;
-  std::string name;
-  Texture_Descriptor icon;
-  float32 duration;
-  float32 tick_freq;
-  Character_Stats stats_modifiers;
-};
-
-enum class Cast_Error
-{
-  Success,
-  Silenced,
-  Global_Cooldown,
-  Cooldown,
-  Insufficient_Mana,
-  Invalid_Target,
-  Out_of_Range,
-  Already_Casting
-};
-
-class Spell_Database
-{
-public:
   Spell_Database();
-  Spell_Formula *get_spell(Spell_Index index);
-  Spell_Formula *get_spell(const char *name);
-  Spell_Object_Formula *get_spell_object(Spell_Index index);
-  Spell_Object_Formula *get_spell_object(Spell_ID id);
-  BuffDef *get_buff(Spell_Index index);
-  BuffDef *get_buff(Spell_ID id);
 
-private:
-  Spell_Formula *add_spell();
-  Spell_Object_Formula *add_spell_object();
-  BuffDef *add_buff();
+  std::unordered_map<std::string_view, UID> by_name;
+  std::unordered_map<UID, std::string> name;
+  std::unordered_map<UID, Texture_Descriptor> icon;
+  std::unordered_map<UID, Spell_Targets> targets;
+  std::unordered_map<UID, int32> mana_cost;
+  std::unordered_map<UID, float32> range;
+  std::unordered_map<UID, float32> cast_time;
+  std::unordered_set<UID> on_gcd;
+  std::unordered_map<UID, float32> cooldown;
+  std::unordered_map<UID, std::vector<UID>> spell_release_buff_application;
+  std::unordered_set<UID> spell_release_blink;
+  std::unordered_set<UID> spell_release_demonic_circle_summon;
+  std::unordered_set<UID> spell_release_demonic_circle_teleport;
+  std::unordered_map<UID, UID> spell_release_object_creation;
 
-  std::vector<Spell_Formula> spells;
-  std::vector<Spell_Object_Formula> objects;
-  std::vector<BuffDef> buffs;
+  std::unordered_map<UID, std::string> sobj_name;
+  std::unordered_map<std::string_view, UID> sobj_by_name;
+  std::unordered_map<UID, float32> sobj_speed;
+  std::unordered_map<UID, int32> sobj_hit_damage;
+  std::unordered_set<UID> sobj_hit_seed_of_corruption;
+  std::unordered_map<UID, UID> sobj_hit_buff_application;
+
+  std::unordered_map<UID, std::string> buff_name;
+  std::unordered_map<std::string_view, UID> buff_by_name;
+  std::unordered_map<UID, Texture_Descriptor> buff_icon;
+  std::unordered_map<UID, float32> buff_duration;
+  std::unordered_map<UID, float32> buff_tick_freq;
+  std::unordered_map<UID, Character_Stats> buff_stats_modifiers;
+  std::unordered_set<UID> buff_is_debuff;
+  std::unordered_map<UID, int32> buff_tick_damage;
+  std::unordered_set<UID> buff_end_demonic_circle_destroy;
+  std::unordered_set<UID> buff_end_seed_of_corruption;
+  std::unordered_set<UID> buff_damage_seed_of_corruption;
 };
 
 extern Spell_Database SPELL_DB;
-
-void buff_on_end_dispatch(Spell_ID sid, UID c_id, Buff &b, Game_State &gs);
-void buff_on_damage_dispatch(Spell_ID sid, UID subject_id, UID object_id, Buff &buff, float32 damage, Game_State &gs);
-void buff_on_tick_dispatch(Spell_ID sid, UID c_id, Buff &b, Game_State &gs);
-void spell_object_on_hit_dispatch(Spell_ID sid, Spell_Object &so, Game_State &gs, Flat_Scene_Graph &scene);
-void spell_on_release_dispatch(Spell_ID sid, UID caster_id, UID target_id, Game_State &gs, Flat_Scene_Graph &scene);

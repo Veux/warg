@@ -219,10 +219,10 @@ Input_Message::Input_Message(uint32_t i_, Move_Status move_status_, quat orienta
   target_id = target_id_;
 }
 
-Cast_Message::Cast_Message(UID target_id, Spell_Index spell_index)
+Cast_Message::Cast_Message(UID target_id, UID spell_id)
 {
   _target_id = target_id;
-  _spell_index = spell_index;
+  _spell_id = spell_id;
 }
 
 State_Message::State_Message(UID pc_, Game_State *game_state_)

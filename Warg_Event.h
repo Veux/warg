@@ -75,7 +75,7 @@ struct Input_Message : Message
 
 struct Cast_Message : Message
 {
-  Cast_Message(UID target_id, Spell_Index spell_index);
+  Cast_Message(UID target_id, UID spell_id);
   Cast_Message(Buffer &b);
   virtual void handle(Warg_Server &server);
   virtual void handle(Warg_State &state)
@@ -85,7 +85,7 @@ struct Cast_Message : Message
   virtual void serialize(Buffer &b);
 
   UID _target_id;
-  Spell_Index _spell_index;
+  UID _spell_id;
 };
 
 struct Input;

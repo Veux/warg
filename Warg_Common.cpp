@@ -20,7 +20,7 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
 }
 
-UID add_dummy(Game_State &game_state, Map *map, vec3 position)
+UID add_dummy(Game_State &game_state, Map &map, vec3 position)
 {
   UID id = uid();
 
@@ -38,15 +38,15 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position)
   dummy.id = id;
   dummy.base_stats = stats;
   dummy.team = 2;
-  strcpy(dummy.name, "Combat Dummy");
+  dummy.name = "Combat Dummy";
   dummy.physics.position = position;
-  dummy.physics.orientation = map->spawn_orientation[0];
+  dummy.physics.orientation = map.spawn_orientation[0];
   game_state.characters.push_back(dummy);
 
   Living_Character lc;
   lc.id = id;
   lc.effective_stats = stats;
-  lc.hp_max = 15;
+  lc.hp_max = 100;
   lc.hp = lc.hp_max;
   lc.mana_max = 10000;
   lc.mana = lc.mana_max;
@@ -55,11 +55,8 @@ UID add_dummy(Game_State &game_state, Map *map, vec3 position)
   return id;
 }
 
-UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int team, const char *name)
+UID add_char(Game_State &gs, Map &map, int team, std::string_view name)
 {
-  ASSERT(0 <= team && team < 2);
-  ASSERT(name);
-
   UID id = uid();
 
   Character_Stats stats;
@@ -72,14 +69,14 @@ UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int tea
   stats.atk_dmg = 5;
   stats.atk_speed = 2;
 
-  Character character;
-  character.id = id;
-  character.base_stats = stats;
-  character.team = team;
-  strncpy(character.name, name, MAX_CHARACTER_NAME_LENGTH);
-  character.physics.position = map->spawn_pos[team];
-  character.physics.orientation = map->spawn_orientation[team];
-  game_state.characters.push_back(character);
+  Character c;
+  c.id = id;
+  c.base_stats = stats;
+  c.team = team;
+  c.name == name;
+  c.physics.position = map.spawn_pos[team];
+  c.physics.orientation = map.spawn_orientation[team];
+  gs.characters.push_back(c);
 
   Living_Character lc;
   lc.id = id;
@@ -88,10 +85,10 @@ UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int tea
   lc.hp = lc.hp_max;
   lc.mana_max = 500;
   lc.mana = lc.mana_max;
-  game_state.living_characters.push_back(lc);
+  gs.living_characters.push_back(lc);
 
-  auto add_spell = [&](const char *name) {
-    game_state.character_spells.push_back({id, spell_db.get_spell(name)->index});
+  auto add_spell = [&](std::string_view name) {
+    gs.character_spells.push_back({id, SPELL_DB.by_name[name]});
   };
 
   add_spell("Frostbolt");
@@ -101,6 +98,7 @@ UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int tea
   add_spell("Sprint");
   add_spell("Demonic Circle: Summon");
   add_spell("Demonic Circle: Teleport");
+  add_spell("Shadow Word: Pain");
 
   return id;
 }
@@ -134,10 +132,8 @@ void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_G
   }
   if (move_status & ~Move_Status::Jumping)
   {
-    auto &lc = std::find_if(
-        gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) { return lc.id == character.id; });
+    auto lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == character.id; });
     v = normalize(v) * lc->effective_stats.speed;
-    // v *= character.effective_stats.speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {
@@ -145,14 +141,7 @@ void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_G
     grounded = false;
   }
 
-  vel.z -= 9.81f * dt;
-  if (vel.z < -53)
-    vel.z = -53;
-  if (grounded)
-    vel.z = 0;
-
-  // vel.z = 0;
-  // pos.z = 0;
+  vel.z = grounded ? 0 : max(vel.z - 9.81f * dt, -53.f);
 
   collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, scene);
 }
@@ -170,7 +159,6 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph &scene)
 
   for (auto &surface : colliders)
   {
-
     Triangle t;
     t.a = surface.a / colpkt.e_radius;
     t.b = surface.b / colpkt.e_radius; // intentionally reversed, winding order mismatch somewhere, not sure
@@ -179,64 +167,62 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph &scene)
   }
 }
 
-vec3 collide_char_with_world(
-    Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel, Flat_Scene_Graph &scene)
+vec3 collide_char_with_world(Collision_Packet &colpkt, vec3 start_pos, vec3 start_vel, Flat_Scene_Graph &scene)
 {
   float epsilon = 0.005f;
 
-  if (collision_recursion_depth > 5)
-    return pos;
+  vec3 pos = start_pos;
+  vec3 vel = start_vel;
 
-  colpkt.vel = vel;
-  colpkt.vel_normalized = normalize(colpkt.vel);
-  colpkt.base_point = pos;
-  colpkt.found_collision = false;
-
-  check_collision(colpkt, scene);
-
-  if (!colpkt.found_collision)
+  for (int i = 0; i < 6; i++)
   {
-    return pos + vel;
+    colpkt.vel = vel;
+    colpkt.vel_normalized = normalize(colpkt.vel);
+    colpkt.base_point = pos;
+    colpkt.found_collision = false;
+
+    check_collision(colpkt, scene);
+
+    if (!colpkt.found_collision)
+      return pos + vel;
+
+    vec3 destination_point = pos + vel;
+    vec3 new_base_point = pos;
+
+    if (colpkt.nearest_distance >= epsilon)
+    {
+      vec3 v = vel;
+      v = normalize(v) * (colpkt.nearest_distance - epsilon);
+      new_base_point = colpkt.base_point + v;
+
+      v = normalize(v);
+      colpkt.intersection_point -= epsilon * v;
+    }
+
+    vec3 slide_plane_origin = colpkt.intersection_point;
+    vec3 slide_plane_normal = new_base_point - colpkt.intersection_point;
+    slide_plane_normal = normalize(slide_plane_normal);
+    Plane sliding_plane = Plane(slide_plane_origin, slide_plane_normal);
+
+    vec3 new_destination_point =
+        destination_point - sliding_plane.signed_distance_to(destination_point) * slide_plane_normal;
+
+    vec3 new_vel_vec = new_destination_point - colpkt.intersection_point;
+
+    if (length(new_vel_vec) < epsilon)
+      return new_base_point;
+
+    pos = new_base_point;
+    vel = new_vel_vec;
   }
 
-  vec3 destination_point = pos + vel;
-  vec3 new_base_point = pos;
-
-  if (colpkt.nearest_distance >= epsilon)
-  {
-    vec3 v = vel;
-    v = normalize(v) * (colpkt.nearest_distance - epsilon);
-    new_base_point = colpkt.base_point + v;
-
-    v = normalize(v);
-    colpkt.intersection_point -= epsilon * v;
-  }
-
-  vec3 slide_plane_origin = colpkt.intersection_point;
-  vec3 slide_plane_normal = new_base_point - colpkt.intersection_point;
-  slide_plane_normal = normalize(slide_plane_normal);
-  Plane sliding_plane = Plane(slide_plane_origin, slide_plane_normal);
-
-  vec3 new_destination_point =
-      destination_point - sliding_plane.signed_distance_to(destination_point) * slide_plane_normal;
-
-  vec3 new_vel_vec = new_destination_point - colpkt.intersection_point;
-
-  if (length(new_vel_vec) < epsilon)
-  {
-    return new_base_point;
-  }
-
-  collision_recursion_depth++;
-  return collide_char_with_world(colpkt, collision_recursion_depth, new_base_point, new_vel_vec, scene);
+  return pos;
 }
 
 void collide_and_slide_char(
     Character_Physics &physics, vec3 &radius, const vec3 &vel, const vec3 &gravity, Flat_Scene_Graph &scene)
 {
-
   Collision_Packet colpkt;
-  int collision_recursion_depth;
 
   colpkt.e_radius = radius;
   colpkt.pos_r3 = physics.position;
@@ -245,9 +231,7 @@ void collide_and_slide_char(
   vec3 e_space_pos = colpkt.pos_r3 / colpkt.e_radius;
   vec3 e_space_vel = colpkt.vel_r3 / colpkt.e_radius;
 
-  collision_recursion_depth = 0;
-
-  vec3 final_pos = collide_char_with_world(colpkt, collision_recursion_depth, e_space_pos, e_space_vel, scene);
+  vec3 final_pos = collide_char_with_world(colpkt, e_space_pos, e_space_vel, scene);
 
   if (physics.grounded)
   {
@@ -267,9 +251,8 @@ void collide_and_slide_char(
   colpkt.vel_r3 = gravity;
 
   e_space_vel = gravity / colpkt.e_radius;
-  collision_recursion_depth = 0;
 
-  final_pos = collide_char_with_world(colpkt, collision_recursion_depth, final_pos, e_space_vel, scene);
+  final_pos = collide_char_with_world(colpkt, final_pos, e_space_vel, scene);
 
   colpkt.pos_r3 = final_pos * colpkt.e_radius;
   colpkt.vel_r3 = vec3(0, 0, -0.05);
@@ -375,251 +358,431 @@ void Input_Buffer::pop_older_than(uint32 input_number)
     start = delta - (capacity - start);
 }
 
-Character *Game_State::get_character(UID id)
+void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage)
 {
-  auto character = std::find_if(characters.begin(), characters.end(), [id](auto &c) { return c.id == id; });
-  return character == characters.end() ? nullptr : &*character;
-}
-
-bool damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage)
-{
-  auto tlc = std::find_if(
-      gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) { return lc.id == object_id; });
+  auto tlc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == object_id; });
 
   tlc->hp -= damage;
 
-  for (auto &cd : gs.character_debuffs)
-    if (cd.character == object_id && subject_id)
-      buff_on_damage_dispatch(cd.buff._id, subject_id, object_id, cd.buff, damage, gs);
-
-  if (tlc->hp <= 0)
+  std::vector<Character_Buff> cbs;
+  for (auto &cb : gs.character_buffs)
+    if (cb.character == object_id && subject_id)
+      cbs.push_back(cb);
+  for (auto &cb : cbs)
   {
-    erase_if(gs.character_casts, [&](auto &cc) { return cc.caster == tlc->id; });
-    erase_if(gs.spell_cooldowns, [&](auto &sc) { return sc.character == tlc->id; });
-    erase_if(gs.character_buffs, [&](auto &cb) { return cb.character == tlc->id; });
-    erase_if(gs.character_debuffs, [&](auto &cd) { return cd.character == tlc->id; });
-    erase_if(gs.character_silencings, [&](auto &cs) { return cs.character == tlc->id; });
-    erase_if(gs.character_gcds, [&](auto &cg) { return cg.character == tlc->id; });
-    gs.living_characters.erase(tlc);
-    return true;
+    if (SPELL_DB.buff_damage_seed_of_corruption.contains(cb.buff_id))
+    {
+      auto b_id = SPELL_DB.buff_by_name["Seed of Corruption"];
+      auto soc = find_if(
+          gs.seeds_of_corruption, [&](auto &soc) { return soc.character == object_id && soc.caster == subject_id; });
+      if (soc == gs.seeds_of_corruption.end())
+        return;
+
+      soc->damage_taken += damage;
+      if (soc->damage_taken < 20)
+        return;
+
+      erase_if(gs.character_buffs,
+          [&](auto &cd) { return cd.character == object_id && cd.buff_id == b_id && cd.caster == soc->caster; });
+      gs.seeds_of_corruption.erase(soc);
+      end_buff(gs, cb);
+    }
   }
-  return false;
 }
 
-void update_spell_objects(Game_State &gs, Spell_Database &sdb, Flat_Scene_Graph &scene)
+void remove_dead_characters(Game_State &gs)
+{
+  auto first_dead =
+      std::partition(gs.living_characters.begin(), gs.living_characters.end(), [](auto &lc) { return lc.hp > 0; });
+  std::for_each(first_dead, gs.living_characters.end(), [&](auto &lc) {
+    erase_if(gs.character_targets, [&](auto &ct) { return ct.character == lc.id || ct.target == lc.id; });
+    erase_if(gs.character_casts, [&](auto &cc) { return cc.caster == lc.id; });
+    erase_if(gs.spell_cooldowns, [&](auto &sc) { return sc.character == lc.id; });
+    erase_if(gs.character_buffs, [&](auto &cb) { return cb.character == lc.id; });
+    erase_if(gs.character_silencings, [&](auto &cs) { return cs.character == lc.id; });
+    erase_if(gs.character_gcds, [&](auto &cg) { return cg.character == lc.id; });
+    erase_if(gs.demonic_circles, [&](auto &dc) { return dc.owner == lc.id; });
+    erase_if(gs.seeds_of_corruption, [&](auto &soc) { return soc.character == lc.id; });
+  });
+  gs.living_characters.erase(first_dead, gs.living_characters.end());
+}
+
+void update_spell_objects(Game_State &gs, Flat_Scene_Graph &scene)
 {
   for (auto &so : gs.spell_objects)
   {
-    Spell_Object_Formula *sof = sdb.get_spell_object(so.formula_index);
-    auto t = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == so.target; });
-    vec3 a = normalize(t->physics.position - so.pos);
-    a *= vec3(sof->speed * dt);
-    so.pos += a;
+    auto t = find_if(gs.characters, [&](auto &c) { return c.id == so.target; });
+    auto speed = SPELL_DB.sobj_speed[so.spell_id];
+    so.pos += normalize(t->physics.position - so.pos) * (speed *dt);
   }
-  
-  auto &first_hit = std::partition(gs.spell_objects.begin(), gs.spell_objects.end(), [&](auto &so) {
-    Spell_Object_Formula *sof = sdb.get_spell_object(so.formula_index);
-    auto t = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == so.target; });
+
+  auto first_hit = std::partition(gs.spell_objects.begin(), gs.spell_objects.end(), [&](auto &so) {
+    auto t = find_if(gs.characters, [&](auto &c) { return c.id == so.target; });
+    auto speed = SPELL_DB.sobj_speed[so.spell_id];
     float d = length(t->physics.position - so.pos);
-    float epsilon = sof->speed * dt / 2.f * 1.05f;
+    float epsilon = speed * dt / 2.f * 1.05f;
     return d > epsilon;
   });
-  std::vector<Spell_Object> hits(first_hit, gs.spell_objects.end());
+  auto hits = std::vector(first_hit, gs.spell_objects.end());
   gs.spell_objects.erase(first_hit, gs.spell_objects.end());
 
   for (auto &so : hits)
   {
-    Spell_Object_Formula *sof = sdb.get_spell_object(so.formula_index);
-    spell_object_on_hit_dispatch(sof->_id, so, gs, scene);
-  }
-}
+    if (none_of(gs.living_characters, [&](auto &lc) { return lc.id == so.target; }))
+      continue;
 
-void update_buffs(std::vector<Character_Buff> &bs, Game_State& gs, Spell_Database& sdb)
-{
-  for (auto &b : bs)
-  {
-    BuffDef *buff_formula = sdb.get_buff(b.buff.formula_index);
-    b.buff.duration -= dt;
-    b.buff.time_since_last_tick += dt;
-    auto &lc = std::find_if(gs.living_characters.begin(), gs.living_characters.end(),
-        [&](auto &lc) { return lc.id == b.character; });
-    lc->effective_stats *= buff_formula->stats_modifiers;
-    if (b.buff.time_since_last_tick > 1.f / buff_formula->tick_freq)
+    auto hit_damage = SPELL_DB.sobj_hit_damage.find(so.spell_id);
+    if (hit_damage != SPELL_DB.sobj_hit_damage.end())
+      damage_character(gs, so.caster, so.target, hit_damage->second);
+
+    auto buff_application = SPELL_DB.sobj_hit_buff_application.find(so.spell_id);
+    if (buff_application != SPELL_DB.sobj_hit_buff_application.end())
     {
-      buff_on_tick_dispatch(buff_formula->_id, b.character, b.buff, gs);
-      b.buff.time_since_last_tick = 0;
+      erase_if(gs.character_buffs,
+        [&](auto &cd) { return cd.character == so.target && cd.buff_id == buff_application->second; });
+      gs.character_buffs.push_back({
+        .character = so.target,
+        .buff_id = buff_application->second,
+        .caster = so.caster,
+        .duration = SPELL_DB.buff_duration[buff_application->second],
+        .time_since_last_tick = 0
+      });
+    }
+
+    if (SPELL_DB.sobj_hit_seed_of_corruption.contains(so.spell_id))
+    {
+      auto b_id = SPELL_DB.buff_by_name["Seed of Corruption"];
+      auto existing =
+          find_if(gs.character_buffs, [&](auto &cd) { return cd.character == so.target && cd.buff_id == b_id; });
+
+      if (existing != gs.character_buffs.end())
+      {
+        erase_if(gs.character_buffs, [&](auto &cd) { return cd.character == so.target && cd.buff_id == b_id; });
+        break;
+      }
+
+      gs.character_buffs.push_back({
+        .character = so.target,
+        .buff_id = b_id,
+        .caster = so.caster,
+        .duration = SPELL_DB.buff_duration[b_id],
+        .time_since_last_tick = 0
+      });
+
+      gs.seeds_of_corruption.push_back({so.target, so.caster, 0.0});
     }
   }
-  auto first_ended = std::partition(bs.begin(), bs.end(), [&](auto &b) { return b.buff.duration > 0; });
-  std::vector<Character_Buff> ended_buffs(first_ended, bs.end());
+}
+
+void end_buff(Game_State &gs, Character_Buff &b) 
+{
+  if (SPELL_DB.buff_end_demonic_circle_destroy.contains(b.buff_id))
+    erase_if(gs.demonic_circles, [&](auto &ds) { return ds.owner == b.character; });
+
+  if (SPELL_DB.buff_end_seed_of_corruption.contains(b.buff_id))
+  {
+    std::queue<Character_Buff> seeds_to_detonate;
+    seeds_to_detonate.push(b);
+    while (!seeds_to_detonate.empty())
+    {
+      auto soc = seeds_to_detonate.front();
+
+      auto c = find_if(gs.characters, [&](auto &c) { return c.id == soc.character; });
+      auto pos = c->physics.position;
+
+      for (auto &c1 : gs.characters)
+      {
+        if (c1.team != c->team || length(c1.physics.position - pos) > 10.f)
+          continue;
+        if (none_of(gs.living_characters, [&](auto &lc) { return lc.id == c1.id; }))
+          continue;
+        UID soc_id = SPELL_DB.buff_by_name["Seed of Corruption"];
+        auto first_soc = std::partition(gs.character_buffs.begin(), gs.character_buffs.end(),
+            [&](auto &cd) { return cd.character != c1.id || cd.buff_id != soc_id; });
+        std::for_each(first_soc, gs.character_buffs.end(), [&](auto &soc1) { seeds_to_detonate.push(soc1); });
+        gs.character_buffs.erase(first_soc, gs.character_buffs.end());
+        erase_if(gs.seeds_of_corruption, [&](auto &soc1) { return soc1.character == c1.id; });
+        damage_character(gs, c->id, c1.id, 10);
+        UID corruption_id = SPELL_DB.buff_by_name["Corruption"];
+        float32 corruption_duration = SPELL_DB.buff_duration[corruption_id];
+        gs.character_buffs.push_back({
+          .character = c1.id,
+          .buff_id = corruption_id,
+          .caster = c->id,
+          .duration = corruption_duration,
+          .time_since_last_tick = 0
+        });
+      }
+
+      seeds_to_detonate.pop();
+    }
+  }
+}
+
+void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs)
+{
+  std::vector<Character_Buff> buffs_to_tick;
+  for (auto &b : bs)
+  {
+    b.duration -= dt;
+    b.time_since_last_tick += dt;
+    auto lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == b.character; });
+
+    auto stats_modifiers = SPELL_DB.buff_stats_modifiers.find(b.buff_id);
+    if (stats_modifiers != SPELL_DB.buff_stats_modifiers.end())
+    {
+      lc->effective_stats *= stats_modifiers->second;
+    }
+
+    auto tick_freq = SPELL_DB.buff_tick_freq.find(b.buff_id);
+    if (tick_freq != SPELL_DB.buff_tick_freq.end() && b.time_since_last_tick > 1.f / tick_freq->second)
+    {
+      buffs_to_tick.push_back(b);
+      b.time_since_last_tick = 0;
+    }
+  }
+  for (auto &b : buffs_to_tick)
+  {
+    UID b_id = b.buff_id;
+    auto tick_damage = SPELL_DB.buff_tick_damage.find(b_id);
+    if (tick_damage != SPELL_DB.buff_tick_damage.end())
+      damage_character(gs, b.caster, b.character, tick_damage->second);
+  }
+  auto first_ended = std::partition(bs.begin(), bs.end(), [&](auto &b) { return b.duration > 0; });
+  auto ended_buffs = std::vector(first_ended, bs.end());
   bs.erase(first_ended, bs.end());
   for (auto &b : ended_buffs)
-    buff_on_end_dispatch(b.buff._id, b.character, b.buff, gs);
+    end_buff(gs, b);
 }
 
-Cast_Error cast_viable(Game_State &game_state, Spell_Database &spell_db, UID caster_id, UID target_id,
-    Spell_Index spell_id, bool ignore_gcd, bool ignore_already_casting)
+void cast_spell(Game_State &gs, Flat_Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id)
 {
-  Spell_Formula *spell_formula = spell_db.get_spell(spell_id);
-  ASSERT(spell_formula);
-
-  Character *caster = game_state.get_character(caster_id);
-  ASSERT(caster);
-
-  Character *target = game_state.get_character(target_id);
-  if (spell_formula->targets == Spell_Targets::Self)
-    target = caster;
-
-  if (!target)
-    return Cast_Error::Invalid_Target;
-  auto &casterr = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == caster_id; });
-  bool target_alive = std::any_of(game_state.living_characters.begin(), game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == target->id; });
-  if (casterr == game_state.living_characters.end() || !target_alive)
-    return Cast_Error::Invalid_Target;
-  if (std::any_of(game_state.character_silencings.begin(), game_state.character_silencings.end(),
-          [caster_id](auto &cs) { return cs.character == caster_id; }))
-    return Cast_Error::Silenced;
-  if (!ignore_gcd && spell_formula->on_global_cooldown &&
-      std::any_of(game_state.character_gcds.begin(), game_state.character_gcds.end(),
-          [caster_id](auto &cg) { return cg.character == caster_id; }))
-    return Cast_Error::Global_Cooldown;
-  if (std::any_of(game_state.spell_cooldowns.begin(), game_state.spell_cooldowns.end(),
-          [&](auto &c) { return c.character == caster_id && c.spell == spell_id; }))
-    return Cast_Error::Cooldown;
-  if (spell_formula->mana_cost > casterr->mana)
-    return Cast_Error::Insufficient_Mana;
-  if (!target && spell_formula->targets != Spell_Targets::Terrain)
-    return Cast_Error::Invalid_Target;
-  if (target && length(caster->physics.position - target->physics.position) > spell_formula->range &&
-      spell_formula->targets != Spell_Targets::Terrain && spell_formula->targets != Spell_Targets::Self)
-    return Cast_Error::Out_of_Range;
-  if (!ignore_already_casting && std::any_of(game_state.character_casts.begin(), game_state.character_casts.end(),
-                                     [&](auto &c) { return c.caster == caster->id; }))
-    return Cast_Error::Already_Casting;
-
-  return Cast_Error::Success;
-}
-
-void release_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id,
-    UID target_id, Spell_Index spell_id)
-{
-  Spell_Formula *spell_formula = spell_db.get_spell(spell_id);
-  ASSERT(spell_formula);
-
-  Cast_Error err;
-  if (static_cast<int>(err = cast_viable(game_state, spell_db, caster_id, target_id, spell_id, true, true)))
+  if (none_of(gs.character_spells, [&](auto &cs) { return cs.character == caster_id && cs.spell == spell_id; }))
     return;
 
-  spell_on_release_dispatch(spell_formula->_id, caster_id, target_id, game_state, scene);
+  auto caster_lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == caster_id; });
 
-  auto &lc = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == caster_id; });
-  if (!spell_formula->cast_time && spell_formula->on_global_cooldown)
-    game_state.character_gcds.push_back({caster_id, lc->effective_stats.global_cooldown});
-
-  if (spell_formula->cooldown > 0.0)
-    game_state.spell_cooldowns.push_back({caster_id, spell_id, spell_formula->cooldown});
-
-  lc->mana = std::max(0.f, lc->mana - spell_formula->mana_cost);
-}
-
-void begin_cast(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, UID target_id,
-    Spell_Index spell_id)
-{
-  Spell_Formula *formula = spell_db.get_spell(spell_id);
-  ASSERT(formula->cast_time > 0);
-
-  Character_Cast cast;
-  cast.caster = caster_id;
-  cast.target = target_id;
-  cast.spell = spell_id;
-  cast.progress = 0;
-  game_state.character_casts.push_back(cast);
-
-  auto &lc = std::find_if(game_state.living_characters.begin(), game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == caster_id; });
-  if (formula->on_global_cooldown)
-    game_state.character_gcds.push_back({caster_id, lc->effective_stats.global_cooldown});
-}
-
-void cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, UID target_id,
-    Spell_Index spell_id)
-{
-  Spell_Formula *formula = spell_db.get_spell(spell_id);
-  if (formula->cast_time > 0)
-    begin_cast(game_state, spell_db, scene, caster_id, target_id, spell_id);
-  else
-    release_spell(game_state, spell_db, scene, caster_id, target_id, spell_id);
-}
-
-void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id,
-    UID target_id, Spell_Index spell_id)
-{
-  if (std::none_of(game_state.character_spells.begin(), game_state.character_spells.end(),
-          [&](auto &cs) { return cs.character == caster_id && cs.spell == spell_id; }))
-    return;
-
-  Spell_Formula *spell = spell_db.get_spell(spell_id);
-  ASSERT(spell);
-
-  if (spell->targets == Spell_Targets::Self)
+  if (SPELL_DB.targets[spell_id] == Spell_Targets::Self)
     target_id = caster_id;
 
-  if (cast_viable(game_state, spell_db, caster_id, target_id, spell_id, false, false) == Cast_Error::Success)
-    cast_spell(game_state, spell_db, scene, caster_id, target_id, spell_id);
-}
+  bool target_dead = none_of(gs.living_characters, [&](auto &lc) { return lc.id == target_id; });
+  if (caster_lc == gs.living_characters.end() || target_dead)
+    return;
 
-void update_casts(std::vector<Character_Cast> &ccs, std::vector<Living_Character> &lcs, Game_State &gs, Spell_Database &sdb,
-  Flat_Scene_Graph &scene) {
-  for (auto &cc : ccs)
+  if (any_of(gs.character_silencings, [caster_id](auto &cs) { return cs.character == caster_id; }))
+    return;
+
+  if (SPELL_DB.on_gcd.contains(spell_id) &&
+      any_of(gs.character_gcds, [caster_id](auto &cg) { return cg.character == caster_id; }))
+    return;
+
+  if (any_of(gs.spell_cooldowns, [&](auto &c) { return c.character == caster_id && c.spell == spell_id; }))
+    return;
+
+  auto mana_cost = SPELL_DB.mana_cost.find(spell_id);
+  if (mana_cost != SPELL_DB.mana_cost.end() && mana_cost->second > caster_lc->mana)
+    return;
+
+  if (caster_id != target_id)
   {
-    auto &lc = std::find_if(lcs.begin(), lcs.end(), [&](auto &lc) { return lc.id == cc.caster; });
-    cc.progress += lc->effective_stats.cast_speed * dt;
+    auto caster = find_if(gs.characters, [&](auto &c) { return c.id == caster_id; });
+    auto target = find_if(gs.characters, [&](auto &c) { return c.id == target_id; });
+    auto range = SPELL_DB.range.find(spell_id);
+    if (range == SPELL_DB.range.end() || length(caster->physics.position - target->physics.position) > range->second)
+      return;
   }
 
-  auto first_completed = std::partition(ccs.begin(), ccs.end(),
-    [&](auto &cc) { return cc.progress < sdb.get_spell(cc.spell)->cast_time; });
-  auto completed = std::vector(first_completed, ccs.end());
-  ccs.erase(first_completed, ccs.end());
+  if (any_of(gs.character_casts, [&](auto &c) { return c.caster == caster_id; }))
+    return;
+
+  if (SPELL_DB.cast_time.contains(spell_id))
+  {
+    gs.character_casts.push_back({caster_id, target_id, spell_id, 0});
+  }
+  else
+  {
+    auto object_creation = SPELL_DB.spell_release_object_creation.find(spell_id);
+    if (object_creation != SPELL_DB.spell_release_object_creation.end())
+    {
+      auto c = find_if(gs.characters, [&](auto &c) { return c.id == caster_id; });
+      Spell_Object object;
+      object.spell_id = object_creation->second;
+      object.caster = caster_id;
+      object.target = target_id;
+      object.pos = c->physics.position;
+      object.id = uid();
+      gs.spell_objects.push_back(object);
+    }
+
+    auto &buff_applications = SPELL_DB.spell_release_buff_application.find(spell_id);
+    if (buff_applications != SPELL_DB.spell_release_buff_application.end())
+    {
+      for (auto b_id : buff_applications->second)
+      {
+        bool is_debuff = SPELL_DB.buff_is_debuff.contains(b_id);
+        erase_if(gs.character_buffs, [&](auto &cb) { return cb.character == target_id && cb.buff_id == b_id; });
+        gs.character_buffs.push_back({.character = target_id,
+            .buff_id = b_id,
+            .caster = caster_id,
+            .duration = SPELL_DB.buff_duration[b_id],
+            .time_since_last_tick = 0});
+      }
+    }
+
+    if (SPELL_DB.spell_release_blink.contains(spell_id))
+    {
+      auto caster = find_if(gs.characters, [&](auto &c) { return c.id == caster_id; });
+      vec3 dir = caster->physics.orientation * vec3(0, 1, 0);
+      vec3 delta = normalize(dir) * vec3(15.f);
+      collide_and_slide_char(caster->physics, caster->radius, delta, vec3(0, 0, -100), scene);
+    }
+
+    if (SPELL_DB.spell_release_demonic_circle_summon.contains(spell_id))
+    {
+      auto b_id = SPELL_DB.buff_by_name["Demonic Circle"];
+      erase_if(gs.character_buffs, [&](auto &cb) { return cb.character == caster_id && cb.buff_id == b_id; });
+      erase_if(gs.demonic_circles, [&](auto &ds) { return ds.owner == caster_id; });
+      gs.character_buffs.push_back({.character = caster_id,
+          .buff_id = b_id,
+          .caster = caster_id,
+          .duration = SPELL_DB.buff_duration[b_id]});
+
+      auto c = find_if(gs.characters, [&](auto &c) { return c.id == caster_id; });
+      gs.demonic_circles.push_back({caster_id, c->physics.position});
+    }
+
+    if (SPELL_DB.spell_release_demonic_circle_teleport.contains(spell_id))
+    {
+      auto ds = find_if(gs.demonic_circles, [&](auto &ds) { return ds.owner == caster_id; });
+      if (ds == gs.demonic_circles.end())
+        return;
+      auto c = find_if(gs.characters, [&](auto &c) { return c.id == caster_id; });
+      c->physics.position = ds->position;
+      c->physics.grounded = false;
+    }
+
+    auto cd = SPELL_DB.cooldown.find(spell_id);
+    if (cd != SPELL_DB.cooldown.end())
+      gs.spell_cooldowns.push_back({caster_id, spell_id, cd->second});
+
+    auto mana_cost = SPELL_DB.mana_cost.find(spell_id);
+    if (mana_cost != SPELL_DB.mana_cost.end())
+      caster_lc->mana = max(0.f, caster_lc->mana - mana_cost->second);
+  }
+  if (SPELL_DB.on_gcd.contains(spell_id))
+    gs.character_gcds.push_back({caster_id, caster_lc->effective_stats.global_cooldown});
+}
+
+// clang-format off
+
+int cmp(Character &c, Living_Character &lc) { return (lc.id < c.id) - (c.id < lc.id); }
+int cmp(Living_Character &lc, Character &c) { return -cmp(c, lc); }
+int cmp(Living_Character &lc, Character_GCD &cg) { return (cg.character < lc.id) - (lc.id < cg.character); }
+int cmp(Character_GCD &cg, Living_Character &lc) { return -cmp(lc, cg); }
+int cmp(Living_Character &lc, Character_Cast &cc) { return (cc.caster < lc.id) - (lc.id < cc.caster); }
+int cmp(Character_Cast &cc, Living_Character &lc) { return -cmp(lc, cc); }
+
+// clang-format on
+
+void update_casts(Game_State &gs, Flat_Scene_Graph &scene)
+{
+  join_for(gs.character_casts, gs.living_characters,
+      [](auto &cc, auto &lc) { cc.progress += lc.effective_stats.cast_speed * dt; });
+
+  auto first_completed = std::partition(gs.character_casts.begin(), gs.character_casts.end(), [&](auto &cc) {
+    return cc.progress < SPELL_DB.cast_time[cc.spell];
+  });
+  auto completed = std::vector(first_completed, gs.character_casts.end());
+  gs.character_casts.erase(first_completed, gs.character_casts.end());
 
   for (auto &cc : completed)
-    release_spell(gs, sdb, scene, cc.caster, cc.target, cc.spell);
+  {
+    auto caster_lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == cc.caster; });
+
+    if (none_of(gs.living_characters, [&](auto &lc) { return lc.id == cc.target; }))
+      continue;
+
+    auto mana_cost = SPELL_DB.mana_cost.find(cc.spell);
+    if (mana_cost != SPELL_DB.mana_cost.end() && mana_cost->second > caster_lc->mana)
+      continue;
+
+    if (cc.caster != cc.target)
+    {
+      auto caster = find_if(gs.characters, [&](auto &c) { return c.id == cc.caster; });
+      auto target = find_if(gs.characters, [&](auto &c) { return c.id == cc.target; });
+      auto range = SPELL_DB.range.find(cc.spell);
+      if (range == SPELL_DB.range.end() ||
+          length(caster->physics.position - target->physics.position) > range->second)
+        continue;
+    }
+
+    auto object_creation = SPELL_DB.spell_release_object_creation.find(cc.spell);
+    if (object_creation != SPELL_DB.spell_release_object_creation.end())
+    {
+      auto c = find_if(gs.characters, [&](auto &c) { return c.id == cc.caster; });
+      Spell_Object object;
+      object.spell_id = object_creation->second;
+      object.caster = cc.caster;
+      object.target = cc.target;
+      object.pos = c->physics.position;
+      object.id = uid();
+      gs.spell_objects.push_back(object);
+    }
+
+    auto cd = SPELL_DB.cooldown.find(cc.spell);
+    if (cd != SPELL_DB.cooldown.end())
+      gs.spell_cooldowns.push_back({cc.caster, cc.spell, cd->second});
+
+    caster_lc->mana = std::max(0.f, caster_lc->mana - mana_cost->second);
+  }
 }
 
-void update_game(Game_State &gs, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene)
+void update_hp(std::vector<Living_Character> &lcs)
 {
-  // if (!std::any_of(gs.living_characters.begin(), gs.living_characters.end(), [&](auto &lc) {
-  //      return std::any_of(gs.characters.begin(), gs.characters.end(),
-  //          [&](auto &c) { return c.id == lc.id && std::string(c.name) == "Combat Dummy"; });
-  //    }))
-  //  add_dummy(gs, map, {1, 1, 5});
-
-  for (auto &lc : gs.living_characters)
-  {
-    auto &c = std::find_if(gs.characters.begin(), gs.characters.end(), [&](auto &c) { return c.id == lc.id; });
-    lc.effective_stats = c->base_stats;
-  }
-
-  update_buffs(gs.character_buffs, gs, spell_db);
-  update_buffs(gs.character_debuffs, gs, spell_db);
-
-  for (auto &lc : gs.living_characters)
+  for (auto &lc : lcs)
     lc.hp = min(lc.hp + lc.effective_stats.hp_regen * dt, lc.hp_max);
+}
 
-  for (auto &lc : gs.living_characters)
+void update_mana(std::vector<Living_Character> &lcs)
+{
+  for (auto &lc : lcs)
     lc.mana = min(lc.hp + lc.effective_stats.mana_regen * dt, lc.mana_max);
+}
 
-  for (auto &cg : gs.character_gcds)
-    cg.remaining -= dt;
-  erase_if(gs.character_gcds, [](auto &cg) { return cg.remaining <= 0.f; });
+void update_gcds(std::vector<Living_Character> &lcs, std::vector<Character_GCD> &cgs)
+{
+  join_for(cgs, lcs, [](auto &cg, auto &lc) { cg.remaining -= dt * lc.effective_stats.cast_speed; });
+  erase_if(cgs, [](auto &cg) { return cg.remaining <= 0.f; });
+}
 
-  update_spell_objects(gs, spell_db, scene);
-
-  for (auto &scd : gs.spell_cooldowns)
+void update_spell_cooldowns(std::vector<Spell_Cooldown> &scs)
+{
+  for (auto &scd : scs)
     scd.cooldown_remaining -= dt;
-  erase_if(gs.spell_cooldowns, [](auto &scd) { return scd.cooldown_remaining <= 0.0; });
+  erase_if(scs, [](auto &scd) { return scd.cooldown_remaining <= 0.0; });
+}
 
-  update_casts(gs.character_casts, gs.living_characters, gs, spell_db, scene);
+void reset_stats(std::vector<Character> &cs, std::vector<Living_Character> &lcs)
+{
+  join_for(cs, lcs, [](auto &c, auto &lc) { lc.effective_stats = c.base_stats; });
+}
+
+void respawn_dummy(std::vector<Character> &cs, std::vector<Living_Character> &lcs, Game_State& gs, Map& map)
+{
+  if (join_none_of(cs, lcs, [](auto &c, auto &lc) { return c.name == "Combat Dummy"; }))
+    add_dummy(gs, map, {1, 1, 5});
+}
+
+void update_game(Game_State &gs, Map &map, Flat_Scene_Graph &scene)
+{
+  reset_stats(gs.characters, gs.living_characters);
+  update_buffs(gs.character_buffs, gs);
+  update_hp(gs.living_characters);
+  update_mana(gs.living_characters);
+  update_gcds(gs.living_characters, gs.character_gcds);
+  update_spell_objects(gs, scene);
+  update_spell_cooldowns(gs.spell_cooldowns);
+  update_casts(gs, scene);
+  remove_dead_characters(gs);
+  respawn_dummy(gs.characters, gs.living_characters, gs, map);
 }

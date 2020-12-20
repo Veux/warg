@@ -685,18 +685,14 @@ void Image_Loader::loader_loop(Image_Loader *loader)
 
 Image_Loader::Image_Loader()
 {
-  threads[0] = std::thread(loader_loop, this);
-  threads[1] = std::thread(loader_loop, this);
-  threads[2] = std::thread(loader_loop, this);
-  // threads[3] = std::thread(loader_loop, this);
+  for (int i = 0; i < thread_count; i++)
+    threads[i] = std::thread(loader_loop, this);
 }
 Image_Loader::~Image_Loader()
 {
   running = false;
-  threads[0].join();
-  threads[1].join();
-  threads[2].join();
-  // threads[3].join();
+  for (int i = 0; i < thread_count; i++)
+    threads[i].join();
 }
 
 bool Image_Loader::load(std::string path, Image_Data *data)

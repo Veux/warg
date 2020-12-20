@@ -11,7 +11,7 @@ Warg_Server::Warg_Server() : scene(&resource_manager)
   map = new Blades_Edge(scene);
   spell_db = Spell_Database();
   for (int i = 0; i < 1; i++)
-    add_dummy(game_state, map, {1, i, 5});
+    add_dummy(game_state, *map, {1, i, 5});
 }
 
 Warg_Server::~Warg_Server()
@@ -26,7 +26,7 @@ void Warg_Server::update()
 
   process_messages();
 
-  update_game(game_state, map, spell_db, scene);
+  update_game(game_state, *map, scene);
 
   for (auto &character : game_state.characters)
   {
@@ -43,15 +43,14 @@ void Warg_Server::update()
     if (_isnan(character.physics.position.x) || _isnan(character.physics.position.y) ||
         _isnan(character.physics.position.z))
       character.physics.position = map->spawn_pos[character.team];
-    if (std::any_of(game_state.living_characters.begin(), game_state.living_characters.end(),
-            [&](auto &lc) { return lc.id == character.id; }))
+    if (character.physics.position.z < -50)
+      character.physics.position = map->spawn_pos[character.team];
+    if (any_of(game_state.living_characters, [&](auto &lc) { return lc.id == character.id; }))
     {
       if (character.physics.position != old_pos)
       {
-        game_state.character_casts.erase(
-            std::remove_if(game_state.character_casts.begin(), game_state.character_casts.end(),
-                [&](auto &cast) { return cast.caster == character.id; }),
-            game_state.character_casts.end());
+        erase_if(game_state.character_casts, [&](auto &cc) { return cc.caster == character.id; });
+        erase_if(game_state.character_gcds, [&](auto &cg) { return cg.character == character.id; });
       }
     }
     else
@@ -81,7 +80,7 @@ void Warg_Server::process_messages()
 
 void Char_Spawn_Request_Message::handle(Warg_Server &server)
 {
-  UID character = add_char(server.game_state, server.map, server.spell_db, team, name.c_str());
+  UID character = add_char(server.game_state, *server.map,  team, name);
   ASSERT(server.peers.count(peer));
   server.peers[peer]->character = character;
 }
@@ -90,8 +89,6 @@ void Input_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  Character *character = server.game_state.get_character(peer_->character);
-  ASSERT(character);
 
   Input command;
   command.number = input_number;
@@ -99,21 +96,19 @@ void Input_Message::handle(Warg_Server &server)
   command.m = move_status;
   peer_->last_input = command;
   auto t = std::find_if(server.game_state.character_targets.begin(), server.game_state.character_targets.end(),
-      [&](auto &t) { return t.character == character->id; });
+      [&](auto &t) { return t.character == peer_->character; });
   if (t != server.game_state.character_targets.end())
     t->target = target_id;
   else
-    server.game_state.character_targets.push_back({character->id, target_id});
+    server.game_state.character_targets.push_back({peer_->character, target_id});
 }
 
 void Cast_Message::handle(Warg_Server &server)
 {
   ASSERT(server.peers.count(peer));
   auto &peer_ = server.peers[peer];
-  Character *character = server.game_state.get_character(peer_->character);
-  ASSERT(character);
 
-  try_cast_spell(server.game_state, server.spell_db, server.scene, peer_->character, _target_id, _spell_index);
+  cast_spell(server.game_state, server.scene, peer_->character, _target_id, _spell_id);
 }
 
 void Warg_Server::connect(std::shared_ptr<Peer> peer)

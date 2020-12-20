@@ -48,7 +48,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   // scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
   //    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   scene.initialize_lighting(
-      "Assets/Textures/black.jpg", "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
+    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
 
   scene.particle_emitters.push_back({});
@@ -165,16 +166,16 @@ void Warg_State::handle_input_events()
       {
       }
       if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam &&
-          current_game_state.get_character(player_character_id))
+          any_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
       {
         int i = 0;
-        auto &spell =
-            std::find_if(current_game_state.character_spells.begin(), current_game_state.character_spells.end(),
-                [&](auto &cs) { return cs.character == player_character_id && i++ == _e.key.keysym.sym - SDLK_1; });
+        auto &spell = find_if(current_game_state.character_spells,
+            [&](auto &cs) { return cs.character == player_character_id && i++ == _e.key.keysym.sym - SDLK_1; });
         if (spell != current_game_state.character_spells.end())
           session->push(std::make_unique<Cast_Message>(target_id, spell->spell));
       }
-      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && current_game_state.get_character(player_character_id))
+      if (_e.key.keysym.sym == SDLK_TAB && !free_cam &&
+          any_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
       {
         for (auto &lc : current_game_state.living_characters)
           if (lc.id != player_character_id)
@@ -219,7 +220,8 @@ void Warg_State::handle_input_events()
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!player_character_id || !current_game_state.get_character(player_character_id))
+  if (!player_character_id ||
+      none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
   if (free_cam)
   {
@@ -364,8 +366,9 @@ void Warg_State::handle_input_events()
     character_to_camera = normalize(ry * character_to_camera);
 
     ASSERT(player_character_id);
-    Character *player_character = current_game_state.get_character(player_character_id);
-    ASSERT(player_character);
+    auto player_character =
+        find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+    ASSERT(player_character != current_game_state.characters.end());
 
     quat orientation;
     static quat last_rmb_orientation = player_character->physics.orientation;
@@ -417,8 +420,8 @@ void Warg_State::process_messages()
 void Warg_State::set_camera_geometry()
 {
   // set_message(s("set_camera_geometry()",s(" time:", current_time), 1.0f);
-  Character *player_character = current_game_state.get_character(player_character_id);
-  if (!player_character)
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (player_character == current_game_state.characters.end())
     return;
 
   float effective_zoom = camera.zoom;
@@ -442,9 +445,7 @@ void Warg_State::set_camera_geometry()
 void Warg_State::update_hp_bar(UID character_id)
 {
   // set_message("update_hp_bar()");
-  Character *character = current_game_state.get_character(character_id);
   Node_Index character_node = character_nodes[character_id];
-
   Node_Index hp_bar = scene.find_by_name(character_node, "hp_bar");
 
   auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
@@ -523,8 +524,8 @@ void Warg_State::update_character_nodes()
 
 void Warg_State::update_prediction_ghost()
 {
-  Character *player_character = current_game_state.get_character(player_character_id);
-  if (!player_character)
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (player_character == current_game_state.characters.end())
     return;
 
   Character_Physics *physics = &player_character->physics;
@@ -570,91 +571,89 @@ void Warg_State::update_stats_bar()
 
 bool prediction_correct(UID player_character_id, Game_State &server_state, Game_State &predicted_state)
 {
-  bool same_input = server_state.input_number == predicted_state.input_number;
+  // bool same_input = server_state.input_number == predicted_state.input_number;
 
-  set_message("preduction_correct()",
-      s("server_state.input_number:", server_state.input_number,
-          " predicted_state.input_number:", predicted_state.input_number),
-      1.0f);
+  // set_message("preduction_correct()",
+  //    s("server_state.input_number:", server_state.input_number,
+  //        " predicted_state.input_number:", predicted_state.input_number),
+  //    1.0f);
 
-  Character *server_character = server_state.get_character(player_character_id);
-  Character *predicted_character = predicted_state.get_character(player_character_id);
+  // auto server_character = find_if(server_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  // auto predicted_character = find_if(predicted_state.characters, [&](auto &c) { return c.id == player_character_id;
+  // });
 
-  if (!server_character && !predicted_character)
-  {
-    return same_input;
-  }
+  // if (server_character == server_state.characters.end() && predicted_character == predicted_state.characters.end())
+  //  return same_input;
 
-  if (!server_character != !predicted_character)
-  {
-    return false;
-  }
+  ////if (!server_character != !predicted_character)
+  ////  return false;
 
-  ASSERT(server_character);
-  ASSERT(predicted_character);
+  // ASSERT(server_character);
+  // ASSERT(predicted_character);
 
-  bool same_player_physics = server_character->physics == predicted_character->physics;
+  // bool same_player_physics = server_character->physics == predicted_character->physics;
 
-  return same_input && same_player_physics;
+  // return same_input && same_player_physics;
+  return true;
 }
 
 void Warg_State::predict_state()
 {
-  // game_state = server_state;
-  return;
-  if (!last_recieved_server_state.get_character(player_character_id))
-    return;
+  //// game_state = server_state;
+  // return;
+  // if (!last_recieved_server_state.get_character(player_character_id))
+  //  return;
 
-  if (input_buffer.size() == 0)
-    return;
+  // if (input_buffer.size() == 0)
+  //  return;
 
-  while (state_buffer.size() > 0 && state_buffer.front().input_number < last_recieved_server_state.input_number)
-    state_buffer.pop_front();
+  // while (state_buffer.size() > 0 && state_buffer.front().input_number < last_recieved_server_state.input_number)
+  //  state_buffer.pop_front();
 
-  Game_State predicted_state = last_recieved_server_state;
-  size_t prediction_start = 0;
+  // Game_State predicted_state = last_recieved_server_state;
+  // size_t prediction_start = 0;
 
-  bool prediction_correct_result = false;
-  if (state_buffer.size() > 0)
-  {
-    prediction_correct_result =
-        prediction_correct(player_character_id, last_recieved_server_state, state_buffer.front());
-  }
-  set_message("predict_state(): prediction_correct_result:", s(prediction_correct_result));
-  if (prediction_correct_result)
-  {
-    predicted_state = state_buffer.back();
-    state_buffer.pop_front();
-    prediction_start = input_buffer.size() - 1;
-  }
-  else
-  {
-    state_buffer = {};
-    predicted_state = last_recieved_server_state;
-  }
+  // bool prediction_correct_result = false;
+  // if (state_buffer.size() > 0)
+  //{
+  //  prediction_correct_result =
+  //      prediction_correct(player_character_id, last_recieved_server_state, state_buffer.front());
+  //}
+  // set_message("predict_state(): prediction_correct_result:", s(prediction_correct_result));
+  // if (prediction_correct_result)
+  //{
+  //  predicted_state = state_buffer.back();
+  //  state_buffer.pop_front();
+  //  prediction_start = input_buffer.size() - 1;
+  //}
+  // else
+  //{
+  //  state_buffer = {};
+  //  predicted_state = last_recieved_server_state;
+  //}
 
-  size_t prediction_iterations = 0;
-  for (size_t i = prediction_start; i < input_buffer.size(); i++)
-  {
-    Input &input = input_buffer[i];
+  // size_t prediction_iterations = 0;
+  // for (size_t i = prediction_start; i < input_buffer.size(); i++)
+  //{
+  //  Input &input = input_buffer[i];
 
-    Character *player_character = predicted_state.get_character(player_character_id);
-    Character_Physics &physics = player_character->physics;
-    vec3 radius = player_character->radius;
-    /*float32 movement_speed = player_character->effective_stats.speed;*/
+  //  Character *player_character = predicted_state.get_character(player_character_id);
+  //  Character_Physics &physics = player_character->physics;
+  //  vec3 radius = player_character->radius;
+  //  /*float32 movement_speed = player_character->effective_stats.speed;*/
 
-    move_char(predicted_state, *player_character, input, scene);
-    if (vec3_has_nan(physics.position))
-      physics.position = map->spawn_pos[player_character->team];
+  //  move_char(predicted_state, *player_character, input, scene);
+  //  if (vec3_has_nan(physics.position))
+  //    physics.position = map->spawn_pos[player_character->team];
 
-    predicted_state.input_number = input.number;
-    state_buffer.push_back(predicted_state);
+  //  predicted_state.input_number = input.number;
+  //  state_buffer.push_back(predicted_state);
 
-    prediction_iterations++;
-  }
-  // set_message("prediction iterations:", s(prediction_iterations), 5);
+  //  prediction_iterations++;
+  //}
+  //// set_message("prediction iterations:", s(prediction_iterations), 5);
 
-  current_game_state = state_buffer.back();
+  // current_game_state = state_buffer.back();
 }
 
 void Warg_State::update_meshes()
@@ -714,13 +713,13 @@ void Warg_State::animate_character(UID character_id)
   static std::map<UID, vec3> last_positions;
   static std::map<UID, bool> last_grounded;
 
-  Character *character = current_game_state.get_character(character_id);
-  ASSERT(character);
+  auto character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
 
   auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
       [&](auto &lc) { return lc.id == character_id; });
 
-  if (lc == current_game_state.living_characters.end()) return;
+  if (lc == current_game_state.living_characters.end())
+    return;
 
   ASSERT(character_nodes.count(character_id));
 
@@ -810,7 +809,7 @@ void Warg_State::update()
   process_messages();
   update_stats_bar();
   current_game_state = last_recieved_server_state;
-  Character *target = current_game_state.get_character(target_id);
+  auto target = find_if(current_game_state.characters, [&](auto &c) { return c.id == target_id; });
   auto &tlc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
       [&](auto &lc) { return lc.id == target_id; });
   if (tlc == current_game_state.living_characters.end())
@@ -840,8 +839,8 @@ void Warg_State::update()
   beatimer.stop();
   // set_message("octree timer:", beatimer.string_report(), 1.0f);
 
-  Character *me = current_game_state.get_character(player_character_id);
-  if (!me)
+  auto me = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (me == current_game_state.characters.end())
     return;
   Mesh_Descriptor mesh(cube, "spawnedcube");
   mat4 transform = scene.build_transformation(character_nodes[player_character_id]);
@@ -892,13 +891,13 @@ void Warg_State::update()
     ptr->server->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
   }
   Local_Session *ptr = (Local_Session *)this->session;
-  // ptr->server->scene.collision_octree.clear();
+  ptr->server->scene.collision_octree.clear();
 
-  // ptr->server->scene.collision_octree.push(md);
+   ptr->server->scene.collision_octree.push(md);
   for (Node_Index node : spawned_nodes)
   {
     mat4 M = scene.build_transformation(node);
-    // scene.collision_octree.push(&mesh, &M);
+     scene.collision_octree.push(&mesh, &M);
     AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
@@ -909,7 +908,7 @@ void Warg_State::update()
   {
     Local_Session *ptr = (Local_Session *)this->session;
     mat4 M = ptr->server->scene.build_transformation(node);
-    // ptr->server->scene.collision_octree.push(&mesh, &M);
+     ptr->server->scene.collision_octree.push(&mesh, &M);
   }
 
   if (WANT_CLEAR_OCTREE)
@@ -932,10 +931,10 @@ void Warg_State::update()
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   Material_Descriptor material;
-  static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
+  //static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
-  scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
-  transform = scene.build_transformation(dynamic_collider_node);
+  //scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
+  //transform = scene.build_transformation(dynamic_collider_node);
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   // fire_emitter2(
@@ -1032,8 +1031,6 @@ void Warg_State::draw_gui()
 
 void Warg_State::add_girl_character_mesh(UID character_id)
 {
-
-  Character *character = current_game_state.get_character(character_id);
   character_nodes[character_id];
 
   // Material_Descriptor hp_bar_material;
@@ -1334,7 +1331,6 @@ void Warg_State::add_character_mesh(UID character_id)
     return;
   }
 
-  Character *character = current_game_state.get_character(character_id);
   character_nodes[character_id];
 
   Material_Descriptor skin_material;
@@ -1624,8 +1620,8 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
 
 void Warg_State::update_cast_bar()
 {
-  Character *player_character = current_game_state.get_character(player_character_id);
-  if (!player_character)
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (player_character == current_game_state.characters.end())
     return;
 
   auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
@@ -1637,21 +1633,17 @@ void Warg_State::update_cast_bar()
 
   ImVec2 size = ImVec2(200, 32);
   ImVec2 position = ImVec2(resolution.x / 2 - size.x / 2, CONFIG.resolution.y * 0.7f);
-  Spell_Formula *casting_spell_formula = spell_db.get_spell(cast->spell);
-  float32 progress = cast->progress / casting_spell_formula->cast_time;
+  float32 progress = cast->progress / SPELL_DB.cast_time[cast->spell];
 
   create_cast_bar("player_cast_bar", progress, position, size);
 }
 
 void Warg_State::update_unit_frames()
 {
-  Character *player_character = current_game_state.get_character(player_character_id);
-  if (!player_character)
+  if (none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
 
-  auto make_unit_frame = [&](const char *name, Character *character, ImVec2 size, ImVec2 position) {
-    const char *character_name = character->name;
-
+  auto make_unit_frame = [&](const char *name, UID character_id, ImVec2 size, ImVec2 position) {
     Layout_Grid grid(vec2(size.x, size.y), vec2(2), vec2(1), 1, 4);
 
     bool display_unit_frame = true;
@@ -1665,11 +1657,12 @@ void Warg_State::update_unit_frames()
         ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
 
-    ImGui::SetCursorPos(v(grid.get_position(0, 0)));
-    ImGui::Text("%s", character_name);
+    auto character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
 
-    auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
-        [&](auto &lc) { return lc.id == character->id; });
+    ImGui::SetCursorPos(v(grid.get_position(0, 0)));
+    ImGui::Text("%s", character->name.c_str());
+
+    auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == character->id; });
 
     ImGui::SetCursorPos(v(grid.get_position(0, 1)));
     float32 hp_percentage = (float32)lc->hp / (float32)lc->hp_max;
@@ -1689,17 +1682,14 @@ void Warg_State::update_unit_frames()
     ImGui::PopStyleVar(3);
   };
 
-  auto make_target_buffs = [&](std::vector<Character_Buff> cbs, UID character, vec2 position, vec2 size, bool debuffs) {
-    int buff_count = std::count_if(cbs.begin(), cbs.end(), [character](auto &cb) { return cb.character == character; });
+  auto make_target_buffs = [&](std::vector<Character_Buff> cbs, vec2 position, vec2 size, bool debuffs) {
+    int buff_count = cbs.size();
 
     Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(buff_count, 1), vec2(1, 1), 1);
 
     int i = 0;
     for (auto &cb : cbs)
     {
-      if (cb.character != character)
-        continue;
-
       Layout_Grid inner_grid(outer_grid.get_section_size(1, 1), vec2(2), vec2(0), 1, 1);
 
       bool display_buff = true;
@@ -1714,9 +1704,8 @@ void Warg_State::update_unit_frames()
               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
               ImGuiWindowFlags_NoFocusOnAppearing);
 
-      BuffDef *buff_formula = spell_db.get_buff(cb.buff.formula_index);
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
-      put_imgui_texture(&buff_formula->icon, inner_grid.get_section_size(1, 1));
+      put_imgui_texture(&SPELL_DB.buff_icon[cb.buff_id], inner_grid.get_section_size(1, 1));
       ImGui::End();
       ImGui::PopStyleVar(4);
       i++;
@@ -1725,32 +1714,38 @@ void Warg_State::update_unit_frames()
 
   Layout_Grid grid(vec2(400, 160), vec2(10), vec2(5), 2, 6);
 
-  make_unit_frame("player_unit_frame", player_character, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
+  make_unit_frame("player_unit_frame", player_character_id, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
 
-  Character *target = current_game_state.get_character(target_id);
-  if (!target)
+  if (none_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == target_id; }))
     return;
 
-  make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
-  make_target_buffs(
-      current_game_state.character_buffs, target_id, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
-  make_target_buffs(
-      current_game_state.character_debuffs, target_id, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
+  make_unit_frame("target_unit_frame", target_id, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
+  std::vector<Character_Buff> buffs, debuffs;
+  for (auto &cb : current_game_state.character_buffs)
+  {
+    if (cb.character != target_id)
+      continue;
+    if (SPELL_DB.buff_is_debuff.contains(cb.buff_id))
+      debuffs.push_back(cb);
+    else
+      buffs.push_back(cb);
+  }
+  make_target_buffs(buffs, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
+  make_target_buffs(debuffs, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
 
   auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
-      [&](auto &c) { return c.caster == target->id; });
+      [&](auto &c) { return c.caster == target_id; });
   if (cast == current_game_state.character_casts.end())
     return;
 
-  Spell_Formula *casting_spell_formula = spell_db.get_spell(cast->spell);
-  float32 cast_progress = cast->progress / casting_spell_formula->cast_time;
+  float32 cast_progress = cast->progress / SPELL_DB.cast_time[cast->spell];
   create_cast_bar("target_cast_bar", cast_progress, v(grid.get_position(1, 5)), v(grid.get_section_size(1, 1)));
 }
 
 void Warg_State::update_icons()
 {
-  Character *player_character = current_game_state.get_character(player_character_id);
-  ASSERT(player_character);
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  ASSERT(player_character != current_game_state.characters.end());
 
   static Framebuffer framebuffer = Framebuffer();
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
@@ -1778,10 +1773,10 @@ void Warg_State::update_icons()
     {
       if (cs.character != player_character_id)
         continue;
-      Spell_Formula *spell = spell_db.get_spell(cs.spell);
+
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = spell->icon;
+      sources[i] = SPELL_DB.icon[cs.spell];
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
       i++;
     }
@@ -1798,22 +1793,22 @@ void Warg_State::update_icons()
   {
     if (cs.character != player_character_id)
       continue;
-    Spell_Formula *spell = spell_db.get_spell(cs.spell);
 
     float32 cooldown_percent = 0.f;
     float32 cooldown_remaining = 0.f;
 
-    auto scd = std::find_if(current_game_state.spell_cooldowns.begin(), current_game_state.spell_cooldowns.end(),
+    auto scd = find_if(current_game_state.spell_cooldowns,
         [&](auto &scd) { return scd.character == player_character_id && scd.spell == cs.spell; });
     if (scd != current_game_state.spell_cooldowns.end())
-      cooldown_percent = scd->cooldown_remaining / spell->cooldown;
-    if (spell->on_global_cooldown)
+      cooldown_percent = scd->cooldown_remaining / SPELL_DB.cooldown[cs.spell];
+    if (SPELL_DB.on_gcd.contains(cs.spell))
     {
-      auto &cg = std::find_if(current_game_state.character_gcds.begin(), current_game_state.character_gcds.end(),
-          [&](auto &cg) { return cg.character == player_character_id; });
-      auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
-          [&](auto &lc) { return lc.id == player_character_id; });
-      if (cg != current_game_state.character_gcds.end())
+      auto &cg =
+          find_if(current_game_state.character_gcds, [&](auto &cg) { return cg.character == player_character_id; });
+      auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; });
+      if (cg != current_game_state.character_gcds.end() &&
+          (scd == current_game_state.spell_cooldowns.end() ||
+              cg->remaining / lc->effective_stats.cast_speed  > scd->cooldown_remaining))
         cooldown_percent = cg->remaining / lc->effective_stats.global_cooldown;
     }
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
@@ -1852,8 +1847,8 @@ void Warg_State::update_action_bar()
 
 void Warg_State::update_buff_indicators()
 {
-  Character *player_character = current_game_state.get_character(player_character_id);
-  ASSERT(player_character);
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  ASSERT(player_character != current_game_state.characters.end());
 
   auto duration_string = [](float32 seconds) {
     int32 seconds_int = ceil(seconds);
@@ -1903,39 +1898,44 @@ void Warg_State::update_buff_indicators()
   size_t max_columns = 18;
   Layout_Grid grid(vec2(800, 300), vec2(10), vec2(5), max_columns, 3);
 
-  int col = 0;
+  
+  std::vector<Character_Buff> buffs, debuffs;
   for (auto &cb : current_game_state.character_buffs)
+  {
+    if (cb.character != player_character_id)
+      continue;
+    if (SPELL_DB.buff_is_debuff.contains(cb.buff_id))
+      debuffs.push_back(cb);
+    else
+      buffs.push_back(cb);
+  }
+
+  int col = 0;
+  for (auto &cb : buffs)
   {
     if (col >= max_columns)
       break;
-    if (cb.character != player_character_id)
-      continue;
-    BuffDef *buff_formula = spell_db.get_buff(cb.buff.formula_index);
     float32 position_x = resolution.x - grid.get_position(col, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(col, 0).y), grid.get_section_size(1, 1), &buff_formula->icon,
-        cb.buff.duration, false, col);
+    create_indicator(vec2(position_x, grid.get_position(col, 0).y), grid.get_section_size(1, 1),
+        &SPELL_DB.buff_icon[cb.buff_id], cb.duration, false, col);
     col++;
   }
 
   col = 0;
-  for (auto &cd : current_game_state.character_debuffs)
+  for (auto &cd : debuffs)
   {
     if (col >= max_columns)
       break;
-    if (cd.character != player_character_id)
-      continue;
-    BuffDef *debuff_formula = spell_db.get_buff(cd.buff.formula_index);
     float32 position_x = resolution.x - grid.get_position(col, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(col, 2).y), grid.get_section_size(1, 1), &debuff_formula->icon,
-        cd.buff.duration, false, col);
+    create_indicator(vec2(position_x, grid.get_position(col, 2).y), grid.get_section_size(1, 1),
+        &SPELL_DB.buff_icon[cd.buff_id], cd.duration, false, col);
     col++;
   }
 }
 
 void Warg_State::update_game_interface()
 {
-  Character *player_character = current_game_state.get_character(player_character_id);
-  if (!player_character)
+  if (none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
 
   const vec2 resolution = CONFIG.resolution;

@@ -75,7 +75,7 @@ struct Character
 
   Character_Physics physics;
   vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
-  char name[MAX_CHARACTER_NAME_LENGTH + 1] = {};
+  std::string name;
   int team;
   Character_Stats base_stats;
 };
@@ -101,14 +101,14 @@ struct Character_Cast
   UID caster;
 
   UID target;
-  Spell_Index spell;
+  UID spell;
   float32 progress;
 };
 
 struct Spell_Cooldown
 {
   UID character;
-  Spell_Index spell;
+  UID spell;
 
   float32 cooldown_remaining;
 };
@@ -116,40 +116,37 @@ struct Spell_Cooldown
 struct Character_Spell
 {
   UID character;
-  Spell_Index spell;
+  UID spell;
 };
 
-struct Buff
-{
-  Spell_ID _id;
-  Spell_Index formula_index;
-  float64 duration;
-  float64 time_since_last_tick = 0;
-  UID caster;
-};
 struct Character_Buff
 {
   UID character;
-  Buff buff;
+  UID buff_id;
+  UID caster;
+
+  float64 duration;
+  float64 time_since_last_tick = 0;
 };
 
 struct Character_Silencing
 {
   UID character;
-  Spell_ID buff_id;
+  UID buff_id;
 };
 
 struct Character_GCD
 {
   UID character;
 
-  double remaining;
+  float32 remaining;
 };
 
 struct Spell_Object
 {
   UID id;
-  Spell_Index formula_index;
+
+  UID spell_id;
   UID caster;
   UID target;
   vec3 pos;
@@ -166,28 +163,23 @@ struct Seed_of_Corruption
 {
   UID character;
   UID caster;
-
   double damage_taken;
 };
 
 struct Game_State
 {
-  Character *get_character(UID id);
-
   Map *map = nullptr;
 
   uint32 tick = 0;
   uint32 input_number = 0;
 
   std::vector<Character> characters;
-
   std::vector<Living_Character> living_characters;
   std::vector<Character_Target> character_targets;
   std::vector<Character_Spell> character_spells;
   std::vector<Character_Cast> character_casts;
   std::vector<Spell_Cooldown> spell_cooldowns;
   std::vector<Character_Buff> character_buffs;
-  std::vector<Character_Buff> character_debuffs;
   std::vector<Character_Silencing> character_silencings;
   std::vector<Character_GCD> character_gcds;
   std::vector<Spell_Object> spell_objects;
@@ -195,20 +187,14 @@ struct Game_State
   std::vector<Seed_of_Corruption> seeds_of_corruption;
 };
 
+UID add_dummy(Game_State &game_state, Map &map, vec3 position);
+UID add_char(Game_State &game_state, Map &map, int team, std::string_view name);
 void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_Graph &scene);
 void collide_and_slide_char(
     Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity, Flat_Scene_Graph &scene);
-void update_spell_objects(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene);
-void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs, Spell_Database &sdb);
-Cast_Error cast_viable(Game_State &game_state, Spell_Database &spell_db, UID caster_id, UID target_id,
-    Spell_Index spell_id, bool ignore_gcd, bool ignore_already_casting);
-void release_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id,
-    UID target_id, Spell_Index spell_id);
-void begin_cast(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id, UID target_id,
-    Spell_Index spell_id);
-void try_cast_spell(Game_State &game_state, Spell_Database &spell_db, Flat_Scene_Graph &scene, UID caster_id,
-    UID target_id, Spell_Index spell_id);
-UID add_dummy(Game_State &game_state, Map *map, vec3 position);
-UID add_char(Game_State &game_state, Map *map, Spell_Database &spell_db, int team, const char *name);
-void update_game(Game_State &game_state, Map *map, Spell_Database &spell_db, Flat_Scene_Graph &scene);
-bool damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage);
+void update_spell_objects(Game_State &game_state, Flat_Scene_Graph &scene);
+void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs);
+void cast_spell(Game_State &game_state, Flat_Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id);
+void update_game(Game_State &game_state, Map &map, Flat_Scene_Graph &scene);
+void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage);
+void end_buff(Game_State &gs, Character_Buff &cb);
