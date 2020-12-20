@@ -237,7 +237,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  //rach = scene.add_aiscene_new("racharound/racharound.fbx");
+  rach = scene.add_aiscene_new("racharound/racharound.fbx");
 
   terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
@@ -650,13 +650,17 @@ void Render_Test_State::update()
   renderer.set_camera(camera.pos, camera.dir);
   terrain.apply_geometry_to_octree_if_necessary(&scene);
 
-  //Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
-  //if (rach_ptr->animation_state_pool_index != NODE_NULL)
-  //{
-  //  Skeletal_Animation_State *anim_ptr =
-  //      &scene.resource_manager->animation_state_pool[rach_ptr->animation_state_pool_index];
-  //  anim_ptr->time = current_time;
-  //}
+  if (rach != NODE_NULL)
+  {
+
+    Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
+    if (rach_ptr->animation_state_pool_index != NODE_NULL)
+    {
+      Skeletal_Animation_State *anim_ptr =
+          &scene.resource_manager->animation_state_pool[rach_ptr->animation_state_pool_index];
+      anim_ptr->time = current_time;
+    }
+  }
 }
 
 void Render_Test_State::draw_gui()
@@ -672,6 +676,40 @@ void Render_Test_State::draw_gui()
       terrain.window_open = !terrain.window_open;
     }
     terrain.run(this);
+
+    if (rach != NODE_NULL)
+    {
+
+      Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
+      if (rach_ptr->animation_state_pool_index != NODE_NULL)
+      {
+        Skeletal_Animation_State *anim_ptr =
+            &scene.resource_manager->animation_state_pool[rach_ptr->animation_state_pool_index];
+        anim_ptr->time = current_time;
+        Skeletal_Animation_Set *anim_set = &scene.resource_manager->animation_set_pool[anim_ptr->animation_set_index];
+
+        const char *currently_playing = anim_set->animation_set[anim_ptr->currently_playing_animation].name.c_str();
+        if (ImGui::BeginCombo("Anim", currently_playing))
+        {
+          const size_t count = anim_set->animation_set.size();
+          for (size_t i = 0; i < count; i++)
+          {
+            const char *this_list_name = anim_set->animation_set[i].name.c_str();
+            bool is_selected = strcmp(currently_playing, this_list_name) == 0;
+
+            if (ImGui::Selectable(this_list_name, is_selected))
+            {
+              anim_ptr->currently_playing_animation = i;
+              anim_ptr->time = 0;
+            }
+
+            if (is_selected)
+              ImGui::SetItemDefaultFocus();
+          }
+          ImGui::EndCombo();
+        }
+      }
+    }
   }
   ImGui::End();
 }

@@ -12,7 +12,7 @@ struct Render_Test_State : protected State
   vec3 player_dir = vec3(0, 1, 0);
   
   Liquid_Surface terrain;
-  Node_Index rach;
+  Node_Index rach = NODE_NULL;
 };
 
 struct Frostbolt_Effect

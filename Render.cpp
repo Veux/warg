@@ -919,48 +919,53 @@ void Mesh_Handle::enable_assign_attributes()
   {
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (normal_buffer)
   {
     glEnableVertexAttribArray(1);
     glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (uv_buffer)
   {
     glEnableVertexAttribArray(2);
     glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (tangents_buffer)
   {
     glEnableVertexAttribArray(3);
     glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (bitangents_buffer)
   {
     glEnableVertexAttribArray(4);
     glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
-    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
-  if (bone_data_buffer)
+  if (bone_indices_buffer)
   {
     glEnableVertexAttribArray(5);
-    glBindBuffer(GL_ARRAY_BUFFER, bone_data_buffer);
-    glVertexAttribPointer(5, 4, GL_INT, GL_FALSE, sizeof(int32) * 8, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_indices_buffer);
+    glVertexAttribPointer(5, 4, GL_UNSIGNED_INT, GL_FALSE, 0, 0);
 
     glEnableVertexAttribArray(6);
-    glBindBuffer(GL_ARRAY_BUFFER, bone_data_buffer);
-    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(float32) * 8, (void*)(4 * sizeof(int32)));
-  }
+    glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
+    // glEnableVertexAttribArray(5);
+    // glVertexAttribPointer(5, 4, GL_INT, GL_FALSE, stride, 0);
+
+    // glEnableVertexAttribArray(6);
+    // glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, stride, (void *)(4 * sizeof(int32)));
+  }
 }
 
 void Mesh_Handle::upload_data()
@@ -1029,17 +1034,70 @@ void Mesh_Handle::upload_data()
   glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0], GL_STATIC_DRAW);
 
-
   if (mesh_data.bone_weights.size())
   {
-    // bone_data_buffer
-    size_t bone_count = mesh_data.bone_weights.size();
-    buffer_size = bone_count * sizeof(Vertex_Bone_Data);
-    glBindBuffer(GL_ARRAY_BUFFER, bone_data_buffer);
-    glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bone_weights[0], GL_STATIC_DRAW);
 
+    size_t vertex_count = mesh_data.bone_weights.size();
+
+
+    ASSERT(vertex_count == mesh_data.positions.size());
+
+    buffer_size = vertex_count * sizeof(Vertex_Bone_Data);
+
+    // sponge repack this for cache
+
+    std::vector<ivec4> temp1;
+    std::vector<vec4> temp2;
+    temp1.resize(vertex_count);
+    temp2.resize(vertex_count);
+
+    int32 max_index = 0;
+    int32 min_index = 100000;
+
+    for (size_t i = 0; i < vertex_count; ++i)
+    {
+      ivec4 *a = (ivec4 *)&mesh_data.bone_weights[i].indices[0];
+      temp1[i] = *a;
+
+      // temp1[i] = ivec4(5);
+
+      max_index = max(max_index, a->r);
+      max_index = max(max_index, a->g);
+      max_index = max(max_index, a->b);
+      max_index = max(max_index, a->a);
+
+      min_index = min(min_index, a->r);
+      min_index = min(min_index, a->g);
+      min_index = min(min_index, a->b);
+      min_index = min(min_index, a->a);
+
+      float32 *b = &mesh_data.bone_weights[i].weights[0];
+      vec4 weight_v = vec4(*b, *(b + 1), *(b + 2), *(b + 3));
+
+      float32 sum = weight_v.x + weight_v.y + weight_v.z + weight_v.w;
+      ASSERT(sum < 1.1f || sum > -0.1f);
+
+
+      temp2[i] = weight_v;
+    }
+
+
+    int a = sizeof(ivec4);
+    int b = sizeof(vec4);
+
+    if (max_index > MAX_BONES || min_index < 0.f)
+    {
+      int a = 3;
+    }
+
+    glGenBuffers(1, &bone_indices_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_indices_buffer);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(int32) * 4, &(temp1[0]), GL_STATIC_DRAW);
+
+    glGenBuffers(1, &bone_weight_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(float32) * 4, &(temp2[0]), GL_STATIC_DRAW);
   }
-
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
@@ -1928,15 +1986,21 @@ void Renderer::opaque_pass(float64 time)
 
     if (entity.animation)
     {
-      ASSERT(entity.material->shader.vs == "skeletal_animation.vert");
-      Skeletal_Animation_State *animation = entity.animation;
-      const std::vector<mat4> *bones = &animation->final_bone_transforms;
-      const mat4 *m = &(*bones)[0];
-      shader.set_uniform_array("bones[0]", m, bones->size());
+       ASSERT(shader.vs == "skeletal_animation.vert");
+       Skeletal_Animation_State *animation = entity.animation;
+       std::vector<Bone>* bones = &entity.mesh->mesh->descriptor.bones;
+       for (size_t i = 0; i < bones->size(); ++i)
+       {
+         Bone* to_bind = &(*bones)[i];
+         mat4* pose = &animation->final_bone_transforms[to_bind->name];
+         *pose = mat4(1);
+         std::string bone_uniform_name = s("bones", "[", i, "]");
+         shader.set_uniform(bone_uniform_name.c_str(), *pose);
+       }
     }
     else
     {
-      if (entity.material->shader.vs == "skeletal_animation.vert")
+      if (shader.vs == "skeletal_animation.vert")
       {
         static mat4 identity[MAX_BONES] = {mat4(1)};
         shader.set_uniform_array("bones[0]", &identity[0], MAX_BONES);

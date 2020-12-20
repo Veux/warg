@@ -284,9 +284,11 @@ struct Mesh_Handle
   GLuint uv_buffer = 0;
   GLuint tangents_buffer = 0;
   GLuint bitangents_buffer = 0;
-  GLuint bone_data_buffer = 0;
   GLuint indices_buffer = 0;
   GLuint indices_buffer_size = 0;
+
+  GLuint bone_indices_buffer = 0;
+  GLuint bone_weight_buffer = 0;
   void enable_assign_attributes();
   Mesh_Descriptor descriptor;
 };

@@ -31,8 +31,8 @@ struct Bone
 #define MAX_BONES_PER_VERTEX 4
 struct Vertex_Bone_Data
 {
-  std::array<uint32, MAX_BONES_PER_VERTEX> indices;
-  std::array<float32, MAX_BONES_PER_VERTEX> weights;
+  std::array<uint32, MAX_BONES_PER_VERTEX> indices = {0,0,0,0};
+  std::array<float32, MAX_BONES_PER_VERTEX> weights = {0.f,0.f,0.f,0.f};
 };
 
 typedef uint32 Skeletal_Animation_Keyframe_Index;
@@ -96,20 +96,16 @@ struct Skeletal_Animation_State
   //pointer to our model's bones
   uint32 model_bone_set_index = NODE_NULL;
 
-  //bone transforms posed and packed for uniform binding
-  std::vector<mat4> final_bone_transforms;
-  //std::array<mat4, MAX_BONES>final_bone_transforms;
+
+
+  //bone names to their completed transformations
+  std::unordered_map<std::string,mat4> final_bone_transforms;
 };
-
-
+ 
 struct Model_Bone_Set
 {
-  //std::array<Bone, MAX_BONES>import_bone_data;
- std::vector<Bone> import_bone_data;
+  std::unordered_map<std::string, Bone> bones;
 };
-
-
-
 
 struct Mesh_Data
 {
@@ -130,7 +126,11 @@ struct Mesh_Data
     tangents.reserve(size);
     bitangents.reserve(size);
     indices.reserve(size);
-    bone_weights.reserve(size);
+
+    //not reserving this because we use it as a flag to see
+    //if there are any bones
+    //it gets resized anyway on import
+    //bone_weights.reserve(size);
   }
 
   std::string build_unique_identifier() const
@@ -174,6 +174,8 @@ struct Mesh_Descriptor
   }
   std::string name = "";
   Mesh_Data mesh_data;
+  std::vector<Bone> bones;
+
   std::string unique_identifier = "";
   const std::string& get_unique_identifier()  {
     if (unique_identifier == "")

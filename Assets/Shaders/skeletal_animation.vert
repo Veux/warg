@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 #define MAX_LIGHTS 10
-#define MAX_BONES 50
+#define MAX_BONES 128u
 
 uniform sampler2D texture11; // displacement
 uniform vec4 texture11_mod;
@@ -15,6 +15,7 @@ uniform mat4 VP;
 uniform mat4 Model;
 uniform mat4 shadow_map_transform[MAX_LIGHTS];
 uniform mat4 bones[MAX_BONES];
+
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;
@@ -22,7 +23,7 @@ layout(location = 3) in vec3 tangent;
 layout(location = 4) in vec3 bitangent;
 
 // assuming max 4 bones per vertex
-layout(location = 5) in ivec4 bone_index;
+layout(location = 5) in uvec4 bone_index;
 layout(location = 6) in vec4 bone_weights;
 
 out vec3 frag_world_position;
@@ -32,10 +33,64 @@ out vec2 frag_normal_uv;
 out vec4 frag_in_shadow_space[MAX_LIGHTS];
 void main()
 {
-  mat4 vertex_to_pose = bones[bone_index[0]] * bone_weights[0];
-  vertex_to_pose += bones[bone_index[1]] * bone_weights[1];
-  vertex_to_pose += bones[bone_index[2]] * bone_weights[2];
-  vertex_to_pose += bones[bone_index[3]] * bone_weights[3];
+
+  vec3 input_pos = position;
+
+  mat4 vertex_to_pose = (bones[bone_index.x] * bone_weights.x);
+  vertex_to_pose += (bones[bone_index.y] * bone_weights.y);
+  vertex_to_pose += (bones[bone_index.z] * bone_weights.z);
+  vertex_to_pose += (bones[bone_index.w] * bone_weights.w);
+
+  float weight_sum = bone_weights[0] + bone_weights[1] + bone_weights[2] + bone_weights[3];
+
+  bool bad_index = false;
+
+  if (bone_index.x >= MAX_BONES)
+  {
+    bad_index = true;
+  }
+
+  if (bone_index.y >= MAX_BONES)
+  {
+    bad_index = true;
+  }
+
+  if (bone_index.z >= MAX_BONES)
+  {
+    bad_index = true;
+  }
+
+  if (bone_index.w >= MAX_BONES)
+  {
+    bad_index = true;
+  }
+
+  for (int i = 0; i < 4; ++i)
+  {
+   // if ((bone_index[i] < 0) || (bone_index[i] > MAX_BONES))
+    {
+    //  bad_index = true;
+
+      // input_pos.z = bone_index[i];
+    }
+
+    if (bone_weights[i] < 0 || bone_weights[i] > 1)
+    {
+      // bad = true;
+    }
+  }
+
+  if (weight_sum < 0.95f || weight_sum > 1.05f)
+  {
+    input_pos.x = 55 * sin(time);
+  }
+
+  if (bad_index)
+  {
+    input_pos.z = 50 * sin(time);
+  }
+
+  // vertex_to_pose = mat4(1);
 
   mat4 vertex_to_pose_to_world = Model * vertex_to_pose;
 
@@ -52,5 +107,5 @@ void main()
   {
     frag_in_shadow_space[i] = shadow_map_transform[i] * vertex_to_pose_to_world * vec4(position, 1);
   }
-  gl_Position = txaa_jitter * VP * vertex_to_pose_to_world * vec4(position, 1);
+  gl_Position = VP * vertex_to_pose_to_world * vec4(input_pos, 1);
 }

@@ -171,10 +171,32 @@ void Shader::set_uniform_array(const char *name, const mat4 *matrices, uint32 co
 {
   GLint location = program->get_uniform_location(name);
 
-  if (check_err(location, name))
-    return;
+ // if (check_err(location, name))
+  //  return;
 
-  glUniformMatrix4fv(location, count, GL_FALSE, &matrices[0][0][0]);
+  //sponge
+  glUniformMatrix4fv(location, count, GL_FALSE, &(*matrices)[0][0]);
+
+  return;
+  for (uint32 i = 0; i < count; ++i)
+  {
+    //sponge
+    std::string istr = s("bones", "[", i, "]");
+    GLuint iloc = program->get_uniform_location(istr.c_str());
+
+    mat4 mat(1);
+
+
+
+    if (iloc == -1)
+    {
+      int a = 3;
+    }
+
+
+
+    glUniformMatrix4fv(iloc,1, GL_FALSE, &mat[0][0]);
+  }
 }
 GLint Shader_Handle::get_uniform_location(const char *name)
 {
@@ -211,7 +233,7 @@ bool Shader::check_err(GLint loc, const char *name)
   {
     set_message("Shader invalid uniform: ", name);
   }
-  return loc != -1;
+  return loc == -1;
 }
 
 void Shader_Handle::set_location_cache()

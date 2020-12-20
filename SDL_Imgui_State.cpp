@@ -177,7 +177,7 @@ void SDL_Imgui_State::render()
           }
 
           glActiveTexture(GL_TEXTURE0);
-          if (itd.ptr)
+          if (itd.ptr && !itd.is_cubemap)
             glBindTexture(GL_TEXTURE_2D, itd.ptr->texture);
           else
             glBindTexture(GL_TEXTURE_2D, 0);

@@ -260,8 +260,11 @@ struct Imported_Scene_Data
   Imported_Scene_Node root_node;
   std::vector<Mesh_Descriptor> meshes;
   std::vector<Material_Descriptor> materials;
-  std::vector<Bone> bones;
   std::vector<Skeletal_Animation> animations;
+
+  //for all bones in the import
+  std::unordered_map<std::string, Bone> all_imported_bones;
+  
   float64 scale_factor = 1.;
   uint32 import_flags = default_assimp_flags;
   std::atomic<bool> valid = false;
@@ -274,7 +277,7 @@ struct Resource_Manager
   Mesh_Index push_mesh(Mesh_Descriptor *d);
 
   // todo: not the best, refactor these so they construct in place
-  uint32 push_bone_set(std::vector<Bone> *bones);
+  uint32 push_bone_set(std::unordered_map<std::string, Bone>* bones);
   uint32 push_animation_set(std::vector<Skeletal_Animation> *animation_set);
   uint32 push_animation_state();
 
@@ -350,9 +353,7 @@ struct Scene_Graph_Node
   uint32 animation_state_pool_index = NODE_NULL;
 
   //the set of bones our import had
-  uint32 model_bone_set_pool_index = NODE_NULL;
-  //specifically which bone in the bone set this node is
-  uint32 bone_index = NODE_NULL;
+ uint32 model_bone_set_pool_index = NODE_NULL;
 
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
@@ -360,6 +361,7 @@ struct Scene_Graph_Node
   bool visible = true;
   bool propagate_visibility = true;
   bool wait_on_resource = true;
+  bool is_a_bone = false;
 
   // require the mesh and materials to be available immediately
   bool interpolate_this_node_with_last = false; // if set to true, prepare_renderer can interpolate the last two
@@ -466,7 +468,7 @@ private:
   glm::mat4 __build_transformation(Node_Index node_index);
   void assert_valid_parent_ptr(Node_Index child);
   Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node,
-      const std::pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_pool_index);
+      const std::pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_pool_index, uint32 animation_state_pool_index);
 
   // imgui:
   Node_Index imgui_selected_node = NODE_NULL;

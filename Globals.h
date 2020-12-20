@@ -11,7 +11,7 @@
 #define MAX_INSTANCE_COUNT 40000
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS 10 // reminder to change the Texture_Location::s1...sn shadow map enums
-#define MAX_BONES 50
+#define MAX_BONES 128
 #define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define ENABLE_ASSERTS 1
