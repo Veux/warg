@@ -112,6 +112,30 @@ void Warg_Server::run(int32 port)
                   cast_spell(game_state, scene, character, target, spell);
                   break;
                 }
+                case CHAT_MESSAGE:
+                {
+                  std::string chat_message;
+                  deserialize(b, chat_message);
+                  Peer &peer = peers[(UID)event.peer->data];
+                  auto character = find_if(game_state.characters, [&](auto &c) { return c.id == peer.character; });
+                  Chat_Message cm;
+                  if (character != game_state.characters.end())
+                    cm.name = character->name;
+                  else
+                    cm.name = "Unknown";
+                  cm.message = chat_message;
+
+                  Buffer b;
+                  serialize_(b, CHAT_MESSAGE_RELAY);
+                  serialize_(b, cm.name);
+                  serialize_(b, cm.message);
+                  for (auto &p : peers)
+                  {
+                    ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+                    enet_peer_send(p.second.peer, 0, packet);
+                    enet_host_flush(server);
+                  }
+                }
               }
             }
 
@@ -137,6 +161,7 @@ void Warg_Server::run(int32 port)
       for (auto &p : peers)
       {
         Buffer b;
+        serialize_(b, STATE_MESSAGE);
         serialize_(b, game_state);
         serialize_(b, p.second.character);
 

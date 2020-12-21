@@ -1019,7 +1019,32 @@ void Warg_State::draw_gui()
   IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
 
   update_game_interface();
+  draw_chat_box();
   scene.draw_imgui(state_name);
+}
+
+void Warg_State::draw_chat_box()
+{
+  std::vector<Chat_Message> chat_log = session->get_chat_log();
+
+  ImGui::Begin("chatbox");
+
+  static char chat_input_buffer[1000];
+  if (ImGui::InputText("", chat_input_buffer, 1000, ImGuiInputTextFlags_EnterReturnsTrue, NULL, NULL) &&
+      strlen(chat_input_buffer))
+  {
+    session->send_chat_message(chat_input_buffer);
+    std::fill(chat_input_buffer, chat_input_buffer + 1000, 0);
+  }
+
+  ImGui::BeginChild("chatbox_log_region");
+  for (auto &m : chat_log)
+  {
+    ImGui::TextWrapped("%s: %s", m.name.c_str(), m.message.c_str());
+  }
+  ImGui::EndChild();
+
+  ImGui::End();
 }
 
 void Warg_State::add_girl_character_mesh(UID character_id)

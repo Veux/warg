@@ -16,6 +16,12 @@ struct Peer
   ENetPeer *peer;
 };
 
+struct Chat_Message
+{
+  std::string name;
+  std::string message;
+};
+
 struct Warg_Server
 {
   Warg_Server();
@@ -30,4 +36,6 @@ struct Warg_Server
   Resource_Manager resource_manager;
   Flat_Scene_Graph scene;
   Game_State game_state;
+
+  std::vector<Chat_Message> chat_log;
 };

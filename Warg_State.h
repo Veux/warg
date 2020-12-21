@@ -54,6 +54,7 @@ struct Warg_State : protected State
   void update_action_bar();
   void update_icons();
   void update_buff_indicators();
+  void draw_chat_box();
 
   Session *session = nullptr;
 

@@ -11,6 +11,8 @@ const int32 SPAWN_MESSAGE = 1;
 const int32 MOVE_MESSAGE = 2;
 const int32 CAST_MESSAGE = 3;
 const int32 STATE_MESSAGE = 4;
+const int32 CHAT_MESSAGE = 5;
+const int32 CHAT_MESSAGE_RELAY = 6;
 
 struct Buffer
 {

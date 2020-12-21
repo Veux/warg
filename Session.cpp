@@ -44,6 +44,15 @@ void Local_Session::try_cast_spell(UID target, UID spell)
   cast_spell(game_state, scene, character, target, spell);
 }
 
+void Local_Session::send_chat_message(std::string_view message) {
+  return;
+}
+
+std::vector<Chat_Message> Local_Session::get_chat_log()
+{
+  return {};
+}
+
 Network_Session::~Network_Session()
 {
   enet_host_destroy(client);
@@ -91,23 +100,39 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     switch (event.type)
     {
       case ENET_EVENT_TYPE_RECEIVE:
-        std::cout << "networksession received packet" << std::endl;
-        
+      {
+        Buffer b;
+        b.insert(event.packet->data, event.packet->dataLength);
+        int32 message_type;
+        deserialize(b, message_type);
+
+        switch (message_type)
         {
-          Buffer b;
-          b.insert(event.packet->data, event.packet->dataLength);
-          deserialize(b, last_state);
-          deserialize(b, character);
+          case STATE_MESSAGE:
+          {
+            deserialize(b, last_state);
+            deserialize(b, character);
+            gs = last_state;
+            pc = character;
+            break;
+          }
+
+          case CHAT_MESSAGE_RELAY:
+          {
+            Chat_Message cm;
+            deserialize(b, cm.name);
+            deserialize(b, cm.message);
+            chat_log.push_back(cm);
+            break;
+          }
         }
 
         enet_packet_destroy(event.packet);
 
         break;
+      }
     }
   }
-
-  gs = last_state;
-  pc = character;
 }
 
 void Network_Session::request_spawn(std::string_view name, int32 team)
@@ -135,4 +160,15 @@ void Network_Session::try_cast_spell(UID target, UID spell) {
   serialize_(b, target);
   serialize_(b, spell);
   send(b);
+}
+
+void Network_Session::send_chat_message(std::string_view chat_message) {
+  Buffer b;
+  serialize_(b, CHAT_MESSAGE);
+  serialize_(b, chat_message);
+  send(b);
+}
+
+std::vector<Chat_Message> Network_Session::get_chat_log() {
+  return chat_log;
 }

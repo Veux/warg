@@ -14,6 +14,8 @@ public:
   virtual void request_spawn(std::string_view name, int team) = 0;
   virtual void move_command(int m, quat orientation, UID target_id) = 0;
   virtual void try_cast_spell(UID target, UID spell) = 0;
+  virtual void send_chat_message(std::string_view chat_message) = 0;
+  virtual std::vector<Chat_Message> get_chat_log() = 0;
 };
 
 class Local_Session : Session
@@ -25,6 +27,8 @@ public:
   void request_spawn(std::string_view name, int team);
   void move_command(int m, quat orientation, UID target_id);
   void try_cast_spell(UID target, UID spell);
+  void send_chat_message(std::string_view chat_message);
+  std::vector<Chat_Message> get_chat_log();
 
   UID character = 0;
   Input last_input;
@@ -47,10 +51,13 @@ public:
   void request_spawn(std::string_view name, int team);
   void move_command(int m, quat orientation, UID target_id);
   void try_cast_spell(UID target, UID spell);
+  void send_chat_message(std::string_view chat_message);
+  std::vector<Chat_Message> get_chat_log();
 
 private:
   ENetHost *client = nullptr;
   ENetPeer *server = nullptr;
   Game_State last_state;
   UID character = 0;
+  std::vector<Chat_Message> chat_log;
 };
