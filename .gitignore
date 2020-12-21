@@ -9,3 +9,6 @@ warg_log.txt
 Assets/Icons/
 Third_party/
 .vs
+cmake-build-debug
+config.json
+imgui.ini
