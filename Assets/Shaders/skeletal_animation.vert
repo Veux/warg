@@ -2,7 +2,11 @@
 //#extension GL_ARB_separate_shader_objects : enable
 
 #define MAX_LIGHTS 10
-#define MAX_BONES 128u
+#define MAX_BONES 210u
+
+// Total amount of constant memory: 65536 bytes.
+// Total amount of shared memory per block: 49152 bytes.
+// Total number of registers available per block: 65536.
 
 uniform sampler2D texture11; // displacement
 uniform vec4 texture11_mod;
@@ -33,74 +37,10 @@ out vec4 frag_in_shadow_space[MAX_LIGHTS];
 // assuming max 4 bones per vertex
 void main()
 {
-
-  vec3 input_pos = position;
-
   mat4 vertex_to_pose = (bones[bone_index.x] * bone_weights.x);
   vertex_to_pose += (bones[bone_index.y] * bone_weights.y);
   vertex_to_pose += (bones[bone_index.z] * bone_weights.z);
   vertex_to_pose += (bones[bone_index.w] * bone_weights.w);
-
-  float weight_sum = bone_weights[0] + bone_weights[1] + bone_weights[2] + bone_weights[3];
-
-  bool bad_index = false;
-
-  uint ai = bone_index.x;
-  uint bi = bone_index.y;
-  uint ci = bone_index.z;
-  uint di = bone_index.w;
-  //
-  //  gl_Position.x = bone_index.x;
-  //  gl_Position.y = bone_index.y;
-  //  gl_Position.z = bone_index.z;
-  // index_w = bone_index.w;
-
-  if (ai >= MAX_BONES)
-  {
-    bad_index = true;
-  }
-
-  if (bi >= MAX_BONES)
-  {
-    bad_index = true;
-  }
-
-  if (ci >= MAX_BONES)
-  {
-    bad_index = true;
-  }
-
-  if (di >= MAX_BONES)
-  {
-    bad_index = true;
-  }
-
-  for (int i = 0; i < 4; ++i)
-  {
-    // if ((bone_index[i] < 0) || (bone_index[i] > MAX_BONES))
-    {
-      //  bad_index = true;
-
-      // input_pos.z = bone_index[i];
-    }
-
-    if (bone_weights[i] < 0 || bone_weights[i] > 1)
-    {
-      // bad = true;
-    }
-  }
-
-  if (weight_sum < 0.95f || weight_sum > 1.05f)
-  {
-    input_pos.x = 55 * sin(time);
-  }
-
-  if (bad_index)
-  {
-    input_pos.z = 50 * sin(time);
-  }
-
-  // vertex_to_pose = mat4(1);
 
   mat4 vertex_to_pose_to_world = Model * vertex_to_pose;
 
@@ -117,5 +57,5 @@ void main()
   {
     frag_in_shadow_space[i] = shadow_map_transform[i] * vertex_to_pose_to_world * vec4(position, 1);
   }
-  gl_Position = VP * vertex_to_pose_to_world * vec4(input_pos, 1);
+  gl_Position = VP * vertex_to_pose_to_world * vec4(position, 1);
 }

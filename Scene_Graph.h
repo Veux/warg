@@ -10,6 +10,7 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <assimp/types.h>
+#include <assimp/config.h>
 #include <atomic>
 #include <glm/glm.hpp>
 #include <unordered_map>
@@ -28,14 +29,28 @@ enum struct imgui_pane
   end
 };
 
+
+//check: 
+
+//can use to get around our vertex shader register limit
+// aiProcess_SplitByBoneCount 
+
+//can use to do unit conversion on import
+//aiProcess_GlobalScale
+
+//some sort of auto texture searching feature similar to what we hardcoded before
+//aiProcess_EmbedTextures
+
+
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
 const uint32 default_assimp_flags = // aiProcess_FlipWindingOrder |
                                     // aiProcess_Triangulate |
                                     // aiProcess_FlipUVs |
     aiProcess_CalcTangentSpace |
+  aiProcess_ValidateDataStructure|
     // aiProcess_MakeLeftHanded|
     // aiProcess_JoinIdenticalVertices |
-    // aiProcess_PreTransformVertices |
+    // aiProcess_PreTransformVertices | 
     // aiProcess_GenUVCoords |
     // aiProcess_OptimizeGraph|
     // aiProcess_ImproveCacheLocality|

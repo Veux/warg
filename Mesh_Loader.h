@@ -14,15 +14,13 @@ enum Mesh_Primitive
   cube
 };
 
-//just the import data of a single bone - its name and offset matrices
+//just the import data of a single bone - its name and offset matrix
 struct Bone
 {
   //must be the unique assimp-given name because we have to search for it
   std::string name;
 
-  //translations to and from our bone's model space position
   mat4 offset; //model to bone
-  mat4 inverse_offset;//bone to model
 };
 
 
@@ -69,7 +67,7 @@ struct Bone_Animation
 //is a constant - does not change - reference data
 struct Skeletal_Animation
 {
-  std::string name;
+  std::string animation_name;
   float64 duration;
   float64 ticks_per_sec;
   std::vector<Bone_Animation> bone_animations;

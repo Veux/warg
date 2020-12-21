@@ -1650,7 +1650,7 @@ void Scene_Graph::draw_imgui(std::string name)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   const float32 selected_node_draw_height = 340;
-  const float32 horizontal_tile_size = 350;
+  const float32 horizontal_tile_size = 1350;
   const float32 vertical_tile_size = 400;
   // ImGuiWindowFlags flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize;
@@ -2362,10 +2362,11 @@ std::vector<Render_Entity> Scene_Graph::visit_nodes_start()
     if (node->parent == NODE_NULL)
     { // node is visible and its parent is the null node, add its branch
 
-      mat4 inverse_root = __build_transformation(i);
-      visit_nodes(i, mat4(1),inverse_root, accumulator);
+      mat4 inverse_root = inverse(__build_transformation(i));
+      visit_nodes(i, mat4(1), inverse_root, accumulator);
     }
   }
+
   return accumulator;
 }
 
@@ -2504,19 +2505,23 @@ void Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
 
 // we should be guaranteed that all bones above us are already computed
 // for this frame in the calculated_bone_data vector...
-mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Animation_Set *anim_set, Bone* bone)
+mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Animation_Set *anim_set, Bone *bone)
 {
   const string_view bone_name = bone->name;
-  const Skeletal_Animation *skeletal_animation = &anim_set->animation_set[anim_state->currently_playing_animation];
+  const Skeletal_Animation *selected_animation = &anim_set->animation_set[anim_state->currently_playing_animation];
+
   Bone_Animation const *bone_animation = nullptr;
 
   // find bone in animation by name of bone we want to compute
-  for (size_t i = 0; i < skeletal_animation->bone_animations.size(); ++i)
+
+  const size_t num_of_animated_bones = selected_animation->bone_animations.size();
+  for (size_t i = 0; i < num_of_animated_bones; ++i)
   {
-    const string_view test_bone_name = skeletal_animation->bone_animations[i].bone_node_name;
+    const Bone_Animation *bone_anim = &selected_animation->bone_animations[i];
+    const string_view test_bone_name = bone_anim->bone_node_name;
     if (test_bone_name == bone_name)
     {
-      bone_animation = &skeletal_animation->bone_animations[i];
+      bone_animation = bone_anim;
       break;
     }
   }
@@ -2526,15 +2531,18 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
 
   if (!bone_animation)
   {
-    return mat4(1);
+    // this should not be hit...
+    set_message(bone->name, "Bone not found in animation", 10.f);
+    return mat4(1); //??
+    return mat4(sin(get_real_time()));
   }
 
   ASSERT(bone_animation);
 
   // not sure exactly why its calculated using 'ticks'...
-  const float32 ticks_per_sec = skeletal_animation->ticks_per_sec != 0 ? skeletal_animation->ticks_per_sec : 60;
+  const float32 ticks_per_sec = selected_animation->ticks_per_sec != 0 ? selected_animation->ticks_per_sec : 60;
   const float32 time_in_ticks = anim_state->time * ticks_per_sec;
-  const float32 animation_time = fmod(time_in_ticks, skeletal_animation->duration);
+  const float32 animation_time = fmod(time_in_ticks, selected_animation->duration);
 
   size_t left_i = 0;
   size_t right_i = 0;
@@ -2570,7 +2578,6 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
   // result in bone space
   mat4 transformed_bone = translate(translation_result) * toMat4(rotation_result) * scale(scale_result);
   return transformed_bone;
-
 }
 
 // note: the node with the character mesh in it may visit first
@@ -2580,7 +2587,8 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
 
 // this should not be a problem for child node models of a bone, because we modify the stack
 // as we go down the tree, so it will always be correct for children
-void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &P, const mat4& INVERSE_ROOT, std::vector<Render_Entity> &accumulator)
+void Scene_Graph::visit_nodes(
+    Node_Index node_index, const mat4 &P, const mat4 &INVERSE_ROOT, std::vector<Render_Entity> &accumulator)
 {
   if (node_index == NODE_NULL)
     return;
@@ -2598,14 +2606,13 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &P, const mat4& 
   const mat4 R = toMat4(entity->orientation);
   // const mat4 B = entity->import_basis;
 
-  //this node's transform alone
+  // this node's transform alone
   mat4 RST = T * S_o * R;
 
-
-  Skeletal_Animation_State* anim_state;
-  Skeletal_Animation_Set* anim_set;
-  Model_Bone_Set* bone_set;
-  Bone* bone;
+  Skeletal_Animation_State *anim_state;
+  Skeletal_Animation_Set *anim_set;
+  Model_Bone_Set *bone_set;
+  Bone *bone;
   if (entity->is_a_bone)
   {
     // the current user-set state of the animation
@@ -2621,24 +2628,25 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &P, const mat4& 
     // pose it in bone space
     const mat4 posed_bone = animation_resolve(anim_state, anim_set, bone);
 
-    //assign our transformation to our node
-    RST = RST * posed_bone; //technically should just replace it but we'll see if this is useful
+    // assign our transformation to our node
+    RST = posed_bone; // technically should just replace it but we'll see if this is useful
+
+    if (posed_bone == mat4(1))
+    {
+      int a = 3;
+    }
   }
 
   mat4 PRST = P * RST;
 
-  if(entity->is_a_bone)
-  {  
+  if (entity->is_a_bone)
+  {
     // data that is bound in the uniform array in the vertex shader
-    anim_state->final_bone_transforms[s(entity->name)] = INVERSE_ROOT*PRST*bone->offset;
+    anim_state->final_bone_transforms[s(entity->name)] = INVERSE_ROOT * PRST * bone->offset;
   }
 
-
-
   // this node specifically
-  const mat4 BASIS = PRST * S_non;
-
-
+  const mat4 BASIS = PRST; // *S_non;
 
   const size_t num_meshes = entity->model.size();
   for (size_t i = 0; i < num_meshes; ++i)
@@ -2672,7 +2680,7 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &P, const mat4& 
   for (uint32 i = 0; i < entity->children.size(); ++i)
   {
     Node_Index child = entity->children[i];
-    visit_nodes(child, PRST,INVERSE_ROOT, accumulator);
+    visit_nodes(child, PRST, INVERSE_ROOT, accumulator);
   }
 }
 
@@ -2722,6 +2730,12 @@ void import_thread_loop()
 
 bool Resource_Manager::import_aiscene_async(Imported_Scene_Data *dst)
 {
+  ASSERT(0);
+
+  //*@note One Importer instance is not thread - safe.If you use multiple
+  //  * threads for loading, each thread should maintain its own Importer instance.
+
+
   ASSERT(dst->valid != true);
   if (!thread_active)
   {
@@ -2854,13 +2868,14 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
 
   for (uint32 i = 0; i < scene->mNumAnimations; ++i)
   {
+
     aiAnimation *anim = scene->mAnimations[i];
     aiString *animation_name = &anim->mName;
     float64 duration = anim->mDuration;
     float64 tickspersec = anim->mTicksPerSecond;
 
     Skeletal_Animation animation;
-    animation.name = copy(animation_name);
+    animation.animation_name = copy(animation_name);
     animation.duration = duration;
     animation.ticks_per_sec = tickspersec;
 
@@ -2868,6 +2883,9 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
     // a channel is a bone
     uint32 bone_count = anim->mNumChannels;
     animation.bone_animations.reserve(bone_count);
+    ASSERT(bone_count < MAX_BONES);
+
+    set_message(s("Bone count for:", dst->assimp_filename), s(bone_count), 3000.f);
     for (uint32 i = 0; i < bone_count; ++i)
     {
       aiNodeAnim *nodeanim = anim->mChannels[i];
@@ -2888,22 +2906,22 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
       ASSERT(num_pos_keys == num_rot_keys);
       ASSERT(num_pos_keys == num_scale_keys);
 
-      uint32 count = num_pos_keys;
+      uint32 keyframe_count = num_pos_keys;
 
       Bone_Animation bone_animation;
       bone_animation.bone_node_name = copy(nodename);
-      bone_animation.translations.reserve(count);
-      bone_animation.scales.reserve(count);
-      bone_animation.rotations.reserve(count);
-      bone_animation.timestamp.reserve(count);
-      for (uint32 i = 0; i < count; ++i)
+      bone_animation.translations.reserve(keyframe_count);
+      bone_animation.scales.reserve(keyframe_count);
+      bone_animation.rotations.reserve(keyframe_count);
+      bone_animation.timestamp.reserve(keyframe_count);
+      for (uint32 j = 0; j < keyframe_count; ++j)
       {
-        bone_animation.translations.push_back(copy(pos_keys[i].mValue));
-        bone_animation.scales.push_back(copy(scale_keys[i].mValue));
-        bone_animation.rotations.push_back(copy(quat_keys[i].mValue));
-        float64 pos_time = pos_keys[i].mTime;
-        float64 scale_time = scale_keys[i].mTime;
-        float64 rot_time = quat_keys[i].mTime;
+        bone_animation.translations.push_back(copy(pos_keys[j].mValue));
+        bone_animation.scales.push_back(copy(scale_keys[j].mValue));
+        bone_animation.rotations.push_back(copy(quat_keys[j].mValue));
+        float64 pos_time = pos_keys[j].mTime;
+        float64 scale_time = scale_keys[j].mTime;
+        float64 rot_time = quat_keys[j].mTime;
         ASSERT(scale_time == pos_time);
         ASSERT(rot_time == pos_time);
         bone_animation.timestamp.push_back(pos_time);
@@ -2937,7 +2955,6 @@ void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *b
   const size_t vertex_count = d->mesh_data.positions.size();
   d->mesh_data.bone_weights = vector<Vertex_Bone_Data>(vertex_count);
 
-
   // all the bones this mesh is affected by
   for (uint32 i = 0; i < aimesh->mNumBones; ++i)
   {
@@ -2964,7 +2981,6 @@ void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *b
       bones->emplace_back();
       bones->back().name = bone_name;
       bones->back().offset = offsetmatrix;
-      bones->back().inverse_offset = inverse(offsetmatrix);
       shader_bone_index = int32(bones->size()) - 1;
     }
 
@@ -2982,29 +2998,22 @@ void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *b
           d->mesh_data.bone_weights[vertex_index].weights[k] = weight.mWeight;
           break;
         }
-
-
-        //sponge
-        for (Vertex_Bone_Data& e : d->mesh_data.bone_weights)
-        {
-          float32 sum = 0.f;
-          for (uint32 i = 0; i < 4; ++i)
-          {
-            sum += e.weights[i];
-          }
-          if (sum > 1.1f || sum < -0.1f)
-          {
-            int a = 3;
-          }
-        }
-
+      }
+    }
+    // sponge
+    for (Vertex_Bone_Data &e : d->mesh_data.bone_weights)
+    {
+      float32 sum = 0.f;
+      for (uint32 i = 0; i < 4; ++i)
+      {
+        sum += e.weights[i];
+      }
+      if (sum > 1.1f || sum < -0.1f)
+      {
+        ASSERT(0);
       }
     }
   }
-
- 
-
-
 }
 
 void gather_mesh_indices(std::vector<uint32> &indices, const aiMesh *aimesh)
@@ -3050,16 +3059,14 @@ void gather_meshes(const aiScene *scene, Imported_Scene_Data *dst)
     gather_mesh_indices(d.mesh_data.indices, aimesh);
     gather_mesh_bones(aimesh, &d, &d.bones);
 
-    
-    //unfortunately this is a copy, there is no easy way to 
-    //retrieve the bone offset data from within the meshes
-    //from the scene graph - the meshes are in an entirely different
-    //tree branch even...
-    for (size_t i = 0; i < d.bones.size();++i)
+    // unfortunately this is a copy, there is no easy way to
+    // retrieve the bone offset data from within the meshes
+    // from the scene graph - the meshes are in an entirely different
+    // tree branch even...
+    for (size_t i = 0; i < d.bones.size(); ++i)
     {
       dst->all_imported_bones[d.bones[i].name] = d.bones[i];
     }
-
   }
 }
 
@@ -3217,10 +3224,13 @@ void gather_animation_subfolder(Imported_Scene_Data *dst)
   {
     const aiScene *aiscene = IMPORTER.ReadFile(animation_filenames[i].c_str(), dst->import_flags);
 
-    // mflags incomplete is being set - not sure why - geterrorstring returns ""
-    if (!aiscene) // || aiscene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
+    // AI_SCENE_FLAGS_INCOMPLETE is set if there are no meshes or no materials
+    // the fbx animation only files will always trigger it regardless
+
+    if (!aiscene)
     {
-      set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
+      std::string error = IMPORTER.GetErrorString();
+      set_message("ERROR::ASSIMP::", error);
       continue;
     }
 
@@ -3328,10 +3338,9 @@ Mesh_Index Resource_Manager::push_mesh(Mesh_Descriptor *d)
   return result;
 }
 
-
 // todo: not the best, refactor these so they construct in place
 
- uint32 Resource_Manager::push_bone_set(std::unordered_map<std::string, Bone>* bones)
+uint32 Resource_Manager::push_bone_set(std::unordered_map<std::string, Bone> *bones)
 {
   ASSERT(current_model_bone_set_pool_size < MAX_POOL_SIZE);
   model_bone_set_pool[current_model_bone_set_pool_size].bones = *bones;
@@ -3354,7 +3363,7 @@ uint32 Resource_Manager::push_animation_state()
   return current_animation_state_pool_size - 1;
 }
 
-//uint32 Resource_Manager::push_bone_set(std::vector<Bone> *bones)
+// uint32 Resource_Manager::push_bone_set(std::vector<Bone> *bones)
 //{
 //  if (bones->size() == 0)
 //  {

@@ -201,16 +201,22 @@ void Shader::set_uniform_array(const char *name, const mat4 *matrices, uint32 co
 GLint Shader_Handle::get_uniform_location(const char *name)
 {
   GLint location;
-  auto search = location_cache.find(name);
-  if (search == location_cache.end())
+
+  if (!location_cache.contains(s(name)))
   {
-    location = glGetUniformLocation(program, name);
-    location_cache[name] = location;
+    location = location_cache[name] = glGetUniformLocation(program, name);
   }
   else
   {
-    location = search->second;
+    location = location_cache[name];
   }
+
+  if (location == -1)
+  {
+    set_message("Invalid shader uniform:", s(name," :[",vs,"] [", fs,"]"), 10.f);
+  }
+
+
   return location;
 }
 void Shader::use() const

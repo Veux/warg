@@ -103,24 +103,32 @@ void glad_callback(const char *name, void *funcptr, int len_args, ...)
     switch (error_code)
     {
       case GL_INVALID_OPERATION:
-        error = "INVALID_OPERATION";
+        error = "INVALID_OPERATION"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
       case GL_INVALID_ENUM:
-        error = "INVALID_ENUM";
+        error = "INVALID_ENUM"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
       case GL_INVALID_VALUE:
-        error = "INVALID_VALUE";
+        error = "INVALID_VALUE"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
       case GL_OUT_OF_MEMORY:
-        error = "OUT_OF_MEMORY";
+        error = "OUT_OF_MEMORY"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
       case GL_INVALID_FRAMEBUFFER_OPERATION:
-        error = "INVALID_FRAMEBUFFER_OPERATION";
+        error = "INVALID_FRAMEBUFFER_OPERATION"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
     }
-    set_message("GL ERROR", "GL_" + error);
-    push_log_to_disk();
-    ASSERT(0);
+    
   }
 }
 

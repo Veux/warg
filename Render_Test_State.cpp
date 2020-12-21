@@ -688,13 +688,13 @@ void Render_Test_State::draw_gui()
         anim_ptr->time = current_time;
         Skeletal_Animation_Set *anim_set = &scene.resource_manager->animation_set_pool[anim_ptr->animation_set_index];
 
-        const char *currently_playing = anim_set->animation_set[anim_ptr->currently_playing_animation].name.c_str();
+        const char *currently_playing = anim_set->animation_set[anim_ptr->currently_playing_animation].animation_name.c_str();
         if (ImGui::BeginCombo("Anim", currently_playing))
         {
           const size_t count = anim_set->animation_set.size();
           for (size_t i = 0; i < count; i++)
           {
-            const char *this_list_name = anim_set->animation_set[i].name.c_str();
+            const char *this_list_name = anim_set->animation_set[i].animation_name.c_str();
             bool is_selected = strcmp(currently_playing, this_list_name) == 0;
 
             if (ImGui::Selectable(this_list_name, is_selected))
