@@ -560,7 +560,6 @@ void Warg_State::update_stats_bar()
   ImGui::Begin("stats_bar", &show_stats_bar,
       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
           ImGuiWindowFlags_AlwaysAutoResize);
-  ImGui::Text("Ping: %dms", latency_tracker.get_latency());
   ImGui::End();
 }
 
@@ -1558,28 +1557,6 @@ void Warg_State::add_character_mesh(UID character_id)
     scene.nodes[lips].position = vec3(0.f, 0.5f, -0.25f);
     scene.nodes[lips].scale = vec3(0.3f, 0.05f, 0.1f);
   }
-}
-
-bool Latency_Tracker::should_send_ping()
-{
-  float64 current_time = get_real_time();
-  if (!acked || current_time < last_ping + 1)
-    return false;
-  last_ping = current_time;
-  acked = false;
-  return true;
-}
-
-void Latency_Tracker::ack_received()
-{
-  last_ack = get_real_time();
-  acked = true;
-  last_latency = last_ack - last_ping;
-}
-
-uint32 Latency_Tracker::get_latency()
-{
-  return (uint32)round(last_latency * 1000);
 }
 
 void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2 size)

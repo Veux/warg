@@ -8,20 +8,6 @@
 #include "Warg_Server.h"
 #include <deque>
 
-class Latency_Tracker
-{
-public:
-  bool should_send_ping();
-  void ack_received();
-  uint32 get_latency();
-
-private:
-  float64 last_ping = 0;
-  float64 last_ack = 0;
-  float64 last_latency = 0;
-  bool acked = true;
-};
-
 struct HP_Bar_Nodes
 {
   Node_Index max;
