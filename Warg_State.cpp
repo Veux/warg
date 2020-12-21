@@ -40,16 +40,17 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   session = session_;
 
   map = new Blades_Edge(scene);
-  spell_db = Spell_Database(); /*
-   map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
+   //map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
   // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
   // collider_cache = collect_colliders(scene);
 
   // scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
   //    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   scene.initialize_lighting(
-      "Assets/Textures/black.jpg", "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-  session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
+    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
+    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+
+  session->request_spawn("Cubeboi", 0);
 
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
@@ -107,12 +108,12 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   scene.particle_emitters[0].mesh_index = mesh_index0;
   scene.particle_emitters[0].material_index = material_index0;
 
-   scene.particle_emitters[1].mesh_index = mesh_index1;
-   scene.particle_emitters[1].material_index = material_index1;
-   scene.particle_emitters[2].mesh_index = mesh_index2;
-   scene.particle_emitters[2].material_index = material_index2;
-   scene.particle_emitters[3].mesh_index = mesh_index3;
-   scene.particle_emitters[3].material_index = material_index3;
+  scene.particle_emitters[1].mesh_index = mesh_index1;
+  scene.particle_emitters[1].material_index = material_index1;
+  scene.particle_emitters[2].mesh_index = mesh_index2;
+  scene.particle_emitters[2].material_index = material_index2;
+  scene.particle_emitters[3].mesh_index = mesh_index3;
+  scene.particle_emitters[3].material_index = material_index3;
 
   scene.lights.light_count = 5;
 
@@ -138,7 +139,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
 Warg_State::~Warg_State()
 {
-  session->end();
   delete map;
 }
 
@@ -165,24 +165,20 @@ void Warg_State::handle_input_events()
       {
       }
       if (SDLK_1 <= _e.key.keysym.sym && _e.key.keysym.sym <= SDLK_9 && !free_cam &&
-          get_character(&current_game_state, player_character_id))
+          any_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
       {
-        Character *player_character = get_character(&current_game_state, player_character_id);
-        size_t key = _e.key.keysym.sym - SDLK_1;
-        if (key < player_character->spell_set.spell_count)
-        {
-          Spell_Index spell_formula_index = player_character->spell_set.spell_statuses[key].formula_index;
-          session->push(std::make_unique<Cast_Message>(target_id, spell_formula_index));
-        }
+        int i = 0;
+        auto &spell = find_if(current_game_state.character_spells,
+            [&](auto &cs) { return cs.character == player_character_id && i++ == _e.key.keysym.sym - SDLK_1; });
+        if (spell != current_game_state.character_spells.end())
+          session->try_cast_spell(target_id, spell->spell);
       }
-      if (_e.key.keysym.sym == SDLK_TAB && !free_cam && get_character(&current_game_state, player_character_id))
+      if (_e.key.keysym.sym == SDLK_TAB && !free_cam &&
+          any_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
       {
-        for (size_t i = 0; i < current_game_state.character_count; i++)
-        {
-          Character *character = &current_game_state.characters[i];
-          if (character->id != player_character_id && character->alive)
-            target_id = character->id;
-        }
+        for (auto &lc : current_game_state.living_characters)
+          if (lc.id != player_character_id)
+            target_id = lc.id;
       }
       if (_e.key.keysym.sym == SDLK_g)
       {
@@ -223,8 +219,14 @@ void Warg_State::handle_input_events()
   bool last_seen_lmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT);
   bool last_seen_rmb = previous_mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT);
 
-  if (!player_character_id || !get_character(&current_game_state, player_character_id))
+  if (!player_character_id ||
+      none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
+  if (player_character_id && none_of(current_game_state.living_characters, [&](auto &lc) {
+    return lc.id == player_character_id; }))
+  {
+    session->request_spawn("Cubeboi", 0);
+  }
   if (free_cam)
   {
     mouse_relative_mode = true;
@@ -368,8 +370,9 @@ void Warg_State::handle_input_events()
     character_to_camera = normalize(ry * character_to_camera);
 
     ASSERT(player_character_id);
-    Character *player_character = get_character(&current_game_state, player_character_id);
-    ASSERT(player_character);
+    auto player_character =
+        find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+    ASSERT(player_character != current_game_state.characters.end());
 
     quat orientation;
     static quat last_rmb_orientation = player_character->physics.orientation;
@@ -394,35 +397,25 @@ void Warg_State::handle_input_events()
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
 
-    register_move_command((Move_Status)m, orientation);
+    session->move_command(m, orientation, target_id);
   }
   previous_mouse_state = mouse_state;
 }
 
-void Warg_State::register_move_command(Move_Status m, quat orientation)
-{
-  session->push(make_unique<Input_Message>(input_number, m, orientation, target_id));
-  Input cmd;
-  cmd.number = input_number;
-  cmd.m = m;
-  cmd.orientation = orientation;
-  input_buffer.push(cmd);
-  input_number++;
-}
-
 void Warg_State::process_messages()
 {
-  std::vector<unique_ptr<Message>> messages = session->pull();
-  set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
-  for (unique_ptr<Message> &message : messages)
-    message->handle(*this);
+  //std::vector<unique_ptr<Message>> messages = session->pull();
+  //set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
+  //for (unique_ptr<Message> &message : messages)
+  //  message->handle(*this);
+
 }
 
 void Warg_State::set_camera_geometry()
 {
   // set_message(s("set_camera_geometry()",s(" time:", current_time), 1.0f);
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  if (!player_character)
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (player_character == current_game_state.characters.end())
     return;
 
   float effective_zoom = camera.zoom;
@@ -446,12 +439,12 @@ void Warg_State::set_camera_geometry()
 void Warg_State::update_hp_bar(UID character_id)
 {
   // set_message("update_hp_bar()");
-  Character *character = get_character(&current_game_state, character_id);
   Node_Index character_node = character_nodes[character_id];
-
   Node_Index hp_bar = scene.find_by_name(character_node, "hp_bar");
 
-  if (!character->alive)
+  auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == character_id; });
+  if (lc == current_game_state.living_characters.end())
   {
     scene.delete_node(hp_bar);
 
@@ -500,35 +493,33 @@ void Warg_State::update_hp_bar(UID character_id)
   if (hp_bar == NODE_NULL)
     return;
 
-  float32 hp_percent = ((float32)character->hp) / ((float32)character->hp_max);
+  float32 hp_percent = ((float32)lc->hp) / ((float32)lc->hp_max);
   Material_Descriptor *md = scene.get_modifiable_material_pointer_for(hp_bar, 0);
   md->emissive.mod = vec4(1.f - hp_percent, hp_percent, 0.f, 1.f);
 }
 
 void Warg_State::update_character_nodes()
 {
-  for (size_t i = 0; i < current_game_state.character_count; i++)
+  for (auto &character : current_game_state.characters)
   {
-    Character *character = &current_game_state.characters[i];
+    Node_Index character_node = character_nodes[character.id];
 
-    Node_Index character_node = character_nodes[character->id];
+    scene.nodes[character_node].velocity = (character.physics.position - scene.nodes[character_node].position) / dt;
+    scene.nodes[character_node].position = character.physics.position;
+    scene.nodes[character_node].orientation = character.physics.orientation;
 
-    scene.nodes[character_node].velocity = (character->physics.position - scene.nodes[character_node].position) / dt;
-    scene.nodes[character_node].position = character->physics.position;
-    scene.nodes[character_node].orientation = character->physics.orientation;
+    scene.nodes[character_node].scale = character.radius * vec3(2);
 
-    scene.nodes[character_node].scale = character->radius * vec3(2);
+    update_hp_bar(character.id);
 
-    update_hp_bar(character->id);
-
-    animate_character(character->id);
+    animate_character(character.id);
   }
 }
 
 void Warg_State::update_prediction_ghost()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  if (!player_character)
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (player_character == current_game_state.characters.end())
     return;
 
   Character_Physics *physics = &player_character->physics;
@@ -574,101 +565,98 @@ void Warg_State::update_stats_bar()
 
 bool prediction_correct(UID player_character_id, Game_State &server_state, Game_State &predicted_state)
 {
-  bool same_input = server_state.input_number == predicted_state.input_number;
+  // bool same_input = server_state.input_number == predicted_state.input_number;
 
-  set_message("preduction_correct()",
-      s("server_state.input_number:", server_state.input_number,
-          " predicted_state.input_number:", predicted_state.input_number),
-      1.0f);
+  // set_message("preduction_correct()",
+  //    s("server_state.input_number:", server_state.input_number,
+  //        " predicted_state.input_number:", predicted_state.input_number),
+  //    1.0f);
 
-  Character *server_character = get_character(&server_state, player_character_id);
-  Character *predicted_character = get_character(&predicted_state, player_character_id);
+  // auto server_character = find_if(server_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  // auto predicted_character = find_if(predicted_state.characters, [&](auto &c) { return c.id == player_character_id;
+  // });
 
-  if (!server_character && !predicted_character)
-  {
-    return same_input;
-  }
+  // if (server_character == server_state.characters.end() && predicted_character == predicted_state.characters.end())
+  //  return same_input;
 
-  if (!server_character != !predicted_character)
-  {
-    return false;
-  }
+  ////if (!server_character != !predicted_character)
+  ////  return false;
 
-  ASSERT(server_character);
-  ASSERT(predicted_character);
+  // ASSERT(server_character);
+  // ASSERT(predicted_character);
 
-  bool same_player_physics = server_character->physics == predicted_character->physics;
+  // bool same_player_physics = server_character->physics == predicted_character->physics;
 
-  return same_input && same_player_physics;
+  // return same_input && same_player_physics;
+  return true;
 }
 
 void Warg_State::predict_state()
 {
-  // game_state = server_state;
-  return;
-  if (!get_character(&last_recieved_server_state, player_character_id))
-    return;
+  //// game_state = server_state;
+  // return;
+  // if (!last_recieved_server_state.get_character(player_character_id))
+  //  return;
 
-  if (input_buffer.size() == 0)
-    return;
+  // if (input_buffer.size() == 0)
+  //  return;
 
-  while (state_buffer.size() > 0 && state_buffer.front().input_number < last_recieved_server_state.input_number)
-    state_buffer.pop_front();
+  // while (state_buffer.size() > 0 && state_buffer.front().input_number < last_recieved_server_state.input_number)
+  //  state_buffer.pop_front();
 
-  Game_State predicted_state = last_recieved_server_state;
-  size_t prediction_start = 0;
+  // Game_State predicted_state = last_recieved_server_state;
+  // size_t prediction_start = 0;
 
-  bool prediction_correct_result = false;
-  if (state_buffer.size() > 0)
-  {
-    prediction_correct_result =
-        prediction_correct(player_character_id, last_recieved_server_state, state_buffer.front());
-  }
-  set_message("predict_state(): prediction_correct_result:", s(prediction_correct_result));
-  if (prediction_correct_result)
-  {
-    predicted_state = state_buffer.back();
-    state_buffer.pop_front();
-    prediction_start = input_buffer.size() - 1;
-  }
-  else
-  {
-    state_buffer = {};
-    predicted_state = last_recieved_server_state;
-  }
+  // bool prediction_correct_result = false;
+  // if (state_buffer.size() > 0)
+  //{
+  //  prediction_correct_result =
+  //      prediction_correct(player_character_id, last_recieved_server_state, state_buffer.front());
+  //}
+  // set_message("predict_state(): prediction_correct_result:", s(prediction_correct_result));
+  // if (prediction_correct_result)
+  //{
+  //  predicted_state = state_buffer.back();
+  //  state_buffer.pop_front();
+  //  prediction_start = input_buffer.size() - 1;
+  //}
+  // else
+  //{
+  //  state_buffer = {};
+  //  predicted_state = last_recieved_server_state;
+  //}
 
-  size_t prediction_iterations = 0;
-  for (size_t i = prediction_start; i < input_buffer.size(); i++)
-  {
-    Input &input = input_buffer[i];
+  // size_t prediction_iterations = 0;
+  // for (size_t i = prediction_start; i < input_buffer.size(); i++)
+  //{
+  //  Input &input = input_buffer[i];
 
-    Character *player_character = get_character(&predicted_state, player_character_id);
-    Character_Physics &physics = player_character->physics;
-    vec3 radius = player_character->radius;
-    float32 movement_speed = player_character->effective_stats.speed;
+  //  Character *player_character = predicted_state.get_character(player_character_id);
+  //  Character_Physics &physics = player_character->physics;
+  //  vec3 radius = player_character->radius;
+  //  /*float32 movement_speed = player_character->effective_stats.speed;*/
 
-    move_char(*player_character, input, &scene);
-    if (vec3_has_nan(physics.position))
-      physics.position = map->spawn_pos[player_character->team];
+  //  move_char(predicted_state, *player_character, input, scene);
+  //  if (vec3_has_nan(physics.position))
+  //    physics.position = map->spawn_pos[player_character->team];
 
-    predicted_state.input_number = input.number;
-    state_buffer.push_back(predicted_state);
+  //  predicted_state.input_number = input.number;
+  //  state_buffer.push_back(predicted_state);
 
-    prediction_iterations++;
-  }
-  // set_message("prediction iterations:", s(prediction_iterations), 5);
+  //  prediction_iterations++;
+  //}
+  //// set_message("prediction iterations:", s(prediction_iterations), 5);
 
-  current_game_state = state_buffer.back();
+  // current_game_state = state_buffer.back();
 }
 
 void Warg_State::update_meshes()
 {
-  for (size_t i = 0; i < current_game_state.character_count; i++)
+  for (auto &character : current_game_state.characters)
   {
-    Character *character = &current_game_state.characters[i];
-    if (!character_nodes.count(character->id))
+    if (!character_nodes.count(character.id))
     {
-      add_character_mesh(character->id);
+      add_character_mesh(character.id);
     }
   }
 }
@@ -680,27 +668,25 @@ void Warg_State::update_spell_object_nodes()
   material.emissive = "color(1, 1, 1, 1)";
   material.emissive.mod = vec4(0.5f, 0.5f, 100.f, 1.f);
 
-  for (size_t i = 0; i < current_game_state.spell_object_count; i++)
+  for (auto &so : current_game_state.spell_objects)
   {
-    Spell_Object *spell_object = &current_game_state.spell_objects[i];
-    if (spell_object_nodes.count(spell_object->id) == 0)
+    if (spell_object_nodes.count(so.id) == 0)
     {
-      spell_object_nodes[spell_object->id] = scene.add_mesh(cube, "spell_object_cube", &material);
+      spell_object_nodes[so.id] = scene.add_mesh(cube, "spell_object_cube", &material);
       // set_message(s("adding spell object node on tick ", game_state.tick), "", 20);
     }
-    Node_Index mesh = spell_object_nodes[spell_object->id];
+    Node_Index mesh = spell_object_nodes[so.id];
     scene.nodes[mesh].scale = vec3(0.4f);
-    scene.nodes[mesh].position = spell_object->pos;
+    scene.nodes[mesh].position = so.pos;
   }
 
   std::vector<UID> to_erase;
   for (auto &node : spell_object_nodes)
   {
     bool orphaned = true;
-    for (size_t i = 0; i < current_game_state.spell_object_count; i++)
+    for (auto &so : current_game_state.spell_objects)
     {
-      Spell_Object *spell_object = &current_game_state.spell_objects[i];
-      if (node.first == spell_object->id)
+      if (node.first == so.id)
         orphaned = false;
     }
     if (orphaned)
@@ -721,10 +707,12 @@ void Warg_State::animate_character(UID character_id)
   static std::map<UID, vec3> last_positions;
   static std::map<UID, bool> last_grounded;
 
-  Character *character = get_character(&current_game_state, character_id);
-  ASSERT(character);
+  auto character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
 
-  if (!character->alive)
+  auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == character_id; });
+
+  if (lc == current_game_state.living_characters.end())
     return;
 
   ASSERT(character_nodes.count(character_id));
@@ -766,7 +754,7 @@ void Warg_State::animate_character(UID character_id)
     return float32(4.f * abs(fract(m * x + b) - 0.5f) - 1.f);
   };
 
-  float32 cadence = character->effective_stats.speed / STEP_SIZE;
+  float32 cadence = lc->effective_stats.speed / STEP_SIZE;
 
   float32 m = cadence / 2;
   float32 x = *animation_time;
@@ -794,7 +782,7 @@ void Warg_State::update_animation_objects()
       animation_object.physics.velocity.z = 0;
 
     collide_and_slide_char(animation_object.physics, animation_object.radius, animation_object.physics.velocity,
-        vec3(0.f, 0.f, animation_object.physics.velocity.z), &scene);
+        vec3(0.f, 0.f, animation_object.physics.velocity.z), scene);
 
     scene.nodes[animation_object.node].position = animation_object.physics.position;
 
@@ -812,11 +800,12 @@ void Warg_State::update()
   // set_message("Warg update. Time:", s(current_time), 1.0f);
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
-  process_messages();
+  session->get_state(current_game_state, player_character_id);
   update_stats_bar();
-  current_game_state = last_recieved_server_state;
-  Character *target = get_character(&current_game_state, target_id);
-  if (!target || !target->alive)
+  auto target = find_if(current_game_state.characters, [&](auto &c) { return c.id == target_id; });
+  auto &tlc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
+      [&](auto &lc) { return lc.id == target_id; });
+  if (tlc == current_game_state.living_characters.end())
     target_id = 0;
   predict_state();
   set_camera_geometry();
@@ -843,8 +832,8 @@ void Warg_State::update()
   beatimer.stop();
   // set_message("octree timer:", beatimer.string_report(), 1.0f);
 
-  Character *me = get_character(&current_game_state, player_character_id);
-  if (!me)
+  auto me = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (me == current_game_state.characters.end())
     return;
   Mesh_Descriptor mesh(cube, "spawnedcube");
   mat4 transform = scene.build_transformation(character_nodes[player_character_id]);
@@ -868,40 +857,40 @@ void Warg_State::update()
   static std::vector<Node_Index> spawned_nodes;
   static std::vector<Node_Index> spawned_server_nodes;
 
-  if (WANT_SPAWN_OCTREE_BOX)
-  {
-    WANT_SPAWN_OCTREE_BOX = false;
-    Material_Descriptor mat;
-    mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
-    mat.normal = "3D_pattern_62/pattern_335/normal.png";
-    mat.roughness.mod.x = 1.0f;
-    mat.metalness.mod.x = 0.f;
+  //if (WANT_SPAWN_OCTREE_BOX)
+  //{
+  //  WANT_SPAWN_OCTREE_BOX = false;
+  //  Material_Descriptor mat;
+  //  mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
+  //  mat.normal = "3D_pattern_62/pattern_335/normal.png";
+  //  mat.roughness.mod.x = 1.0f;
+  //  mat.metalness.mod.x = 0.f;
 
-    Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
-    Local_Session *ptr = (Local_Session *)this->session;
-    Node_Index servernode = ptr->server->scene.add_mesh(cube, "spawned box", &mat);
+  //  Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
+  //  Local_Session *ptr = (Local_Session *)this->session;
+  //  Node_Index servernode = ptr->scene.add_mesh(cube, "spawned box", &mat);
 
-    spawned_nodes.push_back(newnode);
-    spawned_server_nodes.push_back(servernode);
-    vec3 dir = normalize(camera.dir);
-    vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
-    float32 angle2 = atan2(dir.y, dir.x);
-    scene.nodes[newnode].position = camera.pos + 12.f * dir;
-    scene.nodes[newnode].scale = vec3(2);
-    scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+  //  spawned_nodes.push_back(newnode);
+  //  spawned_server_nodes.push_back(servernode);
+  //  vec3 dir = normalize(camera.dir);
+  //  vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
+  //  float32 angle2 = atan2(dir.y, dir.x);
+  //  scene.nodes[newnode].position = camera.pos + 12.f * dir;
+  //  scene.nodes[newnode].scale = vec3(2);
+  //  scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
 
-    ptr->server->scene.nodes[servernode].position = camera.pos + 12.f * dir;
-    ptr->server->scene.nodes[servernode].scale = vec3(2);
-    ptr->server->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
-  }
-  Local_Session *ptr = (Local_Session *)this->session;
-  // ptr->server->scene.collision_octree.clear();
+  //  ptr->scene.nodes[servernode].position = camera.pos + 12.f * dir;
+  //  ptr->scene.nodes[servernode].scale = vec3(2);
+  //  ptr->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+  //}
+  //Local_Session *ptr = (Local_Session *)this->session;
+  //ptr->scene.collision_octree.clear();
 
-  // ptr->server->scene.collision_octree.push(md);
+  // ptr->scene.collision_octree.push(md);
   for (Node_Index node : spawned_nodes)
   {
     mat4 M = scene.build_transformation(node);
-    // scene.collision_octree.push(&mesh, &M);
+     scene.collision_octree.push(&mesh, &M);
     AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
@@ -911,8 +900,8 @@ void Warg_State::update()
   for (Node_Index node : spawned_server_nodes)
   {
     Local_Session *ptr = (Local_Session *)this->session;
-    mat4 M = ptr->server->scene.build_transformation(node);
-    // ptr->server->scene.collision_octree.push(&mesh, &M);
+    mat4 M = ptr->scene.build_transformation(node);
+     ptr->scene.collision_octree.push(&mesh, &M);
   }
 
   if (WANT_CLEAR_OCTREE)
@@ -927,7 +916,7 @@ void Warg_State::update()
     for (Node_Index servernode : spawned_server_nodes)
     {
       Local_Session *ptr = (Local_Session *)this->session;
-      ptr->server->scene.delete_node(servernode);
+      ptr->scene.delete_node(servernode);
     }
     spawned_server_nodes.clear();
   }
@@ -935,10 +924,10 @@ void Warg_State::update()
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   Material_Descriptor material;
-  static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
+  //static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
-  scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
-  transform = scene.build_transformation(dynamic_collider_node);
+  //scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
+  //transform = scene.build_transformation(dynamic_collider_node);
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   // fire_emitter2(
@@ -955,73 +944,73 @@ void Warg_State::update()
   if (fract(sin(current_time)) > .5)
     wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
-  Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
-  Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
-  Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
+  // Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
+  // Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
+  // Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
+  // Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
-  scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 5;
-  scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
-  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[1].descriptor.emission_descriptor.particles_per_second = 415;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[1].descriptor.emission_descriptor.initial_scale = scene.nodes[p1].scale;
+  //// scene.particle_emitters[1].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[1].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[1].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 5;
-  scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
-  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[2].descriptor.position = scene.nodes[p2].position;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[2].descriptor.emission_descriptor.particles_per_second = 415;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[2].descriptor.emission_descriptor.initial_scale = scene.nodes[p2].scale;
+  //// scene.particle_emitters[2].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[2].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[2].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 5;
-  scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
-  scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
-  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[3].descriptor.position = scene.nodes[p3].position;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[3].descriptor.emission_descriptor.particles_per_second = 415;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.minimum_time_to_live = 15;
+  // scene.particle_emitters[3].descriptor.emission_descriptor.initial_scale = scene.nodes[p3].scale;
+  //// scene.particle_emitters[3].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[3].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[3].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
-  scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 5;
-  scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
-  scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
-  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
-  scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
-  scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
-  scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
-  scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
-  scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
-  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
-  scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
+  // scene.particle_emitters[0].descriptor.position = scene.nodes[p0].position;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_position_variance = vec3(2, 2, 0);
+  // scene.particle_emitters[0].descriptor.emission_descriptor.particles_per_second = 185;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.minimum_time_to_live = 12;
+  // scene.particle_emitters[0].descriptor.emission_descriptor.initial_scale = scene.nodes[p0].scale;
+  //// scene.particle_emitters[0].descriptor.emission_descriptor.initial_extra_scale_variance = vec3(1.5f,1.5f,.14f);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.type = wind;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.direction = wind_dir;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.octree = &scene.collision_octree;
+  // scene.particle_emitters[0].update(renderer.projection, renderer.camera, dt);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.intensity = random_between(111.f, 111.f);
+  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_min = 0.82;
+  // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 
-  uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[2].shared_data->particles.MVP_Matrices.size();
-  particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
-  set_message("Total Particle count:", s(particle_count), 1.0f);
-  uint32 i = sizeof(Octree);
+  // uint32 particle_count = scene.particle_emitters[0].shared_data->particles.MVP_Matrices.size();
+  // particle_count += scene.particle_emitters[1].shared_data->particles.MVP_Matrices.size();
+  // particle_count += scene.particle_emitters[2].shared_data->particles.MVP_Matrices.size();
+  // particle_count += scene.particle_emitters[3].shared_data->particles.MVP_Matrices.size();
+  // set_message("Total Particle count:", s(particle_count), 1.0f);
+  // uint32 i = sizeof(Octree);
 }
 
 void Warg_State::draw_gui()
@@ -1035,8 +1024,6 @@ void Warg_State::draw_gui()
 
 void Warg_State::add_girl_character_mesh(UID character_id)
 {
-
-  Character *character = get_character(&current_game_state, character_id);
   character_nodes[character_id];
 
   // Material_Descriptor hp_bar_material;
@@ -1337,7 +1324,6 @@ void Warg_State::add_character_mesh(UID character_id)
     return;
   }
 
-  Character *character = get_character(&current_game_state, character_id);
   character_nodes[character_id];
 
   Material_Descriptor skin_material;
@@ -1573,15 +1559,6 @@ void Warg_State::add_character_mesh(UID character_id)
   }
 }
 
-void State_Message::handle(Warg_State &state)
-{
-  state.player_character_id = pc;
-  game_state_copy(&state.last_recieved_server_state, &game_state);
-  set_message("State_Message::handle() type with \"input_number\" of:", s(game_state.input_number), 1.0f);
-  set_message("State_Message::handle() type with \"tick\" of:", s(game_state.tick), 1.0f);
-  state.input_buffer.pop_older_than(state.last_recieved_server_state.input_number);
-}
-
 bool Latency_Tracker::should_send_ping()
 {
   float64 current_time = get_real_time();
@@ -1627,32 +1604,30 @@ void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2
 
 void Warg_State::update_cast_bar()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  if (!player_character)
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  if (player_character == current_game_state.characters.end())
     return;
 
-  if (!player_character->casting)
+  auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
+      [&](auto &c) { return c.caster == player_character->id; });
+  if (cast == current_game_state.character_casts.end())
     return;
 
   const vec2 resolution = CONFIG.resolution;
 
   ImVec2 size = ImVec2(200, 32);
   ImVec2 position = ImVec2(resolution.x / 2 - size.x / 2, CONFIG.resolution.y * 0.7f);
-  Spell_Formula *casting_spell_formula = spell_db.get_spell(get_casting_spell_formula_index(player_character));
-  float32 progress = player_character->cast_progress / casting_spell_formula->cast_time;
+  float32 progress = cast->progress / SPELL_DB.cast_time[cast->spell];
 
   create_cast_bar("player_cast_bar", progress, position, size);
 }
 
 void Warg_State::update_unit_frames()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  if (!player_character)
+  if (none_of(current_game_state.living_characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
 
-  auto make_unit_frame = [&](const char *name, Character *character, ImVec2 size, ImVec2 position) {
-    const char *character_name = character->name;
-
+  auto make_unit_frame = [&](const char *name, UID character_id, ImVec2 size, ImVec2 position) {
     Layout_Grid grid(vec2(size.x, size.y), vec2(2), vec2(1), 1, 4);
 
     bool display_unit_frame = true;
@@ -1666,18 +1641,22 @@ void Warg_State::update_unit_frames()
         ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
 
+    auto character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
+
     ImGui::SetCursorPos(v(grid.get_position(0, 0)));
-    ImGui::Text("%s", character_name);
+    ImGui::Text("%s", character->name.c_str());
+
+    auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == character->id; });
 
     ImGui::SetCursorPos(v(grid.get_position(0, 1)));
-    float32 hp_percentage = (float32)character->hp / (float32)character->hp_max;
+    float32 hp_percentage = (float32)lc->hp / (float32)lc->hp_max;
     ImVec4 hp_color = ImVec4((1.f - hp_percentage) * 0.75f, hp_percentage * 0.75f, 0.f, 1.f);
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, hp_color);
     ImGui::ProgressBar(hp_percentage, v(grid.get_section_size(1, 2)), "");
     ImGui::PopStyleColor();
 
     ImGui::SetCursorPos(v(grid.get_position(0, 3)));
-    float32 mana_percentage = (float32)character->mana / (float32)character->mana_max;
+    float32 mana_percentage = (float32)lc->mana / (float32)lc->mana_max;
     vec4 mana_color = rgb_vec4(64, 112, 255);
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(mana_color.x, mana_color.y, mana_color.z, mana_color.w));
     ImGui::ProgressBar(mana_percentage, v(grid.get_section_size(1, 1)), "");
@@ -1687,10 +1666,13 @@ void Warg_State::update_unit_frames()
     ImGui::PopStyleVar(3);
   };
 
-  auto make_target_buffs = [&](Buff *buffs, uint8 buff_count, vec2 position, vec2 size, bool debuffs) {
+  auto make_target_buffs = [&](std::vector<Character_Buff> cbs, vec2 position, vec2 size, bool debuffs) {
+    int buff_count = cbs.size();
+
     Layout_Grid outer_grid(size, vec2(0), vec2(2), vec2(buff_count, 1), vec2(1, 1), 1);
 
-    for (size_t i = 0; i < buff_count; i++)
+    int i = 0;
+    for (auto &cb : cbs)
     {
       Layout_Grid inner_grid(outer_grid.get_section_size(1, 1), vec2(2), vec2(0), 1, 1);
 
@@ -1706,44 +1688,56 @@ void Warg_State::update_unit_frames()
               ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
               ImGuiWindowFlags_NoFocusOnAppearing);
 
-      BuffDef *buff_formula = spell_db.get_buff(buffs[i].formula_index);
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
-      put_imgui_texture(&buff_formula->icon, inner_grid.get_section_size(1, 1));
+      put_imgui_texture(&SPELL_DB.buff_icon[cb.buff_id], inner_grid.get_section_size(1, 1));
       ImGui::End();
       ImGui::PopStyleVar(4);
+      i++;
     }
   };
 
   Layout_Grid grid(vec2(400, 160), vec2(10), vec2(5), 2, 6);
 
-  make_unit_frame("player_unit_frame", player_character, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
+  make_unit_frame("player_unit_frame", player_character_id, v(grid.get_section_size(1, 3)), v(grid.get_position(0, 0)));
 
-  Character *target = get_character(&current_game_state, target_id);
-  if (!target)
+  if (none_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == target_id; }))
     return;
 
-  make_unit_frame("target_unit_frame", target, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
-  make_target_buffs(target->buffs, target->buff_count, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
-  make_target_buffs(target->debuffs, target->debuff_count, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
-  if (!target->casting)
+  make_unit_frame("target_unit_frame", target_id, v(grid.get_section_size(1, 3)), v(grid.get_position(1, 0)));
+  std::vector<Character_Buff> buffs, debuffs;
+  for (auto &cb : current_game_state.character_buffs)
+  {
+    if (cb.character != target_id)
+      continue;
+    if (SPELL_DB.buff_is_debuff.contains(cb.buff_id))
+      debuffs.push_back(cb);
+    else
+      buffs.push_back(cb);
+  }
+  make_target_buffs(buffs, grid.get_position(1, 3), grid.get_section_size(1, 1), false);
+  make_target_buffs(debuffs, grid.get_position(1, 4), grid.get_section_size(1, 1), true);
+
+  auto cast = std::find_if(current_game_state.character_casts.begin(), current_game_state.character_casts.end(),
+      [&](auto &c) { return c.caster == target_id; });
+  if (cast == current_game_state.character_casts.end())
     return;
-  Spell_Formula *casting_spell_formula = spell_db.get_spell(get_casting_spell_formula_index(target));
-  float32 cast_progress = target->cast_progress / casting_spell_formula->cast_time;
+
+  float32 cast_progress = cast->progress / SPELL_DB.cast_time[cast->spell];
   create_cast_bar("target_cast_bar", cast_progress, v(grid.get_position(1, 5)), v(grid.get_section_size(1, 1)));
 }
 
 void Warg_State::update_icons()
 {
-
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  ASSERT(player_character);
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  ASSERT(player_character != current_game_state.characters.end());
 
   static Framebuffer framebuffer = Framebuffer();
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
   static std::vector<Texture> sources;
 
+  int num_spells = 0;
   static bool configured = false;
-  static size_t num_spells = 0;
+  int i = 0;
   if (!configured)
   {
     Texture_Descriptor texture_descriptor;
@@ -1753,18 +1747,22 @@ void Warg_State::update_icons()
     ASSERT(interface_state.action_bar_textures.size() == 0);
     ASSERT(sources.size() == 0);
 
-    num_spells = player_character->spell_set.spell_count;
+    num_spells = std::count_if(current_game_state.character_spells.begin(), current_game_state.character_spells.end(),
+        [&](auto &cs) { return cs.character == player_character_id; });
     interface_state.action_bar_textures.resize(num_spells);
     sources.resize(num_spells);
     framebuffer.color_attachments.resize(num_spells);
 
-    for (size_t i = 0; i < num_spells; i++)
+    for (auto &cs : current_game_state.character_spells)
     {
-      Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
+      if (cs.character != player_character_id)
+        continue;
+
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = formula->icon;
+      sources[i] = SPELL_DB.icon[cs.spell];
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
+      i++;
     }
     configured = true;
   }
@@ -1774,23 +1772,31 @@ void Warg_State::update_icons()
 
   shader.use();
   shader.set_uniform("count", (int)sources.size());
-  for (size_t i = 0; i < num_spells; i++)
+  i = 0;
+  for (auto &cs : current_game_state.character_spells)
   {
-    Spell_Status *spell_status = &player_character->spell_set.spell_statuses[i];
-    Spell_Formula *spell_formula = spell_db.get_spell(spell_status->formula_index);
+    if (cs.character != player_character_id)
+      continue;
 
     float32 cooldown_percent = 0.f;
     float32 cooldown_remaining = 0.f;
 
-    float32 cooldown = spell_formula->cooldown;
-    if (cooldown > 0.f)
+    auto scd = find_if(current_game_state.spell_cooldowns,
+        [&](auto &scd) { return scd.character == player_character_id && scd.spell == cs.spell; });
+    if (scd != current_game_state.spell_cooldowns.end())
+      cooldown_percent = scd->cooldown_remaining / SPELL_DB.cooldown[cs.spell];
+    if (SPELL_DB.on_gcd.contains(cs.spell))
     {
-      cooldown_remaining = spell_status->cooldown_remaining;
-      cooldown_percent = cooldown_remaining / cooldown;
+      auto &cg =
+          find_if(current_game_state.character_gcds, [&](auto &cg) { return cg.character == player_character_id; });
+      auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; });
+      if (cg != current_game_state.character_gcds.end() &&
+          (scd == current_game_state.spell_cooldowns.end() ||
+              cg->remaining / lc->effective_stats.cast_speed  > scd->cooldown_remaining))
+        cooldown_percent = cg->remaining / lc->effective_stats.global_cooldown;
     }
-    if (spell_formula->on_global_cooldown && cooldown_remaining < player_character->global_cooldown)
-      cooldown_percent = player_character->global_cooldown / player_character->effective_stats.global_cooldown;
     shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
+    i++;
   }
 
   run_pixel_shader(&shader, &sources, &framebuffer);
@@ -1825,8 +1831,8 @@ void Warg_State::update_action_bar()
 
 void Warg_State::update_buff_indicators()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  ASSERT(player_character);
+  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+  ASSERT(player_character != current_game_state.characters.end());
 
   auto duration_string = [](float32 seconds) {
     int32 seconds_int = ceil(seconds);
@@ -1876,31 +1882,44 @@ void Warg_State::update_buff_indicators()
   size_t max_columns = 18;
   Layout_Grid grid(vec2(800, 300), vec2(10), vec2(5), max_columns, 3);
 
-  for (size_t i = 0; i < player_character->buff_count && i < max_columns; i++)
+  
+  std::vector<Character_Buff> buffs, debuffs;
+  for (auto &cb : current_game_state.character_buffs)
   {
-    Buff *buff = &player_character->buffs[i];
-    BuffDef *buff_formula = spell_db.get_buff(buff->formula_index);
-
-    float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(i, 0).y), grid.get_section_size(1, 1), &buff_formula->icon,
-        buff->duration, false, i);
+    if (cb.character != player_character_id)
+      continue;
+    if (SPELL_DB.buff_is_debuff.contains(cb.buff_id))
+      debuffs.push_back(cb);
+    else
+      buffs.push_back(cb);
   }
 
-  for (size_t i = 0; i < player_character->debuff_count && i < max_columns; i++)
+  int col = 0;
+  for (auto &cb : buffs)
   {
-    Buff *debuff = &player_character->debuffs[i];
-    BuffDef *debuff_formula = spell_db.get_buff(debuff->formula_index);
+    if (col >= max_columns)
+      break;
+    float32 position_x = resolution.x - grid.get_position(col, 0).x - grid.get_section_size(1, 1).x;
+    create_indicator(vec2(position_x, grid.get_position(col, 0).y), grid.get_section_size(1, 1),
+        &SPELL_DB.buff_icon[cb.buff_id], cb.duration, false, col);
+    col++;
+  }
 
-    float32 position_x = resolution.x - grid.get_position(i, 0).x - grid.get_section_size(1, 1).x;
-    create_indicator(vec2(position_x, grid.get_position(i, 2).y), grid.get_section_size(1, 1), &debuff_formula->icon,
-        debuff->duration, true, i);
+  col = 0;
+  for (auto &cd : debuffs)
+  {
+    if (col >= max_columns)
+      break;
+    float32 position_x = resolution.x - grid.get_position(col, 0).x - grid.get_section_size(1, 1).x;
+    create_indicator(vec2(position_x, grid.get_position(col, 2).y), grid.get_section_size(1, 1),
+        &SPELL_DB.buff_icon[cd.buff_id], cd.duration, false, col);
+    col++;
   }
 }
 
 void Warg_State::update_game_interface()
 {
-  Character *player_character = get_character(&current_game_state, player_character_id);
-  if (!player_character)
+  if (none_of(current_game_state.living_characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
 
   const vec2 resolution = CONFIG.resolution;
@@ -1909,17 +1928,4 @@ void Warg_State::update_game_interface()
   update_unit_frames();
   update_action_bar();
   update_buff_indicators();
-}
-
-Character *get_character(Game_State *game_state, UID id)
-{
-  for (size_t i = 0; i < game_state->character_count; i++)
-  {
-    Character *character = &game_state->characters[i];
-    if (character->id == id)
-      return character;
-  }
-
-  set_message("get_character failed with UID:", s(id), 1.0f);
-  return nullptr;
 }

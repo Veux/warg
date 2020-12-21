@@ -233,26 +233,29 @@ int main(int argc, char *argv[])
   std::string address;
   std::string char_name;
   uint8_t team;
+  int port = 8765;
 
   WARG_SERVER = false;
   ASSERT(!enet_initialize());
+  atexit(enet_deinitialize);
   if (argc > 1 && std::string(argv[1]) == "--server")
   {
     WARG_SERVER = true;
     ASSERT(WARG_SERVER);
-    // server_main();
+    Warg_Server *server = new Warg_Server();
+    server->run(port);
     return 0;
   }
-
   else if (argc > 1 && std::string(argv[1]) == "--connect")
   {
+    std::cout << "CONNECTING" << std::endl;
     client = true;
 
     if (argc <= 4)
     {
       std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
-                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --wargconnect "
-                   "127.0.0.1 Warriorguy 0"
+                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
+                   "127.0.0.1 Cubeboi 0"
                 << std::endl;
       return 1;
     }
@@ -260,6 +263,7 @@ int main(int argc, char *argv[])
     char_name = argv[3];
     team = std::stoi(argv[4]);
   }
+
   ASSERT(!WARG_SERVER);
   generator.seed(uint32(SDL_GetPerformanceCounter()));
 
@@ -340,7 +344,19 @@ int main(int argc, char *argv[])
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
 
- //Local_Session warg_session = Local_Session();
+  Session *warg_session = nullptr;
+  if (client)
+  {
+    std::cout << "CLIENT TRUE" << std::endl;
+    Network_Session *network_session = new Network_Session();
+    network_session->connect(address.c_str(), port);
+    warg_session = (Session *)network_session;
+    std::cout << "connected successfully" << std::endl;
+  }
+  else
+  {
+    warg_session = (Session *)new Local_Session();
+  }
 
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
@@ -349,7 +365,8 @@ int main(int argc, char *argv[])
   std::vector<State *> states;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
-  //states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)&warg_session));
+  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)warg_session));
+
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
   //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));

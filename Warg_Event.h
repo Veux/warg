@@ -7,10 +7,10 @@
 #include <enet/enet.h>
 #include <map>
 
-typedef uint32_t UID;
-
-struct Warg_Server;
-struct Warg_State;
+const int32 SPAWN_MESSAGE = 1;
+const int32 MOVE_MESSAGE = 2;
+const int32 CAST_MESSAGE = 3;
+const int32 STATE_MESSAGE = 4;
 
 struct Buffer
 {
@@ -22,87 +22,14 @@ struct Buffer
   size_t wnext = 0, rnext = 0;
 };
 
-enum class Warg_Event_Type
-{
-  Spawn_Request,
-  Input,
-  State,
-  Cast
-};
-
-struct Message
-{
-  virtual void handle(Warg_Server &server) = 0;
-  virtual void handle(Warg_State &state) = 0;
-  virtual void serialize(Buffer &buffer) = 0;
-
-  UID peer;
-  bool reliable = true;
-  float64_t t;
-};
-
-struct Char_Spawn_Request_Message : Message
-{
-  Char_Spawn_Request_Message(const char *name, uint8_t team);
-  Char_Spawn_Request_Message(Buffer &b);
-  virtual void handle(Warg_Server &server);
-  virtual void handle(Warg_State &state)
-  {
-    ASSERT(false);
-  };
-  virtual void serialize(Buffer &b);
-
-  std::string name;
-  uint8_t team;
-};
-
-struct Input_Message : Message
-{
-  Input_Message(uint32_t i_, Move_Status move_status, quat orientation, UID target_id);
-  Input_Message(Buffer &b);
-  virtual void handle(Warg_Server &server);
-  virtual void handle(Warg_State &state)
-  {
-    ASSERT(false);
-  };
-  virtual void serialize(Buffer &b);
-
-  uint32_t input_number;
-  Move_Status move_status;
-  quat orientation;
-  UID target_id;
-};
-
-struct Cast_Message : Message
-{
-  Cast_Message(UID target_id, Spell_Index spell_index);
-  Cast_Message(Buffer &b);
-  virtual void handle(Warg_Server &server);
-  virtual void handle(Warg_State &state)
-  {
-    ASSERT(false);
-  };
-  virtual void serialize(Buffer &b);
-
-  UID _target_id;
-  Spell_Index _spell_index;
-};
-
-struct Input;
-
-struct State_Message : Message
-{
-  State_Message(UID pc, Game_State *game_state_);
-  State_Message(Buffer &b);
-  virtual void handle(Warg_Server &server)
-  {
-    ASSERT(false);
-  };
-  virtual void handle(Warg_State &state);
-  virtual void serialize(Buffer &b);
-
-  UID pc;
-  Game_State game_state;
-};
-
-std::unique_ptr<Message> deserialize_message(Buffer &b);
+void serialize_(Buffer &b, std::string &s);
+void serialize_(Buffer &b, int32_t n);
+void serialize_(Buffer &b, uint32_t n);
+void serialize_(Buffer &b, std::string_view s);
+void serialize_(Buffer &b, quat q);
+void serialize_(Buffer &b, Game_State &gs);
+void deserialize(Buffer &b, Game_State &gs);
+void deserialize(Buffer &b, int32 &n);
+void deserialize(Buffer &b, std::string &s);
+void deserialize(Buffer &b, quat &q);
+void deserialize(Buffer &b, uint32 &n);

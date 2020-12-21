@@ -64,6 +64,93 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
 #endif
 }
 
+template <typename C, typename F> auto erase_if(C &c, F f)
+{
+  return c.erase(std::remove_if(c.begin(), c.end(), f), c.end());
+}
+template <typename C, typename F> auto any_of(C &c, F f)
+{
+  return std::any_of(c.begin(), c.end(), f);
+}
+template <typename C, typename F> auto find_if(C &c, F f)
+{
+  return std::find_if(c.begin(), c.end(), f);
+}
+template <typename C, typename F> auto none_of(C &c, F f)
+{
+  return std::none_of(c.begin(), c.end(), f);
+}
+template <typename C0, typename C1, typename CMP, typename F> void join_for(C0 &c0, C1 &c1, CMP cmp, F f)
+{
+  auto c0_it = c0.begin();
+  auto c1_it = c1.begin();
+  while (c0_it != c0.end() & c1_it != c1.end())
+  {
+    int c = cmp(*c0_it, *c1_it);
+    if (c < 0)
+      c0_it++;
+    else if (c > 0)
+      c1_it++;
+    else
+      f(*(c0_it++), *(c1_it++));
+  }
+}
+template <typename C0, typename C1, typename CMP, typename F> bool join_any_of(C0 &c0, C1 &c1, CMP cmp, F f)
+{
+  auto c0_it = c0.begin();
+  auto c1_it = c1.begin();
+  while (c0_it != c0.end() & c1_it != c1.end())
+  {
+    int c = cmp(*c0_it, *c1_it);
+    if (c < 0)
+      c0_it++;
+    else if (c > 0)
+      c1_it++;
+    else if (f(*(c0_it++), *(c1_it++)))
+      return true;
+  }
+  return false;
+}
+template <typename C0, typename C1, typename CMP, typename F> bool join_none_of(C0 &c0, C1 &c1, CMP cmp, F f)
+{
+  return !join_any_of(c0, c1, cmp, f);
+}
+template <typename C0, typename C1, typename F> void join_for(C0 &c0, C1 &c1, F f)
+{
+  auto c0_it = c0.begin();
+  auto c1_it = c1.begin();
+  while (c0_it != c0.end() & c1_it != c1.end())
+  {
+    int c = cmp(*c0_it, *c1_it);
+    if (c < 0)
+      c0_it++;
+    else if (c > 0)
+      c1_it++;
+    else
+      f(*(c0_it++), *(c1_it++));
+  }
+}
+template <typename C0, typename C1, typename F> bool join_any_of(C0 &c0, C1 &c1, F f)
+{
+  auto c0_it = c0.begin();
+  auto c1_it = c1.begin();
+  while (c0_it != c0.end() & c1_it != c1.end())
+  {
+    int c = cmp(*c0_it, *c1_it);
+    if (c < 0)
+      c0_it++;
+    else if (c > 0)
+      c1_it++;
+    else if (f(*(c0_it++), *(c1_it++)))
+      return true;
+  }
+  return false;
+}
+template <typename C0, typename C1, typename F> bool join_none_of(C0 &c0, C1 &c1, F f)
+{
+  return !join_any_of(c0, c1, f);
+}
+
 struct Config
 { // if you add more settings, be sure to put them in load() and save()
   ivec2 resolution = ivec2(1280, 720);
@@ -89,6 +176,8 @@ struct Image_Data
 
 struct Image_Loader
 {
+  static const int thread_count = 17;
+
 public:
   Image_Loader();
   ~Image_Loader();
@@ -103,7 +192,7 @@ private:
   std::mutex db_mtx;
   std::mutex queue_mtx;
   std::atomic<size_t> queue_size;
-  std::thread threads[3];
+  std::thread threads[thread_count];
 };
 
 bool all_equal(int32 a, int32 b, int32 c);
