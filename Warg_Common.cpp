@@ -615,7 +615,7 @@ void cast_spell(Game_State &gs, Flat_Scene_Graph &scene, UID caster_id, UID targ
       gs.spell_objects.push_back(object);
     }
 
-    auto &buff_applications = SPELL_DB.spell_release_buff_application.find(spell_id);
+    const auto &buff_applications = SPELL_DB.spell_release_buff_application.find(spell_id);
     if (buff_applications != SPELL_DB.spell_release_buff_application.end())
     {
       for (auto b_id : buff_applications->second)

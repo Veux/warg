@@ -169,7 +169,7 @@ void Warg_State::handle_input_events()
           any_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
       {
         int i = 0;
-        auto &spell = find_if(current_game_state.character_spells,
+        const auto &spell = find_if(current_game_state.character_spells,
             [&](auto &cs) { return cs.character == player_character_id && i++ == _e.key.keysym.sym - SDLK_1; });
         if (spell != current_game_state.character_spells.end())
           session->try_cast_spell(target_id, spell->spell);
@@ -443,8 +443,8 @@ void Warg_State::update_hp_bar(UID character_id)
   Node_Index character_node = character_nodes[character_id];
   Node_Index hp_bar = scene.find_by_name(character_node, "hp_bar");
 
-  auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == character_id; });
+  const auto &lc = std::find_if(current_game_state.living_characters.begin(),
+      current_game_state.living_characters.end(), [&](auto &lc) { return lc.id == character_id; });
   if (lc == current_game_state.living_characters.end())
   {
     scene.delete_node(hp_bar);
@@ -709,8 +709,8 @@ void Warg_State::animate_character(UID character_id)
 
   auto character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
 
-  auto &lc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == character_id; });
+  const auto &lc = std::find_if(current_game_state.living_characters.begin(),
+      current_game_state.living_characters.end(), [&](auto &lc) { return lc.id == character_id; });
 
   if (lc == current_game_state.living_characters.end())
     return;
@@ -803,8 +803,8 @@ void Warg_State::update()
   session->get_state(current_game_state, player_character_id);
   update_stats_bar();
   auto target = find_if(current_game_state.characters, [&](auto &c) { return c.id == target_id; });
-  auto &tlc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
-      [&](auto &lc) { return lc.id == target_id; });
+  const auto &tlc = std::find_if(current_game_state.living_characters.begin(),
+      current_game_state.living_characters.end(), [&](auto &lc) { return lc.id == target_id; });
   if (tlc == current_game_state.living_characters.end())
     target_id = 0;
   predict_state();
@@ -1624,7 +1624,7 @@ void Warg_State::update_unit_frames()
     ImGui::SetCursorPos(v(grid.get_position(0, 0)));
     ImGui::Text("%s", character->name.c_str());
 
-    auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == character->id; });
+    const auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == character->id; });
 
     ImGui::SetCursorPos(v(grid.get_position(0, 1)));
     float32 hp_percentage = (float32)lc->hp / (float32)lc->hp_max;
@@ -1765,9 +1765,10 @@ void Warg_State::update_icons()
       cooldown_percent = scd->cooldown_remaining / SPELL_DB.cooldown[cs.spell];
     if (SPELL_DB.on_gcd.contains(cs.spell))
     {
-      auto &cg =
+      const auto &cg =
           find_if(current_game_state.character_gcds, [&](auto &cg) { return cg.character == player_character_id; });
-      auto &lc = find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; });
+      const auto &lc =
+          find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; });
       if (cg != current_game_state.character_gcds.end() &&
           (scd == current_game_state.spell_cooldowns.end() ||
               cg->remaining / lc->effective_stats.cast_speed  > scd->cooldown_remaining))
