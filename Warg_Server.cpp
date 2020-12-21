@@ -18,8 +18,8 @@ void Warg_Server::run(int32 port)
   /* Bind the server to the default localhost.     */
   /* A specific host address can be specified by   */
   /* enet_address_set_host (& address, "x.x.x.x"); */
-  enet_address_set_host(&addr, "127.0.0.1"); 
   /* Bind the server to port 1234. */
+  addr.host = ENET_HOST_ANY;
   addr.port = 1234;
   server = enet_host_create(
     &addr /* the address to bind the server host to */,

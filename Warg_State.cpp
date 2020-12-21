@@ -34,8 +34,9 @@ extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
 //  dst->bool_uniforms["water_use_uv"] = true;
 //}
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_)
-    : State(name, window, window_size)
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_,
+  std::string_view character_name, int32 team)
+    : State(name, window, window_size), character_name(character_name), team(team)
 {
   session = session_;
 
@@ -50,7 +51,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
     "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
     "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
-  session->request_spawn("Cubeboi", 0);
+  session->request_spawn(character_name, team);
 
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
@@ -225,7 +226,7 @@ void Warg_State::handle_input_events()
   if (player_character_id && none_of(current_game_state.living_characters, [&](auto &lc) {
     return lc.id == player_character_id; }))
   {
-    session->request_spawn("Cubeboi", 0);
+    session->request_spawn(character_name, team);
   }
   if (free_cam)
   {

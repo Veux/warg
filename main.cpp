@@ -356,6 +356,8 @@ int main(int argc, char *argv[])
   else
   {
     warg_session = (Session *)new Local_Session();
+    char_name = "Cubeboi";
+    team = 0;
   }
 
   IMGUI.init(window);
@@ -365,7 +367,7 @@ int main(int argc, char *argv[])
   std::vector<State *> states;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
 
-  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)warg_session));
+  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)warg_session, char_name, team));
 
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;

@@ -43,7 +43,8 @@ struct Interface_State
 
 struct Warg_State : protected State
 {
-  Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session);
+  Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session,
+    std::string_view character_name, int32 team);
   ~Warg_State();
   void update();
   void draw_gui();
@@ -69,7 +70,6 @@ struct Warg_State : protected State
   void update_buff_indicators();
 
   Session *session = nullptr;
-  Latency_Tracker latency_tracker;
 
   Map *map;
 
@@ -90,4 +90,7 @@ struct Warg_State : protected State
   vec4 character_to_camera;
 
   Interface_State interface_state;
+
+  std::string character_name;
+  int32 team;
 };
