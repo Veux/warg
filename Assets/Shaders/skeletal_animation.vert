@@ -1,5 +1,5 @@
 #version 330
-#extension GL_ARB_separate_shader_objects : enable
+//#extension GL_ARB_separate_shader_objects : enable
 
 #define MAX_LIGHTS 10
 #define MAX_BONES 128u
@@ -21,8 +21,6 @@ layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;
 layout(location = 3) in vec3 tangent;
 layout(location = 4) in vec3 bitangent;
-
-// assuming max 4 bones per vertex
 layout(location = 5) in uvec4 bone_index;
 layout(location = 6) in vec4 bone_weights;
 
@@ -31,6 +29,8 @@ out mat3 frag_TBN;
 out vec2 frag_uv;
 out vec2 frag_normal_uv;
 out vec4 frag_in_shadow_space[MAX_LIGHTS];
+
+// assuming max 4 bones per vertex
 void main()
 {
 
@@ -45,31 +45,41 @@ void main()
 
   bool bad_index = false;
 
-  if (bone_index.x >= MAX_BONES)
+  uint ai = bone_index.x;
+  uint bi = bone_index.y;
+  uint ci = bone_index.z;
+  uint di = bone_index.w;
+  //
+  //  gl_Position.x = bone_index.x;
+  //  gl_Position.y = bone_index.y;
+  //  gl_Position.z = bone_index.z;
+  // index_w = bone_index.w;
+
+  if (ai >= MAX_BONES)
   {
     bad_index = true;
   }
 
-  if (bone_index.y >= MAX_BONES)
+  if (bi >= MAX_BONES)
   {
     bad_index = true;
   }
 
-  if (bone_index.z >= MAX_BONES)
+  if (ci >= MAX_BONES)
   {
     bad_index = true;
   }
 
-  if (bone_index.w >= MAX_BONES)
+  if (di >= MAX_BONES)
   {
     bad_index = true;
   }
 
   for (int i = 0; i < 4; ++i)
   {
-   // if ((bone_index[i] < 0) || (bone_index[i] > MAX_BONES))
+    // if ((bone_index[i] < 0) || (bone_index[i] > MAX_BONES))
     {
-    //  bad_index = true;
+      //  bad_index = true;
 
       // input_pos.z = bone_index[i];
     }

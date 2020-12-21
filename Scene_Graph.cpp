@@ -2361,7 +2361,9 @@ std::vector<Render_Entity> Scene_Graph::visit_nodes_start()
       continue;
     if (node->parent == NODE_NULL)
     { // node is visible and its parent is the null node, add its branch
-      visit_nodes(i, mat4(1), accumulator);
+
+      mat4 inverse_root = __build_transformation(i);
+      visit_nodes(i, mat4(1),inverse_root, accumulator);
     }
   }
   return accumulator;
@@ -2567,9 +2569,8 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
 
   // result in bone space
   mat4 transformed_bone = translate(translation_result) * toMat4(rotation_result) * scale(scale_result);
-  // return mat4(1);
-  // shift the vertex to bone space, transform it by the animation bone, put it back
-  return bone->offset * transformed_bone * bone->inverse_offset;
+  return transformed_bone;
+
 }
 
 // note: the node with the character mesh in it may visit first
@@ -2579,7 +2580,7 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
 
 // this should not be a problem for child node models of a bone, because we modify the stack
 // as we go down the tree, so it will always be correct for children
-void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<Render_Entity> &accumulator)
+void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &P, const mat4& INVERSE_ROOT, std::vector<Render_Entity> &accumulator)
 {
   if (node_index == NODE_NULL)
     return;
@@ -2597,37 +2598,47 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
   const mat4 R = toMat4(entity->orientation);
   // const mat4 B = entity->import_basis;
 
-  const mat4 RTM = M * T * S_o * R;
+  //this node's transform alone
+  mat4 RST = T * S_o * R;
 
-  // what the nodes below inherit
-  mat4 STACK = RTM * S_prop;
 
-  // this node specifically
-  const mat4 BASIS = STACK * S_non;
-
+  Skeletal_Animation_State* anim_state;
+  Skeletal_Animation_Set* anim_set;
+  Model_Bone_Set* bone_set;
+  Bone* bone;
   if (entity->is_a_bone)
-  { 
+  {
     // the current user-set state of the animation
-    Skeletal_Animation_State *anim_state = &resource_manager->animation_state_pool[entity->animation_state_pool_index];
+    anim_state = &resource_manager->animation_state_pool[entity->animation_state_pool_index];
 
     // the set of animations and their keyframe data
-     Skeletal_Animation_Set *anim_set = &resource_manager->animation_set_pool[anim_state->animation_set_index];
+    anim_set = &resource_manager->animation_set_pool[anim_state->animation_set_index];
 
     // find our bone
-     Model_Bone_Set *bone_set = &resource_manager->model_bone_set_pool[entity->model_bone_set_pool_index];
-     ASSERT(bone_set->bones.contains(s(entity->name)));
-     Bone *bone = &bone_set->bones[s(entity->name)];
+    bone_set = &resource_manager->model_bone_set_pool[entity->model_bone_set_pool_index];
+    ASSERT(bone_set->bones.contains(s(entity->name)));
+    bone = &bone_set->bones[s(entity->name)];
+    // pose it in bone space
+    const mat4 posed_bone = animation_resolve(anim_state, anim_set, bone);
 
-    // the result of the animation for this bone
-    // it shifts from vertex space to bone space, transforms by the animation, then shifts back to vertex space
-    const mat4 THIS_BONE = animation_resolve(anim_state, anim_set, bone);
-
-    // pass it down so the next bones inherit
-    STACK = STACK * THIS_BONE;
-
-    // data that is bound in the uniform array in the vertex shader
-    anim_state->final_bone_transforms[s(entity->name)] = STACK;
+    //assign our transformation to our node
+    RST = RST * posed_bone; //technically should just replace it but we'll see if this is useful
   }
+
+  mat4 PRST = P * RST;
+
+  if(entity->is_a_bone)
+  {  
+    // data that is bound in the uniform array in the vertex shader
+    anim_state->final_bone_transforms[s(entity->name)] = INVERSE_ROOT*PRST*bone->offset;
+  }
+
+
+
+  // this node specifically
+  const mat4 BASIS = PRST * S_non;
+
+
 
   const size_t num_meshes = entity->model.size();
   for (size_t i = 0; i < num_meshes; ++i)
@@ -2661,7 +2672,7 @@ void Scene_Graph::visit_nodes(Node_Index node_index, const mat4 &M, std::vector<
   for (uint32 i = 0; i < entity->children.size(); ++i)
   {
     Node_Index child = entity->children[i];
-    visit_nodes(child, STACK, accumulator);
+    visit_nodes(child, PRST,INVERSE_ROOT, accumulator);
   }
 }
 

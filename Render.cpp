@@ -954,17 +954,40 @@ void Mesh_Handle::enable_assign_attributes()
   {
     glEnableVertexAttribArray(5);
     glBindBuffer(GL_ARRAY_BUFFER, bone_indices_buffer);
-    glVertexAttribPointer(5, 4, GL_UNSIGNED_INT, GL_FALSE, 0, 0);
+    glVertexAttribIPointer(5, 4, GL_UNSIGNED_INT, GL_FALSE, 0);
 
     glEnableVertexAttribArray(6);
     glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
     glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
+
+    ASSERT(6 < GL_MAX_VERTEX_ATTRIBS);
     // glEnableVertexAttribArray(5);
     // glVertexAttribPointer(5, 4, GL_INT, GL_FALSE, stride, 0);
 
     // glEnableVertexAttribArray(6);
     // glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, stride, (void *)(4 * sizeof(int32)));
+
+
+    /*
+    
+    
+    
+    
+    
+    When an array indexing expression, including struct field member accesses, results in an opaque types, the standard has special requirements on those array indices. Under GLSL version 3.30, Sampler arrays (the only opaque type 3.30 provides) can be declared, but they can only be accessed by compile-time integral Constant Expressions. So you cannot loop over an array of samplers, no matter what the array initializer, offset and comparison expressions are.
+
+Under GLSL 4.00 and above, array indices leading to an opaque value can be accessed by non-compile-time constants, but these index values must be dynamically uniform. The value of those indices must be the same value, in the same execution order, regardless of any non-uniform parameter values, for all shader invocations in the invocation group.
+
+For example, in 4.00, it is legal to loop over an array of samplers, so long as the loop index is based on constants and uniforms. So this is legal: 
+    
+    
+    
+    
+    */
+
+
+
   }
 }
 
@@ -1046,17 +1069,17 @@ void Mesh_Handle::upload_data()
 
     // sponge repack this for cache
 
-    std::vector<ivec4> temp1;
+    std::vector<uvec4> temp1;
     std::vector<vec4> temp2;
     temp1.resize(vertex_count);
     temp2.resize(vertex_count);
 
-    int32 max_index = 0;
-    int32 min_index = 100000;
+    uint32 max_index = 0;
+    uint32 min_index = 100000;
 
     for (size_t i = 0; i < vertex_count; ++i)
     {
-      ivec4 *a = (ivec4 *)&mesh_data.bone_weights[i].indices[0];
+      uvec4 *a = (uvec4 *)&mesh_data.bone_weights[i].indices[0];
       temp1[i] = *a;
 
       // temp1[i] = ivec4(5);
@@ -1078,21 +1101,24 @@ void Mesh_Handle::upload_data()
       ASSERT(sum < 1.1f || sum > -0.1f);
 
 
+      //the shader says its reading values out of range of max bones..............
+      //yet we upload them right here
+
       temp2[i] = weight_v;
     }
 
 
-    int a = sizeof(ivec4);
+    int a = sizeof(uvec4);
     int b = sizeof(vec4);
 
-    if (max_index > MAX_BONES || min_index < 0.f)
+    if (max_index > MAX_BONES || min_index < 0)
     {
-      int a = 3;
+      ASSERT(0);
     }
 
     glGenBuffers(1, &bone_indices_buffer);
     glBindBuffer(GL_ARRAY_BUFFER, bone_indices_buffer);
-    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(int32) * 4, &(temp1[0]), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(uint32) * 4, &(temp1[0]), GL_STATIC_DRAW);
 
     glGenBuffers(1, &bone_weight_buffer);
     glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
@@ -1993,7 +2019,7 @@ void Renderer::opaque_pass(float64 time)
        {
          Bone* to_bind = &(*bones)[i];
          mat4* pose = &animation->final_bone_transforms[to_bind->name];
-         *pose = mat4(1);
+         //*pose = mat4(1);
          std::string bone_uniform_name = s("bones", "[", i, "]");
          shader.set_uniform(bone_uniform_name.c_str(), *pose);
        }

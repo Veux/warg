@@ -262,9 +262,9 @@ struct Imported_Scene_Data
   std::vector<Material_Descriptor> materials;
   std::vector<Skeletal_Animation> animations;
 
-  //for all bones in the import
+  // for all bones in the import
   std::unordered_map<std::string, Bone> all_imported_bones;
-  
+
   float64 scale_factor = 1.;
   uint32 import_flags = default_assimp_flags;
   std::atomic<bool> valid = false;
@@ -277,10 +277,9 @@ struct Resource_Manager
   Mesh_Index push_mesh(Mesh_Descriptor *d);
 
   // todo: not the best, refactor these so they construct in place
-  uint32 push_bone_set(std::unordered_map<std::string, Bone>* bones);
+  uint32 push_bone_set(std::unordered_map<std::string, Bone> *bones);
   uint32 push_animation_set(std::vector<Skeletal_Animation> *animation_set);
   uint32 push_animation_state();
-
 
 #define MAX_POOL_SIZE 5000
   std::array<Mesh, MAX_POOL_SIZE> mesh_pool;
@@ -297,8 +296,6 @@ struct Resource_Manager
 
   std::array<Skeletal_Animation_State, MAX_POOL_SIZE> animation_state_pool;
   uint32 current_animation_state_pool_size = 0;
-
-
 
   Material default_material;
 
@@ -349,11 +346,11 @@ struct Scene_Graph_Node
   // mat4 import_basis = mat4(1);
   std::array<std::pair<Mesh_Index, Material_Index>, MAX_MESHES_PER_NODE> model;
 
-  //pointer for our animation controller - needed for visit nodes
+  // pointer for our animation controller - needed for visit nodes
   uint32 animation_state_pool_index = NODE_NULL;
 
-  //the set of bones our import had
- uint32 model_bone_set_pool_index = NODE_NULL;
+  // the set of bones our import had
+  uint32 model_bone_set_pool_index = NODE_NULL;
 
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
@@ -464,11 +461,13 @@ private:
   uint32 highest_allocated_node = 0;
   std::vector<Render_Entity> accumulator;
   std::vector<World_Object> accumulator1;
-  void visit_nodes(Node_Index Node_Index, const mat4 &M, std::vector<Render_Entity> &accumulator);
+  void visit_nodes(
+      Node_Index Node_Index, const mat4 &M, const mat4 &INVERSE_ROOT, std::vector<Render_Entity> &accumulator);
   glm::mat4 __build_transformation(Node_Index node_index);
   void assert_valid_parent_ptr(Node_Index child);
   Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node,
-      const std::pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_pool_index, uint32 animation_state_pool_index);
+      const std::pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_pool_index,
+      uint32 animation_state_pool_index);
 
   // imgui:
   Node_Index imgui_selected_node = NODE_NULL;
