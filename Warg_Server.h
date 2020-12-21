@@ -9,21 +9,25 @@
 #include <map>
 #include <queue>
 
+struct Peer
+{
+  UID character = 0;
+  Input last_input;
+  ENetPeer *peer;
+};
+
 struct Warg_Server
 {
   Warg_Server();
   ~Warg_Server();
-  void update();
-  void connect(std::shared_ptr<Peer> peer);
-  void process_messages();
+  void run(int32 port);
 
-  std::map<UID, std::shared_ptr<Peer>> peers;
-  float64 time = 0;
-  uint32 tick = 0;
-  std::atomic<bool> running = false;
-  Map *map;
+  ENetAddress addr;
+  ENetHost *server;
+
+  std::map<UID, Peer> peers;
+  std::unique_ptr<Map> map;
   Resource_Manager resource_manager;
   Flat_Scene_Graph scene;
-  Spell_Database spell_db;
   Game_State game_state;
 };

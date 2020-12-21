@@ -40,8 +40,7 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   session = session_;
 
   map = new Blades_Edge(scene);
-  spell_db = Spell_Database(); /*
-   map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");*/
+   //map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
   // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
   // collider_cache = collect_colliders(scene);
 
@@ -50,7 +49,8 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   scene.initialize_lighting(
     "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
     "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-  session->push(make_unique<Char_Spawn_Request_Message>("Cubeboi", 0));
+
+  session->request_spawn("Cubeboi", 0);
 
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
@@ -139,7 +139,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
 Warg_State::~Warg_State()
 {
-  session->end();
   delete map;
 }
 
@@ -172,7 +171,7 @@ void Warg_State::handle_input_events()
         auto &spell = find_if(current_game_state.character_spells,
             [&](auto &cs) { return cs.character == player_character_id && i++ == _e.key.keysym.sym - SDLK_1; });
         if (spell != current_game_state.character_spells.end())
-          session->push(std::make_unique<Cast_Message>(target_id, spell->spell));
+          session->try_cast_spell(target_id, spell->spell);
       }
       if (_e.key.keysym.sym == SDLK_TAB && !free_cam &&
           any_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
@@ -223,6 +222,11 @@ void Warg_State::handle_input_events()
   if (!player_character_id ||
       none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
+  if (player_character_id && none_of(current_game_state.living_characters, [&](auto &lc) {
+    return lc.id == player_character_id; }))
+  {
+    session->request_spawn("Cubeboi", 0);
+  }
   if (free_cam)
   {
     mouse_relative_mode = true;
@@ -393,28 +397,18 @@ void Warg_State::handle_input_events()
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
 
-    register_move_command((Move_Status)m, orientation);
+    session->move_command(m, orientation, target_id);
   }
   previous_mouse_state = mouse_state;
 }
 
-void Warg_State::register_move_command(Move_Status m, quat orientation)
-{
-  session->push(make_unique<Input_Message>(input_number, m, orientation, target_id));
-  Input cmd;
-  cmd.number = input_number;
-  cmd.m = m;
-  cmd.orientation = orientation;
-  input_buffer.push(cmd);
-  input_number++;
-}
-
 void Warg_State::process_messages()
 {
-  std::vector<unique_ptr<Message>> messages = session->pull();
-  set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
-  for (unique_ptr<Message> &message : messages)
-    message->handle(*this);
+  //std::vector<unique_ptr<Message>> messages = session->pull();
+  //set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
+  //for (unique_ptr<Message> &message : messages)
+  //  message->handle(*this);
+
 }
 
 void Warg_State::set_camera_geometry()
@@ -806,9 +800,8 @@ void Warg_State::update()
   // set_message("Warg update. Time:", s(current_time), 1.0f);
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
-  process_messages();
+  session->get_state(current_game_state, player_character_id);
   update_stats_bar();
-  current_game_state = last_recieved_server_state;
   auto target = find_if(current_game_state.characters, [&](auto &c) { return c.id == target_id; });
   auto &tlc = std::find_if(current_game_state.living_characters.begin(), current_game_state.living_characters.end(),
       [&](auto &lc) { return lc.id == target_id; });
@@ -864,36 +857,36 @@ void Warg_State::update()
   static std::vector<Node_Index> spawned_nodes;
   static std::vector<Node_Index> spawned_server_nodes;
 
-  if (WANT_SPAWN_OCTREE_BOX)
-  {
-    WANT_SPAWN_OCTREE_BOX = false;
-    Material_Descriptor mat;
-    mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
-    mat.normal = "3D_pattern_62/pattern_335/normal.png";
-    mat.roughness.mod.x = 1.0f;
-    mat.metalness.mod.x = 0.f;
+  //if (WANT_SPAWN_OCTREE_BOX)
+  //{
+  //  WANT_SPAWN_OCTREE_BOX = false;
+  //  Material_Descriptor mat;
+  //  mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
+  //  mat.normal = "3D_pattern_62/pattern_335/normal.png";
+  //  mat.roughness.mod.x = 1.0f;
+  //  mat.metalness.mod.x = 0.f;
 
-    Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
-    Local_Session *ptr = (Local_Session *)this->session;
-    Node_Index servernode = ptr->server->scene.add_mesh(cube, "spawned box", &mat);
+  //  Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
+  //  Local_Session *ptr = (Local_Session *)this->session;
+  //  Node_Index servernode = ptr->scene.add_mesh(cube, "spawned box", &mat);
 
-    spawned_nodes.push_back(newnode);
-    spawned_server_nodes.push_back(servernode);
-    vec3 dir = normalize(camera.dir);
-    vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
-    float32 angle2 = atan2(dir.y, dir.x);
-    scene.nodes[newnode].position = camera.pos + 12.f * dir;
-    scene.nodes[newnode].scale = vec3(2);
-    scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+  //  spawned_nodes.push_back(newnode);
+  //  spawned_server_nodes.push_back(servernode);
+  //  vec3 dir = normalize(camera.dir);
+  //  vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
+  //  float32 angle2 = atan2(dir.y, dir.x);
+  //  scene.nodes[newnode].position = camera.pos + 12.f * dir;
+  //  scene.nodes[newnode].scale = vec3(2);
+  //  scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
 
-    ptr->server->scene.nodes[servernode].position = camera.pos + 12.f * dir;
-    ptr->server->scene.nodes[servernode].scale = vec3(2);
-    ptr->server->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
-  }
-  Local_Session *ptr = (Local_Session *)this->session;
-  ptr->server->scene.collision_octree.clear();
+  //  ptr->scene.nodes[servernode].position = camera.pos + 12.f * dir;
+  //  ptr->scene.nodes[servernode].scale = vec3(2);
+  //  ptr->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+  //}
+  //Local_Session *ptr = (Local_Session *)this->session;
+  //ptr->scene.collision_octree.clear();
 
-   ptr->server->scene.collision_octree.push(md);
+  // ptr->scene.collision_octree.push(md);
   for (Node_Index node : spawned_nodes)
   {
     mat4 M = scene.build_transformation(node);
@@ -907,8 +900,8 @@ void Warg_State::update()
   for (Node_Index node : spawned_server_nodes)
   {
     Local_Session *ptr = (Local_Session *)this->session;
-    mat4 M = ptr->server->scene.build_transformation(node);
-     ptr->server->scene.collision_octree.push(&mesh, &M);
+    mat4 M = ptr->scene.build_transformation(node);
+     ptr->scene.collision_octree.push(&mesh, &M);
   }
 
   if (WANT_CLEAR_OCTREE)
@@ -923,7 +916,7 @@ void Warg_State::update()
     for (Node_Index servernode : spawned_server_nodes)
     {
       Local_Session *ptr = (Local_Session *)this->session;
-      ptr->server->scene.delete_node(servernode);
+      ptr->scene.delete_node(servernode);
     }
     spawned_server_nodes.clear();
   }
@@ -1566,15 +1559,6 @@ void Warg_State::add_character_mesh(UID character_id)
   }
 }
 
-void State_Message::handle(Warg_State &state)
-{
-  state.player_character_id = pc;
-  state.last_recieved_server_state = game_state;
-  set_message("State_Message::handle() type with \"input_number\" of:", s(game_state.input_number), 1.0f);
-  set_message("State_Message::handle() type with \"tick\" of:", s(game_state.tick), 1.0f);
-  state.input_buffer.pop_older_than(state.last_recieved_server_state.input_number);
-}
-
 bool Latency_Tracker::should_send_ping()
 {
   float64 current_time = get_real_time();
@@ -1640,7 +1624,7 @@ void Warg_State::update_cast_bar()
 
 void Warg_State::update_unit_frames()
 {
-  if (none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
+  if (none_of(current_game_state.living_characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
 
   auto make_unit_frame = [&](const char *name, UID character_id, ImVec2 size, ImVec2 position) {
@@ -1935,7 +1919,7 @@ void Warg_State::update_buff_indicators()
 
 void Warg_State::update_game_interface()
 {
-  if (none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
+  if (none_of(current_game_state.living_characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
 
   const vec2 resolution = CONFIG.resolution;

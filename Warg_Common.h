@@ -36,7 +36,7 @@ struct Input
   bool operator!=(const Input &) const;
 
   uint32 number = 0;
-  Move_Status m = Move_Status::None;
+  int m = Move_Status::None;
   quat orientation = quat();
 };
 
@@ -163,7 +163,7 @@ struct Seed_of_Corruption
 {
   UID character;
   UID caster;
-  double damage_taken;
+  float32 damage_taken;
 };
 
 struct Game_State
@@ -195,6 +195,6 @@ void collide_and_slide_char(
 void update_spell_objects(Game_State &game_state, Flat_Scene_Graph &scene);
 void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs);
 void cast_spell(Game_State &game_state, Flat_Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id);
-void update_game(Game_State &game_state, Map &map, Flat_Scene_Graph &scene);
+void update_game(Game_State &game_state, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs);
 void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage);
 void end_buff(Game_State &gs, Character_Buff &cb);

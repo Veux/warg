@@ -49,7 +49,6 @@ struct Warg_State : protected State
   void draw_gui();
   virtual void handle_input_events() final;
   void process_messages();
-  void register_move_command(Move_Status m, quat orientation);
   void add_character_mesh(UID character_id);
   void add_girl_character_mesh(UID character_id);
   void set_camera_geometry();
@@ -77,14 +76,11 @@ struct Warg_State : protected State
   UID player_character_id = 0;
   UID target_id = 0;
 
-  Game_State last_recieved_server_state;
   std::deque<Game_State> state_buffer;
   Game_State current_game_state;
 
   Input_Buffer input_buffer;
   uint32 input_number = 0;
-
-  Spell_Database spell_db;
 
   // veux: why not put these Node_Index inside of the Character struct?
   std::map<UID, Node_Index> character_nodes;

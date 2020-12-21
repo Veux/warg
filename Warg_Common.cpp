@@ -73,7 +73,7 @@ UID add_char(Game_State &gs, Map &map, int team, std::string_view name)
   c.id = id;
   c.base_stats = stats;
   c.team = team;
-  c.name == name;
+  c.name = name;
   c.physics.position = map.spawn_pos[team];
   c.physics.orientation = map.spawn_orientation[team];
   gs.characters.push_back(c);
@@ -111,7 +111,7 @@ void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_G
   vec3 dir = command.orientation * vec3(0, 1, 0);
   vec3 &vel = character.physics.velocity;
   bool &grounded = character.physics.grounded;
-  Move_Status move_status = command.m;
+  int move_status = command.m;
 
   vec3 v = vec3(0);
   if (move_status & Move_Status::Forwards)
@@ -133,7 +133,8 @@ void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_G
   if (move_status & ~Move_Status::Jumping)
   {
     auto lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == character.id; });
-    v = normalize(v) * lc->effective_stats.speed;
+    if (lc != gs.living_characters.end())
+      v = normalize(v) * lc->effective_stats.speed;
   }
   if (move_status & Move_Status::Jumping && grounded)
   {
@@ -767,16 +768,50 @@ void reset_stats(std::vector<Character> &cs, std::vector<Living_Character> &lcs)
   join_for(cs, lcs, [](auto &c, auto &lc) { lc.effective_stats = c.base_stats; });
 }
 
-void respawn_dummy(std::vector<Character> &cs, std::vector<Living_Character> &lcs, Game_State& gs, Map& map)
+void respawn_dummy(std::vector<Character> &cs, std::vector<Living_Character> &lcs, Game_State &gs, Map &map)
 {
   if (join_none_of(cs, lcs, [](auto &c, auto &lc) { return c.name == "Combat Dummy"; }))
     add_dummy(gs, map, {1, 1, 5});
 }
 
-void update_game(Game_State &gs, Map &map, Flat_Scene_Graph &scene)
+void move_characters(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs)
+{
+  for (auto &c : gs.characters)
+  {
+    Input last_input;
+    if (any_of(gs.living_characters, [&](auto &lc) { return lc.id == c.id; }))
+    {
+      auto last_input_it = inputs.find(c.id);
+      if (last_input_it != inputs.end())
+        last_input = last_input_it->second;
+    }
+
+    vec3 old_pos = c.physics.position;
+    move_char(gs, c, last_input, scene);
+    if (_isnan(c.physics.position.x) || _isnan(c.physics.position.y) || _isnan(c.physics.position.z))
+      c.physics.position = map.spawn_pos[c.team];
+    if (c.physics.position.z < -50)
+      c.physics.position = map.spawn_pos[c.team];
+    if (any_of(gs.living_characters, [&](auto &lc) { return lc.id == c.id; }))
+    {
+      if (c.physics.position != old_pos)
+      {
+        erase_if(gs.character_casts, [&](auto &cc) { return cc.caster == c.id; });
+        erase_if(gs.character_gcds, [&](auto &cg) { return cg.character == c.id; });
+      }
+    }
+    else
+    {
+      c.physics.orientation = angleAxis(-half_pi<float32>(), vec3(1.f, 0.f, 0.f));
+    }
+  }
+}
+
+void update_game(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs)
 {
   reset_stats(gs.characters, gs.living_characters);
   update_buffs(gs.character_buffs, gs);
+  move_characters(gs, map, scene, inputs);
   update_hp(gs.living_characters);
   update_mana(gs.living_characters);
   update_gcds(gs.living_characters, gs.character_gcds);

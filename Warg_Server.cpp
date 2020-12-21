@@ -1,117 +1,151 @@
 #include "stdafx.h"
 #include "Warg_Server.h"
 
-using std::make_unique;
-using std::queue;
-using std::unique_ptr;
-using std::vector;
-
 Warg_Server::Warg_Server() : scene(&resource_manager)
 {
-  map = new Blades_Edge(scene);
-  spell_db = Spell_Database();
+  map = std::make_unique<Map>(Blades_Edge(scene));
   for (int i = 0; i < 1; i++)
     add_dummy(game_state, *map, {1, i, 5});
 }
 
 Warg_Server::~Warg_Server()
 {
-  delete map;
+  enet_host_destroy(server);
 }
 
-void Warg_Server::update()
+void Warg_Server::run(int32 port)
 {
-  time += dt;
-  tick += 1;
-
-  process_messages();
-
-  update_game(game_state, *map, scene);
-
-  for (auto &character : game_state.characters)
+  /* Bind the server to the default localhost.     */
+  /* A specific host address can be specified by   */
+  /* enet_address_set_host (& address, "x.x.x.x"); */
+  enet_address_set_host(&addr, "127.0.0.1"); 
+  /* Bind the server to port 1234. */
+  addr.port = 1234;
+  server = enet_host_create(
+    &addr /* the address to bind the server host to */,
+    32 /* allow up to 32 clients and/or outgoing connections */,
+    2 /* allow up to 2 channels to be used, 0 and 1 */,
+    0 /* assume any amount of incoming bandwidth */,
+    0 /* assume any amount of outgoing bandwidth */
+  );
+  ASSERT(server);
+  
+  float64 current_time = 0.0;
+  float64 last_time = get_real_time() - dt;
+  float64 elapsed_time = 0.0;
+  while (true)
   {
-    Input last_input;
-    for (auto &peer_ : peers)
+    const float64 time = get_real_time();
+    elapsed_time = time - current_time;
+    last_time = current_time;
+    while (current_time + dt < last_time + elapsed_time)
     {
-      std::shared_ptr<Peer> peer = peer_.second;
-      if (peer->character == character.id)
-        last_input = peer->last_input;
-    }
-
-    vec3 old_pos = character.physics.position;
-    move_char(game_state, character, last_input, scene);
-    if (_isnan(character.physics.position.x) || _isnan(character.physics.position.y) ||
-        _isnan(character.physics.position.z))
-      character.physics.position = map->spawn_pos[character.team];
-    if (character.physics.position.z < -50)
-      character.physics.position = map->spawn_pos[character.team];
-    if (any_of(game_state.living_characters, [&](auto &lc) { return lc.id == character.id; }))
-    {
-      if (character.physics.position != old_pos)
+      current_time += dt;
+      ENetEvent event;
+      while (enet_host_service(server, &event, 0) > 0)
       {
-        erase_if(game_state.character_casts, [&](auto &cc) { return cc.caster == character.id; });
-        erase_if(game_state.character_gcds, [&](auto &cg) { return cg.character == character.id; });
+        switch (event.type)
+        {
+          case ENET_EVENT_TYPE_CONNECT:
+            printf("A new client connected from %x:%u.\n", event.peer->address.host, event.peer->address.port);
+            /* Store any relevant client information here. */
+            {
+              Peer p;
+              p.peer = event.peer;
+              UID peer_id = uid();
+              peers[peer_id] = p;
+              event.peer->data = (void *)peer_id;
+            }
+            break;
+          case ENET_EVENT_TYPE_RECEIVE:
+            {
+              Buffer b;
+              b.insert(event.packet->data, event.packet->dataLength);
+              int32 message_type;
+              deserialize(b, message_type);
+              switch (message_type)
+              {
+                case SPAWN_MESSAGE:
+                {
+                  std::string name;
+                  int32 team;
+                  deserialize(b, name);
+                  deserialize(b, team);
+                  Peer &peer = peers[(UID)event.peer->data];
+                  if (none_of(game_state.living_characters, [&](auto& lc) { return lc.id == peer.character; }))
+                  {
+                    UID character = add_char(game_state, *map, team, name);
+                    peer.character = character;
+                  }
+                  break;
+                }
+                case MOVE_MESSAGE:
+                {
+                  int m;
+                  quat orientation;
+                  UID target_id;
+                  deserialize(b, m);
+                  deserialize(b, orientation);
+                  deserialize(b, target_id);
+                  Input command;
+                  command.number = 0;
+                  command.orientation = orientation;
+                  command.m = m;
+                  Peer &peer = peers[(UID)event.peer->data];
+                  UID character = peer.character;
+                  peer.last_input = command;
+                  auto t = std::find_if(game_state.character_targets.begin(), game_state.character_targets.end(),
+                      [&](auto &t) { return t.character == character; });
+                  if (t != game_state.character_targets.end())
+                    t->target = target_id;
+                  else
+                    game_state.character_targets.push_back({character, target_id});
+                  break;
+                }
+                case CAST_MESSAGE:
+                {
+                  UID target, spell;
+                  deserialize(b, target);
+                  deserialize(b, spell);
+                  Peer &peer = peers[(UID)event.peer->data];
+                  UID character = peer.character;
+                  cast_spell(game_state, scene, character, target, spell);
+                  break;
+                }
+              }
+            }
+
+            enet_packet_destroy(event.packet);
+
+            break;
+
+          case ENET_EVENT_TYPE_DISCONNECT:
+            printf("peer %u disconnected.\n", (UID)event.peer->data);
+            std::cout << std::endl;
+            /* Reset the peer's client information. */
+            peers.erase((UID)event.peer->data);
+            event.peer->data = NULL;
+            break;
+        }
+      }
+
+      std::map<UID, Input> inputs;
+      for (auto &p : peers)
+        inputs[p.second.character] = p.second.last_input;
+      update_game(game_state, *map, scene, inputs);
+
+      for (auto &p : peers)
+      {
+        Buffer b;
+        serialize_(b, game_state);
+        serialize_(b, p.second.character);
+
+        ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+        enet_peer_send(p.second.peer, 0, packet);
+        enet_host_flush(server);
       }
     }
-    else
-    {
-      character.physics.orientation = angleAxis(-half_pi<float32>(), vec3(1.f, 0.f, 0.f));
-    }
+    SDL_Delay(5);
   }
-
-  for (auto &p : peers)
-  {
-    shared_ptr<Peer> peer = p.second;
-    peer->push_to_peer(make_unique<State_Message>(peer->character, &game_state));
-  }
-}
-
-void Warg_Server::process_messages()
-{
-  for (auto &peer : peers)
-  {
-    for (auto &message : peer.second->pull_from_peer())
-    {
-      message->peer = peer.first;
-      message->handle(*this);
-    }
-  }
-}
-
-void Char_Spawn_Request_Message::handle(Warg_Server &server)
-{
-  UID character = add_char(server.game_state, *server.map,  team, name);
-  ASSERT(server.peers.count(peer));
-  server.peers[peer]->character = character;
-}
-
-void Input_Message::handle(Warg_Server &server)
-{
-  ASSERT(server.peers.count(peer));
-  auto &peer_ = server.peers[peer];
-
-  Input command;
-  command.number = input_number;
-  command.orientation = orientation;
-  command.m = move_status;
-  peer_->last_input = command;
-  auto t = std::find_if(server.game_state.character_targets.begin(), server.game_state.character_targets.end(),
-      [&](auto &t) { return t.character == peer_->character; });
-  if (t != server.game_state.character_targets.end())
-    t->target = target_id;
-  else
-    server.game_state.character_targets.push_back({peer_->character, target_id});
-}
-
-void Cast_Message::handle(Warg_Server &server)
-{
-  ASSERT(server.peers.count(peer));
-  auto &peer_ = server.peers[peer];
-
-  cast_spell(server.game_state, server.scene, peer_->character, _target_id, _spell_id);
-}
-
-void Warg_Server::connect(std::shared_ptr<Peer> peer)
-{
-  peers[uid()] = peer;
+  std::cout << "closing like an idiot " << std::endl;
 }
