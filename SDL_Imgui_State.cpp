@@ -705,8 +705,8 @@ void put_imgui_texture(Imgui_Texture_Descriptor *descriptor)
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
   
   float32 aspect = 0.0f;
-  if (descriptor->ptr);
-  aspect = (float32)descriptor->ptr->size.x / (float32)descriptor->ptr->size.y;
+  if (descriptor->ptr)
+    aspect = (float32)descriptor->ptr->size.x / (float32)descriptor->ptr->size.y;
 
   if (descriptor->y_invert)
     ImGui::Image((ImTextureID)data, ImVec2(aspect * descriptor->size.x, descriptor->size.y), ImVec2(0, 1),

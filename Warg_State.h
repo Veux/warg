@@ -24,6 +24,7 @@ struct Animation_Object
 
 struct Interface_State
 {
+  bool icons_loaded = false;
   bool icon_setup_complete = false;
   std::vector<Texture> action_bar_textures_sources;
   std::vector<Texture> action_bar_textures_with_cooldown;

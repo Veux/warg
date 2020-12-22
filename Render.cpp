@@ -457,6 +457,18 @@ Texture::Texture(Texture_Descriptor &td)
   // load(); why arent we calling load anymore?
 }
 
+Texture::Texture(const char *file_path)
+{
+  t.source = file_path;
+  t.key = s(t.source, ",", t.format);
+  t.format = GL_SRGB8_ALPHA8;
+}
+
+bool Texture::is_ready()
+{
+  return texture && texture->texture;
+}
+
 Texture::Texture(string name, ivec2 size, uint8 levels, GLenum internalformat, GLenum minification_filter,
     GLenum magnification_filter, GLenum wrap_s, GLenum wrap_t, vec4 border_color)
 {

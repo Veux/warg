@@ -37,7 +37,7 @@ struct Spell_Database
 
   std::unordered_map<std::string_view, UID> by_name;
   std::unordered_map<UID, std::string> name;
-  std::unordered_map<UID, Texture_Descriptor> icon;
+  std::unordered_map<UID, Texture> icon;
   std::unordered_map<UID, Spell_Targets> targets;
   std::unordered_map<UID, int32> mana_cost;
   std::unordered_map<UID, float32> range;
@@ -59,7 +59,7 @@ struct Spell_Database
 
   std::unordered_map<UID, std::string> buff_name;
   std::unordered_map<std::string_view, UID> buff_by_name;
-  std::unordered_map<UID, Texture_Descriptor> buff_icon;
+  std::unordered_map<UID, Texture> buff_icon;
   std::unordered_map<UID, float32> buff_duration;
   std::unordered_map<UID, float32> buff_tick_freq;
   std::unordered_map<UID, Character_Stats> buff_stats_modifiers;

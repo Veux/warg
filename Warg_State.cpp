@@ -1007,6 +1007,22 @@ void Warg_State::draw_gui()
   // opengl code is allowed in here
   IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
 
+  if (!interface_state.icons_loaded)
+  {
+    int n_unready = 0;
+    for (auto &[spell, icon] : SPELL_DB.icon)
+    {
+      icon.load();
+      n_unready += !icon.is_ready();
+    }
+    for (auto &[spell, icon] : SPELL_DB.buff_icon)
+    {
+      icon.load();
+      n_unready += !icon.is_ready();
+    }
+    interface_state.icons_loaded = n_unready == 0;
+  }
+
   update_game_interface();
   draw_chat_box();
   scene.draw_imgui(state_name);
@@ -1689,7 +1705,8 @@ void Warg_State::update_unit_frames()
               ImGuiWindowFlags_NoFocusOnAppearing);
 
       ImGui::SetCursorPos(v(inner_grid.get_position(0, 0)));
-      put_imgui_texture(&SPELL_DB.buff_icon[cb.buff_id], inner_grid.get_section_size(1, 1));
+      auto &icon = SPELL_DB.buff_icon[cb.buff_id];
+      put_imgui_texture(&icon, inner_grid.get_section_size(1, 1));
       ImGui::End();
       ImGui::PopStyleVar(4);
       i++;
@@ -1881,7 +1898,7 @@ void Warg_State::update_buff_indicators()
 
   const vec2 resolution = CONFIG.resolution;
 
-  auto create_indicator = [&](vec2 position, vec2 size, Texture_Descriptor *icon, float64 duration, bool debuff,
+  auto create_indicator = [&](vec2 position, vec2 size, Texture *icon, float64 duration, bool debuff,
                               size_t i) {
     Layout_Grid grid(size, vec2(2), vec2(1), vec2(1, 3), vec2(1, 2), 1);
 
