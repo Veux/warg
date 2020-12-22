@@ -62,7 +62,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(5.25f, .25f, .35f, 1.f);
   small_object_water_settings(&material.uniform_set);
   Node_Index particle_node = scene.add_mesh(cube, "particle0", &material);
@@ -71,7 +70,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(1.25f, .0f, .35f, 1.f);
   Node_Index particle_node1 = scene.add_mesh(cube, "particle1", &material);
   Mesh_Index mesh_index1 = scene.nodes[particle_node1].model[0].first;
@@ -79,7 +77,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(1.05f, .0f, 2.15f, 1.f);
   Node_Index particle_node2 = scene.add_mesh(cube, "particle2", &material);
   Mesh_Index mesh_index2 = scene.nodes[particle_node2].model[0].first;
@@ -87,7 +84,6 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
 
   material.vertex_shader = "instance.vert";
   material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
   material.emissive.mod = vec4(0.0f, 2.f, 3.f, 1.f);
   Node_Index particle_node3 = scene.add_mesh(cube, "particle3", &material);
   Mesh_Index mesh_index3 = scene.nodes[particle_node3].model[0].first;
@@ -527,7 +523,6 @@ void Warg_State::update_prediction_ghost()
 
   static Material_Descriptor material;
   material.albedo = "crate_diffuse.png";
-  material.emissive = "";
   material.normal = "test_normal.png";
   material.roughness = "crate_roughness.png";
   material.vertex_shader = "vertex_shader.vert";
@@ -544,9 +539,6 @@ void Warg_State::update_prediction_ghost()
 
 void Warg_State::update_stats_bar()
 {
-  if (!imgui_this_tick)
-    return;
-  IMGUI_LOCK lock(this);
 
   vec2 resolution = CONFIG.resolution;
 
@@ -665,7 +657,6 @@ void Warg_State::update_spell_object_nodes()
 {
   Material_Descriptor material;
   material.albedo.mod = vec4(0.f);
-  material.emissive = "color(1, 1, 1, 1)";
   material.emissive.mod = vec4(0.5f, 0.5f, 100.f, 1.f);
 
   for (auto &so : current_game_state.spell_objects)
@@ -1052,7 +1043,6 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   character_nodes[character_id];
 
   // Material_Descriptor hp_bar_material;
-  // hp_bar_material.emissive = "color(1, 1, 1, 1)";
   // Node_Index hp_bar = scene.add_mesh(cube, "hp_bar", &hp_bar_material);
   // scene.set_parent(hp_bar, character_node);
   // float32 bar_z_pos = character->radius.z;
@@ -1100,7 +1090,6 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   shirt_material.albedo.mod = vec4(1);
   shirt_material.uv_scale = vec2(1.);
   Material_Descriptor solid_material = shirt_material;
-  solid_material.normal = "";
 
   // proper way to do this after we define the materials we want to use:
 
@@ -1368,6 +1357,7 @@ void Warg_State::add_character_mesh(UID character_id)
   Material_Descriptor suit_material;
   suit_material.albedo.mod = vec4(0, 0, 0, 1);
   suit_material.roughness.mod = vec4(1);
+  suit_material.roughness.source = "white";
   suit_material.metalness.mod = vec4(0);
   suit_material.normal = "cloth_normal.jpg";
   suit_material.uv_scale = vec2(0.25f);
@@ -1375,6 +1365,7 @@ void Warg_State::add_character_mesh(UID character_id)
   Material_Descriptor hair_material;
   hair_material.albedo.mod = 0.75f * rgb_vec4(63, 26, 3);
   hair_material.roughness.mod = vec4(0.82);
+  hair_material.roughness.source = "white";
   hair_material.metalness.mod = vec4(0);
   hair_material.normal = "hair_normal.jpg";
   hair_material.uv_scale = vec2(1.f);
@@ -1388,7 +1379,6 @@ void Warg_State::add_character_mesh(UID character_id)
   shirt_material.albedo.mod = vec4(1);
   shirt_material.uv_scale = vec2(1.);
   Material_Descriptor solid_material = shirt_material;
-  solid_material.normal = "";
 
   Mesh_Descriptor md(cube, "girl's cube");
   Mesh_Index cube_mesh_index = scene.resource_manager->push_custom_mesh(&md);
@@ -1747,17 +1737,38 @@ void Warg_State::update_icons()
   static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
   static std::vector<Texture> sources;
 
-  int num_spells = 0;
-  static bool configured = false;
-  int i = 0;
-  if (!configured)
+  static bool setup_complete = false;
+  static bool all_textures_ready = true;
+  static size_t num_spells = 0;
+  if (!setup_complete)
   {
     Texture_Descriptor texture_descriptor;
-    texture_descriptor.size = ivec2(56);
+    texture_descriptor.source = "generate";
     texture_descriptor.minification_filter = GL_LINEAR;
+    texture_descriptor.size = vec2(90, 90);
+    texture_descriptor.format = GL_RGB;
+    texture_descriptor.levels = 1;
 
-    ASSERT(interface_state.action_bar_textures.size() == 0);
-    ASSERT(sources.size() == 0);
+    if (sources.size() != 0)
+    {
+      for (size_t i = 0; i < num_spells; i++)
+      {
+        if (!sources[i].bind(0))
+        {
+          all_textures_ready = false;
+        }
+        if (!interface_state.action_bar_textures[i].bind(0))
+        {
+          all_textures_ready = false;
+        }
+      }
+         if (!all_textures_ready)
+        return;
+    }
+    else
+    {
+      ASSERT(interface_state.action_bar_textures.size() == 0);
+      ASSERT(sources.size() == 0);
 
     num_spells = std::count_if(current_game_state.character_spells.begin(), current_game_state.character_spells.end(),
         [&](auto &cs) { return cs.character == player_character_id; });
@@ -1765,26 +1776,58 @@ void Warg_State::update_icons()
     sources.resize(num_spells);
     framebuffer.color_attachments.resize(num_spells);
 
+    int i = 0;
     for (auto &cs : current_game_state.character_spells)
     {
       if (cs.character != player_character_id)
         continue;
 
+      const auto &icon = SPELL_DB.icon[cs.spell];
+
       texture_descriptor.name = s("duration-spiral-", i);
       interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = SPELL_DB.icon[cs.spell];
+      sources[i] = Texture(texture_descriptor);
+      if (!sources[i].bind(0))
+      {
+        all_textures_ready = false;
+      }
+      if (!interface_state.action_bar_textures[i].bind(0))
+      {
+        all_textures_ready = false;
+      }
       framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
       i++;
     }
-    configured = true;
+
+      //for (size_t i = 0; i < num_spells; i++)
+      //{
+      //  Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
+      //  
+      //  texture_descriptor.name = s("duration-spiral-", i);
+      //  interface_state.action_bar_textures[i] = Texture(texture_descriptor);
+      //  sources[i] = formula->icon;
+      //  if (!sources[i].bind(0))
+      //  {
+      //    all_textures_ready = false;
+      //  }
+      //  if (!interface_state.action_bar_textures[i].bind(0))
+      //  {
+      //    all_textures_ready = false;
+      //  }
+      //  framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
+      //}
+      if (!all_textures_ready)
+        return;
+    }
+    setup_complete = true;
   }
 
   framebuffer.init();
-  framebuffer.bind();
+  framebuffer.bind_for_drawing_dst();
 
   shader.use();
   shader.set_uniform("count", (int)sources.size());
-  i = 0;
+  int i = 0;
   for (auto &cs : current_game_state.character_spells)
   {
     if (cs.character != player_character_id)
@@ -1941,4 +1984,5 @@ void Warg_State::update_game_interface()
   update_unit_frames();
   update_action_bar();
   update_buff_indicators();
+  update_stats_bar();
 }

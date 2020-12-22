@@ -28,7 +28,7 @@ void main()
   if(gamma_encoded)
   {
     result = pow(result,vec4(2.2));
-    result = 1.3*result;
+    result = 1.*result;
     //result = Tonemap_ACES(result);
   }
   out0 = result;

@@ -7,7 +7,7 @@
 #include "SDL_Imgui_State.h"
 #include "General_Purpose.h"
 #include "Timer.h"
-
+#define blah 1
 #define MAX_INSTANCE_COUNT 40000
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS 10 // reminder to change the Texture_Location::s1...sn shadow map enums
@@ -83,4 +83,3 @@ extern std::thread::id MAIN_THREAD_ID;
 extern std::mutex IMGUI_MUTEX;
 extern SDL_Imgui_State IMGUI;
 extern SDL_Imgui_State TRASH_IMGUI;
-extern const glm::vec4 MISSING_TEXTURE_MOD;

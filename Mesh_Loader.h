@@ -35,6 +35,11 @@ void add_quad(vec3 a, vec3 b, vec3 c, vec3 d, Mesh_Data &mesh);
 Mesh_Data load_mesh(Mesh_Primitive p);
 Mesh_Data load_mesh_cube();
 
+Mesh_Data generate_grid(ivec2 tile_count);
+
+
+
+
 void add_aabb(vec3 min, vec3 max, Mesh_Data &mesh);
 Mesh_Data load_mesh_plane();
 std::string to_string(Mesh_Primitive p);

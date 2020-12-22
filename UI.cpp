@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "UI.h"
 #include "SDL_Imgui_State.h"
+#include "Render.h"
 
 std::unordered_map<std::string, Texture> FILE_PICKER_TEXTURE_CACHE;
 
@@ -67,7 +68,7 @@ bool File_Picker::run()
 {
   bool clicked = false;
   display = true;
-  ImGui::Begin("File Picker", &display,  ImGuiWindowFlags_NoScrollbar);
+  ImGui::Begin("File Picker", &display, ImGuiWindowFlags_NoScrollbar);
 
   auto winsize = ImGui::GetWindowSize();
 
@@ -113,20 +114,28 @@ bool File_Picker::run()
 
     FS_Node &f = dircontents[i];
     Texture_Descriptor td = "Assets/Icons/dir.png";
-    // Texture_Descriptor *t = &dir_icon;
     if (!f.is_dir)
     {
       td = "Assets/Icons/file.png";
       if (has_img_file_extension(f.path))
       {
         td.name = f.path;
+        td.source = f.path;
+        if(has_hdr_file_extension(f.path))
+        {
+          td.format = GL_RGBA16F;
+        }
       }
     }
-    FILE_PICKER_TEXTURE_CACHE[td.name] = Texture(td);
-    // FILE_PICKER_TEXTURE_CACHE.push_back(td);
+    if (!FILE_PICKER_TEXTURE_CACHE.contains(td.name))
+    {
+      FILE_PICKER_TEXTURE_CACHE[td.name] = Texture(td);
+    }
+
+    FILE_PICKER_TEXTURE_CACHE[td.name].load();
 
     ImGui::PushID(s("thumbbutton", i).c_str());
-    if (put_imgui_texture_button(&td, thumbsize))
+    if (put_imgui_texture_button(FILE_PICKER_TEXTURE_CACHE[td.name].texture, thumbsize))
     {
       clicked = true;
       last_clicked_node = i;
@@ -221,3 +230,5 @@ vec2 Layout_Grid::get_section_size(uint32 number_columns, uint32 number_rows)
 {
   return element_size + vec2(number_columns - 1, number_rows - 1) * (element_size + spacing);
 }
+
+

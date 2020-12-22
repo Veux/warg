@@ -6,7 +6,7 @@
 #include "State.h"
 #include "Animation_Utilities.h"
 using namespace glm;
-void spawn_test_spheres(Flat_Scene_Graph &scene);
+bool spawn_test_spheres(Flat_Scene_Graph &scene);
 
 void world_water_settings(Uniform_Set_Descriptor *dst)
 {
@@ -71,16 +71,20 @@ void small_object_refraction_settings(Uniform_Set_Descriptor *dst)
 
 void spawn_water(Flat_Scene_Graph *scene, vec3 scale, vec3 pos)
 {
+
+  Mesh_Descriptor mesh;
+  mesh.name = "generated water grid";
+  mesh.mesh_data = generate_grid(ivec2(256));
   Material_Descriptor material;
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.054, .135, .159, .998);
-  material.uses_transparency = true;
+  //material.uses_transparency = true;
   material.uv_scale = vec2(1);
   material.roughness.mod = vec4(0.25);
   material.metalness.mod = vec4(0.84);
-  material.frag_shader = "water.frag";
+  //material.frag_shader = "water.frag";
   world_water_settings(&material.uniform_set);
-  Node_Index memewater = scene->add_mesh(cube, "water", &material);
+  Node_Index memewater = scene->add_mesh("water",&mesh, &material);
   scene->nodes[memewater].scale = scale;
   scene->nodes[memewater].position = pos;
 }
@@ -118,6 +122,7 @@ void spawn_planets(Flat_Scene_Graph *scene, vec3 pos)
 {
   Material_Descriptor material_star;
 
+  material_star.emissive.source = "white";
   material_star.albedo.mod = vec4(0, 0, 0, 1);
   material_star.emissive.mod = vec4(2.f, 2.f, .3f, 0.f);
   material_star.frag_shader = "water.frag";
@@ -161,6 +166,8 @@ void spawn_compass(Flat_Scene_Graph *scene)
 {
   Node_Index root = scene->new_node("compass");
   Material_Descriptor material;
+
+  material.emissive.source = "white";
   material.frag_shader = "emission.frag";
   material.emissive.mod = vec4(0);
   material.emissive.mod.r = 2.0f;
@@ -194,6 +201,8 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
 {
 
   Material_Descriptor material;
+
+  material.emissive.source = "white";
   material.frag_shader = "emission.frag";
   material.emissive.mod = vec4(0);
   material.emissive.mod.r = 2.0f;
@@ -216,6 +225,8 @@ void spawn_test_triangle(Flat_Scene_Graph *scene)
   scene->nodes[c].position = random_3D_unit_vector();
 
   Material_Descriptor material2;
+
+  material.albedo.source = "white";
   material2.albedo.mod = vec4(.2, .2, .2, .2);
   material.emissive.mod = vec4(0);
   material2.uses_transparency = true;
@@ -232,48 +243,48 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
     : State(name, window, window_size)
 {
 
-  scene.initialize_lighting("Assets/Textures/Environment_Maps/Frozen_Waterfall/Frozen_Waterfall_HiRes_TMap.jpg",
-      "Assets/Textures/Environment_Maps/Frozen_Waterfall/irradiance.hdr");
-    //scene.initialize_lighting("Assets/Textures/black.png",
-    //  "Assets/Textures/black.png");
+  scene.initialize_lighting(
+      "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+  // scene.initialize_lighting("Assets/Textures/black.png",
+  //  "Assets/Textures/black.png");
 
   camera.phi = .25;
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  spawn_test_spheres(scene);
-  // spawn_water(&scene, vec3(6000, 6000, 3), vec3(0, 0, -2));
+  spawn_water(&scene, vec3(25, 25, 3), vec3(0, 0, -2));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
-  //spawn_planets(&scene, vec3(12, 6, 3));
+  spawn_planets(&scene, vec3(12, 6, 3));
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   spawn_test_triangle(&scene);
   spawn_compass(&scene);
+
+
   // spawn_map(&scene);
 
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  Material_Descriptor material;
-  Particle_Emitter *pe = &scene.particle_emitters.back();
-  material.vertex_shader = "instance.vert";
-  material.frag_shader = "emission.frag";
-  material.emissive = "color(1,1,1,1)";
-  material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
-  small_object_water_settings(&material.uniform_set);
-  Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
-  Mesh_Index mesh_index = scene.nodes[particle_node].model[0].first;
-  Material_Index material_index = scene.nodes[particle_node].model[0].second;
-  scene.nodes[particle_node].visible = false;
-  scene.particle_emitters[0].mesh_index = mesh_index;
-  scene.particle_emitters[0].material_index = material_index;
-  scene.particle_emitters[1].mesh_index = mesh_index;
-  scene.particle_emitters[1].material_index = material_index;
-  scene.particle_emitters[2].mesh_index = mesh_index;
-  scene.particle_emitters[2].material_index = material_index;
-  scene.particle_emitters[3].mesh_index = mesh_index;
-  scene.particle_emitters[3].material_index = material_index;
+  // scene.particle_emitters.push_back({});
+  // scene.particle_emitters.push_back({});
+  // scene.particle_emitters.push_back({});
+  // scene.particle_emitters.push_back({});
+  // Material_Descriptor material;
+  // Particle_Emitter *pe = &scene.particle_emitters.back();
+  // material.vertex_shader = "instance.vert";
+  // material.frag_shader = "emission.frag";
+  // material.emissive.mod = vec4(0.25f, .25f, .35f, 1.f);
+  // small_object_water_settings(&material.uniform_set);
+  // Node_Index particle_node = scene.add_mesh(cube, "snow particle", &material);
+  // Mesh_Index mesh_index = scene.nodes[particle_node].model[0].first;
+  // Material_Index material_index = scene.nodes[particle_node].model[0].second;
+  // scene.nodes[particle_node].visible = false;
+  // scene.particle_emitters[0].mesh_index = mesh_index;
+  // scene.particle_emitters[0].material_index = material_index;
+  // scene.particle_emitters[1].mesh_index = mesh_index;
+  // scene.particle_emitters[1].material_index = material_index;
+  // scene.particle_emitters[2].mesh_index = mesh_index;
+  // scene.particle_emitters[2].material_index = material_index;
+  // scene.particle_emitters[3].mesh_index = mesh_index;
+  // scene.particle_emitters[3].material_index = material_index;
 
   auto &lights = scene.lights.lights;
   scene.lights.light_count = 2;
@@ -621,6 +632,8 @@ void update_test_triangle(Flat_Scene_Graph *scene)
   scene->resource_manager->mesh_pool[meshi] = md;
   Material_Descriptor *material = scene->get_modifiable_material_pointer_for(triangle, 0);
 
+  material->albedo.source = "white";
+  material->emissive.source = "white";
   material->albedo.mod = vec4(.3, .3, .3, .3);
   material->uses_transparency = true;
   material->blending = true;
@@ -646,11 +659,22 @@ void update_test_triangle(Flat_Scene_Graph *scene)
 }
 void Render_Test_State::update()
 {
+
+
+  if(painter.textures.size() && painter.textures[0].texture != nullptr)
+  {
+    Node_Index water_node = scene.find_by_name(NODE_NULL,"water");
+    Flat_Scene_Graph_Node* node = &scene.nodes[water_node];
+    Material_Index mi = node->model[0].second;
+    Material* mat = &scene.resource_manager->material_pool[mi];
+    mat->displacement = painter.textures[painter.selected_texture];
+  }
+
+
   // update_grabbyarm(&scene, current_time);
-  //update_planets(&scene, current_time);
+  update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);
-
   update_test_triangle(&scene);
 
   // static vec3 wind_dir;
@@ -714,31 +738,58 @@ void Render_Test_State::update()
   // scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.15;
 }
 
-void spawn_test_spheres(Flat_Scene_Graph &scene)
+void Render_Test_State::draw_gui()
 {
+  IMGUI_LOCK lock(this);
+  scene.draw_imgui(state_name);
+
+  if (imgui_this_tick)
+  {
+    if (ImGui::Button("Texture Painter"))
+    {
+      painter.window_open = !painter.window_open;
+    }
+    painter.run(imgui_event_accumulator);
+
+    //static std::vector<char> buf = {};
+    //uint32 size = buf.size();
+    //ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
+    //ImGui::InputTextMultiline("blah",&buf[0],size,ImVec2(512,512),flags);
+  }
+}
+
+bool spawn_test_spheres(Flat_Scene_Graph &scene)
+{
+  Node_Index test = scene.add_aiscene("smoothsphere.fbx", "spheretest", false);
+  if (test == NODE_NULL)
+  {
+    return false;
+  }
+  scene.delete_node(test);
+
   Material_Descriptor material;
-  material.albedo = "color(1,1,1,1)";
   // material.emissive = "";
   // material.normal = "test_normal.png";
-  material.roughness = "color(1,1,1,1)";
-  material.metalness = "color(1,1,1,1)";
   material.vertex_shader = "vertex_shader.vert";
   material.frag_shader = "fragment_shader.frag";
   material.uv_scale = vec2(1);
   material.casts_shadows = true;
   material.backface_culling = true;
-  uint32 count = 4;
-  uint32 zcount = 4;
+  material.roughness.source = "white";
+  material.metalness.source = "white";
+  uint32 kcount = 2;
+  uint32 icount = 15;
+  uint32 jcount = 4;
 
-  for (uint32 i = 0; i < count; ++i)
+  for (uint32 i = 0; i < icount; ++i)
   {
-    for (uint32 j = 0; j < zcount; ++j)
+    for (uint32 j = 0; j < jcount; ++j)
     {
-      for (uint32 k = 0; k < count; ++k)
+      for (uint32 k = 0; k < kcount; ++k)
       {
-        float roughness = mix(0.f, 1.f, float(i) / float(count - 1));
-        float metalness = mix(0.f, 1.f, float(j) / float(zcount - 1));
-        float color = mix(0.f, 1.f, float(k) / float(count - 1));
+        float roughness = mix(0.f, 1.f, float(i) / float(icount - 1));
+        float metalness = mix(0.f, 1.f, float(j) / float(jcount - 1));
+        float color = mix(0.f, 1.f, float(k) / float(kcount - 1));
 
         material.albedo.mod = vec4(color, 1, 1, 1.0);
         material.roughness.mod = vec4(roughness);
@@ -751,7 +802,7 @@ void spawn_test_spheres(Flat_Scene_Graph &scene)
         {
           material.casts_shadows = false;
           material.uses_transparency = true;
-          material.albedo.mod.a = mix(0.0f, 0.8f, float(k) / float(count - 1));
+          material.albedo.mod.a = mix(0.0f, 0.8f, float(k) / float(kcount - 1));
           material.roughness.mod = vec4(0);
           material.frag_shader = "refraction.frag";
           small_object_refraction_settings(&material.uniform_set);
@@ -774,7 +825,7 @@ void spawn_test_spheres(Flat_Scene_Graph &scene)
         Node_Index index = scene.add_aiscene("smoothsphere.fbx", "Spherearray");
         Material_Index mi = scene.resource_manager->push_custom_material(&material);
         scene.nodes[scene.nodes[index].children[0]].model[0].second = mi;
-
+        scene.nodes[scene.nodes[index].children[0]].name = s("sphere ", i, " ", j, " ", k);
         material.uniform_set.clear();
 
         Flat_Scene_Graph_Node *node = &scene.nodes[index];
@@ -784,4 +835,5 @@ void spawn_test_spheres(Flat_Scene_Graph &scene)
       }
     }
   }
+  return true;
 }

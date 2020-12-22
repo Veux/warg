@@ -10,6 +10,12 @@
 #include "Timer.h"
 #include "Scene_Graph.h"
 #include "UI.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb/stb_image_write.h"
+#undef STB_IMAGE_WRITE_IMPLEMENTATION
+
+#include <filesystem>
+
 using glm::ivec2;
 using glm::lookAt;
 using glm::mat4;
@@ -41,19 +47,28 @@ const vec4 Conductor_Reflectivity::copper = vec4(0.95, 0.64, 0.54, 1.0f);
 const vec4 Conductor_Reflectivity::gold = vec4(1.0, 0.71, 0.29, 1.0f);
 const vec4 Conductor_Reflectivity::aluminum = vec4(0.91, 0.92, 0.92, 1.0f);
 const vec4 Conductor_Reflectivity::silver = vec4(0.95, 0.93, 0.88, 1.0f);
-
+const uint32 ENV_MAP_MIP_LEVELS = 6;
 static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
 extern std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
 
-const std::string WHITE = "color(1,1,1,1)";
-const vec4 MISSING_TEXTURE_MOD = vec4(-1.12345);
+// if we overwrite an opengl object in a state thread that isnt the main thread
+// we need to defer deletion of the resources, we can do it anywhere in the main thread
+// so theyre just cleared at the top of render()
+
+std::vector<Mesh_Handle> DEFERRED_MESH_DELETIONS;
+std::vector<Texture_Handle> DEFERRED_TEXTURE_DELETIONS;
+
+// all unsuccessful texture binds will bind white instead of default black
+// this means we need default values for the mod value of the textures
+Texture WHITE_TEXTURE;
 const vec4 DEFAULT_ALBEDO = vec4(1);
 const vec4 DEFAULT_NORMAL = vec4(0.5, 0.5, 1.0, 0.0);
 const vec4 DEFAULT_ROUGHNESS = vec4(0.3);
 const vec4 DEFAULT_METALNESS = vec4(0);
 const vec4 DEFAULT_EMISSIVE = vec4(0);
+const vec4 DEFAULT_DISPLACEMENT = vec4(0);
 const vec4 DEFAULT_AMBIENT_OCCLUSION = vec4(1);
 const std::string DEFAULT_VERTEX_SHADER = "vertex_shader.vert";
 const std::string DEFAULT_FRAG_SHADER = "fragment_shader.frag";
@@ -76,8 +91,6 @@ Framebuffer_Handle::~Framebuffer_Handle()
 Framebuffer::Framebuffer() {}
 void Framebuffer::init()
 {
-  // opengl calls no longer allowed in state.update()
-  // render your imgui ui that requires textures in state.render()
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   if (!fbo)
   {
@@ -89,10 +102,8 @@ void Framebuffer::init()
   std::vector<GLenum> draw_buffers;
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
-    Texture_Descriptor test;
-    ASSERT(color_attachments[i].t.name != test.name); // texture must be named, or .load assumes null
-    color_attachments[i].load();
     glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
+    ASSERT(color_attachments[i].texture->size != ivec2(0));
     draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
   glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
@@ -109,29 +120,22 @@ void Framebuffer::init()
     depth->size = depth_size;
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
   }
-  // check_FBO_status();
+  check_FBO_status();
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Framebuffer::bind()
+void Framebuffer::bind_for_drawing_dst()
 {
   ASSERT(fbo);
   ASSERT(fbo->fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-  // check_FBO_status();
-  if (encode_srgb_on_draw)
-  {
-    glEnable(GL_FRAMEBUFFER_SRGB);
-  }
-  else
-  {
-    glDisable(GL_FRAMEBUFFER_SRGB);
-  }
+  check_FBO_status();
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
 void Gaussian_Blur::init(Texture_Descriptor &td)
 {
+  ASSERT(td.source == "generate");
   if (!initialized)
     gaussian_blur_shader = Shader("passthrough.vert", "gaussian_blur_7x.frag");
 
@@ -174,7 +178,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.use();
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform("lod", uint32(1));
-  gaussian_blur_shader.set_uniform("transform", Renderer::ortho_projection(*dst_size));
+  gaussian_blur_shader.set_uniform("transform", fullscreen_quad());
   src->bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
@@ -212,31 +216,31 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
 }
 
 Renderer::~Renderer() {}
-
-void check_and_clear_expired_textures()
-{ // todo: separate thread that does this
-  auto it = TEXTURE2D_CACHE.begin();
-  while (it != TEXTURE2D_CACHE.end())
-  {
-    auto texture_handle = *it;
-    const string *path = &texture_handle.first;
-    struct stat attr;
-    stat(path->c_str(), &attr);
-    time_t t = attr.st_mtime;
-
-    auto ptr = texture_handle.second.lock();
-    if (ptr) // texture could exist but not yet be loaded
-    {
-      time_t t1 = ptr.get()->file_mod_t;
-      if (t1 != t)
-      {
-        it = TEXTURE2D_CACHE.erase(it);
-        continue;
-      }
-    }
-    ++it;
-  }
-}
+//
+// void check_and_clear_expired_textures()
+//{
+//  auto it = TEXTURE2D_CACHE.begin();
+//  while (it != TEXTURE2D_CACHE.end())
+//  {
+//    auto texture_handle = *it;
+//    const string *path = &texture_handle.first;
+//    struct stat attr;
+//    stat(path->c_str(), &attr);
+//    time_t t = attr.st_mtime;
+//
+//    auto ptr = texture_handle.second.lock();
+//    if (ptr) // texture could exist but not yet be loaded
+//    {
+//      time_t t1 = ptr.get()->file_mod_t;
+//      if (t1 != t)
+//      {
+//        it = TEXTURE2D_CACHE.erase(it);
+//        continue;
+//      }
+//    }
+//    ++it;
+//  }
+//}
 
 void save_and_log_screen()
 {
@@ -262,6 +266,97 @@ void save_and_log_screen()
   {
     set_message("surface creation failed in save_and_log_screen()");
   }
+}
+
+int32 save_texture(Texture *texture, std::string filename, uint32 level)
+{
+  const GLenum format = texture->texture->internalformat;
+  uint32 width = texture->texture->size.x;
+  uint32 height = texture->texture->size.y;
+
+  if (is_float_format(texture->texture->internalformat))
+  {
+    uint32 comp = 4;
+    std::vector<float32> data(width * height * comp);
+    uint32 size = data.size() * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
+
+    int32 result = stbi_write_hdr(s(filename, ".hdr").c_str(), width, height, comp, &data[0]);
+    return result;
+  }
+  else
+  {
+    uint32 comp = 4;
+    std::vector<uint8> data(width * height * comp);
+    uint32 size = data.size() * sizeof(uint8);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
+
+    int32 result = stbi_write_png(s(texture->t.name, ".png").c_str(), width, height, comp, &data[0], 0);
+    return result;
+  }
+}
+
+int32 save_texture_type(GLuint texture, ivec2 size, std::string filename, std::string type, uint32 level)
+{
+  uint32 width = size.x;
+  uint32 height = size.y;
+
+  if (type == "hdr")
+  {
+    uint32 comp = 4;
+    std::vector<float32> data(width * height * comp);
+    uint32 size = data.size() * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
+
+    int32 result = stbi_write_hdr(s(filename, ".hdr").c_str(), width, height, comp, &data[0]);
+    return result;
+  }
+  if (type == "png")
+  {
+    uint32 comp = 4;
+    std::vector<uint8> data(width * height * comp);
+    uint32 size = data.size() * sizeof(uint8);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
+
+    int32 result = stbi_write_png(s(filename, ".png").c_str(), width, height, comp, &data[0], 0);
+    return result;
+  }
+  return 0;
+}
+
+int32 save_texture_type(Texture *texture, std::string filename, std::string type, uint32 level)
+{
+  const GLenum format = texture->texture->internalformat;
+  uint32 width = texture->texture->size.x;
+  uint32 height = texture->texture->size.y;
+
+  if (type == "hdr")
+  {
+    uint32 comp = 4;
+    std::vector<float32> data(width * height * comp);
+    uint32 size = data.size() * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
+
+    int32 result = stbi_write_hdr(s(filename, ".hdr").c_str(), width, height, comp, &data[0]);
+    return result;
+  }
+  if (type == "png")
+  {
+    uint32 comp = 4;
+    std::vector<uint8> data(width * height * comp);
+    uint32 size = data.size() * sizeof(uint8);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
+
+    int32 result = stbi_write_png(s(filename, ".png").c_str(), width, height, comp, &data[0], 0);
+    return result;
+  }
+  return 0;
 }
 
 void save_and_log_texture(GLuint texture)
@@ -334,320 +429,392 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
 Texture::Texture(Texture_Descriptor &td)
 {
   t = td;
-  load();
+  t.key = s(t.source, ",", t.format);
+  // load(); why arent we calling load anymore?
 }
 
-Texture::Texture(string name, ivec2 size, GLenum format, GLenum minification_filter, GLenum magnification_filter,
-    GLenum wrap_s, GLenum wrap_t, vec4 border_color)
+Texture::Texture(string name, ivec2 size, uint8 levels, GLenum internalformat, GLenum minification_filter,
+    GLenum magnification_filter, GLenum wrap_s, GLenum wrap_t, vec4 border_color)
 {
   this->t.name = name;
+  this->t.source = "generate";
   this->t.size = size;
-  this->t.format = format;
+  this->t.levels = levels;
+  this->t.format = internalformat;
   this->t.minification_filter = minification_filter;
   this->t.magnification_filter = magnification_filter;
   this->t.wrap_t = wrap_t;
   this->t.wrap_s = wrap_s;
   this->t.border_color = border_color;
-  this->t.cache_as_unique = true;
   load();
 }
 Texture_Handle::~Texture_Handle()
 {
-  // opengl calls no longer allowed in state.update()
-  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  // set_message("Deleting texture: ", s(texture, " ", filename), 45.f);
+  if (std::this_thread::get_id() != MAIN_THREAD_ID)
+  {
+    DEFERRED_TEXTURE_DELETIONS.push_back(*this);
+    return;
+  }
   glDeleteTextures(1, &texture);
-  texture = 0;
 }
 
-Texture::Texture(string path, bool premul)
+void Texture_Handle::generate_ibl_mipmaps(float32 time)
 {
-  t.name = path; // note this will possibly be modified within .load()
-  t.cache_as_unique = false;
-  t.process_premultiply = premul;
-  t.format = GL_RGBA;
-  const bool is_hdr = stbi_is_hdr(path.c_str());
-  if (is_hdr)
+
+  if (ibl_mipmaps_generated || (!(time > (this->time + 2 * dt))))
   {
-    t.format = GL_RGBA16F;
+    return;
   }
-  load();
+  this->time = time;
+  static bool loaded = false;
+  static Shader specular_filter;
+  if (!loaded)
+  {
+    loaded = true;
+    if (CONFIG.use_low_quality_specular)
+    {
+      specular_filter = Shader("equi_to_cube.vert", "specular_brdf_convolution - low.frag");
+    }
+    else
+    {
+      specular_filter = Shader("equi_to_cube.vert", "specular_brdf_convolution.frag");
+    }
+  }
+  static Mesh cube(Mesh_Descriptor(cube, "generate_ibl_mipmaps()'s cube"));
+
+  const mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
+  const vec3 origin = vec3(0);
+  const vec3 posx = vec3(1.0f, 0.0f, 0.0f);
+  const vec3 negx = vec3(-1.0f, 0.0f, 0.0f);
+  const vec3 posy = vec3(0.0f, 1.0f, 0.0f);
+  const vec3 negy = vec3(0.0f, -1.0f, 0.0f);
+  const vec3 posz = vec3(0.0f, 0.0f, 1.0f);
+  const vec3 negz = vec3(0.0f, 0.0f, -1.0f);
+  const mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
+      lookAt(origin, negy, negz), lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
+
+  if (tiley == 0 && tilex == 0)
+  {
+    string label = filename + "ibl mipmapped";
+    glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &ibl_texture_target);
+    glTextureStorage2D(ibl_texture_target, ENV_MAP_MIP_LEVELS, GL_RGB16F, size.x, size.y);
+
+    glTextureParameteri(ibl_texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(ibl_texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(ibl_texture_target, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(ibl_texture_target, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTextureParameteri(ibl_texture_target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glCreateFramebuffers(1, &ibl_fbo);
+    // glCreateRenderbuffers(1, &ibl_rbo);
+
+    ibl_source = texture;
+
+    // uncomment to see progress:
+    // texture = ibl_texture_target;
+  }
+  GLint current_fbo;
+  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, ibl_fbo);
+  specular_filter.use();
+  glActiveTexture(GL_TEXTURE6);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_source);
+  ASSERT(ibl_source);
+
+  float angle = radians(0.f);
+  mat4 rot = toMat4(quat(1, 0, 0, angle));
+  specular_filter.set_uniform("projection", projection);
+  specular_filter.set_uniform("rotation", rot);
+
+  glEnable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
+  glDisable(GL_DEPTH_TEST);
+  glDepthMask(GL_TRUE);
+  glFrontFace(GL_CCW);
+  glCullFace(GL_FRONT);
+  glDepthFunc(GL_LESS);
+  // glEnable(GL_FRAMEBUFFER_SRGB);
+  glEnable(GL_SCISSOR_TEST);
+
+  for (uint32 mip_level = 0; mip_level < ENV_MAP_MIP_LEVELS; ++mip_level)
+  {
+    uint32 width = (uint32)floor(size.x * pow(0.5, mip_level));
+    uint32 height = (uint32)floor(size.y * pow(0.5, mip_level));
+    uint32 xf = floor(width / ibl_tile_max);
+    uint32 x = tilex * xf;
+    uint32 draw_width = ceil(float32(width) / ibl_tile_max);
+
+    uint32 yf = floor(height / ibl_tile_max);
+    uint32 y = tiley * yf;
+    uint32 draw_height = ceil(float32(height) / ibl_tile_max);
+
+    glViewport(0, 0, width, height);
+
+    // jank af, without these magic numbers its calculated exact
+    // but its not pixel perfect at lower mip levels...
+    // even with a scissor size the same as the viewport
+    glScissor(x - 15, y - 15, draw_width + 33, draw_height + 33);
+    float roughness = (float)mip_level / (float)(ENV_MAP_MIP_LEVELS - 1);
+    specular_filter.set_uniform("roughness", roughness);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+      specular_filter.set_uniform("camera", cameras[i]);
+      glFramebufferTexture2D(
+          GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl_texture_target, mip_level);
+      // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      cube.draw();
+    }
+  }
+
+  glDisable(GL_SCISSOR_TEST);
+  glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
+  glFrontFace(GL_CCW);
+  glCullFace(GL_BACK);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LESS);
+  glViewport(0, 0, 0, 0);
+  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
+
+  bool x_at_end = (tilex == ibl_tile_max);
+  bool y_at_end = (tiley == ibl_tile_max);
+  if (x_at_end)
+  {
+    tiley = tiley + 1;
+    tilex = 0;
+  }
+  else
+  {
+    tilex += 1;
+  }
+
+  if (x_at_end && y_at_end)
+  {
+    ibl_mipmaps_generated = true;
+    texture = ibl_texture_target;
+    glDeleteTextures(1, &ibl_source);
+  }
 }
 
 void Texture::load()
 {
-  // opengl calls no longer allowed in state.update()
-  // render your imgui ui that requires textures in state.render()
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
-  if (initialized && !texture)
-  { // file doesnt exist
-#if !DYNAMIC_TEXTURE_RELOADING
+
+  if (texture)
+  {
+    if (texture->texture == 0)
+    {
+      static float64 last = get_real_time();
+      float64 time = get_real_time();
+      if (!(time > last + 0.05))
+      {
+        return;
+      }
+      last = time;
+
+      if (texture->upload_sync != 0)
+      {
+        GLint ready = 0;
+        glGetSynciv(texture->upload_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+
+        if (ready == GL_SIGNALED)
+        {
+          glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
+          glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
+          glTextureStorage2D(texture->texture, t.levels, texture->internalformat, texture->size.x, texture->size.y);
+          glTextureSubImage2D(
+              texture->texture, 0, 0, 0, texture->size.x, texture->size.y, GL_RGBA, texture->datatype, 0);
+          glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+          // glDeleteBuffers(1, &texture->uploading_pbo); ??
+          set_message("SYNC FINISHED FOR:", s(t.name, " ", t.source), 1.0f);
+          glDeleteSync(texture->upload_sync);
+          texture->upload_sync = 0;
+          glGenerateTextureMipmap(texture->texture);
+          check_set_parameters();
+          texture->transfer_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+          return;
+        }
+      }
+    }
     return;
-#endif
   }
 
   if (t.name == "")
-    return;
-
-  const bool is_a_color = t.name.substr(0, 6) == "color(" || t.name.substr(0, 6) == "Color(";
-
-  if (is_a_color)
   {
-    t.cache_as_unique = false;
+    ASSERT(0);
   }
 
-  if (!initialized && !is_a_color)
-    t.cache_as_unique = !has_img_file_extension(t.name);
-
-  // for generated textures
-  if (t.cache_as_unique)
+  if (t.source == "")
   {
-    bool requires_reallocation = !((texture) && (texture->size == t.size) && (texture->format == t.format));
-    if (!requires_reallocation)
-      return;
+    ASSERT(0);
+  }
 
+  if (t.source == "generate")
+  {
     if (!texture)
     {
+      texture = make_shared<Texture_Handle>();
       static uint32 i = 0;
       ++i;
-      string unique_key = s("Generated texture ID:", i, " Name:", t.name);
-      TEXTURE2D_CACHE[unique_key] = texture = make_shared<Texture_Handle>();
-      glGenTextures(1, &texture->texture);
+      string key = s("Generated texture ID:", i, " Name:", t.name, ",", t.format);
+      TEXTURE2D_CACHE[key] = texture;
+      ASSERT(t.name != "");
+      glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
+      glTextureStorage2D(texture->texture, t.levels, t.format, t.size.x, t.size.y);
+      glObjectLabel(GL_TEXTURE, texture->texture, -1, t.name.c_str());
       texture->filename = t.name;
+      texture->size = t.size;
+      texture->levels = t.levels;
+      texture->internalformat = t.format;
+
+      check_set_parameters();
     }
-
-    glBindTexture(GL_TEXTURE_2D, texture->texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, GL_FLOAT, 0);
-
-    glObjectLabel(GL_TEXTURE, texture->texture, -1, t.name.c_str());
-    texture->size = t.size;
-    texture->format = t.format;
-    initialized = true;
-    ASSERT(texture);
-    check_set_parameters();
     return;
   }
-
-  if (!initialized && !is_a_color)
-  {
-    t.name = fix_filename(t.name);
-
-    if (t.name.find_last_of("/") == t.name.npos)
-    { // no directory included in name, so use base path
-      t.name = BASE_TEXTURE_PATH + t.name;
-    }
-    // else: use t.name as the full directory
-  }
-
-  if (t.name == BASE_TEXTURE_PATH)
-  {
-    set_message(s("Warning: Invalid texture path:", t.name));
-    texture = nullptr;
-    return;
-  }
-
-  auto ptr = TEXTURE2D_CACHE[t.name].lock();
+  auto ptr = TEXTURE2D_CACHE[t.key].lock();
   if (ptr)
   {
     texture = ptr;
+    ASSERT(texture->size != ivec2(0));
 
-    t.size = texture->size;
-    t.format = texture->format;
-    initialized = true;
     return;
   }
 
-  // todo: other software procedural texture generators here?
-  if (is_a_color)
-  {
-    vec4 color = string_to_float4_color(t.name);
-    if (color != vec4(0))
-    {
-      texture = make_shared<Texture_Handle>();
-      TEXTURE2D_CACHE[t.name] = texture;
-      t.size = ivec2(1, 1);
-      t.format = GL_RGBA16F; // could detect and support other formats in here
-      t.magnification_filter = GL_NEAREST;
-      t.minification_filter = GL_NEAREST;
-      glGenTextures(1, &texture->texture);
-      glBindTexture(GL_TEXTURE_2D, texture->texture);
-      glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, GL_FLOAT, &color);
-      glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
-      glBindTexture(GL_TEXTURE_2D, 0);
-      texture->size = t.size;
-      texture->filename = t.name;
-      texture->format = t.format;
-      texture->border_color = t.border_color;
-      initialized = true;
-      return;
-    }
-    return;
-  }
-
-  void *data = nullptr;
-  GLenum data_format = GL_UNSIGNED_BYTE;
-  Image_Data imgdata;
-  int32 width, height, n;
-  if (IMAGE_LOADER.load(t.name, &imgdata))
+  if (t.source == "default" || t.source == "white")
   {
     texture = make_shared<Texture_Handle>();
-    TEXTURE2D_CACHE[t.name] = texture;
-    data = imgdata.data;
-    width = imgdata.x;
-    height = imgdata.y;
-    n = imgdata.comp;
-    data_format = imgdata.format;
+    texture->filename = t.name;
+
+    TEXTURE2D_CACHE[t.key] = texture;
+    texture->internalformat = GL_RGBA8;
+    texture->size = ivec2(1);
+    texture->datatype = GL_UNSIGNED_BYTE;
+    uint8 arr[4] = {255, 255, 255, 255};
+    glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
+    glTextureStorage2D(texture->texture, 1, GL_RGBA8, 1, 1);
+    glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &arr[0]);
+    return;
   }
 
-  if (!data)
-  { // error loading file...
-#if DYNAMIC_TEXTURE_RELOADING
-    // retry next frame
-    set_message("Warning: missing texture:" + t.name);
-    texture = nullptr;
-    return;
-#else
-    if (!data)
+  Image_Data imgdata;
+  if (IMAGE_LOADER.load(t.source, &imgdata, t.format))
+  {
+    if (!imgdata.data)
     {
-      set_message("STBI failed to find or load texture: ", t.name, 3.0);
-      texture = nullptr;
-      initialized = imgdata.initialized;
+      texture = make_shared<Texture_Handle>();
+      texture->filename = t.name + " - FILE MISSING";
+      TEXTURE2D_CACHE[t.key] = texture;
+      texture->internalformat = GL_RGBA8;
+      texture->size = ivec2(1);
+      texture->datatype = GL_UNSIGNED_BYTE;
+      texture->levels = t.levels;
+      uint8 arr[4] = {255, 255, 255, 255};
+      glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
+      glTextureStorage2D(texture->texture, 1, GL_RGBA8, 1, 1);
+      glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &arr[0]);
       return;
     }
-#endif
+    texture = make_shared<Texture_Handle>();
+    TEXTURE2D_CACHE[t.key] = texture;
+
+    struct stat attr;
+    stat(t.name.c_str(), &attr);
+    texture.get()->file_mod_t = attr.st_mtime;
+
+    t.size = texture->size = ivec2(imgdata.x, imgdata.y);
+    texture->filename = t.name;
+
+    texture->internalformat = t.format;
+    texture->border_color = t.border_color;
+    texture->levels = t.levels;
+
+    set_message(s("Texture load cache miss. Texture from disk: ", t.name,
+                    "\nInternal_Format: ", texture_format_to_string(texture->internalformat)),
+        "", 3.f);
+    PERF_TIMER.start();
+    glCreateBuffers(1, &texture->uploading_pbo);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, imgdata.data_size, imgdata.data, GL_STATIC_DRAW);
+    PERF_TIMER.stop();
+    texture->datatype = imgdata.data_type;
+    stbi_image_free(imgdata.data);
+    set_message("PERF:", PERF_TIMER.string_report(), 55.0f);
+    set_message("SYNC STARTED FOR:", s(t.name, " ", t.source), 1.0f);
+    texture->upload_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   }
-
-  struct stat attr;
-  stat(t.name.c_str(), &attr);
-  texture.get()->file_mod_t = attr.st_mtime;
-
-  if (t.process_premultiply)
-  {
-    ASSERT(t.format == GL_RGBA);
-    ASSERT(data_format == GL_UNSIGNED_BYTE);
-    for (int32 i = 0; i < width * height; ++i)
-    {
-      uint32 pixel = ((uint32 *)data)[i];
-      uint8 r = (uint8)(0x000000FF & pixel);
-      uint8 g = (uint8)((0x0000FF00 & pixel) >> 8);
-      uint8 b = (uint8)((0x00FF0000 & pixel) >> 16);
-      uint8 a = (uint8)((0xFF000000 & pixel) >> 24);
-
-      r = (uint8)round(r * ((float)a / 255));
-      g = (uint8)round(g * ((float)a / 255));
-      b = (uint8)round(b * ((float)a / 255));
-
-      ((uint32 *)data)[i] = (24 << a) | (16 << b) | (8 << g) | r;
-    }
-  }
-
-  t.size = ivec2(width, height);
-  glGenTextures(1, &texture->texture);
-
-  set_message(s("Texture load cache miss. Texture from disk: ", t.name, " Generated handle: ", texture->texture,
-                  "\nInternal_Format: ", texture_format_to_string(t.format)),
-      "", 3.f);
-  glBindTexture(GL_TEXTURE_2D, texture->texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, t.format, t.size.x, t.size.y, 0, GL_RGBA, data_format, data);
-  // glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, MAX_ANISOTROPY);
-
-  glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
-  check_set_parameters();
-  glGenerateMipmap(GL_TEXTURE_2D);
-  stbi_image_free(data);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  texture->filename = t.name;
-  texture->size = t.size;
-  texture->format = t.format;
-  texture->border_color = t.border_color;
-  t.magnification_filter = GL_LINEAR;
-  t.minification_filter = GL_LINEAR_MIPMAP_LINEAR;
-  initialized = true;
 }
 
 void Texture::check_set_parameters()
 {
-  // check/set desired state:
-  ASSERT(t.magnification_filter != GLenum(0));
-  ASSERT(t.minification_filter != GLenum(0));
-  ASSERT(t.wrap_t != GLenum(0));
-  ASSERT(t.wrap_s != GLenum(0));
 
   if (t.magnification_filter != texture->magnification_filter)
   {
     texture->magnification_filter = t.magnification_filter;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, t.magnification_filter);
+    glTextureParameteri(texture->texture, GL_TEXTURE_MAG_FILTER, t.magnification_filter);
   }
   if (t.minification_filter != texture->minification_filter)
   {
     texture->minification_filter = t.minification_filter;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, t.minification_filter);
+    glTextureParameteri(texture->texture, GL_TEXTURE_MIN_FILTER, t.minification_filter);
   }
   if (t.wrap_t != texture->wrap_t)
   {
     texture->wrap_t = t.wrap_t;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, t.wrap_t);
+    glTextureParameteri(texture->texture, GL_TEXTURE_WRAP_T, t.wrap_t);
   }
   if (t.wrap_s != texture->wrap_s)
   {
     texture->wrap_s = t.wrap_s;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, t.wrap_s);
+    glTextureParameteri(texture->texture, GL_TEXTURE_WRAP_S, t.wrap_s);
   }
   if (t.border_color != texture->border_color)
   {
     texture->border_color = t.border_color;
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
-  }
-  if (t.anisotropic_filtering != texture->anisotropic_filtering)
-  {
-    texture->anisotropic_filtering = t.anisotropic_filtering;
-    // glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, MAX_ANISOTROPY);
+    glTextureParameterfv(texture->texture, GL_TEXTURE_BORDER_COLOR, &t.border_color[0]);
   }
 }
 
-void Texture::bind(GLuint binding)
+bool Texture::bind(GLuint binding)
 {
-// set_message(s("Texture::bind(", binding, ")"));
-#if DYNAMIC_TEXTURE_RELOADING
   load();
-#endif
-
-  if (!initialized)
-  {
-    load();
-  }
   if (!texture)
   {
-    // set_message("Null texture for binding:", s(binding));
-    glActiveTexture(GL_TEXTURE0 + binding);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return;
+    WHITE_TEXTURE.bind(binding);
+    return false;
+  }
+  if (texture->texture == 0)
+  {
+    WHITE_TEXTURE.bind(binding);
+    return false;
   }
 
-  // descriptor desync - the handle should have been dropped and reloaded:
-  ASSERT(t.name == texture->filename);
-  ASSERT(t.format == texture->format);
-  ASSERT(t.size == texture->size);
+  if (texture->transfer_sync != 0)
+  {
+    GLint ready = 0;
+    glGetSynciv(texture->transfer_sync, GL_SYNC_STATUS, 1, NULL, &ready);
 
-  // set_message(s("Binding texture name:",texture->filename," with handle:",
-  // texture->texture, " to binding:", s(binding)));
+    if (ready == GL_SIGNALED)
+    {
+      texture->transfer_sync = 0;
+      glDeleteSync(texture->transfer_sync);
+    }
+    else
+    {
+      WHITE_TEXTURE.bind(binding);
+      return false;
+    }
+  }
   glActiveTexture(GL_TEXTURE0 + binding);
   glBindTexture(GL_TEXTURE_2D, texture->texture);
-
+  // glBindTextureUnit(binding, texture->texture);
   check_set_parameters();
+  return true;
 }
-
-// not guaranteed to be constant for every call -
-// handle lifetime only guaranteed for as long as the Texture object
-// is held, and if dynamic texture reloading has not been triggered
-// by a file modification - if it is, it will gracefully display
-// black, or a random other texture
-
 GLuint Texture::get_handle()
 {
-  if (!initialized)
-    load();
-
+  load();
   return texture ? texture->texture : 0;
 }
 
@@ -802,40 +969,148 @@ Material::Material() {}
 Material::Material(Material_Descriptor &m)
 {
   descriptor = m;
-  reload_from_descriptor = true;
+
+  static const Material_Descriptor default_md;
+  descriptor.albedo.format = GL_SRGB8_ALPHA8;
+  descriptor.normal.format = GL_RGBA8;
+  descriptor.emissive.format = GL_SRGB8_ALPHA8;
+  descriptor.roughness.format = GL_R8;
+  descriptor.metalness.format = GL_R8;
+  descriptor.ambient_occlusion.format = GL_R8;
+  descriptor.displacement.format = GL_R8;
+
+  albedo = Texture(descriptor.albedo);
+  normal = Texture(descriptor.normal);
+  emissive = Texture(descriptor.emissive);
+  roughness = Texture(descriptor.roughness);
+  metalness = Texture(descriptor.metalness);
+  ambient_occlusion = Texture(descriptor.ambient_occlusion);
+  displacement = Texture(descriptor.displacement);
+
+  if (normal.t.source == "default")
+  {
+    normal.t.mod = DEFAULT_NORMAL;
+    descriptor.normal.mod = DEFAULT_NORMAL;
+  }
+
+  if (roughness.t.source == "default")
+  {
+    roughness.t.mod = DEFAULT_ROUGHNESS;
+    descriptor.roughness.mod = DEFAULT_ROUGHNESS;
+  }
+
+  if (metalness.t.source == "default")
+  {
+    metalness.t.mod = DEFAULT_METALNESS;
+    descriptor.metalness.mod = DEFAULT_METALNESS;
+  }
+
+  if (emissive.t.source == "default")
+  {
+    emissive.t.mod = DEFAULT_EMISSIVE;
+    descriptor.emissive.mod = DEFAULT_EMISSIVE;
+  }
+
+  if (displacement.t.source == "default")
+  {
+    displacement.t.mod = DEFAULT_DISPLACEMENT;
+    descriptor.displacement.mod = DEFAULT_DISPLACEMENT;
+  }
+
+  if (descriptor.vertex_shader == "")
+  {
+    descriptor.vertex_shader = DEFAULT_VERTEX_SHADER;
+  }
+
+  if (descriptor.frag_shader == "")
+  {
+    descriptor.frag_shader = DEFAULT_FRAG_SHADER;
+  }
+  shader = Shader(descriptor.vertex_shader, descriptor.frag_shader);
 }
 
 void Material::load()
 {
-  // the formats set here may be overriden in the texture constructor
-  // based on if its a generated color or not
+
+  static const Material_Descriptor default_md;
 
   descriptor.albedo.format = GL_SRGB8_ALPHA8;
-  albedo = Texture(descriptor.albedo);
-
-  descriptor.normal.format = GL_RGBA;
-  normal = Texture(descriptor.normal);
-
+  descriptor.normal.format = GL_RGBA8;
   descriptor.emissive.format = GL_SRGB8_ALPHA8;
-  emissive = Texture(descriptor.emissive);
-
   descriptor.roughness.format = GL_R8;
-  roughness = Texture(descriptor.roughness);
-
   descriptor.metalness.format = GL_R8;
-  metalness = Texture(descriptor.metalness);
-
   descriptor.ambient_occlusion.format = GL_R8;
-  ambient_occlusion = Texture(descriptor.ambient_occlusion);
+  descriptor.displacement.format = GL_R8;
 
-  const std::string *vert = &descriptor.vertex_shader;
-  const std::string *frag = &descriptor.frag_shader;
+  Texture newalbedo(descriptor.albedo);
+  newalbedo.load();
+  albedo = newalbedo;
+
+  Texture newnormal(descriptor.normal);
+  newnormal.load();
+  normal = newnormal;
+
+  Texture newemissive(descriptor.emissive);
+  newemissive.load();
+  emissive = newemissive;
+
+  Texture newroughness(descriptor.roughness);
+  newroughness.load();
+  roughness = newroughness;
+
+  Texture newmetalness(descriptor.metalness);
+  newmetalness.load();
+  metalness = newmetalness;
+
+  Texture newambient_occlusion(descriptor.ambient_occlusion);
+  newambient_occlusion.load();
+  ambient_occlusion = newambient_occlusion;
+
+  Texture newdisplacement(descriptor.displacement);
+  newdisplacement.load();
+  displacement = newdisplacement;
+
+  if (normal.t.source == "default")
+  {
+    normal.t.mod = DEFAULT_NORMAL;
+    descriptor.normal.mod = DEFAULT_NORMAL;
+  }
+
+  if (roughness.t.source == "default")
+  {
+    roughness.t.mod = DEFAULT_ROUGHNESS;
+    descriptor.roughness.mod = DEFAULT_ROUGHNESS;
+  }
+
+  if (metalness.t.source == "default")
+  {
+    metalness.t.mod = DEFAULT_METALNESS;
+    descriptor.metalness.mod = DEFAULT_METALNESS;
+  }
+
+  if (emissive.t.source == "default")
+  {
+    emissive.t.mod = DEFAULT_EMISSIVE;
+    descriptor.emissive.mod = DEFAULT_EMISSIVE;
+  }
+
+  if (displacement.t.source == "default")
+  {
+    displacement.t.mod = DEFAULT_DISPLACEMENT;
+    descriptor.displacement.mod = DEFAULT_DISPLACEMENT;
+  }
+
   if (descriptor.vertex_shader == "")
-    vert = &DEFAULT_VERTEX_SHADER;
-  if (descriptor.frag_shader == "")
-    frag = &DEFAULT_FRAG_SHADER;
+  {
+    descriptor.vertex_shader = DEFAULT_VERTEX_SHADER;
+  }
 
-  shader = Shader(*vert, *frag);
+  if (descriptor.frag_shader == "")
+  {
+    descriptor.frag_shader = DEFAULT_FRAG_SHADER;
+  }
+
+  shader = Shader(descriptor.vertex_shader, descriptor.frag_shader);
   reload_from_descriptor = false;
 }
 void Material::bind()
@@ -852,13 +1127,46 @@ void Material::bind()
 
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
 
-  bind_texture_or_set_default(albedo, "texture0_mod", DEFAULT_ALBEDO, Texture_Location::albedo);
-  bind_texture_or_set_default(emissive, "texture1_mod", DEFAULT_EMISSIVE, Texture_Location::emissive);
-  bind_texture_or_set_default(roughness, "texture2_mod", DEFAULT_ROUGHNESS, Texture_Location::roughness);
-  bind_texture_or_set_default(normal, "texture3_mod", DEFAULT_NORMAL, Texture_Location::normal);
-  bind_texture_or_set_default(metalness, "texture4_mod", DEFAULT_METALNESS, Texture_Location::metalness);
-  bind_texture_or_set_default(
-      ambient_occlusion, "texture5_mod", DEFAULT_AMBIENT_OCCLUSION, Texture_Location::ambient_occlusion);
+  bool success = albedo.bind(Texture_Location::albedo);
+  shader.set_uniform("texture0_mod", albedo.t.mod * albedo.t.mod);
+
+  success = emissive.bind(Texture_Location::emissive);
+  shader.set_uniform("texture1_mod", emissive.t.mod * emissive.t.mod);
+  if (!success)
+  {
+    shader.set_uniform("texture1_mod", DEFAULT_EMISSIVE);
+  }
+
+  success = roughness.bind(Texture_Location::roughness);
+  shader.set_uniform("texture2_mod", roughness.t.mod * roughness.t.mod);
+  if (!success)
+  {
+    shader.set_uniform("texture2_mod", DEFAULT_ROUGHNESS);
+  }
+
+  success = normal.bind(Texture_Location::normal);
+  shader.set_uniform("texture3_mod", normal.t.mod);
+  if (!success)
+  {
+    shader.set_uniform("texture3_mod", DEFAULT_NORMAL);
+  }
+
+  success = metalness.bind(Texture_Location::metalness);
+  shader.set_uniform("texture4_mod", metalness.t.mod * metalness.t.mod);
+  if (!success)
+  {
+    shader.set_uniform("texture4_mod", DEFAULT_METALNESS);
+  }
+
+  success = displacement.bind(Texture_Location::displacement);
+  shader.set_uniform("texture11_mod", displacement.t.mod);
+  if (!success)
+  {
+    shader.set_uniform("texture11_mod", DEFAULT_DISPLACEMENT);
+  }
+
+  success = ambient_occlusion.bind(Texture_Location::ambient_occlusion);
+  shader.set_uniform("texture5_mod", ambient_occlusion.t.mod);
 
   for (auto &uniform : descriptor.uniform_set.float32_uniforms)
   {
@@ -893,42 +1201,7 @@ void Material::bind()
     shader.set_uniform(uniform.first.c_str(), uniform.second);
   }
 }
-void Material::unbind_textures()
-{
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::albedo);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::normal);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::emissive);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::roughness);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::ambient_occlusion);
-  glBindTexture(GL_TEXTURE_2D, 0);
-}
-void Material::bind_texture_or_set_default(
-    Texture &t, const char *uniform, const glm::vec4 &default_mod, Texture_Location loc)
-{
-  static Texture white = WHITE;
-  t.bind(loc);
-  if (t.texture != nullptr)
-  {
-    if (t.t.mod == MISSING_TEXTURE_MOD)
-      shader.set_uniform(uniform, vec4(1));
-    else
-      shader.set_uniform(uniform, t.t.mod);
-    return;
-  }
-  if (t.texture == nullptr)
-  {
-    white.bind(loc);
-    if (t.t.mod == MISSING_TEXTURE_MOD)
-      shader.set_uniform(uniform, default_mod);
-    else
-      shader.set_uniform(uniform, t.t.mod);
-    return;
-  }
-}
+
 //
 // bool Light::operator==(const Light &rhs) const
 //{
@@ -991,19 +1264,34 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 
   const ivec2 brdf_lut_size = ivec2(512, 512);
   Shader brdf_lut_generator = Shader("passthrough.vert", "brdf_lut_generator.frag");
-  brdf_integration_lut = Texture("brdf_lut", brdf_lut_size, GL_RG16F, GL_LINEAR);
+  brdf_integration_lut = Texture("brdf_lut", brdf_lut_size, 1, GL_RG16F, GL_LINEAR);
   Framebuffer lut_fbo;
   lut_fbo.color_attachments[0] = brdf_integration_lut;
   lut_fbo.init();
-  lut_fbo.bind();
-  auto mat = ortho_projection(brdf_lut_size);
+  lut_fbo.bind_for_drawing_dst();
+  auto mat = fullscreen_quad();
   glViewport(0, 0, brdf_lut_size.x, brdf_lut_size.y);
   brdf_lut_generator.set_uniform("transform", mat);
+  set_message("drawing brdf lut..", "", 1.0f);
   quad.draw();
+  // save_and_log_texture(brdf_integration_lut.texture->texture);
 
+  Texture_Descriptor white_td;
+
+  WHITE_TEXTURE.t.key = "default";
+  bind_white_to_all_textures();
   set_message("Renderer init finished");
   init_render_targets();
+
   FRAME_TIMER.start();
+}
+
+void Renderer::bind_white_to_all_textures()
+{
+  for (uint32 i = 0; i <= Texture_Location::displacement; ++i)
+  {
+    WHITE_TEXTURE.bind(Texture_Location(i));
+  }
 }
 
 void Renderer::set_uniform_shadowmaps(Shader &shader)
@@ -1046,13 +1334,9 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
-mat4 Renderer::ortho_projection(ivec2 dst_size)
+mat4 fullscreen_quad()
 {
-  mat4 o = ortho(0.0f, (float32)dst_size.x, 0.0f, (float32)dst_size.y, 0.1f, 100.0f);
-  mat4 t = translate(vec3(vec2(0.5f * dst_size.x, 0.5f * dst_size.y), -1));
-  mat4 s = scale(vec3(dst_size, 1));
-
-  return o * t * s;
+  return scale(vec3(2, 2, 1));
 }
 
 void Renderer::draw_imgui()
@@ -1098,6 +1382,7 @@ void Renderer::draw_imgui()
         ptr->set_location_cache();
       }
     }
+
     if (ImGui::CollapsingHeader("GPU Textures"))
     { // todo improve texture names for generated textures
 
@@ -1145,7 +1430,7 @@ void Renderer::draw_imgui()
           ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
           ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
           ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          ImGui::Text(s("Format:", texture_format_to_string(ptr->format)).c_str());
+          ImGui::Text(s("Format:", texture_format_to_string(ptr->internalformat)).c_str());
 
           if (ptr->is_cubemap)
             ImGui::Text(s("Type:", "Cubemap").c_str());
@@ -1171,7 +1456,7 @@ void Renderer::draw_imgui()
 
           if (ImGui::TreeNode("List Mipmaps"))
           {
-            uint32 mip_levels = mip_levels_for_resolution(ptr->size);
+            uint32 mip_levels = ptr->levels;
             ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
             for (uint32 i = 0; i < mip_levels; ++i)
             {
@@ -1226,7 +1511,7 @@ void Renderer::build_shadow_maps()
     //
 
     shadow_map->enabled = true;
-    ivec2 shadow_map_size = shadow_map_scale * vec2(light->shadow_map_resolution);
+    ivec2 shadow_map_size = CONFIG.shadow_map_scale * vec2(light->shadow_map_resolution);
     shadow_map->init(shadow_map_size);
     shadow_map->blur.target.color_attachments[0].bind(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1294,7 +1579,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   {
     ASSERT(dst->fbo);
     ASSERT(dst->color_attachments.size());
-    dst->bind();
+    dst->bind_for_drawing_dst();
   }
   else
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1317,7 +1602,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   glDisable(GL_CULL_FACE);
   // glBindVertexArray(quad.get_vao());
   shader->use();
-  shader->set_uniform("transform", Renderer::ortho_projection(viewport_size));
+  shader->set_uniform("transform", fullscreen_quad());
   shader->set_uniform("time", (float32)get_real_time());
   // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -1332,11 +1617,8 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
 
 void Renderer::opaque_pass(float32 time)
 {
-  brdf_integration_lut.bind(brdf_ibl_lut);
 
   // set_message("opaque_pass()");
-  draw_target.bind();
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
 
   glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1350,9 +1632,12 @@ void Renderer::opaque_pass(float32 time)
 
   // set_message("opaque_pass projection:", s(projection), 1.0f);
   // set_message("opaque_pass camera:", s(camera), 1.0f);
-
+  bind_white_to_all_textures();
   for (Render_Entity &entity : render_entities)
   {
+    bind_white_to_all_textures();
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+    brdf_integration_lut.bind(brdf_ibl_lut);
     ASSERT(entity.mesh);
     entity.material->bind();
     if (entity.material->descriptor.wireframe)
@@ -1363,6 +1648,13 @@ void Renderer::opaque_pass(float32 time)
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
       // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+    Material &material = *entity.material;
+    Texture &albedo = material.albedo;
+    if (albedo.texture)
+    {
+      // set_message(s("ALBEDObinding texture:", albedo.texture->texture), s(albedo.t.name), 155.0f);
+    }
+
     Shader &shader = entity.material->shader;
     shader.set_uniform("time", time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
@@ -1379,6 +1671,7 @@ void Renderer::opaque_pass(float32 time)
     set_uniform_shadowmaps(shader);
     environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
     glViewport(0, 0, size.x, size.y);
+    // bind_white_to_all_textures();
     entity.mesh->draw();
     if (entity.material->descriptor.wireframe)
     {
@@ -1387,12 +1680,8 @@ void Renderer::opaque_pass(float32 time)
       // glDepthMask(GL_TRUE);
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
-    entity.material->unbind_textures();
   }
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::environment);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::irradiance);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+  bind_white_to_all_textures();
 }
 
 void Renderer::instance_pass(float32 time)
@@ -1407,16 +1696,16 @@ void Renderer::instance_pass(float32 time)
     previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].bind(0); // will set the wraps
-    previous_draw_target.bind();
+    previous_draw_target.bind_for_drawing_dst();
     glViewport(0, 0, size.x, size.y);
     passthrough.use();
     draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
     quad.draw();
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    draw_target.bind();
+    draw_target.bind_for_drawing_dst();
   }
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
@@ -1541,8 +1830,7 @@ void Renderer::instance_pass(float32 time)
     {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
-
-    entity.material->unbind_textures();
+    bind_white_to_all_textures();
 
     glDisableVertexAttribArray(6);
     glDisableVertexAttribArray(7);
@@ -1614,16 +1902,16 @@ void Renderer::translucent_pass(float32 time)
     previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].bind(0); // will set the wraps
-    previous_draw_target.bind();
+    previous_draw_target.bind_for_drawing_dst();
     glViewport(0, 0, size.x, size.y);
     passthrough.use();
     draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
     quad.draw();
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
     // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    draw_target.bind();
+    draw_target.bind_for_drawing_dst();
   }
 
   // we can do two passes!
@@ -1690,7 +1978,8 @@ void Renderer::translucent_pass(float32 time)
       glDepthMask(GL_TRUE);
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
-    entity.material->unbind_textures();
+
+    bind_white_to_all_textures();
   }
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -1718,7 +2007,7 @@ void Renderer::postprocess_pass(float32 time)
   }
 
   // bloom:
-  bool need_to_allocate_texture = bloom_target.get_handle() == 0;
+  bool need_to_allocate_textures = bloom_target.texture == nullptr;
   const float32 scale_relative_to_1080p = this->size.x / 1920.f;
   const int32 min_width = (int32)(80.f * scale_relative_to_1080p);
   vector<ivec2> resolutions = {size};
@@ -1727,29 +2016,28 @@ void Renderer::postprocess_pass(float32 time)
     resolutions.push_back(resolutions.back() / 2);
   }
 
-  uint32 mip_levels = resolutions.size() - 1;
+  const uint32 levels = resolutions.size();
+  const uint32 dst_mip_level_count = resolutions.size() - 1;
 
-  if (need_to_allocate_texture)
+  if (need_to_allocate_textures)
   {
-    bloom_intermediate = Texture(name + s("'s Bloom Intermediate"), size, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
-    bloom_intermediate.bind(0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip_levels);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_intermediate = Texture(name + s("'s Bloom Intermediate"), size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_target = Texture(name + s("'s Bloom Target"), size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_result =
+        Texture(name + "'s bloom_result", size, 1, GL_RGB16F, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
-    bloom_target = Texture(name + s("'s Bloom Target"), size, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
-    bloom_target.bind(0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mip_levels);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    for (uint32 i = 0; i < resolutions.size(); ++i)
-    {
-      ivec2 resolution = resolutions[i];
-      bloom_intermediate.bind(0);
-      glTexImage2D(GL_TEXTURE_2D, i, GL_RGB16F, resolution.x, resolution.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-      bloom_target.bind(0);
-      glTexImage2D(GL_TEXTURE_2D, i, GL_RGB16F, resolution.x, resolution.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-    }
+    // glTextureParameteri(bloom_intermediate.texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    // glTextureParameteri(bloom_target.texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    // for (uint32 i = 0; i < resolutions.size(); ++i)
+    //{
+    //  ivec2 resolution = resolutions[i];
+    //  bloom_intermediate.bind(0);
+    //  glTextureStorage2D(bloom_intermediate.texture->texture, 6, bloom_intermediate.texture->internalformat,
+    //      bloom_intermediate.texture->size.x, bloom_intermediate.texture->size.y);
+    //  glTexImage2D(GL_TEXTURE_2D, i, GL_RGB16F, resolution.x, resolution.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+    //  bloom_target.bind(0);
+    //  glTexImage2D(GL_TEXTURE_2D, i, GL_RGB16F, resolution.x, resolution.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+    //}
   }
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
@@ -1759,9 +2047,9 @@ void Renderer::postprocess_pass(float32 time)
   // apply high pass filter
   bloom_fbo.color_attachments[0] = bloom_target;
   bloom_fbo.init();
-  bloom_fbo.bind();
+  bloom_fbo.bind_for_drawing_dst();
   high_pass_shader.use();
-  high_pass_shader.set_uniform("transform", ortho_projection(size));
+  high_pass_shader.set_uniform("transform", fullscreen_quad());
   glViewport(0, 0, size.x, size.y);
   draw_target.color_attachments[0].bind(0);
   quad.draw();
@@ -1775,7 +2063,7 @@ void Renderer::postprocess_pass(float32 time)
       ImGui::Checkbox("Enabled", &enabled);
       ImGui::DragFloat("blur_radius", &blur_radius, 0.00001, 0.0f, 0.5f, "%.6f");
       ImGui::DragFloat("mip_scale_factor", &blur_factor, 0.001, 0.0f, 10.5f, "%.3f");
-      ImGui::Text(s("mip_count:", mip_levels).c_str());
+      ImGui::Text(s("mip_count:", dst_mip_level_count).c_str());
       ImGui::End();
     }
   }
@@ -1783,9 +2071,9 @@ void Renderer::postprocess_pass(float32 time)
   float32 original = blur_radius;
   // in a loop
   // blur: src:bloom_target, dst:intermediate (x), src:intermediate, dst:target (y)
-  for (uint32 i = 0; i < mip_levels; ++i)
+  for (uint32 i = 0; i < dst_mip_level_count; ++i)
   {
-    ivec2 resolution = resolutions[i + 1];
+    ivec2 resolution = resolutions[i + uint32(1)];
     gaussian_blur_15x.use();
     glViewport(0, 0, resolution.x, resolution.y);
 
@@ -1795,7 +2083,7 @@ void Renderer::postprocess_pass(float32 time)
     vec2 gaus_scale = vec2(aspect_ratio_factor * blur_radius, 0.0);
     gaussian_blur_15x.set_uniform("gauss_axis_scale", gaus_scale);
     gaussian_blur_15x.set_uniform("lod", i);
-    gaussian_blur_15x.set_uniform("transform", ortho_projection(resolution));
+    gaussian_blur_15x.set_uniform("transform", fullscreen_quad());
     quad.draw();
 
     gaus_scale = vec2(0.0f, blur_radius);
@@ -1808,38 +2096,27 @@ void Renderer::postprocess_pass(float32 time)
     blur_radius += (blur_factor * blur_radius);
   }
   blur_radius = original;
-  // bloom target is now the screen high pass filtered, lod0 no blur, increasing bluriness on each mip level below that
 
-  if (!bloom_result.get_handle())
-  {
-    Texture_Descriptor td;
-    td.name = name + "'s bloom_result";
-    td.size = size / 1;
-    td.format = GL_RGB16F;
-    td.minification_filter = GL_LINEAR;
-    td.wrap_s = GL_CLAMP_TO_EDGE;
-    td.wrap_t = GL_CLAMP_TO_EDGE;
-    bloom_result = td;
-    bloom_result.bind(0);
-  }
+  // bloom target is now the screen high pass filtered, lod0 no blur, increasing bluriness on each mip level below that
   // now we need to mix the lods and put them in the bloom_result texture
+
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_result.get_handle(), 0);
   bloom_mix.use();
   bloom_target.bind(0);
   glViewport(0, 0, bloom_result.t.size.x, bloom_result.t.size.y);
-  bloom_mix.set_uniform("transform", ortho_projection(bloom_result.t.size));
-  bloom_mix.set_uniform("mip_count", mip_levels + 1); //+1 because we index from 0
+  bloom_mix.set_uniform("transform", fullscreen_quad());
+  bloom_mix.set_uniform("mip_count", levels);
   quad.draw();
   // all of these bloom textures should now be averaged and drawn into a texture at 1/4 the source resolution
 
   // add to draw_target
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE);
-  draw_target.bind();
+  draw_target.bind_for_drawing_dst();
   bloom_result.bind(0);
   glViewport(0, 0, size.x, size.y);
   passthrough.use();
-  passthrough.set_uniform("transform", ortho_projection(size));
+  passthrough.set_uniform("transform", fullscreen_quad());
   if (enabled)
     quad.draw();
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -1877,85 +2154,11 @@ void Renderer::skybox_pass(float32 time)
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
-void Renderer::copy_to_primary_framebuffer_and_txaa(float32 time)
-{
-  glDisable(GL_DEPTH_TEST);
-  if (previous_camera != camera)
-  {
-    previous_color_target_missing = true;
-  }
-
-  if (use_txaa && previous_camera == camera)
-  {
-    txaa_jitter = get_next_TXAA_sample();
-    // TODO: implement motion vector vertex attribute
-
-    // 1: blend draw_target with previous_draw_target, store in
-    // draw_target_srgb8  2: copy draw_target to previous_draw_target  3: run
-    // fxaa on draw_target_srgb8, drawing to screen
-
-    glBindVertexArray(quad.get_vao());
-    draw_target_srgb8.bind();
-    glViewport(0, 0, size.x, size.y);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    temporalaa.use();
-
-    // blend draw_target with previous_draw_target, store in draw_target_srgb8
-    if (previous_color_target_missing)
-    {
-      draw_target.color_attachments[0].bind(0);
-      draw_target.color_attachments[0].bind(1);
-    }
-    else
-    {
-      draw_target.color_attachments[0].bind(0);
-      previous_draw_target.color_attachments[0].bind(1);
-    }
-
-    temporalaa.set_uniform("transform", ortho_projection(window_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // copy draw_target to previous_draw_target
-    previous_draw_target.bind();
-    glViewport(0, 0, size.x, size.y);
-    passthrough.use();
-    draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", ortho_projection(window_size));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-    previous_color_target_missing = false;
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-  else
-  {
-    // draw to srgb8 framebuffer
-    glViewport(0, 0, size.x, size.y);
-    glBindVertexArray(quad.get_vao());
-    draw_target_srgb8.bind();
-    glEnable(GL_FRAMEBUFFER_SRGB); // draw_target_srgb8 will do its own gamma
-                                   // encoding
-    tonemapping.use();
-    tonemapping.set_uniform("transform", ortho_projection(size));
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    draw_target.color_attachments[0].bind(0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-  }
-
-  if (use_fxaa)
-    previous_camera = camera;
-}
-
 void Renderer::render(float64 state_time)
 {
-
+  DEFERRED_MESH_DELETIONS.clear();
+  DEFERRED_TEXTURE_DELETIONS.clear();
+  // glEnable(GL_FRAMEBUFFER_SRGB);
   ASSERT(name != "Unnamed Renderer");
 // set_message("sin(time) [-1,1]:", s(sin(state_time)), 1.0f);
 // set_message("sin(time) [ 0,1]:", s(0.5f + 0.5f * sin(state_time)), 1.0f);
@@ -1975,7 +2178,7 @@ void Renderer::render(float64 state_time)
 
   float32 time = (float32)get_real_time();
   float64 t = (time - state_time) / dt;
-
+  // glEnable(GL_FRAMEBUFFER_SRGB);
   // set_message("FRAME_START", "");
   // set_message("BUILDING SHADOW MAPS START", "");
   if (!CONFIG.render_simple)
@@ -1983,98 +2186,118 @@ void Renderer::render(float64 state_time)
     build_shadow_maps();
   }
   // set_message("OPAQUE PASS START", "");
+  draw_target.bind_for_drawing_dst();
 
   opaque_pass(time);
-
   skybox_pass(time);
-
   instance_pass(time);
-
   translucent_pass(time);
-
-#if POSTPROCESSING
   postprocess_pass(time);
-#else
 
-#endif
+  // debug draw to screen
 
-  // glDisable(GL_DEPTH_TEST);
-  // if (previous_camera != camera)
-  //{
-  //  previous_color_target_missing = true;
-  //}
+  if (true)
+  {
+    glEnable(GL_FRAMEBUFFER_SRGB);
+    glViewport(0, 0, window_size.x, window_size.y);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-  // if (use_txaa && previous_camera == camera)
-  //{
-  //  txaa_jitter = get_next_TXAA_sample();
-  //  // TODO: implement motion vector vertex attribute
+    passthrough.use();
+    passthrough.set_uniform("transform", fullscreen_quad());
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    draw_target.color_attachments[0].bind(0);
 
-  //  // 1: blend draw_target with previous_draw_target, store in
-  //  // draw_target_srgb8  2: copy draw_target to previous_draw_target  3: run
-  //  // fxaa on draw_target_srgb8, drawing to screen
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
-  //  glBindVertexArray(quad.get_vao());
-  //  draw_target_srgb8.bind();
-  //  glViewport(0, 0, size.x, size.y);
-  //  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  //  temporalaa.use();
+    FRAME_TIMER.stop();
+    SWAP_TIMER.start();
 
-  //  // blend draw_target with previous_draw_target, store in draw_target_srgb8
-  //  if (previous_color_target_missing)
-  //  {
-  //    draw_target.color_attachments[0].bind(0);
-  //    draw_target.color_attachments[0].bind(1);
-  //  }
-  //  else
-  //  {
-  //    draw_target.color_attachments[0].bind(0);
-  //    previous_draw_target.color_attachments[0].bind(1);
-  //  }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_FRAMEBUFFER_SRGB);
+    glBindVertexArray(0);
 
-  //  temporalaa.set_uniform("transform", ortho_projection(window_size));
-  //  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  //  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-  //  glActiveTexture(GL_TEXTURE0);
-  //  glBindTexture(GL_TEXTURE_2D, 0);
-  //  glActiveTexture(GL_TEXTURE1);
-  //  glBindTexture(GL_TEXTURE_2D, 0);
+    frame_count += 1;
+    return;
+  }
+  // end debug draw to screen
 
-  //  // copy draw_target to previous_draw_target
-  //  previous_draw_target.bind();
-  //  glViewport(0, 0, size.x, size.y);
-  //  passthrough.use();
-  //  draw_target.color_attachments[0].bind(0);
-  //  passthrough.set_uniform("transform", ortho_projection(window_size));
-  //  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  //  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  // all pixel data is now in draw_target in 16f linear space
 
-  //  previous_color_target_missing = false;
-  //  glBindTexture(GL_TEXTURE_2D, 0);
-  //}
-  // else
-  //{
-  //  // draw to srgb8 framebuffer
-  //  glViewport(0, 0, size.x, size.y);
-  //  glBindVertexArray(quad.get_vao());
-  //  draw_target_srgb8.bind();
-  //  glEnable(GL_FRAMEBUFFER_SRGB); // draw_target_srgb8 will do its own gamma
-  //                                 // encoding
-  //  passthrough.use();
-  //  passthrough.set_uniform("transform", ortho_projection(size));
-  //  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  //  draw_target.color_attachments[0].bind(0);
-  //  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  //  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-  //  glBindTexture(GL_TEXTURE_2D, 0);
-  //}
+  glDisable(GL_DEPTH_TEST);
 
-  // if (use_fxaa)
-  //  previous_camera = camera;
+  if (use_txaa && previous_camera == camera)
+  {
+    txaa_jitter = get_next_TXAA_sample();
+    // TODO: implement motion vector vertex attribute
 
-  copy_to_primary_framebuffer_and_txaa(time);
+    // 1: blend draw_target with previous_draw_target, store in draw_target_srgb8
+    // 2: copy draw_target to previous_draw_target
+    // 3: run fxaa on draw_target_srgb8, drawing to screen
 
-  // do fxaa or passthrough if disabled
-  draw_target_fxaa.bind();
+    glBindVertexArray(quad.get_vao());
+    tonemapping_target_srgb8.bind_for_drawing_dst();
+    glViewport(0, 0, size.x, size.y);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    temporalaa.use();
+
+    // blend draw_target with previous_draw_target, store in draw_target_srgb8
+    if (previous_color_target_missing)
+    {
+      draw_target.color_attachments[0].bind(0);
+      draw_target.color_attachments[0].bind(1);
+    }
+    else
+    {
+      draw_target.color_attachments[0].bind(0);
+      previous_draw_target.color_attachments[0].bind(1);
+    }
+
+    temporalaa.set_uniform("transform", fullscreen_quad());
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // copy draw_target to previous_draw_target
+    previous_draw_target.bind_for_drawing_dst();
+    glViewport(0, 0, size.x, size.y);
+    passthrough.use();
+    draw_target.color_attachments[0].bind(0);
+    passthrough.set_uniform("transform", fullscreen_quad());
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+
+    previous_color_target_missing = false;
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+  else
+  {
+    ///////////////////////////////////////
+    ///////////////////////////////////////
+    // HERE IS DRAWING TO TONEMAPPER FRAMEBUFFER
+    ////////////////////////////////////////
+    ////////////////////////////////////////
+    glDisable(GL_FRAMEBUFFER_SRGB);
+
+    glViewport(0, 0, size.x, size.y);
+    glBindVertexArray(quad.get_vao());
+    tonemapping_target_srgb8.bind_for_drawing_dst();
+    tonemapping.use();
+    tonemapping.set_uniform("transform", fullscreen_quad());
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    draw_target.color_attachments[0].bind(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
+    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+
+  if (use_fxaa)
+    previous_camera = camera;
+
   if (use_fxaa)
   {
     static float EDGE_THRESHOLD_MIN = 0.0312;
@@ -2101,38 +2324,52 @@ void Renderer::render(float64 state_time)
     fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
     fxaa.set_uniform("ITERATIONS", ITERATIONS);
     fxaa.set_uniform("QUALITY", QUALITY);
-    fxaa.set_uniform("transform", ortho_projection(window_size));
+    fxaa.set_uniform("transform", fullscreen_quad());
     fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
     fxaa.set_uniform("time", (float32)state_time);
+    // glDisable(GL_FRAMEBUFFER_SRGB);
   }
   else
   {
     passthrough.use();
-    passthrough.set_uniform("transform", ortho_projection(window_size));
+    passthrough.set_uniform("transform", fullscreen_quad());
+
+    // glDisable(GL_FRAMEBUFFER_SRGB);
   }
 
-  // this is drawn to another intermediate framebuffer so fxaa uses all the
-  // fragments of the original render scale
+  ///////////////////////////////////////
+  ///////////////////////////////////////
+  // HERE IS DRAWING TO FXAA FRAMEBUFFER
+  ////////////////////////////////////////
+  ////////////////////////////////////////
+  glEnable(GL_FRAMEBUFFER_SRGB);
+
+  fxaa_target_srgb8.bind_for_drawing_dst();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  draw_target_srgb8.color_attachments[0].bind(0);
+  tonemapping_target_srgb8.color_attachments[0].bind(0);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
-  // draw draw_target_post_fxaa to screen
   glViewport(0, 0, window_size.x, window_size.y);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  ///////////////////////////////////////
+  ///////////////////////////////////////
+  // HERE IS DRAWING TO DEFAULT FRAMEBUFFER
+  ////////////////////////////////////////
+  ////////////////////////////////////////
   glEnable(GL_FRAMEBUFFER_SRGB);
+
   passthrough.use();
-  passthrough.set_uniform("transform", ortho_projection(window_size));
+  passthrough.set_uniform("transform", fullscreen_quad());
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  draw_target_fxaa.color_attachments[0].bind(0);
+  fxaa_target_srgb8.color_attachments[0].bind(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
   FRAME_TIMER.stop();
   SWAP_TIMER.start();
-
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, 0);
   glDisable(GL_FRAMEBUFFER_SRGB);
@@ -2299,38 +2536,46 @@ void Renderer::init_render_targets()
   bloom_fbo = Framebuffer();
 
   Texture_Descriptor td;
+  td.source = "generate";
   td.name = name + " Renderer::draw_target.color[0]";
   td.size = size;
+  td.levels = 1;
   td.format = FRAMEBUFFER_FORMAT;
   td.minification_filter = GL_LINEAR;
   draw_target.color_attachments[0] = Texture(td);
+  draw_target.color_attachments[0].load();
   draw_target.depth_enabled = true;
   draw_target.depth_size = size;
   draw_target.init();
 
   td.name = name + " Renderer::previous_frame.color[0]";
   previous_draw_target.color_attachments[0] = Texture(td);
+  previous_draw_target.color_attachments[0].load();
   previous_draw_target.init();
 
   // full render scaled, clamped and encoded srgb
   Texture_Descriptor srgb8;
+  srgb8.source = "generate";
   srgb8.name = name + " Renderer::draw_target_srgb8.color[0]";
   srgb8.size = size;
-  srgb8.format = GL_SRGB8;
+  srgb8.levels = 1;
+  srgb8.format = GL_RGB16F;
   srgb8.minification_filter = GL_LINEAR;
-  draw_target_srgb8.color_attachments[0] = Texture(srgb8);
-  draw_target_srgb8.encode_srgb_on_draw = true;
-  draw_target_srgb8.init();
+  tonemapping_target_srgb8.color_attachments[0] = Texture(srgb8);
+  tonemapping_target_srgb8.color_attachments[0].load();
+  tonemapping_target_srgb8.init();
 
   // full render scaled, fxaa or passthrough target
   Texture_Descriptor fxaa;
+  fxaa.source = "generate";
   fxaa.name = name + " Renderer::draw_target_post_fxaa.color[0]";
   fxaa.size = size;
-  fxaa.format = GL_SRGB8;
+  fxaa.levels = 1;
+  fxaa.format = GL_RGB8;
   fxaa.minification_filter = GL_LINEAR;
-  draw_target_fxaa.color_attachments[0] = Texture(fxaa);
-  draw_target_fxaa.encode_srgb_on_draw = true;
-  draw_target_fxaa.init();
+  fxaa_target_srgb8.color_attachments[0] = Texture(fxaa);
+  fxaa_target_srgb8.color_attachments[0].load();
+  fxaa_target_srgb8.init();
 }
 
 void Renderer::dynamic_framerate_target()
@@ -2430,6 +2675,11 @@ mat4 Renderer::get_next_TXAA_sample()
 
 Mesh_Handle::~Mesh_Handle()
 {
+  if (std::this_thread::get_id() != MAIN_THREAD_ID)
+  {
+    DEFERRED_MESH_DELETIONS.push_back(*this);
+    return;
+  }
   set_message("Deleting mesh: ", s(vao, " ", position_buffer));
   glDeleteBuffers(1, &position_buffer);
   glDeleteBuffers(1, &normal_buffer);
@@ -2465,16 +2715,19 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   pre_blur.depth_format = GL_DEPTH_COMPONENT32;
 
   Texture_Descriptor pre_blur_td;
+  pre_blur_td.source = "generate";
   pre_blur_td.name = "Spotlight Shadow Map pre_blur[0]";
   pre_blur_td.size = size;
   pre_blur_td.format = format;
   pre_blur_td.minification_filter = GL_LINEAR;
   pre_blur.color_attachments[0] = Texture(pre_blur_td);
+  pre_blur.color_attachments[0].bind(0);
   pre_blur.init();
 
   ASSERT(pre_blur.color_attachments.size() == 1);
 
   Texture_Descriptor td;
+  td.source = "generate";
   td.name = "Spotlight Shadow Map";
   td.size = size;
   td.format = format;
@@ -2500,8 +2753,12 @@ void Cubemap::bind(GLuint texture_unit)
   {
     if (is_equirectangular)
     {
-      if (source.is_initialized())
+      if (source.texture && source.texture->texture != 0)
       {
+        if (!source.bind(0)) // attempting to bind the texture will check the transfer sync
+        {
+          return;
+        }
         produce_cubemap_from_equirectangular_source();
       }
       else
@@ -2528,6 +2785,11 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   TEXTURECUBEMAP_CACHE[label] = handle;
   handle->filename = label;
   handle->is_cubemap = true;
+
+  handle->internalformat = GL_RGB16F;
+  size = CONFIG.use_low_quality_specular ? ivec2(1024, 1024) : ivec2(2048, 2048);
+  handle->size = size;
+
   static Shader equi_to_cube("equi_to_cube.vert", "equi_to_cube.frag");
   static Mesh cube(Mesh_Descriptor(cube, "Cubemap(string equirectangular_filename)'s cube"));
 
@@ -2542,77 +2804,60 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
       lookAt(origin, negy, negz), lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
 
-  size = CONFIG.use_low_quality_specular ? ivec2(1024, 1024) : ivec2(2048, 2048);
-  handle->size = size;
-
   GLint current_fbo;
   glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
+
   // initialize targets and result cubemap
   GLuint fbo;
   GLuint rbo;
-  glGenFramebuffers(1, &fbo);
-  glGenRenderbuffers(1, &rbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-  glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-  glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, size.x, size.y);
-  glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
+  glCreateFramebuffers(1, &fbo);
+  glCreateRenderbuffers(1, &rbo);
+  glNamedRenderbufferStorage(rbo, GL_DEPTH_COMPONENT24, size.x, size.y);
+  glNamedFramebufferRenderbuffer(fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
-  glActiveTexture(GL_TEXTURE0);
-  glGenTextures(1, &handle->texture);
-  glActiveTexture(GL_TEXTURE0 + 6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
-  glObjectLabel(GL_TEXTURE, handle->texture, -1, "some_cubemap");
+  glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &handle->texture);
+  glTextureStorage2D(handle->texture, ENV_MAP_MIP_LEVELS, GL_RGB16F, size.x, size.y);
+  // glBindTextureUnit(6, handle->texture);
+  // glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   for (uint32 i = 0; i < 6; ++i)
   {
-    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size.x, size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+    // glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size.x, size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
   }
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  handle->format = GL_RGB16F;
 
-  float angle = radians(0.f);
-  mat4 rot = toMat4(quat(1, 0, 0, angle));
+  mat4 rot = toMat4(quat(1, 0, 0, radians(0.f)));
   glViewport(0, 0, size.x, size.y);
   equi_to_cube.use();
   equi_to_cube.set_uniform("projection", projection);
   equi_to_cube.set_uniform("rotation", rot);
   equi_to_cube.set_uniform("gamma_encoded", is_gamma_encoded);
-  ASSERT(source.is_initialized());
+  ASSERT(source.texture->texture != 0);
   source.bind(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
-  glClearColor(0.0, 1.0, 1.0, 1.0);
 
   glDisable(GL_DEPTH_TEST);
-
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   // draw to cubemap target
   for (uint32 i = 0; i < 6; ++i)
   {
     equi_to_cube.set_uniform("camera", cameras[i]);
     glFramebufferTexture2D(
         GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, handle->texture, 0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     cube.draw();
   }
   glCullFace(GL_BACK);
-  glActiveTexture(GL_TEXTURE0 + 6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+  glTextureParameteri(handle->texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTextureParameteri(handle->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTextureParameteri(handle->texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTextureParameteri(handle->texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTextureParameteri(handle->texture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
   handle->magnification_filter = GL_LINEAR;
   handle->minification_filter = GL_LINEAR_MIPMAP_LINEAR;
   handle->wrap_s = GL_CLAMP_TO_EDGE;
   handle->wrap_t = GL_CLAMP_TO_EDGE;
-  glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-
+  glGenerateTextureMipmap(handle->texture);
   // cleanup targets
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glDeleteRenderbuffers(1, &rbo);
   glDeleteFramebuffers(1, &fbo);
 
@@ -2690,6 +2935,7 @@ Cubemap::Cubemap(string equirectangular_filename, bool gamma_encoded)
     return;
   }
   Texture_Descriptor d;
+  d.source = equirectangular_filename;
   d.name = equirectangular_filename;
   d.format = GL_RGBA16F;
   source = d;
@@ -2709,143 +2955,6 @@ Cubemap::Cubemap(array<string, 6> filenames)
   sources = load_cubemap_faces(filenames);
 }
 
-void Environment_Map::generate_ibl_mipmaps()
-{
-
-  ASSERT(!radiance.handle->ibl_mipmaps_generated);
-  static bool loaded = false;
-  static Shader specular_filter;
-  if (!loaded)
-  {
-    loaded = true;
-    if (CONFIG.use_low_quality_specular)
-    {
-      specular_filter = Shader("equi_to_cube.vert", "specular_brdf_convolution - low.frag");
-    }
-    else
-    {
-      specular_filter = Shader("equi_to_cube.vert", "specular_brdf_convolution.frag");
-    }
-  }
-  static Mesh cube(Mesh_Descriptor(cube, "generate_ibl_mipmaps()'s cube"));
-
-  const uint32 mip_levels = 6;
-
-  const mat4 projection = perspective(half_pi<float>(), 1.0f, 0.01f, 10.0f);
-  const vec3 origin = vec3(0);
-  const vec3 posx = vec3(1.0f, 0.0f, 0.0f);
-  const vec3 negx = vec3(-1.0f, 0.0f, 0.0f);
-  const vec3 posy = vec3(0.0f, 1.0f, 0.0f);
-  const vec3 negy = vec3(0.0f, -1.0f, 0.0f);
-  const vec3 posz = vec3(0.0f, 0.0f, 1.0f);
-  const vec3 negz = vec3(0.0f, 0.0f, -1.0f);
-  const mat4 cameras[] = {lookAt(origin, posx, negy), lookAt(origin, negx, negy), lookAt(origin, posy, posz),
-      lookAt(origin, negy, negz), lookAt(origin, posz, negy), lookAt(origin, negz, negy)};
-
-  if (tiley == 0 && tilex == 0)
-  {
-
-    string label = radiance.handle->filename + "ibl mipmapped";
-    glGenTextures(1, &ibl_texture_target);
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_texture_target);
-    for (uint32 i = 0; i < 6; ++i)
-    {
-      glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, radiance.size.x, radiance.size.y, 0, GL_RGBA,
-          GL_FLOAT, nullptr);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, mip_levels);
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-
-    glGenFramebuffers(1, &ibl_fbo);
-    glGenRenderbuffers(1, &ibl_rbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl_fbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, ibl_rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, radiance.size.x, radiance.size.y);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, ibl_rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, ibl_rbo);
-
-    ibl_source = radiance.handle->texture;
-    radiance.handle->ibl_mipmaps_started = true;
-    radiance.handle->texture = ibl_texture_target;
-  }
-  GLint current_fbo;
-  glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &current_fbo);
-
-  glBindFramebuffer(GL_FRAMEBUFFER, ibl_fbo);
-  specular_filter.use();
-  glActiveTexture(GL_TEXTURE6);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, ibl_source);
-  ASSERT(ibl_source);
-
-  float angle = radians(0.f);
-  mat4 rot = toMat4(quat(1, 0, 0, angle));
-  specular_filter.set_uniform("projection", projection);
-  specular_filter.set_uniform("rotation", rot);
-
-  glEnable(GL_CULL_FACE);
-  glDisable(GL_BLEND);
-  glDepthMask(GL_TRUE);
-  glFrontFace(GL_CCW);
-  glCullFace(GL_FRONT);
-  glDepthFunc(GL_LESS);
-
-  glEnable(GL_SCISSOR_TEST);
-
-  for (uint32 mip_level = 0; mip_level < mip_levels; ++mip_level)
-  {
-    uint32 width = (uint32)floor(radiance.size.x * pow(0.5, mip_level));
-    uint32 height = (uint32)floor(radiance.size.y * pow(0.5, mip_level));
-    uint32 xf = floor(width / ibl_tile_max);
-    uint32 x = tilex * xf;
-    uint32 draw_width = ceil(float32(width ) / ibl_tile_max);
-
-    uint32 yf = floor(height / ibl_tile_max);
-    uint32 y = tiley * yf;
-    uint32 draw_height = ceil(float32(height ) / ibl_tile_max);
-
-    glViewport(0, 0, width, height);
-
-    //jank af, without these magic numbers its calculated exact
-    //but its not pixel perfect at lower mip levels...
-    //even with a scissor size the same as the viewport
-    glScissor(x-15, y-15, draw_width+33, draw_height+33);
-    float roughness = (float)mip_level / (float)(mip_levels - 1);
-    specular_filter.set_uniform("roughness", roughness);
-    set_message(s("Generate mip:", s(mip_level)), "", 5.0f);
-    for (unsigned int i = 0; i < 6; ++i)
-    {
-      specular_filter.set_uniform("camera", cameras[i]);
-      glFramebufferTexture2D(
-          GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl_texture_target, mip_level);
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      cube.draw();
-    }
-  }
-
-  glDisable(GL_SCISSOR_TEST);
-  glCullFace(GL_BACK);
-  glEnable(GL_CULL_FACE);
-  glFrontFace(GL_CCW);
-  glCullFace(GL_BACK);
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LESS);
-  glViewport(0, 0, size.x, size.y);
-  glScissor(0, 0, size.x, size.y);
-  glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-  glActiveTexture(GL_TEXTURE0);
-  // glBindRenderbuffer(GL_RENDERBUFFER, 0);
-  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
-
-  // glUseProgram(0);
-}
-
 Environment_Map::Environment_Map(std::string environment, std::string irradiance, bool equirectangular)
 {
   Environment_Map_Descriptor d(environment, irradiance, equirectangular);
@@ -2863,6 +2972,9 @@ Environment_Map::Environment_Map(Environment_Map_Descriptor d)
 }
 void Environment_Map::load()
 {
+
+  radiance_is_gamma_encoded = !has_hdr_file_extension(m.radiance);
+
   if (m.source_is_equirectangular)
   {
     radiance = Cubemap(m.radiance, radiance_is_gamma_encoded);
@@ -2885,100 +2997,8 @@ void Environment_Map::bind(GLuint radiance_texture_unit, GLuint irradiance_textu
 {
   irradiance.bind(irradiance_texture_unit);
   radiance.bind(radiance_texture_unit);
-
-  if (!radiance.handle || radiance.handle->ibl_mipmaps_generated)
-    return;
-
-  bool started = radiance.handle->ibl_mipmaps_started;
-  if (started && !working_on_ibl)
-  {
-    return;
-  }
-  if (!started && !working_on_ibl)
-  {
-    radiance.handle->ibl_mipmaps_started = true;
-    working_on_ibl = true;
-  }
-  if (!(time > (this->time + dt)))
-  {
-    return;
-  }
-  if (time < 5)
-  {
-    return;
-  }
-
-  this->time = time;
-  // if (ibl_tile_index == ibl_tile_max)
-  //{
-  //  GLint ready = 0;
-  //  glGetSynciv(ibl_sync, GL_SYNC_STATUS, 1, NULL, &ready);
-  //  if (ready == GL_SIGNALED)
-  //  {
-  //    radiance.handle->ibl_mipmaps_generated = true; // sponge
-  //    glDeleteTextures(1, &ibl_source);
-  //    // radiance.handle->texture = ibl_texture_target;
-  //    glDeleteSync(ibl_sync);
-  //    glDeleteRenderbuffers(1, &ibl_rbo);
-  //    glDeleteFramebuffers(1, &ibl_fbo);
-  //    // ibl_texture_target = 0;
-  //    working_on_ibl = false;
-  //    return;
-  //  }
-  //  return;
-  //}
-
-  generate_ibl_mipmaps();
-  
-  bool x_at_end = (tilex == ibl_tile_max );
-  bool y_at_end = (tiley == ibl_tile_max );
-  if (x_at_end)
-  {
-    tiley = tiley + 1;
-    tilex = 0;
-  }
-  else
-  {
-    tilex += 1;
-  }
-
-  if (x_at_end && y_at_end)
-  {
-    working_on_ibl = false;
-    return;
-  }
-
-  // irradiance.bind(irradiance_texture_unit);
-  // radiance.bind(radiance_texture_unit);
-
-  // if (ibl_sync != 0)
-  //{
-  //  GLint ready = 0;
-  //  glGetSynciv(ibl_sync, GL_SYNC_STATUS, 1, NULL, &ready);
-
-  //  if (ready == GL_SIGNALED)
-  //  {
-  //    glDeleteSync(ibl_sync);
-
-  //    generate_ibl_mipmaps();
-  //    ibl_tile_index += 1;
-  //    ibl_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-  //  }
-  //}
-  // else
-  //{
-  //  generate_ibl_mipmaps();
-  //  ibl_tile_index += 1;
-  //  ibl_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-  //}
-
-  irradiance.bind(irradiance_texture_unit);
-  radiance.bind(radiance_texture_unit);
-}
-
-void Environment_Map::irradiance_convolution()
-{
-  ASSERT(0);
+  if (radiance.handle)
+    radiance.handle->generate_ibl_mipmaps(time);
 }
 
 Environment_Map_Descriptor::Environment_Map_Descriptor(
@@ -3667,3 +3687,997 @@ void Image::rotate90()
   }
   data = result.data;
 }
+
+Texture Texture_Paint::create_new_texture(const char *name)
+{
+  const char *tname = "Untitled";
+  if (name)
+  {
+    tname = name;
+  }
+  Texture t = Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR,GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
+  t.load();
+  return t;
+}
+
+void Texture_Paint::preset_pen()
+{
+  intensity = 6.1;
+  exponent = 4.37;
+  size = 4.5;
+  hdr = true;
+  brush_selection = 4;
+  constant_density = false;
+  smoothing_count = 28;
+  blendmode = 1;
+  brush_color = vec4(0);
+}
+
+void Texture_Paint::preset_pen2()
+{
+  intensity = -14.5;
+  exponent = 1.8;
+  size = 1.8;
+  brush_selection = 4;
+  constant_density = false;
+  smoothing_count = 28;
+  blendmode = 2;
+  brush_color = vec4(1);
+}
+
+void Texture_Paint::iterate(Texture *t, float32 current_time)
+{
+
+  liquid.run(current_time);
+}
+
+
+
+void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
+{
+
+  ASSERT(imgui_event_accumulator);
+  if (!window_open)
+    return;
+
+  float32 time = get_real_time();
+  if (!initialized)
+  {
+    Mesh_Descriptor md(plane, "Texture_Paint's quad");
+    quad = Mesh(md);
+    drawing_shader = Shader("passthrough.vert", "paint.frag");
+    copy = Shader("passthrough.vert", "passthrough.frag");
+    postprocessing_shader = Shader("passthrough.vert", "paint_postprocessing.frag");
+
+    textures.push_back(create_new_texture());
+
+    display_surface = create_new_texture("display_surface");
+    intermediate = create_new_texture("texture_paint_intermediate");
+    preview = Texture("texture_paint_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    preview.load();
+
+    initialized = true;
+
+    liquid.set_heightmap(textures[0]);
+  }
+
+  ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+  ImGui::Begin("Texture_Paint", &window_open, window_flags);
+
+  imgui_visit_count += 1;
+  const ImVec2 mouse = ImGui::GetMousePos();
+  const ImVec2 windowp = ImGui::GetWindowPos();
+  const ImVec2 window_size = ImGui::GetWindowSize();
+
+  ivec2 window_cursor_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
+
+  // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0 ||
+  //                    window_cursor_pos.y > window_size.y;
+  window_cursor_pos = clamp(window_cursor_pos, ivec2(0), ivec2(window_size.x, window_size.y));
+  Texture *surface = &textures[selected_texture];
+
+  if (!surface->texture || !surface->bind(0))
+  {
+    ImGui::Text("Surface not ready");
+    ImGui::End();
+    return;
+  }
+  ImGui::BeginChild("asdgasda", ImVec2(240, 0), true);
+  ImGui::Checkbox("HDR", &hdr);
+  ImGui::SameLine();
+
+  ImGui::Checkbox("Cursor", &draw_cursor);
+  if (ImGui::Button("Clear"))
+  {
+    liquid.zero_velocity();
+    clear = 1;
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Clear Color"))
+  {
+    liquid.zero_velocity();
+    clear = 2;
+  }
+
+  ImGui::SameLine();
+  ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+  ImGui::InputFloat("Zoom", &zoom, 0.01);
+  ImGui::InputInt("Water Iterations", &liquid.iterations);
+  liquid.iterations = max(liquid.iterations,0);
+  const char *selected_blendmode = "";
+  if (blendmode == 0)
+    selected_blendmode = "Mix";
+
+  if (blendmode == 1)
+    selected_blendmode = "Blend";
+
+  if (blendmode == 2)
+    selected_blendmode = "Add";
+
+  if (ImGui::BeginCombo("", "Presets"))
+  {
+    if (ImGui::Selectable("Pen"))
+    {
+      preset_pen();
+    }
+    if (ImGui::Selectable("Pen2"))
+    {
+      preset_pen2();
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::PushID("blendmode");
+  if (ImGui::BeginCombo("", selected_blendmode))
+  {
+    if (ImGui::Selectable("Blend"))
+    {
+      blendmode = 1;
+      // put_imgui_texture_button(&preview, vec2(128));
+    }
+
+    if (ImGui::MenuItem("Mix"))
+    {
+      blendmode = 0;
+    }
+
+    if (ImGui::Selectable("Add"))
+    {
+      blendmode = 2;
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::PopID();
+  ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Intensity", &intensity, 0.001, -100, 100, "%.3f", 2.5f);
+  ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Exponent", &exponent, 0.001, 0.1, 25, "%.3f", 1.5f);
+  ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Size", &size, 0.03, 0, 1000, "%.3f", 2.5f);
+
+  ImGui::Separator();
+  ImGui::Separator();
+  ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Exposure", &exposure_delta, 0.005, 0.0f, 3.0f);
+
+  if (ImGui::Button("Apply Darker"))
+  {
+    apply_exposure = -1;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Apply Brighter"))
+  {
+    apply_exposure = 1;
+  }
+
+  ImGui::Separator();
+  ImGui::Separator();
+  ImGui::Checkbox("ACES Tonemap", &postprocess_aces);
+
+  if (ImGui::Button("Apply ACES Tonemap"))
+  {
+    apply_tonemap = 1;
+  }
+
+  ImGui::Separator();
+
+  ImGui::Separator();
+  ImGui::SetNextItemWidth(60);
+  ImGui::DragFloat("Pow()", &pow, 0.01, 0.1f, 16.0f, "%.3f", 2.0f);
+
+  ImGui::SameLine();
+  if (ImGui::Button("Apply"))
+  {
+    apply_pow = 1;
+  }
+
+  ImGui::Separator();
+  ImGui::Separator();
+  ImGui::InputInt("Brush", &brush_selection);
+
+  ImGui::Checkbox("Constant Density", &constant_density);
+  if (constant_density)
+  {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(40);
+    ImGui::DragFloat("", &density, 0.1, 0.1, 100, "%.2f", 2.5f);
+  }
+  else
+  {
+    ImGui::InputInt("Smoothing Count", &smoothing_count);
+  }
+  put_imgui_texture_button(&preview, vec2(128));
+
+  ImGui::SetNextItemWidth(160);
+  ImGui::ColorPicker4("Color", &brush_color[0]);
+
+  ImGui::Separator();
+  ImGui::Separator();
+  if (ImGui::Button("Clone Texture"))
+  {
+    Texture new_texture = create_new_texture(s(surface->t.name).c_str());
+    fbo_intermediate.color_attachments[0] = new_texture;
+    fbo_intermediate.init();
+    fbo_intermediate.bind_for_drawing_dst();
+    glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
+    surface->bind(0);
+    copy.use();
+    copy.set_uniform("texture0_mod", vec4(1));
+    copy.set_uniform("transform", fullscreen_quad());
+    quad.draw();
+    textures.insert(textures.begin() + selected_texture, new_texture);
+    selected_texture += 1;
+    surface = &textures[selected_texture];
+
+    liquid.set_heightmap(*surface);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Clear all"))
+  {
+    textures.clear();
+    textures.push_back(create_new_texture());
+    selected_texture = 0;
+    surface = &textures[selected_texture];
+    liquid.set_heightmap(*surface);
+  }
+
+  for (uint32 i = 0; i < textures.size(); ++i)
+  {
+
+    Texture *this_texture = &textures[i];
+    ImGui::PushID(s(i).c_str());
+    bool green = selected_texture == i;
+    if (green)
+    {
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 1, 0, 1));
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 1, 0, 1));
+    }
+    if (put_imgui_texture_button(this_texture, vec2(160), false))
+    {
+      selected_texture = i;
+      liquid.set_heightmap(textures[selected_texture]);
+    }
+    if (green)
+    {
+      ImGui::PopStyleColor();
+      ImGui::PopStyleColor();
+    }
+    ImGui::SameLine();
+    ImGui::BeginGroup();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
+    if (ImGui::Button("X"))
+    {
+      textures.erase(textures.begin() + i);
+      if (selected_texture >= i)
+        selected_texture = i - 1;
+      if (selected_texture < 0)
+      {
+        selected_texture = 0;
+        if (textures.size() == 0)
+        {
+          textures.push_back(create_new_texture());
+        }
+      }
+      surface = &textures[selected_texture];
+      this_texture = nullptr;
+    }
+    ImGui::PopStyleColor();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
+    ImGui::Dummy(ImVec2(10, 45));
+    if (ImGui::Button("S") && this_texture != nullptr)
+    {
+      ImGui::OpenPopup("Save Texture");
+      filename = this_texture->t.name;
+    }
+    ImGui::PopStyleColor();
+    if (ImGui::BeginPopupModal("Save Texture", NULL, ImGuiWindowFlags_AlwaysAutoResize) && this_texture != nullptr)
+    {
+      std::string type = "";
+      Texture *saved_texture = this_texture;
+      put_imgui_texture(saved_texture, vec2(320));
+      filename.resize(64);
+      ImGui::InputText("filename", &filename[0], filename.size());
+      filename.erase(std::find(filename.begin(), filename.end(), '\0'), filename.end());
+
+      uint32 last_radio_state = save_type_radio_button_state;
+      ImGui::Text("Image file type:");
+      ImGui::RadioButton("HDR", &save_type_radio_button_state, 0);
+      ImGui::SameLine();
+      ImGui::RadioButton("PNG", &save_type_radio_button_state, 1);
+
+      if (save_type_radio_button_state == 0)
+      {
+        type = "hdr";
+      }
+
+      if (save_type_radio_button_state == 1)
+      {
+        type = "png";
+      }
+      std::string extension = s(".", type);
+      bool file_exists = std::filesystem::exists(s(filename, extension));
+
+      ImGui::Separator();
+
+      if (file_exists)
+      {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
+        ImGui::Text("File exists!");
+        if (ImGui::Button("Overwrite", ImVec2(120, 0)))
+        {
+          int32 save_result = save_texture_type(saved_texture, filename, type);
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 1, 0, 1));
+        if (ImGui::Button("Generate Filename", ImVec2(120, 0)))
+        {
+          int32 save_result = save_texture_type(saved_texture, find_free_filename(filename, extension), type);
+          ImGui::CloseCurrentPopup();
+        }
+        ImGui::PopStyleColor();
+      }
+      else if (ImGui::Button("Save", ImVec2(120, 0)))
+      {
+        int32 save_result = save_texture_type(saved_texture, filename, type);
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SetItemDefaultFocus();
+
+      ImGui::SameLine();
+      if (ImGui::Button("Cancel", ImVec2(120, 0)))
+      {
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::EndPopup();
+    }
+    ImGui::EndGroup();
+
+    ImGui::PopID();
+  }
+
+  ImGui::EndChild();
+  ImGui::SameLine();
+  const ImVec2 childo = ImGui::GetCursorPos();
+  ivec2 childoffset = vec2(childo.x, childo.y);
+  // ImGuiWindowFlags childflags = ImGuiWindowFlags_HorizontalScrollbar;
+
+  ImGuiWindowFlags childflags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+  ImGui::BeginChild("paintbox", ImVec2(0, 0), false, childflags);
+
+  bool is_within = ImGui::IsWindowHovered();
+  ImGui::Dummy(ImVec2(0.0f, 120.0f));
+  ImGui::Dummy(ImVec2(120.0f, 0.f));
+  ImGui::SameLine();
+  ivec2 texture_size = zoom * vec2(surface->texture->size);
+  const ImVec2 imgui_draw_cursor_pos = ImGui::GetCursorPos();
+  ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
+  glGenerateTextureMipmap(display_surface.texture->texture);
+  
+  put_imgui_texture(&display_surface, texture_size);
+
+  ImGui::SameLine();
+  ImGui::Dummy(ImVec2(120.0f, 0.f));
+  ImGui::Dummy(ImVec2(0.0f, 120.0f));
+  if (imgui_visit_count == 2)
+  {
+    ImGui::SetScrollX(0.5f * ImGui::GetScrollMaxX());
+    ImGui::SetScrollY(0.5f * ImGui::GetScrollMaxY());
+  }
+  const ivec2 scroll = vec2(ImGui::GetScrollX(), ImGui::GetScrollY());
+
+  float32 zoom_step = 0.051f;
+  for (SDL_Event &e : *imgui_event_accumulator)
+  {
+    if (is_within && e.type == SDL_MOUSEWHEEL)
+    {
+      if (e.wheel.y < 0)
+        zoom -= zoom_step;
+      else if (e.wheel.y > 0)
+        zoom += zoom_step;
+    }
+  }
+
+  zoom = clamp(zoom, 0.1f, 10.f);
+
+  const vec2 cursor_pos_within_texture = window_cursor_pos - window_position_for_texture - childoffset + scroll;
+
+  bool out_of_texture = cursor_pos_within_texture.x < 0 || cursor_pos_within_texture.x > texture_size.x ||
+                        cursor_pos_within_texture.y < 0 || cursor_pos_within_texture.y > texture_size.y;
+  fbo_preview.color_attachments[0] = preview;
+  fbo_preview.init();
+
+  // ImGui::Text(s(cursor_pos_within_texture.x, " ", cursor_pos_within_texture.y).c_str());
+  vec2 ndc_cursor = cursor_pos_within_texture / vec2(texture_size);
+  ndc_cursor = 2.0f * ndc_cursor;
+  ndc_cursor = ndc_cursor - vec2(1);
+
+  ImVec2 imouse_delta = ImGui::GetIO().MouseDelta;
+  vec2 mouse_delta = vec2(imouse_delta.x, imouse_delta.y);
+  ImGuiContext &g = *ImGui::GetCurrentContext();
+  ImGuiWindow *window = g.CurrentWindow;
+
+  bool hovered = false;
+  bool middle_mouse_held = false;
+  uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+
+  // if (g.HoveredId == 0) // If nothing hovered so far in the frame (not same as IsAnyItemHovered()!)
+  ImGui::ButtonBehavior(window->Rect(), window->GetID("Texturasde_Paint"), &hovered, &middle_mouse_held,
+      ImGuiButtonFlags_MouseButtonMiddle);
+  if (middle_mouse_held)
+  {
+    ImGui::SetScrollX(scroll.x - mouse_delta.x);
+    ImGui::SetScrollY(scroll.y - mouse_delta.y);
+  }
+
+  if (!intermediate.texture || intermediate.texture->size != surface->texture->size ||
+      intermediate.texture->internalformat != surface->texture->internalformat)
+  {
+    intermediate = surface->t;
+    intermediate.load();
+  }
+
+  while (sim_time + dt < time)
+  {
+    // iterate(surface, sim_time);
+    sim_time += dt;
+  }
+
+  fbo_drawing.color_attachments[0] = *surface;
+  fbo_intermediate.color_attachments[0] = intermediate;
+  fbo_preview.color_attachments[0] = preview;
+  fbo_display.color_attachments[0] = display_surface;
+
+  // todo: only init when attachments change
+  fbo_drawing.init();
+  fbo_intermediate.init();
+  fbo_display.init();
+
+  fbo_intermediate.bind_for_drawing_dst();
+  glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
+  mat4 mat = fullscreen_quad();
+  surface->bind(0);
+  copy.use();
+  copy.set_uniform("texture0_mod", vec4(1));
+  copy.set_uniform("transform", mat);
+  quad.draw();
+
+  fbo_drawing.bind_for_drawing_dst();
+  intermediate.bind(0);
+  drawing_shader.use();
+  drawing_shader.set_uniform("texture0_mod", vec4(1));
+  drawing_shader.set_uniform("transform", fullscreen_quad());
+  drawing_shader.set_uniform("mouse_pos", ndc_cursor);
+  drawing_shader.set_uniform("size", size);
+  drawing_shader.set_uniform("intensity", intensity);
+  drawing_shader.set_uniform("brush_exponent", exponent);
+  drawing_shader.set_uniform("hdr", (int32)hdr);
+  drawing_shader.set_uniform("brush_selection", (int32)brush_selection);
+  drawing_shader.set_uniform("brush_color", brush_color);
+  drawing_shader.set_uniform("time", time);
+  drawing_shader.set_uniform("blendmode", blendmode);
+  drawing_shader.set_uniform("tonemap_pow", pow);
+
+  if (clear)
+  {
+    if (clear == 1)
+      drawing_shader.set_uniform("mode", 0);
+    if (clear == 2)
+    {
+      drawing_shader.set_uniform("mode", 6);
+      drawing_shader.set_uniform("brush_color", clear_color);
+    }
+
+    quad.draw();
+    clear = 0;
+  }
+
+  // if (!out_of_texture && iswithin)
+  if (is_within)
+  {
+    bool draw = false;
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+      drawing_shader.set_uniform("mode", 1);
+      // quad.draw();
+      draw = true;
+    }
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+    {
+      drawing_shader.set_uniform("mode", 2);
+      draw = true;
+    }
+    if (!draw)
+    {
+      is_new_click = true;
+    }
+
+    float32 dt = max(0.00001f, time - last_run_visit_time);
+    float32 d = length(last_drawn_ndc - ndc_cursor);
+    float32 speed = d / dt;
+    float32 deltaspeed = abs(speed - previous_speed);
+    float32 d_curve = zoom * glm::pow(d, .50f);
+
+    if (d == 0 && !is_new_click)
+    {
+      draw = false;
+    }
+
+    if (draw)
+    {
+      if (is_new_click || !constant_density)
+      {
+        if (!is_new_click && !constant_density)
+        {
+          fbo_drawing.bind_for_drawing_dst();
+          intermediate.bind(0);
+
+          uint32 smoothing_iterations = float32(smoothing_count) * d_curve;
+          smoothing_iterations = glm::max(smoothing_iterations, (uint32)1);
+          set_message("smoothing_iterations", s(smoothing_iterations), 1.0f);
+          for (uint32 i = 0; i < smoothing_iterations; ++i)
+          {
+            if (i > 100)
+              break;
+
+            vec2 p = mix(last_drawn_ndc, ndc_cursor, float32(i + 1) / smoothing_iterations);
+            intermediate.bind(0);
+            fbo_drawing.bind_for_drawing_dst();
+            drawing_shader.use();
+            drawing_shader.set_uniform("mouse_pos", p);
+
+            vec4 calculated_brush_color = brush_color;
+            if (blendmode == 2) // add
+            {
+              calculated_brush_color = (1.0f / smoothing_iterations) * brush_color;
+            }
+            float32 t_of_stroke = ((float32(i) + 1.f) / smoothing_iterations);
+            // float32 adjusted_speed = mix(d*previous_speed,speed,t_of_stroke);
+            float32 adjusted_speed = mix(previous_speed, speed, t_of_stroke);
+            vec4 mul = vec4(vec3(adjusted_speed), 1.0f);
+            calculated_brush_color = mul * calculated_brush_color;
+
+            drawing_shader.set_uniform("brush_color", calculated_brush_color);
+            if (i == smoothing_iterations - 1) // actual mouse pos
+            {
+              // drawing_shader.set_uniform("brush_color", vec4(1, 0, 0, 1));
+            }
+            if (last_drawn_ndc != ndc_cursor)
+            { // we sometimes get the same cursor position even if we're moving
+              quad.draw();
+            }
+            bool not_last_iteration = (i + 1) < smoothing_iterations;
+            if (not_last_iteration)
+            {
+              fbo_intermediate.bind_for_drawing_dst();
+              glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
+              surface->bind(0);
+              copy.use();
+              quad.draw();
+            }
+          }
+          last_drawn_ndc = ndc_cursor;
+          is_new_click = false;
+          accumulator = 0.0f;
+        }
+        else
+        {
+          // drawing_shader.set_uniform("brush_color", vec4(0, 1, 0, 1));
+          drawing_shader.set_uniform("mouse_pos", ndc_cursor);
+          drawing_shader.set_uniform("brush_color", brush_color);
+          quad.draw();
+
+          is_new_click = false;
+          last_drawn_ndc = ndc_cursor;
+          accumulator = 0.0f;
+          last_run_visit_time = time;
+        }
+      }
+      else
+      {
+        const float32 draw_dt = .1f / density;
+        const vec2 d = ndc_cursor - last_drawn_ndc;
+        const float32 len = length(d);
+        const vec2 nd = normalize(d);
+        const vec2 step = draw_dt * nd;
+        const vec2 start = last_drawn_ndc + (draw_dt * nd);
+        const bool mouse_stationary = last_seen_mouse_ndc == ndc_cursor;
+        const bool too_short = length(start - ndc_cursor) < draw_dt;
+        if (too_short || mouse_stationary || len == 0)
+        {
+          // return;
+        }
+        else
+        {
+          accumulator += length(start - ndc_cursor);
+          ASSERT(len != 0);
+          bool first_draw = true;
+          vec2 draw_pos = start;
+          uint8 count = 0;
+          while (accumulator >= draw_dt)
+          {
+            if (count > 200)
+            {
+              break;
+            }
+            fbo_drawing.bind_for_drawing_dst();
+            intermediate.bind(0);
+            drawing_shader.use();
+            // drawing_shader.set_uniform("brush_color", 4.f * accumulator * vec4(0, 1., 0, 1));
+            drawing_shader.set_uniform("mouse_pos", draw_pos);
+            if (first_draw)
+            {
+              // drawing_shader.set_uniform("brush_color", vec4(1, 0, 0, 1));
+              first_draw = false;
+            }
+            quad.draw();
+            // drawing_shader.set_uniform("brush_color", 10.f * accumulator * vec4(0, 5., 0, 1));
+            last_drawn_ndc = draw_pos;
+            draw_pos = draw_pos + step;
+            accumulator -= draw_dt;
+            ++count;
+            bool not_last_iteration = accumulator >= draw_dt;
+            if (not_last_iteration)
+            {
+              fbo_intermediate.bind_for_drawing_dst();
+              glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
+              surface->bind(0);
+              copy.use();
+              quad.draw();
+            }
+          }
+        }
+      }
+    }
+
+    if (!(d == 0 && !is_new_click))
+    {
+      previous_speed = speed;
+    }
+  }
+
+  last_seen_mouse_ndc = ndc_cursor;
+  if (apply_exposure != 0)
+  {
+    drawing_shader.set_uniform("tonemap_x", 1.0f + (apply_exposure * exposure_delta));
+    drawing_shader.set_uniform("mode", 4);
+    quad.draw();
+    apply_exposure = 0;
+  }
+
+  if (apply_tonemap)
+  {
+    drawing_shader.set_uniform("mode", 5);
+    quad.draw();
+    apply_tonemap = 0;
+  }
+
+  if (apply_pow)
+  {
+    drawing_shader.set_uniform("mode", 7);
+    quad.draw();
+    apply_pow = 0;
+  }
+
+  glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);
+  WHITE_TEXTURE.bind(0);
+  fbo_preview.bind_for_drawing_dst();
+  drawing_shader.use();
+  drawing_shader.set_uniform("texture0_mod", clear_color);
+  drawing_shader.set_uniform("transform", fullscreen_quad());
+  drawing_shader.set_uniform("mouse_pos", vec2(0));
+  drawing_shader.set_uniform("size", 450.f);
+  drawing_shader.set_uniform("mode", 3);
+  glClear(GL_COLOR_BUFFER_BIT);
+  quad.draw();
+
+  glViewport(0, 0, display_surface.texture->size.x, display_surface.texture->size.y);
+  surface->bind(0);
+  fbo_display.bind_for_drawing_dst();
+  postprocessing_shader.use();
+  postprocessing_shader.set_uniform("transform", mat);
+  postprocessing_shader.set_uniform("size", size);
+  postprocessing_shader.set_uniform("zoom", zoom);
+  postprocessing_shader.set_uniform("time", time);
+  postprocessing_shader.set_uniform("tonemap_aces", (int32)postprocess_aces);
+  postprocessing_shader.set_uniform("mouse_pos", draw_cursor ? ndc_cursor : vec2(-9999999));
+  glClear(GL_COLOR_BUFFER_BIT);
+  quad.draw();
+  
+  glGenerateTextureMipmap(surface->texture->texture);
+  liquid.run(time);
+
+  ImGui::EndChild();
+  ImGui::End();
+  last_run_visit_time = time;
+}
+
+void Liquid_Surface::zero_velocity()
+{
+  copy_fbo.color_attachments[0] = velocity;
+  copy_fbo.init();
+  copy_fbo.bind_for_drawing_dst();
+  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  glClearColor(0, 0, 0, 0);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  copy_fbo.color_attachments[0] = velocity_copy;
+  copy_fbo.init();
+  copy_fbo.bind_for_drawing_dst();
+  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  glClearColor(0, 0, 0, 0);
+  glClear(GL_COLOR_BUFFER_BIT);
+}
+void Liquid_Surface::run(float32 current_time)
+{
+
+  if (!heightmap.texture || !heightmap.texture->texture)
+  {
+    return;
+  }
+  if (!initialized)
+  {
+    liquid_shader = Shader("passthrough.vert", "liquid.frag");
+    Mesh_Descriptor md(plane, "Texture_Paint's quad");
+    quad = Mesh(md);
+    copy = Shader("passthrough.vert", "passthrough.frag");
+    initialized = true;
+  }
+
+  if (invalidated)
+  {
+    if (!heightmap.texture)
+      return;
+
+    heightmap_copy.t = heightmap.t;
+    velocity.t = heightmap.t;
+    velocity_copy.t = heightmap.t;
+
+    heightmap_copy.t.name = "heightmap_copy";
+    velocity.t.name = "velocity";
+    velocity_copy.t.name = "velocity_copy";
+
+    heightmap_copy.load();
+    velocity.load();
+    velocity_copy.load();
+
+    copy_fbo.color_attachments[0] = heightmap_copy;
+    copy_fbo.init();
+
+    liquid_shader_fbo.color_attachments.resize(2);
+    liquid_shader_fbo.color_attachments[0] = heightmap;
+    liquid_shader_fbo.color_attachments[1] = velocity;
+    liquid_shader_fbo.init();
+
+    zero_velocity();
+
+    invalidated = false;
+  }
+
+  for (uint32 i = 0; i < iterations; ++i)
+  {
+    glDisable(GL_BLEND);
+    // copy heightmap
+    copy_fbo.color_attachments[0] = heightmap_copy;
+    copy_fbo.init();
+    copy_fbo.bind_for_drawing_dst();
+    glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
+    heightmap.bind(0);
+    copy.use();
+    copy.set_uniform("transform", fullscreen_quad());
+    quad.draw();
+
+    // copy velocity
+    copy_fbo.color_attachments[0] = velocity_copy;
+    copy_fbo.init();
+    copy_fbo.bind_for_drawing_dst();
+    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+    velocity.bind(0);
+    copy.use();
+    copy.set_uniform("transform", fullscreen_quad());
+    quad.draw();
+
+    // draw shader
+    liquid_shader_fbo.bind_for_drawing_dst();
+    heightmap_copy.bind(0);
+    velocity_copy.bind(1);
+    liquid_shader.use();
+    liquid_shader.set_uniform("transform", fullscreen_quad());
+    liquid_shader.set_uniform("time", current_time);
+    liquid_shader.set_uniform("size", heightmap.t.size);
+    liquid_shader.set_uniform("dt", dt);
+    quad.draw();
+  }
+}
+
+/*
+
+
+
+
+float height[N*M];
+float vertical_derivative[N*M];
+float previous_height[N*M];
+// ... initialize to zero ...
+// ... begin loop over frames ...
+// --- This is the propagation code ---
+// Convolve height with the kernel
+// and put it into vertical_derivative
+Convolve( height, vertical_derivative );
+float temp;
+for(int k=0;k<N*M;k++)
+{
+temp = height[k];
+height[k] = height[k]*(2.0-alpha*dt)/(1.0+alpha*dt)- previous_height[k]/(1.0+alpha*dt)-
+vertical_derivative[k]*g*dt*dt/(1.0+alpha*dt); previous_height[k] = temp;
+}
+// --- end propagation code ---
+// ... end loop over frames ...
+
+
+
+h(x,y,t) is height (respect to mean) at pixel x,y at time t
+
+
+-g* is gravitational restoring force
+
+
+
+sqrt(-delta^2) is mass conservation operator, aka vertical derivative of the surface
+
+we need to evaluate this as a convolution
+
+
+kernel generation:
+
+uint32 WIDTH = 7;
+float32 G[WIDTH][WIDTH] = {0};
+
+G0 = 0
+for(uint32 n = 0; n < 10000; ++n)
+{
+float o = 1.0f
+float a = (n * 0.001)
+G0 += (a*a) * exp(-o * (a*a));
+}
+for(uint32 y = 0; y < WIDTH; ++y)
+{
+for(uint32 x = 0; x < WIDTH; ++x)
+{
+for(uint32 n = 0; n < 10000;++n)
+{
+  float r = sqrt(x*x+y*y);
+  float a = (n * 0.001)
+  G[y][x] += (a*a) * exp(-o * (a*a)) * J(a*r) / G0
+}
+}
+}
+
+
+
+
+
+
+
+
+
+
+
+convolution:
+
+just as with the gaussian shader, we will have a look up table of values that are calculated
+and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and offsety
+
+where p is this pixels position:
+vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
+
+the number of iterations on the offsets, which is the width of the kernel, affects the quality
+
+
+however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to save
+work
+
+
+
+
+
+
+
+
+propagation:
+
+per pix:
+
+result = heightsample *(2.0-alpha*dt) -  (previous_frame_height_sample)/(1+alpha*dt) - vertical_derivative_sample
+*g*dt*dt / (1.0+alpha*dt); previous_frame_height = heightsample return result
+
+
+
+
+
+
+so in summary,
+G(x,y) is a kernel sample at x,y
+h(x,y) is a heightmap sample at x,y
+
+
+1): we precompute the kernel like the gauss shader, except it will be a full 2d lut
+2): we store a texture for the vertical derivative and compute it with:
+  inputs required: heightmap, kernel LUT (can be hardcoded in the shader code)
+  vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
+3): we copy the heightmap texture, we will need it last frame
+4): we propagate the waves
+  inputs required: vertical derivative texture, heightmap, previous_heightmap
+  output: heightmap
+
+  code:
+  g is gravity
+  a = heightsample*(2.0-alpha*dt)
+  b = previous_frame_height_sample/(1+alpha*dt)
+  c = vertical_derivative_sample*g*dt*dt / (1.0+alpha*dt)
+  result = a - b - c;
+
+
+
+
+
+
+**/
+//
+//// const uint32 WIDTH = 2 * 7;
+// const int32 P = 7;
+// static float32 G[(2 * P) + 1][(2 * P) + 1] = {0};
+
+// const float32 o = 1.0f;
+// static float32 G0 = 0;
+
+// static bool computed = false;
+// if (!computed)
+//{
+//  computed = true;
+//  for (int32 n = 1; n <= 10000; ++n)
+//  {
+//    float32 qn = 0.001f * n;
+//    float32 qsqr = qn * qn;
+//    G0 = G0 + (qsqr * exp(-o * qsqr));
+//  }
+//  for (int32 l = -P; l <= P; ++l)
+//  {
+//    for (int32 k = -P; k <= P; ++k)
+//    {
+//      float32 r = sqrt(k * k + l * l);
+//      int32 xi = P + k;
+//      int32 yi = P + l;
+//      for (int32 n = 1; n <= 10000; ++n)
+//      {
+//        float32 qn = 0.001f * n;
+//        float32 qsqr = qn * qn;
+//        G[yi][xi] = G[yi][xi] + (qsqr * exp(-o * qsqr) * j0(qn * r));
+//      }
+//      G[yi][xi] = G[yi][xi] / G0;
+//    }
+//  }
+//}
+
+// ImGui::PlotLines("plotterboi", &G[0][0], 2 * P + 1, 0, "overlaytext", -2, 2, ImVec2(320, 320));

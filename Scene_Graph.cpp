@@ -670,6 +670,7 @@ void Flat_Scene_Graph::draw_imgui_texture_element(const char *name, Texture_Desc
   ImGui::InputText("Name", &str.str[0], str.str.size());
 
   ptr->name = s(str);
+  ptr->source = ptr->name;
   ImGui::DragFloat("mod_r", &ptr->mod[0], 0.001f, 0.0f);
   ImGui::DragFloat("mod_g", &ptr->mod[1], 0.001f, 0.0f);
   ImGui::DragFloat("mod_b", &ptr->mod[2], 0.001f, 0.0f);
@@ -973,65 +974,79 @@ void Flat_Scene_Graph::draw_imgui(std::string name)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   const float32 selected_node_draw_height = 340;
-  const float32 default_window_height = 800;
   const float32 horizontal_tile_size = 350;
   const float32 vertical_tile_size = 400;
-  static float32 last_seen_height = 600;
-  static float32 last_seen_width = 0;
-  ImGuiWindowFlags flags = ImGuiWindowFlags_HorizontalScrollbar;
+  // ImGuiWindowFlags flags = ImGuiWindowFlags_HorizontalScrollbar;
+  ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize;
+
   ImGui::Begin(s("Scene Graph:", name).c_str(), &imgui_open, flags);
 
-  last_seen_width = ImGui::GetWindowWidth();
-  if (!ImGui::IsWindowCollapsed())
-  {
-    last_seen_height = ImGui::GetWindowHeight();
-  }
-  float32 wid = glm::min(last_seen_width, 3 * horizontal_tile_size + 36);
-  ImGui::SetWindowSize(ImVec2(wid, last_seen_height));
   const float32 line_height = ImGui::GetTextLineHeight();
 
-  // parent
-  // ImGui::BeginChild("parent", ImVec2(0 , 0), true);
+  ImGui::Dummy(ImVec2(15, 24));
+  ImGui::SameLine();
+  // remove entire row
+  if (ImGui::Button("^"))
   {
-    // nodes
-
-    // ImGui::BeginPopupContextItem("thinger");
-    ImGui::BeginChild("pane0", ImVec2(horizontal_tile_size, vertical_tile_size), true);
-    draw_imgui_pane_selection_button(&imgui_panes[0]);
-    draw_imgui_selected_pane(imgui_panes[0]);
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-    ImGui::BeginChild("pane1", ImVec2(horizontal_tile_size, vertical_tile_size), true);
-    draw_imgui_pane_selection_button(&imgui_panes[1]);
-    draw_imgui_selected_pane(imgui_panes[1]);
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-    ImGui::BeginChild("pane2", ImVec2(horizontal_tile_size, vertical_tile_size), true);
-    draw_imgui_pane_selection_button(&imgui_panes[2]);
-    draw_imgui_selected_pane(imgui_panes[2]);
-    ImGui::EndChild();
-
-    ImGui::BeginChild("pane3", ImVec2(horizontal_tile_size, vertical_tile_size), true);
-    draw_imgui_pane_selection_button(&imgui_panes[3]);
-    draw_imgui_selected_pane(imgui_panes[3]);
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-    ImGui::BeginChild("pane4", ImVec2(horizontal_tile_size, vertical_tile_size), true);
-    draw_imgui_pane_selection_button(&imgui_panes[4]);
-    draw_imgui_selected_pane(imgui_panes[4]);
-    ImGui::EndChild();
-
-    ImGui::SameLine();
-    ImGui::BeginChild("pane5", ImVec2(horizontal_tile_size, vertical_tile_size), true);
-    draw_imgui_pane_selection_button(&imgui_panes[5]);
-    draw_imgui_selected_pane(imgui_panes[5]);
-    ImGui::EndChild();
+    if (imgui_rows.size() > 1)
+      imgui_rows_count -= 1;
   }
-  // parent
-  // ImGui::EndChild();
+  if (ImGui::Button("<"))
+  { // pop a pane on the right for every row
+    imgui_col_count -= 1;
+  }
+
+  ImGui::SameLine();
+  // add entire row
+  if (ImGui::Button("v"))
+  {
+
+    if (imgui_rows.size() < imgui_rows_count + 1)
+    { // need to add an entire row
+      imgui_rows.push_back({blank});
+    }
+    // now lets make sure it has enough columns
+    while (imgui_rows.back().size() < imgui_col_count)
+    {
+      imgui_rows.back().push_back(blank);
+    }
+    imgui_rows_count += 1;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button(">"))
+  { // push a pane on the right for every row
+    for (uint32 i = 0; i < imgui_rows.size(); ++i)
+    {
+      if (imgui_rows[i].size() < imgui_col_count + 1)
+      {
+        imgui_rows[i].push_back(blank);
+      }
+    }
+    imgui_col_count += 1;
+  }
+
+  if (imgui_rows_count < 1)
+    imgui_rows_count = 1;
+  if (imgui_col_count < 1)
+    imgui_col_count = 1;
+
+  for (uint32 i = 0; i < imgui_rows_count; ++i)
+  { // rows
+    for (uint32 j = 0; j < imgui_col_count; ++j)
+    { // cols
+      if (j != 0)
+      {
+        ImGui::SameLine();
+      }
+
+      ImGui::BeginChild(s("pane", i, j).c_str(), ImVec2(horizontal_tile_size, vertical_tile_size), true);
+      draw_imgui_pane_selection_button(&imgui_rows[i][j]);
+      draw_imgui_selected_pane(imgui_rows[i][j]);
+      ImGui::EndChild();
+    }
+
+    // ImGui::SameLine();
+  }
 
   // draw_imgui_command_interface();
   // todo: UI for set parent, grab, drop, material changes,
@@ -1660,6 +1675,7 @@ void Flat_Scene_Graph::set_lights_for_renderer(Renderer *r)
     }
 
     Material_Descriptor *md = get_modifiable_material_pointer_for(node, 0);
+    md->emissive.source = "white";
     vec3 c = light->brightness * light->color;
     float mod = 0.03f;
     md->emissive.mod = vec4(mod * c, 0);
@@ -2056,7 +2072,7 @@ void Octree::push(Mesh_Descriptor *mesh, mat4 *transform, vec3 *velocity)
     vec3 atoc = t.c - t.a;
     t.n = normalize(cross(atob, atoc));
 
-    all_worked = all_worked && root->push(t, 0,this);
+    all_worked = all_worked && root->push(t, 0, this);
     // return;//sponge
   }
 
@@ -2085,9 +2101,9 @@ inline Octree_Node *Octree::new_node(vec3 p, float32 size, uint8 depth) noexcept
   ptr->halfsize = 0.5f * size;
   ptr->center = p + vec3(ptr->halfsize);
   ptr->mydepth = depth + 1;
-  #ifdef OCTREE_VECTOR_STYLE
-    ptr->occupying_triangles.reserve(16);
-  #endif 
+#ifdef OCTREE_VECTOR_STYLE
+  ptr->occupying_triangles.reserve(16);
+#endif
   return ptr;
 }
 
@@ -2282,7 +2298,7 @@ inline bool Octree_Node::insert_triangle(const Triangle_Normal &tri) noexcept
   return true;
 }
 
-inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth,Octree* owner) noexcept
+inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth, Octree *owner) noexcept
 {
 #ifdef OCTREE_SPLIT_STYLE
   if (depth == MAX_OCTREE_DEPTH)
@@ -2306,10 +2322,9 @@ inline bool Octree_Node::push(const Triangle_Normal &triangle, uint8 depth,Octre
         ASSERT(child);
       }
 
-
       bool retest = aabb_triangle_intersection(box, triangle);
 
-      bool success = child->push(triangle, depth + 1,owner);
+      bool success = child->push(triangle, depth + 1, owner);
       if (!success)
       {
         requires_self = true;
@@ -2714,7 +2729,6 @@ inline void Octree_Node::clear()
     children[i] = nullptr;
   }
 }
-
 
 // ccw
 Plane_nd compute_plane(vec3 a, vec3 b, vec3 c)

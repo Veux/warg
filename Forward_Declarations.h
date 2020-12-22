@@ -24,6 +24,7 @@ struct Image_Loader;
 struct Texture;
 struct Texture_Descriptor;
 struct SDL_Imgui_State;
+struct Texture_Paint;
 struct State;
 struct Warg_State;
 struct Warg_Server;

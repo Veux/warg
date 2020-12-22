@@ -13,6 +13,5 @@ void main()
   {
     result += textureLod(texture0, frag_uv,i).rgb;
   }
-out0 = vec4(result/mip_count,1);
-
+  out0 = vec4(result/mip_count,1);
 }

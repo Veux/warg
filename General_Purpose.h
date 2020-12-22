@@ -5,6 +5,7 @@
 #include <queue>
 #include <mutex>
 #include "glad/glad.h"
+#include "Forward_Declarations.h"
 enum struct Light_Type;
 #define ASSERT(x) _errr(x, __FILE__, __LINE__)
 
@@ -167,10 +168,11 @@ struct Config
 struct Image_Data
 {
   void *data = nullptr;
-  int32 x;
-  int32 y;
+  int32 x = 0;
+  int32 y = 0;
   int32 comp;
-  GLenum format;
+  uint32 data_size;
+  GLenum data_type;
   bool initialized = false;
 };
 
@@ -181,7 +183,7 @@ struct Image_Loader
 public:
   Image_Loader();
   ~Image_Loader();
-  bool load(std::string filename, Image_Data *data);
+  bool load(std::string filename, Image_Data *data, GLenum format);
   static void loader_loop(Image_Loader *loader);
 
   bool running = true;
@@ -216,11 +218,11 @@ std::string vtos(glm::vec3 v);
 std::string vtos(glm::vec4 v);
 std::string qtos(glm::quat v);
 
-std::string to_string(Light_Type& value);
-std::string to_string(glm::mat4& m);
+std::string to_string(Light_Type &value);
+std::string to_string(glm::mat4 &m);
 std::string to_string(Array_String &s);
-std::string to_string(vec4& value);
-//std::string to_string(ivec4& value);
+std::string to_string(vec4 &value);
+// std::string to_string(ivec4& value);
 
 vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
 float64 random_between(float64 min, float64 max);
@@ -233,11 +235,19 @@ vec2 random_2D_unit_vector();
 vec3 random_3D_unit_vector();
 vec2 random_2D_unit_vector(float32 azimuth_min, float32 azimuth_max);
 vec3 random_3D_unit_vector(float32 azimuth_min, float32 azimuth_max, float32 altitude_min, float32 altitude_max);
-Uint32 string_to_U32_color(std::string color);
-glm::vec4 string_to_float4_color(std::string color);
+// Uint32 string_to_U32_color(std::string color);
+// glm::vec4 string_to_float4_color(std::string color);
 const char *texture_format_to_string(GLenum texture_format);
 bool has_img_file_extension(std::string name);
+bool has_hdr_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
+int32 save_texture(Texture *texture, std::string filename, uint32 level = 0);
+int32 save_texture_type(Texture *texture, std::string filename, std::string type = "png", uint32 level = 0);
+int32 save_texture_type(GLuint texture,ivec2 size, std::string filename, std::string type = "png", uint32 level = 0);
+uint32 type_of_float_format(GLenum texture_format);
+uint32 components_of_float_format(GLenum texture_format);
+
+std::string find_free_filename(std::string filename, std::string extension);
 std::string strip_file_extension(std::string file);
 Uint64 dankhash(const float32 *data, uint32 size);
 void checkSDLError(int32 line = -1);

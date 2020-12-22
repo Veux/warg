@@ -11,9 +11,7 @@
 #include <enet/enet.h>
 #include <fstream>
 #include <functional>
-#include <glm/glm.hpp>/*
-#include <glbinding/Binding.h>
-#include <glbinding/gl33core/gl.h>*/
+#include <glm/glm.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>

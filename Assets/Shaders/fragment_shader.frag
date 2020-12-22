@@ -10,7 +10,10 @@ uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
 
-uniform sampler2D texture10; // uv map grid
+uniform sampler2D texture10; // refraction
+
+uniform sampler2D texture11;//displacement
+uniform vec4 texture11_mod;
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
@@ -53,6 +56,10 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
+in float blocking_terrain;
+in float water_depth;
+in float ground_height;
+in vec4 indebug;
 
 layout(location = 0) out vec4 out0;
 
@@ -296,6 +303,46 @@ float rand(vec2 p)
   return fract(sin(dot(p.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+float random ( vec2 st) {
+    return fract(sin(dot(st.xy,
+                         vec2(12.9898,78.233)))*
+        43758.5453123);
+}
+
+float noise (vec2 st) {
+    vec2 i = floor(st);
+    vec2 f = fract(st);
+
+    // Four corners in 2D of a tile
+    float a = random(i);
+    float b = random(i + vec2(1.0, 0.0));
+    float c = random(i + vec2(0.0, 1.0));
+    float d = random(i + vec2(1.0, 1.0));
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    return mix(a, b, u.x) +
+            (c - a)* u.y * (1.0 - u.x) +
+            (d - b) * u.x * u.y;
+}
+#define NUM_OCTAVES2 3
+float fbm2 (vec2 uv) {
+    float v = 0.0;
+    float a = 0.5;
+    vec2 shift = vec2(100.0);
+    // Rotate to reduce axial bias
+    mat2 rot = mat2(cos(0.5), sin(0.5),
+                    -sin(0.5), cos(0.50));
+    for (int i = 0; i < NUM_OCTAVES2; ++i) {
+        v += a * noise(uv);
+        uv = rot * uv * 2.0 + shift;
+        a *= 0.5;
+    }
+    return v;
+
+
+}
+
 vec3 spherical_to_euclidean(float theta, float phi)
 {
   return vec3(cos(theta) * sin(phi), sin(theta) * sin(phi), cos(theta));
@@ -332,8 +379,8 @@ void main()
   vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
   if (discard_on_alpha)
   {
-    if (texture0_mod.a*albedo_tex.a < 0.3)
-      discard;
+    //if (texture0_mod.a*albedo_tex.a < 0.3)
+     // discard;
   }
   gather_shadow_moments();
 
@@ -367,11 +414,13 @@ void main()
   }
   premultiply_alpha *= texture0_mod.a;
 
-  m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
+  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+  //m.albedo = pow(m.albedo,vec3(1/2.2));
   m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
+  
   // m.metalness = clamp(m.metalness,0.05f,0.45f);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
 
@@ -457,15 +506,17 @@ void main()
     vec3 diffuse_result = radiance * diffuse;
     result += (specular_result + diffuse_result) * visibility * ndotl;
     // ambient
-    direct_ambient += lights[i].ambient * at;
+    direct_ambient += lights[i].ambient * at * m.albedo;
   }
-
+  vec3 directonly = result;
   // ambient light
 
   // ambient specular
   vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  
   const float MAX_REFLECTION_LOD = 5.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
+  
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
   vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
 
@@ -478,6 +529,85 @@ void main()
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
+  //result = m.emissive;
+//  vec2 brdftexcoord = vec2(gl_FragCoord.x/1920,gl_FragCoord.y/1080);
+//  vec2 brdfc = texture2D(texture8,brdftexcoord).xy;
+//  result = vec3(brdfc ,0);
+ // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
+  //result = (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
+  //result = vec3(ndotv);
+  //result = vec3(m.metalness);
+  //result = vec3(m.roughness);
+  //result = mix(vec3(1),F0,m.metalness)*prefilteredColor;
+ // result = vec3(gl_FragCoord.x/1920,gl_FragCoord.y/1080,0);
+  //result = vec3(gl_FragCoord.x/1920);
+  //result = 0.05f*vec3(length(frag_world_position));
+  //result = m.albedo;
+
+  //result = pow(result,vec3(2.2));
+  //result = clamp(result,vec3(0),vec3(1));
+  //result = prefilteredColor;
+  //result = vec3(texture2D(texture2, frag_uv).r);
+  //result = vec3(texture2_mod.r);
+  //result = directonly;
+  //result = vec3(Ks);
+  //result = textureLod(texture6, r, .8).rgb;
+  //result = vec3(texture2D(texture4, frag_uv).r);
+  //result = irradiance;
+  //result = m.albedo;
+  //result = m.emissive;
+  //result = texture3_mod.rgb;
+  //result = vec3(frag_normal_uv,0);
+  //result = texture2D(texture3, frag_normal_uv).rgb;
+  //result = vec3(albedo_tex.a);
+  //result = clamp(result,vec3(0),vec3(1));
+  //result = textureLod(texture6,r,4).rgb;
+  //result = pow(result,vec3(2.2));
+   //result = 1*result;
+
+   
+  //if(blocking_terrain != 0.0f)// 0.015f)
+  //{
+  float epsilon = 0.00001;
+  bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
+  float value = float(tile_light);
+
+  float r1 = noise(50.1f*frag_world_position.xy);
+  float r2 = noise(50.1f*frag_world_position.xz);
+  float r3 = noise(50.1f*frag_world_position.yz);
+  float rr = 0.333f*(r1 + r2+ r3);
+
+  float r12 = noise(52.1f*frag_world_position.xy);
+  float r22 = noise(52.1f*frag_world_position.xz);
+  float r32= noise(52.1f*frag_world_position.yz);
+  float rr2 = 0.333f*(r12 + r22+ r32);
+
+  float r13 = noise(55.1f*frag_world_position.xy);
+  float r23 = noise(55.1f*frag_world_position.xz);
+  float r33 = noise(55.1f*frag_world_position.yz);
+  float rr3 = 0.333f*(r13 + r23+ r33);
+
+  vec3 ground_low = 0.125f*vec3(0.013,.433,.0136);
+  ground_low = rr2 * ground_low;
+
+  vec3 ground_med = 0.45f*vec3(0.3,.13,.036);  
+  ground_med = rr3*ground_med;
+
+
+  float grass_coverage = 1.f*(0.5f+0.5*sin(rr*7.301f*ground_height));
+  grass_coverage = clamp(pow(grass_coverage,1.f),0.f,1.f);
+
+  vec3 ground = mix(ground_med,ground_low,grass_coverage);
+
+  //ground = clamp(ground + rr*ground_med,0.,1.);
   
+  vec3 water = result;
+  
+  float depth_t = clamp(pow(2.1f*water_depth,1.f),0,1);
+  result = mix(ground,water,depth_t);
+ // }
+  //result = vec3(depth_t);
+
+  //result = 0.25f*indebug.rgb;
   out0 = vec4(result, premultiply_alpha);
 }

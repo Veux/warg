@@ -98,6 +98,9 @@ void SDL_Imgui_State::render()
   glUseProgram(shader_handle);
   glUniform1i(texture_location, 0);
   glUniformMatrix4fv(projection_location, 1, GL_FALSE, &ortho_projection[0][0]);
+  GLuint time_loc = glGetUniformLocation(shader_handle, "time");
+  float32 realtime = get_real_time();
+  glUniform1f(time_loc,realtime);
   glBindVertexArray(vao);
   glBindSampler(0, 0); // Rely on combined texture/sampler state.
 
@@ -125,7 +128,6 @@ void SDL_Imgui_State::render()
       {
         const uint32 tex = (uint32)pcmd->TextureId;
 
-        check_gl_error();
         // ensure tex without the warg flag is between 0 and 65536
         const uint32 testmask = 0x0fff0000;
         uint32 testbits = testmask & tex;
@@ -142,9 +144,9 @@ void SDL_Imgui_State::render()
         bool warg_texture_flag_set = (tex & 0xf0000000) == 0xf0000000;
         GLuint texture = tex & 0x0000ffff;
 
-        check_gl_error();
         if (warg_texture_flag_set)
         {
+
           const GLuint index = texture;
           if ((int32(IMGUI_TEXTURE_DRAWS.size()) - 1) < int32(index))
             continue;
@@ -152,11 +154,19 @@ void SDL_Imgui_State::render()
           if (itd.is_cubemap || itd.ptr == nullptr)
           {
             glBindTexture(GL_TEXTURE_2D, 0);
-            check_gl_error();
           }
           else
           {
-            glUniform1i(gamma_location, itd.gamma_encode);
+            if (itd.gamma_encode)
+            {
+              glEnable(GL_FRAMEBUFFER_SRGB);
+            }
+            else
+            {
+              glDisable(GL_FRAMEBUFFER_SRGB);
+            }
+            // glUniform1i(gamma_location, itd.gamma_encode);
+            glUniform1i(gamma_location, false);
             glUniform1f(mip_location, itd.mip_lod_to_draw);
             glBindTexture(GL_TEXTURE_2D, itd.ptr->texture);
             glUniform1i(sample_lod_location, 1);
@@ -170,22 +180,17 @@ void SDL_Imgui_State::render()
         }
         else
         {
-          check_gl_error();
           glUniform1i(gamma_location, false);
           glUniform1f(mip_location, 0);
           glUniform1i(sample_lod_location, 0);
           glBindTexture(GL_TEXTURE_2D, texture);
-          check_gl_error();
         }
 
-        check_gl_error();
         glScissor((int)pcmd->ClipRect.x, (int)(fb_height - pcmd->ClipRect.w),
             (int)(pcmd->ClipRect.z - pcmd->ClipRect.x), (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
-        check_gl_error();
         glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount,
             sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset);
-
-        check_gl_error();
+        glDisable(GL_FRAMEBUFFER_SRGB);
         if (warg_texture_flag_set)
         {
           const GLuint index = texture;
@@ -197,7 +202,6 @@ void SDL_Imgui_State::render()
             {
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tex.ptr->minification_filter);
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, tex.ptr->magnification_filter);
-              check_gl_error();
             }
           }
         }
@@ -291,7 +295,7 @@ bool SDL_Imgui_State::process_event(SDL_Event *event)
     }
     case SDL_KEYDOWN:
     {
-      //io.AddInputCharactersUTF8(event->text.text);
+      // io.AddInputCharactersUTF8(event->text.text);
       int key = event->key.keysym.scancode;
       IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
       io.KeysDown[key] = (event->type == SDL_KEYDOWN);
@@ -303,7 +307,7 @@ bool SDL_Imgui_State::process_event(SDL_Event *event)
     }
     case SDL_KEYUP:
     {
-      
+
       int key = event->key.keysym.scancode;
       IM_ASSERT(key >= 0 && key < IM_ARRAYSIZE(io.KeysDown));
       io.KeysDown[key] = !(event->type == SDL_KEYUP);
@@ -334,8 +338,8 @@ void SDL_Imgui_State::create_fonts_texture()
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
   glGenTextures(1, &font_texture);
   glBindTexture(GL_TEXTURE_2D, font_texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);//sponge linear
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
@@ -361,13 +365,15 @@ bool SDL_Imgui_State::create_device_objects()
                                 "in vec2 Position;\n"
                                 "in vec2 UV;\n"
                                 "in vec4 Color;\n"
+    
+                                "uniform float time;\n"//sponge
                                 "out vec2 Frag_UV;\n"
                                 "out vec4 Frag_Color;\n"
                                 "void main()\n"
                                 "{\n"
                                 "	Frag_UV = UV;\n"
                                 "	Frag_Color = Color;\n"
-                                "	gl_Position = ProjMtx * vec4(Position.xy,0,1);\n"
+                                "	gl_Position =  ProjMtx * vec4((Position.xy),0,1);\n"
                                 "}\n";
 
   const GLchar *fragment_shader = "#version 330\n"
@@ -401,7 +407,6 @@ bool SDL_Imgui_State::create_device_objects()
   glAttachShader(shader_handle, vert_handle);
   glAttachShader(shader_handle, frag_handle);
   glLinkProgram(shader_handle);
-  check_gl_error();
   texture_location = glGetUniformLocation(shader_handle, "Texture");
   projection_location = glGetUniformLocation(shader_handle, "ProjMtx");
   position_location = glGetAttribLocation(shader_handle, "Position");
@@ -475,8 +480,6 @@ void SDL_Imgui_State::invalidate_device_objects()
   if (shader_handle)
     glDeleteProgram(shader_handle);
   shader_handle = 0;
-
-
 }
 
 SDL_Imgui_State::SDL_Imgui_State() {}
@@ -516,9 +519,9 @@ void SDL_Imgui_State::init(SDL_Window *window)
   io.KeyMap[ImGuiKey_Y] = SDL_SCANCODE_Y;
   io.KeyMap[ImGuiKey_Z] = SDL_SCANCODE_Z;
 
-  //io.AddInputCharacter('a');
-  //io.KeyMap[ImGuiKey_0] = SDL_SCANCODE_0;
-  //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  // io.AddInputCharacter('a');
+  // io.KeyMap[ImGuiKey_0] = SDL_SCANCODE_0;
+  // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   io.SetClipboardTextFn = set_clipboard;
   io.GetClipboardTextFn = get_clipboard;
   io.ClipboardUserData = NULL;
@@ -583,11 +586,11 @@ void SDL_Imgui_State::new_frame(SDL_Window *window, float64 dt)
     // Setup mouse inputs (we already got mouse wheel, keyboard keys &
     // characters from our event handler)
     io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
-    io.MouseDown[0] = mouse_pressed[0] ||
-                      (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0; // If a mouse press event came, always pass it
-                                                                        // as "mouse held this frame", so we don't
-                                                                        // miss click-release events that are shorter
-                                                                        // than 1 frame.
+    io.MouseDown[0] =
+        mouse_pressed[0] || (mouse_state & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0; // If a mouse press event came, always
+                                                                              // pass it as "mouse held this frame", so
+                                                                              // we don't miss click-release events that
+                                                                              // are shorter than 1 frame.
     io.MouseDown[1] = mouse_pressed[1] || (mouse_state & SDL_BUTTON(SDL_BUTTON_RIGHT)) != 0;
     io.MouseDown[2] = mouse_pressed[2] || (mouse_state & SDL_BUTTON(SDL_BUTTON_MIDDLE)) != 0;
     mouse_pressed[0] = mouse_pressed[1] = mouse_pressed[2] = false;
@@ -654,12 +657,15 @@ void SDL_Imgui_State::handle_input(std::vector<SDL_Event> *input)
 
 void put_imgui_texture(Texture *t, glm::vec2 size, bool y_invert)
 {
+  ASSERT(t);
+  t->load();
   put_imgui_texture(t->texture, size, y_invert);
 }
 
 void put_imgui_texture(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
 {
   Texture texture = *td;
+  texture.load();
   put_imgui_texture(texture.texture, size, y_invert);
 }
 void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert)
@@ -674,6 +680,7 @@ void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, b
     GLenum format = descriptor.ptr->get_format();
     bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
                       format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
     descriptor.gamma_encode = gamma_flag;
     descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
   }
@@ -701,6 +708,7 @@ bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert)
 bool put_imgui_texture_button(Texture_Descriptor *td, glm::vec2 size, bool y_invert)
 {
   Texture texture = *td;
+  texture.load();
   return put_imgui_texture_button(texture.texture, size, y_invert);
 }
 bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, bool y_invert)
@@ -715,6 +723,7 @@ bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 
     GLenum format = descriptor.ptr->get_format();
     bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
                       format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
     descriptor.gamma_encode = gamma_flag;
     descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
   }

@@ -34,6 +34,7 @@ enum Texture_Location
   brdf_ibl_lut,
   refraction,
   t10,
+  displacement,
   uv_grid,
 
   s0, // shadow maps
@@ -59,7 +60,6 @@ struct Renderbuffer_Handle
 struct Texture_Handle
 {
   ~Texture_Handle();
-  GLuint texture = 0;
   time_t file_mod_t = 0;
   // this resource's current set settings
   // should only be set by Texture class inside .bind()
@@ -71,17 +71,11 @@ struct Texture_Handle
 
   GLenum get_format()
   {
-    return format;
+    return internalformat;
   }
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
-
-  // private:
-  //  friend struct Texture;
-  //  friend struct Cubemap;
-  //  friend struct Environment_Map;
-  //  friend struct Renderer;
-  //  friend struct SDL_Imgui_State;
+  GLuint texture = 0;
 
   // last bound dynamic state:
   GLenum magnification_filter = GLenum(0);
@@ -94,41 +88,82 @@ struct Texture_Handle
   // should be constant for this handle after initialization:
   std::string filename = "TEXTURE_HANDLE_FILENAME_NOT_SET";
   glm::ivec2 size = glm::ivec2(0, 0);
-  GLenum format = GLenum(0);
+  uint8 levels = 0;
+  GLenum internalformat = GLenum(0);
 
   // specific for specular environment maps
-  bool ibl_mipmaps_started = false;
   bool ibl_mipmaps_generated = false;
-
+  GLuint ibl_source = 0;
+  GLuint ibl_texture_target = 0;
+  GLsync ibl_sync = 0;
+  GLuint ibl_fbo = 0;
+  GLuint ibl_rbo = 0;
+  uint32 ibl_tile_max = 10;
+  int32 tilex = 0;
+  int32 tiley = 0;
+  float32 time = 0;
   bool is_cubemap = false;
+  void generate_ibl_mipmaps(float32 time);
+
+  // stream state:
+  GLsync upload_sync = 0;
+  GLsync transfer_sync = 0;
+  GLuint uploading_pbo = 0;
+  GLenum datatype = 0;
+
+private:
 };
 
+// struct Generated_Texture_Descriptor
+//{
+//  Generated_Texture_Descriptor(const char *name, GLenum format)
+//  {
+//    this->name = name;
+//    this->format = format;
+//  }
+//  Generated_Texture_Descriptor(std::string name, GLenum format)
+//  {
+//    this->name = name;
+//    this->format = format;
+//  }
+//
+//  std::string name = "";
+//  GLenum format = 0;
+//  vec4 mod;
+//  GLenum magnification_filter = GL_LINEAR;
+//  GLenum minification_filter = GL_LINEAR_MIPMAP_LINEAR;
+//  GLenum wrap_s = GL_REPEAT;
+//  GLenum wrap_t = GL_REPEAT;
+//  glm::vec4 border_color = glm::vec4(0);
+//};
 struct Texture_Descriptor
 {
   Texture_Descriptor() {}
   Texture_Descriptor(const char *filename)
   {
-    this->name = filename;
+    name = filename;
+    source = filename;
+    format = GL_SRGB8_ALPHA8;
   }
   Texture_Descriptor(std::string filename)
   {
-    this->name = filename;
+    name = filename;
+    source = filename;
+    format = GL_SRGB8_ALPHA8;
   }
 
-  // solid colors can be specified with "color(r,g,b,a)" float values
-  std::string name = "";
-
-  vec4 mod = MISSING_TEXTURE_MOD;
-  glm::ivec2 size = glm::ivec2(0);
-  GLenum format = GL_RGBA;
+  std::string name = "default";
+  std::string source = "default";
+  std::string key;
+  uint8 levels = 6;
+  GLenum format = 0;
+  glm::ivec2 size = ivec2(0);
+  glm::vec4 mod = vec4(1);
   GLenum magnification_filter = GL_LINEAR;
   GLenum minification_filter = GL_LINEAR_MIPMAP_LINEAR;
-  uint32 anisotropic_filtering = MAX_ANISOTROPY;
   GLenum wrap_s = GL_REPEAT;
   GLenum wrap_t = GL_REPEAT;
   glm::vec4 border_color = glm::vec4(0);
-  bool process_premultiply = false;
-  bool cache_as_unique = true;
 };
 
 struct Texture
@@ -136,36 +171,21 @@ struct Texture
   Texture() {}
   Texture(Texture_Descriptor &td);
 
-  Texture(std::string name, glm::ivec2 size, GLenum format, GLenum minification_filter,
+  Texture(std::string name, glm::ivec2 size, uint8 levels, GLenum format, GLenum minification_filter,
       GLenum magnification_filter = GL_LINEAR, GLenum wraps = GL_CLAMP_TO_EDGE, GLenum wrapt = GL_CLAMP_TO_EDGE,
       glm::vec4 border_color = glm::vec4(0));
 
-  Texture(std::string file_path, bool premul = false);
-
   Texture_Descriptor t;
+  // a call to load guarantees we will have a Texture_Handle after it returns
+  // but the texture will start loading asynchronously and may not yet be ready
   void load();
-
-  void bind(GLuint texture_unit);
-
+  bool bind(GLuint texture_unit);
+  bool is_ready() {}
   void check_set_parameters();
-
-  // not guaranteed to be constant for every call -
-  // handle lifetime only guaranteed for as long as the Texture object
-  // is held, and if dynamic texture reloading has not been triggered
-  // by a file modification - if it is, it will gracefully display
-  // black, or a random other texture
   GLuint get_handle();
-
-  bool is_initialized()
-  {
-    return initialized;
-  }
-
-  // do not modify the handle
   std::shared_ptr<Texture_Handle> texture;
 
 private:
-  bool initialized = false;
 };
 struct Image
 {
@@ -206,20 +226,29 @@ struct Environment_Map_Descriptor
   bool source_is_equirectangular = true;
 };
 
-/*
-when one of the constructors that take arguments is called
-load() is called:
-it initializes the cubemaps - first checks if the cubemap has already been created/cached and uses the shared ptr for
-that if theres no shared ptr for it, it creates a new cubemap and loads the source texture and stalls on it then draws
-the cubemap, and drops the source handle, and returns after both cubemaps are constructed, it checks the cubemap handles
-for whether or not theyve had their ibl mipmaps generated, and runs that if not.
+// we should have n environment map probes distributed within the world
+// these should probably be held within the 'scene graph'
+// when an object is gathered for rendering from the graph, we can point to the probes it is affected by
+// the probes themselves should be
 
-in both of these some opengl state may be set that isnt unset
-cubemap seems good
+struct Environment_Probe
+{
+  Environment_Probe(Environment_Map_Descriptor d) {}
+};
 
-
-
-*/
+// a basic single environment map that is a fallback for all objects
+// only one - held by the scene graph
+// constructed from equirectangular images
+// when the scene graph is initialized, the skybox will be missing/black
+// when do we begin to load the data?
+// we should have a way to signal to begin loading
+// what do we do if rendering is called before we are finished loading?
+// we could render them as tiles as before, but we see it stream in very ugly
+// we should just use the source mip only, and swap to the correct cubemap only after it is all finished
+// with convolution
+struct Skybox
+{
+};
 
 struct Environment_Map
 {
@@ -231,30 +260,12 @@ struct Environment_Map
   bool radiance_is_gamma_encoded = true;
 
   void load();
-  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit,float32 time,vec2 size);
+  void bind(GLuint base_texture_unit, GLuint irradiance_texture_unit, float32 time, vec2 size);
 
   Environment_Map_Descriptor m;
 
-  // todo: irradiance map generation
-  void irradiance_convolution();
-  void generate_ibl_mipmaps();
-
   // todo: rendered environment map
   void probe_world(glm::vec3 p, glm::vec2 resolution);
-
-private:
-  //std::shared_ptr<Texture_Handle> ibl_source;
-  GLuint ibl_source = 0;
-  GLuint ibl_texture_target = 0;
-  GLsync ibl_sync= 0;
-  GLuint ibl_fbo = 0;
-  GLuint ibl_rbo = 0;
-  uint32 ibl_tile_max = 15;
-  int32 tilex = 0;
-  int32 tiley = 0;
-  bool working_on_ibl = false;
-  float32 time = 0;
-  vec2 size = vec2(0);
 };
 
 struct Mesh_Handle
@@ -331,6 +342,7 @@ struct Material_Descriptor
   Texture_Descriptor metalness;
   Texture_Descriptor emissive;
   Texture_Descriptor ambient_occlusion;
+  Texture_Descriptor displacement;
   Texture_Descriptor tangent; // anisotropic surface roughness    - unused for now
   Uniform_Set_Descriptor uniform_set;
   std::string vertex_shader;
@@ -424,7 +436,6 @@ struct Material
     return &descriptor;
   }
 
-private:
   bool reload_from_descriptor = true;
   Material_Descriptor descriptor;
   friend struct Renderer;
@@ -434,11 +445,10 @@ private:
   Texture roughness;
   Texture metalness;
   Texture ambient_occlusion;
+  Texture displacement;
   Shader shader;
   void load();
   void bind();
-  void unbind_textures();
-  void bind_texture_or_set_default(Texture &t, const char *uniform, const glm::vec4 &default_mod, Texture_Location loc);
 };
 
 enum struct Light_Type
@@ -593,14 +603,13 @@ struct Framebuffer
 {
   Framebuffer();
   void init();
-  void bind();
+  void bind_for_drawing_dst();
   std::shared_ptr<Framebuffer_Handle> fbo;
   std::vector<Texture> color_attachments = {Texture()};
   std::shared_ptr<Renderbuffer_Handle> depth;
   glm::ivec2 depth_size = glm::ivec2(0);
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
-  bool encode_srgb_on_draw = false; // only works for srgb framebuffer
 };
 
 struct Gaussian_Blur
@@ -837,7 +846,7 @@ struct Particle_Emitter
   Material_Index material_index;
   Particle_Emitter_Descriptor descriptor;
 
-//private:
+  // private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 
@@ -845,9 +854,7 @@ struct Particle_Emitter
   { // todo :
 
     /*
-    collision
-    collision flag for nodes in scene graph,
-    collision bounds draw flag in nodes
+
     proper rigid body physics algorithm
 
 
@@ -870,18 +877,142 @@ struct Particle_Emitter
   std::shared_ptr<Physics_Shared_Data> shared_data;
 };
 
+struct Liquid_Surface
+{
+  void run(float32 current_time);
+
+  void set_heightmap(Texture texture)
+  {
+    heightmap = texture;
+    invalidated = true;
+  }
+
+  void zero_velocity();
+
+  int32 iterations = 1;
+
+private:
+  Texture heightmap;
+  Shader liquid_shader;
+  Texture heightmap_copy;
+  //Texture previous_heightmap;
+  Texture velocity;
+  Texture velocity_copy;
+  
+  Framebuffer liquid_shader_fbo;
+  Framebuffer copy_fbo;
+  Shader copy;
+  Mesh quad;
+
+  bool invalidated = true;
+  bool initialized = false;
+
+  //my algo:
+  //bind current heightmap as input, and heightmap intermediate as output
+
+  //spill height data into adjacent pixels:
+  //use height difference to determine a delta velocity to add to a velocity texture for each pixel side
+
+  //the amount of height to spill away from this pixel in each direction is determined by the velocity texture
+  //this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
+
+  //we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means
+  //we will add a negative - subtracting our height
+
+  //this means that a wave can only propagate at a max speed of 1 pixel per draw..
+  //i think this is what the convolution was trying to do
+
+  
+
+
+  //if we define a height level that is to be considered the underlying hard ground
+  //water added can flow on terrain easily
+
+
+
+
+
+
+
+
+
+
+  // lets store height information in alpha channel and color info in the rgb
+  // we will modify the painter to be able to paint the alpha channel too directly
+  // instead of using it as a blend operator
+
+  // when we iterate on velocity, we can also spread color along those vectors
+
+};
+
+struct Texture_Paint
+{
+  Texture_Paint() {}
+  void run(std::vector<SDL_Event> *imgui_event_accumulator);
+
+  bool window_open = true;
+  Shader drawing_shader;
+  Texture display_surface;
+  std::vector<Texture> textures;
+  Shader postprocessing_shader;
+  void preset_pen();
+  void preset_pen2();
+  Liquid_Surface liquid;
+//private:
+  Framebuffer fbo_drawing;
+  Framebuffer fbo_intermediate;
+  Framebuffer fbo_preview;
+  Framebuffer fbo_display;
+  Shader copy;
+  Mesh quad;
+  Texture intermediate;
+  Texture preview;
+  float32 zoom = .40f;
+  int32 selected_texture = 0;
+  bool hdr = true;
+  bool initialized = false;
+  int8 clear = 0;
+  int8 apply_exposure = false;
+  bool apply_tonemap = false;
+  int32 brush_selection = 1;
+  int32 blendmode = 1;
+  vec4 brush_color = vec4(1);
+  vec4 clear_color = vec4(0.05);
+  float32 intensity = 1.0f;
+  float32 exponent = 1.0f;
+  float32 size = 5.0f;
+  float32 exposure_delta = 0.1f;
+  vec2 last_drawn_ndc = vec2(0, 0);
+  vec2 last_seen_mouse_ndc = vec2(0);
+  bool is_new_click = true;
+  float32 accumulator = 0.0f;
+  float32 density = 25.f;
+  float32 pow = 1.5f;
+  float32 previous_speed = 0.0f;
+  float32 last_run_visit_time = 0.0f;
+  bool apply_pow = false;
+  bool constant_density = true;
+  int32 smoothing_count = 1;
+  bool postprocess_aces = 0;
+  uint32 imgui_visit_count = 0;
+  bool save_dialogue = false;
+  int32 save_type_radio_button_state = 0;
+  std::string filename;
+  float32 sim_time = 0.f;
+  bool draw_cursor = false;
+
+  void iterate(Texture *t, float32 time);
+
+  Texture create_new_texture(const char *name = nullptr);
+};
+mat4 fullscreen_quad();
 struct Renderer
 {
   // todo: irradiance map generation
-  // todo: water shader
   // todo: skeletal animation
-  // todo: particle system/instancing
   // todo: deferred rendering
   // todo: screen space reflections
   // todo: parallax mapping
-  // todo: negative glow
-  // not describe them
-  // with shader3 and materialB  these special effect methods would be hardcoded and the objects would point to them,
   Renderer() {}
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
@@ -904,7 +1035,7 @@ struct Renderer
     pixel.y = window_size.y - pixel.y;
     const vec2 pixel_normalized = vec2(pixel) / vec2(window_size);
     const vec2 screen_ndc = 2.0f * (pixel_normalized - vec2(0.5f));
-   // set_message("cursor_ndc:", s(vec4(screen_ndc, 0, 0)), 1.0f);
+    // set_message("cursor_ndc:", s(vec4(screen_ndc, 0, 0)), 1.0f);
     mat4 inv = glm::inverse(projection * camera);
     return normalize(inv * vec4(screen_ndc, 1, 1));
   }
@@ -921,7 +1052,7 @@ struct Renderer
   float32 blur_radius = 0.0021;
   float32 blur_factor = 2.12f;
   uint32 draw_calls_last_frame = 0;
-  static mat4 ortho_projection(ivec2 dst_size);
+
   Environment_Map environment;
 
   bool imgui_this_tick = false;
@@ -929,7 +1060,6 @@ struct Renderer
   bool show_imgui_fxaa = false;
   bool show_bloom = false;
   void draw_imgui();
-
   Mesh quad;
   Mesh cube;
   Shader temporalaa = Shader("passthrough.vert", "TemporalAA.frag");
@@ -947,6 +1077,7 @@ struct Renderer
   Shader skybox = Shader("vertex_shader.vert", "skybox.frag");
   Shader refraction = Shader("vertex_shader.vert", "refraction.frag");
   Shader water = Shader("vertex_shader.vert", "water.frag");
+  void bind_white_to_all_textures();
 
   Texture uv_map_grid;
   Texture brdf_integration_lut;
@@ -967,12 +1098,11 @@ struct Renderer
   void postprocess_pass(float32 time);
   void skybox_pass(float32 time);
   void copy_to_primary_framebuffer_and_txaa(float32 time);
-  Texture translucent_blur_target;
   Texture bloom_target;
   Texture bloom_result;
   Texture bloom_intermediate;
   Framebuffer bloom_fbo;
-
+  uint32 bloom_mip_levels;
   float64 time_of_last_scale_change = 0.;
   void init_render_targets();
   void dynamic_framerate_target();
@@ -981,7 +1111,6 @@ struct Renderer
   ivec2 window_size; // actual window size
   ivec2 size;        // render target size
   float32 vfov = CONFIG.fov;
-  float shadow_map_scale = CONFIG.shadow_map_scale;
   mat4 camera;
   mat4 previous_camera;
   mat4 projection;
@@ -997,9 +1126,9 @@ struct Renderer
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:
-  Framebuffer draw_target;       // full render scaled, float linear
-  Framebuffer draw_target_srgb8; // full render scaled, srgb
-  Framebuffer draw_target_fxaa;  // full render scaled. srgb
+  Framebuffer draw_target;              // full render scaled, float linear
+  Framebuffer tonemapping_target_srgb8; // full render scaled, srgb
+  Framebuffer fxaa_target_srgb8;        // full render scaled. srgb
 
   // instance attribute buffers
   // GLuint instance_mvp_buffer = 0;

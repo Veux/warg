@@ -99,6 +99,7 @@ struct State
   virtual void handle_input_events(){};
   std::vector<SDL_Event> events_this_tick;
   std::vector<uint8> key_state;
+  std::vector<SDL_Event>* imgui_event_accumulator; //events only cleared after imgui pass
   ivec2 cursor_position;
   ivec2 mouse_delta;
   uint32 mouse_state;
