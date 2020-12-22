@@ -24,7 +24,10 @@ struct Animation_Object
 
 struct Interface_State
 {
+  bool icon_setup_complete = false;
   std::vector<Texture> action_bar_textures;
+  Framebuffer duration_spiral_fbo;
+  Shader duration_spiral_shader;
 };
 
 struct Warg_State : protected State
@@ -80,4 +83,6 @@ struct Warg_State : protected State
 
   std::string character_name;
   int32 team;
+
+
 };

@@ -35,21 +35,20 @@ extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
 //}
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_,
-  std::string_view character_name, int32 team)
+    std::string_view character_name, int32 team)
     : State(name, window, window_size), character_name(character_name), team(team)
 {
   session = session_;
 
   map = new Blades_Edge(scene);
-   //map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
+  // map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
   // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
   // collider_cache = collect_colliders(scene);
 
   // scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
   //    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-  scene.initialize_lighting(
-    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
-    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+  scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
+      "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
   session->request_spawn(character_name, team);
 
@@ -219,8 +218,8 @@ void Warg_State::handle_input_events()
   if (!player_character_id ||
       none_of(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; }))
     return;
-  if (player_character_id && none_of(current_game_state.living_characters, [&](auto &lc) {
-    return lc.id == player_character_id; }))
+  if (player_character_id &&
+      none_of(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; }))
   {
     session->request_spawn(character_name, team);
   }
@@ -401,11 +400,10 @@ void Warg_State::handle_input_events()
 
 void Warg_State::process_messages()
 {
-  //std::vector<unique_ptr<Message>> messages = session->pull();
-  //set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
-  //for (unique_ptr<Message> &message : messages)
+  // std::vector<unique_ptr<Message>> messages = session->pull();
+  // set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
+  // for (unique_ptr<Message> &message : messages)
   //  message->handle(*this);
-
 }
 
 void Warg_State::set_camera_geometry()
@@ -793,7 +791,6 @@ void Warg_State::update()
 
   session->get_state(current_game_state, player_character_id);
 
-
   auto target = find_if(current_game_state.characters, [&](auto &c) { return c.id == target_id; });
   const auto &tlc = std::find_if(current_game_state.living_characters.begin(),
       current_game_state.living_characters.end(), [&](auto &lc) { return lc.id == target_id; });
@@ -849,7 +846,7 @@ void Warg_State::update()
   static std::vector<Node_Index> spawned_nodes;
   static std::vector<Node_Index> spawned_server_nodes;
 
-  //if (WANT_SPAWN_OCTREE_BOX)
+  // if (WANT_SPAWN_OCTREE_BOX)
   //{
   //  WANT_SPAWN_OCTREE_BOX = false;
   //  Material_Descriptor mat;
@@ -875,14 +872,14 @@ void Warg_State::update()
   //  ptr->scene.nodes[servernode].scale = vec3(2);
   //  ptr->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
   //}
-  //Local_Session *ptr = (Local_Session *)this->session;
-  //ptr->scene.collision_octree.clear();
+  // Local_Session *ptr = (Local_Session *)this->session;
+  // ptr->scene.collision_octree.clear();
 
   // ptr->scene.collision_octree.push(md);
   for (Node_Index node : spawned_nodes)
   {
     mat4 M = scene.build_transformation(node);
-     scene.collision_octree.push(&mesh, &M);
+    scene.collision_octree.push(&mesh, &M);
     AABB prober(scene.nodes[node].position);
     push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
     push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
@@ -893,7 +890,7 @@ void Warg_State::update()
   {
     Local_Session *ptr = (Local_Session *)this->session;
     mat4 M = ptr->scene.build_transformation(node);
-     ptr->scene.collision_octree.push(&mesh, &M);
+    ptr->scene.collision_octree.push(&mesh, &M);
   }
 
   if (WANT_CLEAR_OCTREE)
@@ -916,10 +913,10 @@ void Warg_State::update()
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   Material_Descriptor material;
-  //static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
+  // static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
-  //scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
-  //transform = scene.build_transformation(dynamic_collider_node);
+  // scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
+  // transform = scene.build_transformation(dynamic_collider_node);
   // scene.collision_octree.push(&mesh, &transform, &velocity);
 
   // fire_emitter2(
@@ -1731,103 +1728,68 @@ void Warg_State::update_unit_frames()
 
 void Warg_State::update_icons()
 {
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
   ASSERT(player_character != current_game_state.characters.end());
 
-  static Framebuffer framebuffer = Framebuffer();
-  static Shader shader = Shader("passthrough.vert", "duration_spiral.frag");
-  static std::vector<Texture> sources;
+  Framebuffer *framebuffer = &interface_state.duration_spiral_fbo;
+  Shader *shader = &interface_state.duration_spiral_shader;
 
-  static bool setup_complete = false;
-  static bool all_textures_ready = true;
-  static size_t num_spells = 0;
-  if (!setup_complete)
+  if (!interface_state.icon_setup_complete)
   {
-    Texture_Descriptor texture_descriptor;
-    texture_descriptor.source = "generate";
-    texture_descriptor.minification_filter = GL_LINEAR;
-    texture_descriptor.size = vec2(90, 90);
-    texture_descriptor.format = GL_RGB;
-    texture_descriptor.levels = 1;
+    if (shader->fs == "")
+      *shader = Shader("passthrough.vert", "duration_spiral.frag");
 
-    if (sources.size() != 0)
+    if (!interface_state.icon_setup_complete)
     {
-      for (size_t i = 0; i < num_spells; i++)
+      size_t spell_index = 0;
+      for (size_t i = 0; i < current_game_state.character_spells.size(); ++i)
       {
-        if (!sources[i].bind(0))
+        Character_Spell &cs = current_game_state.character_spells[i];
+        if (cs.character != player_character_id)
+          continue;
+
+        if (interface_state.action_bar_textures.size() < spell_index + 1)
+          interface_state.action_bar_textures.emplace_back(SPELL_DB.icon[cs.spell]);
+
+        Texture *icon = &interface_state.action_bar_textures[spell_index];
+
+        spell_index += 1;
+        if (!icon->bind(0))
         {
-          all_textures_ready = false;
-        }
-        if (!interface_state.action_bar_textures[i].bind(0))
-        {
-          all_textures_ready = false;
+          return;
         }
       }
-         if (!all_textures_ready)
+    }
+
+    for (size_t i = 0; i < interface_state.action_bar_textures.size(); ++i)
+    {
+      Texture *icon = &interface_state.action_bar_textures[i];
+      if (!icon->bind(0))
         return;
     }
-    else
+
+    Texture_Descriptor duration_spiral_descriptor;
+    duration_spiral_descriptor.source = "generate";
+    duration_spiral_descriptor.minification_filter = GL_LINEAR;
+    duration_spiral_descriptor.size = vec2(90, 90);
+    duration_spiral_descriptor.format = GL_RGB;
+    duration_spiral_descriptor.levels = 1;
+    framebuffer->color_attachments.resize(interface_state.action_bar_textures.size());
+    for (size_t i = 0; i < interface_state.action_bar_textures.size(); ++i)
     {
-      ASSERT(interface_state.action_bar_textures.size() == 0);
-      ASSERT(sources.size() == 0);
-
-    num_spells = std::count_if(current_game_state.character_spells.begin(), current_game_state.character_spells.end(),
-        [&](auto &cs) { return cs.character == player_character_id; });
-    interface_state.action_bar_textures.resize(num_spells);
-    sources.resize(num_spells);
-    framebuffer.color_attachments.resize(num_spells);
-
-    int i = 0;
-    for (auto &cs : current_game_state.character_spells)
-    {
-      if (cs.character != player_character_id)
-        continue;
-
-      const auto &icon = SPELL_DB.icon[cs.spell];
-
-      texture_descriptor.name = s("duration-spiral-", i);
-      interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      sources[i] = Texture(texture_descriptor);
-      if (!sources[i].bind(0))
-      {
-        all_textures_ready = false;
-      }
-      if (!interface_state.action_bar_textures[i].bind(0))
-      {
-        all_textures_ready = false;
-      }
-      framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
-      i++;
+      duration_spiral_descriptor.name = s("duration-spiral-", i);
+      framebuffer->color_attachments[i] = interface_state.action_bar_textures[i];
     }
-
-      //for (size_t i = 0; i < num_spells; i++)
-      //{
-      //  Spell_Formula *formula = spell_db.get_spell(player_character->spell_set.spell_statuses[i].formula_index);
-      //  
-      //  texture_descriptor.name = s("duration-spiral-", i);
-      //  interface_state.action_bar_textures[i] = Texture(texture_descriptor);
-      //  sources[i] = formula->icon;
-      //  if (!sources[i].bind(0))
-      //  {
-      //    all_textures_ready = false;
-      //  }
-      //  if (!interface_state.action_bar_textures[i].bind(0))
-      //  {
-      //    all_textures_ready = false;
-      //  }
-      //  framebuffer.color_attachments[i] = interface_state.action_bar_textures[i];
-      //}
-      if (!all_textures_ready)
-        return;
-    }
-    setup_complete = true;
+    interface_state.icon_setup_complete = true;
   }
 
-  framebuffer.init();
-  framebuffer.bind_for_drawing_dst();
+  framebuffer->init();
+  framebuffer->bind_for_drawing_dst();
 
-  shader.use();
-  shader.set_uniform("count", (int)sources.size());
+  shader->use();
+  shader->set_uniform("count", (uint32)framebuffer->color_attachments.size());
+
   int i = 0;
   for (auto &cs : current_game_state.character_spells)
   {
@@ -1849,21 +1811,21 @@ void Warg_State::update_icons()
           find_if(current_game_state.living_characters, [&](auto &lc) { return lc.id == player_character_id; });
       if (cg != current_game_state.character_gcds.end() &&
           (scd == current_game_state.spell_cooldowns.end() ||
-              cg->remaining / lc->effective_stats.cast_speed  > scd->cooldown_remaining))
+              cg->remaining / lc->effective_stats.cast_speed > scd->cooldown_remaining))
         cooldown_percent = cg->remaining / lc->effective_stats.global_cooldown;
     }
-    shader.set_uniform(s("progress", i).c_str(), cooldown_percent);
+    shader->set_uniform(s("progress", i).c_str(), cooldown_percent);
     i++;
   }
 
-  run_pixel_shader(&shader, &sources, &framebuffer);
+  run_pixel_shader(shader, &interface_state.action_bar_textures, framebuffer);
 }
 
 void Warg_State::update_action_bar()
 {
 
-  //todo: fix warg icons
-  //update_icons(); 
+  // todo: fix warg icons
+  update_icons();
 
   const vec2 resolution = CONFIG.resolution;
   const size_t number_abilities = interface_state.action_bar_textures.size();
@@ -1941,7 +1903,6 @@ void Warg_State::update_buff_indicators()
   size_t max_columns = 18;
   Layout_Grid grid(vec2(800, 300), vec2(10), vec2(5), max_columns, 3);
 
-  
   std::vector<Character_Buff> buffs, debuffs;
   for (auto &cb : current_game_state.character_buffs)
   {

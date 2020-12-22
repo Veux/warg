@@ -605,11 +605,14 @@ struct Framebuffer
   void init();
   void bind_for_drawing_dst();
   std::shared_ptr<Framebuffer_Handle> fbo;
-  std::vector<Texture> color_attachments = {Texture()};
+  std::vector<Texture> color_attachments = { Texture() };
   std::shared_ptr<Renderbuffer_Handle> depth;
+  Texture depth_texture;
   glm::ivec2 depth_size = glm::ivec2(0);
   GLenum depth_format = GL_DEPTH_COMPONENT;
   bool depth_enabled = false;
+  bool use_renderbuffer_depth = true;
+  std::vector<GLenum> draw_buffers;
 };
 
 struct Gaussian_Blur

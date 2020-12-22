@@ -73,7 +73,7 @@ const vec4 DEFAULT_AMBIENT_OCCLUSION = vec4(1);
 const std::string DEFAULT_VERTEX_SHADER = "vertex_shader.vert";
 const std::string DEFAULT_FRAG_SHADER = "fragment_shader.frag";
 
-void check_FBO_status();
+void check_FBO_status(GLuint fbo);
 uint32 mip_levels_for_resolution(ivec2 resolution)
 {
   uint count = 0;
@@ -95,33 +95,56 @@ void Framebuffer::init()
   if (!fbo)
   {
     fbo = make_shared<Framebuffer_Handle>();
-    glGenFramebuffers(1, &fbo->fbo);
+    // glGenFramebuffers(1, &fbo->fbo);
+    glCreateFramebuffers(1, &fbo->fbo);
   }
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-
-  std::vector<GLenum> draw_buffers;
+  draw_buffers.clear();
   for (uint32 i = 0; i < color_attachments.size(); ++i)
   {
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
+    glNamedFramebufferTexture(fbo->fbo, GL_COLOR_ATTACHMENT0 + i, color_attachments[i].get_handle(), 0);
+
     ASSERT(color_attachments[i].texture->size != ivec2(0));
     draw_buffers.push_back(GL_COLOR_ATTACHMENT0 + i);
   }
-  glDrawBuffers(draw_buffers.size(), &draw_buffers[0]);
-  // check_FBO_status();
-  if (depth_enabled)
-  {
-    depth = make_shared<Renderbuffer_Handle>();
-    glGenRenderbuffers(1, &depth->rbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
+  GLint current_fbo;
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
+  glDrawBuffers(uint32(draw_buffers.size()), &draw_buffers[0]);
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
+  if (true)//depth_enabled)
+  {//sponge this is all pretty bad
+    if (depth_size == ivec2(0))
+    {
+      depth_size = color_attachments[0].t.size;
+    }
 
-    glRenderbufferStorage(GL_RENDERBUFFER, depth_format, depth_size.x, depth_size.y);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
-    depth->format = depth_format;
-    depth->size = depth_size;
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    if (use_renderbuffer_depth && depth == nullptr)
+    {
+      depth = make_shared<Renderbuffer_Handle>();
+      glGenRenderbuffers(1, &depth->rbo);
+      glBindRenderbuffer(GL_RENDERBUFFER, depth->rbo);
+      // glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT,depth_size.x,depth_size.y);
+      glNamedRenderbufferStorage(depth->rbo, depth_format, depth_size.x, depth_size.y);
+      // glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_COMPONENT,GL_RENDERBUFFER,depth->rbo);
+      glNamedFramebufferRenderbuffer(fbo->fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth->rbo);
+      depth->format = depth_format;
+      depth->size = depth_size;
+    }
+    else
+    {
+      if (!depth_texture.texture)
+      {
+        depth_texture.t.size = depth_size;
+        depth_texture.t.format = GL_DEPTH_COMPONENT32F;
+        if (depth_texture.t.name == "default")
+          depth_texture.t.name = "some unnamed depth texture";
+        depth_texture.t.source = "generate";
+        depth_texture.load();
+        glNamedFramebufferTexture(fbo->fbo, GL_DEPTH_ATTACHMENT, depth_texture.get_handle(), 0);
+      }
+    }
   }
-  check_FBO_status();
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  check_FBO_status(fbo->fbo);
 }
 
 void Framebuffer::bind_for_drawing_dst()
@@ -129,7 +152,7 @@ void Framebuffer::bind_for_drawing_dst()
   ASSERT(fbo);
   ASSERT(fbo->fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-  check_FBO_status();
+  check_FBO_status(fbo->fbo);
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
@@ -2481,42 +2504,47 @@ Distance 	Constant 	Linear 	Quadratic
 
 */
 
-void check_FBO_status()
+void check_FBO_status(GLuint fbo)
 {
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   auto result = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  // auto result = glCheckNamedFramebufferStatus(fbo,GL_FRAMEBUFFER);
   string str;
   switch (result)
   {
-    case GL_FRAMEBUFFER_UNDEFINED:
-      str = "GL_FRAMEBUFFER_UNDEFINED";
-      break;
-    case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-      str = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
-      break;
-    case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-      str = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
-      break;
-    case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-      str = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
-      break;
-    case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-      str = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
-      break;
-    case GL_FRAMEBUFFER_UNSUPPORTED:
-      str = "GL_FRAMEBUFFER_UNSUPPORTED";
-      break;
-    case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
-      str = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
-      break;
-    case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
-      str = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
-      break;
-    case GL_FRAMEBUFFER_COMPLETE:
-      str = "GL_FRAMEBUFFER_COMPLETE";
-      break;
+  case GL_FRAMEBUFFER_UNDEFINED:
+    str = "GL_FRAMEBUFFER_UNDEFINED";
+    break;
+  case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+    str = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+    break;
+  case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+    str = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+    break;
+  case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+    str = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+    break;
+  case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+    str = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+    break;
+  case GL_FRAMEBUFFER_UNSUPPORTED:
+    str = "GL_FRAMEBUFFER_UNSUPPORTED";
+    break;
+  case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+    str = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+    break;
+  case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+    str = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+    break;
+  case GL_FRAMEBUFFER_COMPLETE:
+    str = "GL_FRAMEBUFFER_COMPLETE";
+    break;
+  case GL_FRAMEBUFFER_DEFAULT:
+    str = "GL_FRAMEBUFFER_DEFAULT";
+    break;
   }
 
-  if (str != "GL_FRAMEBUFFER_COMPLETE")
+  if (str != "GL_FRAMEBUFFER_COMPLETE" && str != "")
   {
     set_message("FBO_ERROR", str);
     ASSERT(0);
