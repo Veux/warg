@@ -792,7 +792,8 @@ void Warg_State::update()
   // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
 
   session->get_state(current_game_state, player_character_id);
-  update_stats_bar();
+
+
   auto target = find_if(current_game_state.characters, [&](auto &c) { return c.id == target_id; });
   const auto &tlc = std::find_if(current_game_state.living_characters.begin(),
       current_game_state.living_characters.end(), [&](auto &lc) { return lc.id == target_id; });
@@ -1860,7 +1861,9 @@ void Warg_State::update_icons()
 
 void Warg_State::update_action_bar()
 {
-  update_icons();
+
+  //todo: fix warg icons
+  //update_icons(); 
 
   const vec2 resolution = CONFIG.resolution;
   const size_t number_abilities = interface_state.action_bar_textures.size();
