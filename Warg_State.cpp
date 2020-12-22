@@ -1739,6 +1739,7 @@ void Warg_State::update_icons()
   {
     if (shader->fs == "")
       *shader = Shader("passthrough.vert", "duration_spiral.frag");
+    
 
     if (!interface_state.icon_setup_complete)
     {
@@ -1773,7 +1774,7 @@ void Warg_State::update_icons()
     duration_spiral_descriptor.source = "generate";
     duration_spiral_descriptor.minification_filter = GL_LINEAR;
     duration_spiral_descriptor.size = vec2(90, 90);
-    duration_spiral_descriptor.format = GL_RGB8;
+    duration_spiral_descriptor.format = GL_SRGB8_ALPHA8;
     duration_spiral_descriptor.levels = 1;
     framebuffer->color_attachments.resize(interface_state.action_bar_textures_sources.size());
     for (size_t i = 0; i < framebuffer->color_attachments.size(); ++i)
@@ -1841,7 +1842,7 @@ void Warg_State::update_action_bar()
 
   const vec2 resolution = CONFIG.resolution;
   const size_t number_abilities = interface_state.action_bar_textures_with_cooldown.size();
-  Layout_Grid grid(vec2(500, 40), vec2(2), vec2(1), vec2(number_abilities, 1), vec2(1, 1), 1);
+  Layout_Grid grid(vec2(900, 90), vec2(2), vec2(1), vec2(number_abilities, 1), vec2(1, 1), 1);
 
   bool display_action_bar = true;
   ImGui::SetNextWindowPos(

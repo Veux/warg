@@ -14,11 +14,9 @@ struct Imgui_Texture_Descriptor
 {
   std::shared_ptr<Texture_Handle> ptr = nullptr;
   glm::vec2 size = glm::vec2(0);
-  float aspect = 1.0f;
   float mip_lod_to_draw = 0.f;
   bool y_invert = false;
-  bool gamma_encode = false;
-  bool is_cubemap = false;
+  GLenum internalformat = 0;
   bool is_mipmap_list_command = false;
 };
 

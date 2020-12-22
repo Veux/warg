@@ -151,19 +151,27 @@ void SDL_Imgui_State::render()
           if ((int32(IMGUI_TEXTURE_DRAWS.size()) - 1) < int32(index))
             continue;
           Imgui_Texture_Descriptor itd = IMGUI_TEXTURE_DRAWS[index];
-          if (itd.is_cubemap || itd.ptr == nullptr)
+
+          GLenum format = itd.ptr->internalformat;
+          bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
+            format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
+
+          if (itd.ptr->is_cubemap || itd.ptr == nullptr)
           {
             glBindTexture(GL_TEXTURE_2D, 0);
           }
           else
           {
-            if (itd.gamma_encode)
+            if (gamma_flag)
             {
               glEnable(GL_FRAMEBUFFER_SRGB);
             }
             else
             {
-              glDisable(GL_FRAMEBUFFER_SRGB);
+
+              //why exactly do we ever want this?
+             // glDisable(GL_FRAMEBUFFER_SRGB);
             }
             // glUniform1i(gamma_location, itd.gamma_encode);
             glUniform1i(gamma_location, false);
@@ -188,16 +196,29 @@ void SDL_Imgui_State::render()
 
         glScissor((int)pcmd->ClipRect.x, (int)(fb_height - pcmd->ClipRect.w),
             (int)(pcmd->ClipRect.z - pcmd->ClipRect.x), (int)(pcmd->ClipRect.w - pcmd->ClipRect.y));
+
+        if (warg_texture_flag_set)
+        {
+          glEnable(GL_FRAMEBUFFER_SRGB);
+        }
+        else
+        {
+          glDisable(GL_FRAMEBUFFER_SRGB);
+        }
+
         glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount,
             sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset);
-        glDisable(GL_FRAMEBUFFER_SRGB);
+        
+        glEnable(GL_FRAMEBUFFER_SRGB);
+        
+
+
         if (warg_texture_flag_set)
         {
           const GLuint index = texture;
           Imgui_Texture_Descriptor tex = IMGUI_TEXTURE_DRAWS[index];
-          if (!tex.is_cubemap)
+          if (!tex.ptr->is_cubemap)
           {
-
             if (tex.is_mipmap_list_command)
             {
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, tex.ptr->minification_filter);
@@ -674,16 +695,6 @@ void put_imgui_texture(std::shared_ptr<Texture_Handle> handle, glm::vec2 size, b
   descriptor.ptr = handle;
   descriptor.y_invert = y_invert;
   descriptor.size = size;
-  if (descriptor.ptr)
-  {
-    descriptor.is_cubemap = handle->is_cubemap;
-    GLenum format = descriptor.ptr->get_format();
-    bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
-                      format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-
-    descriptor.gamma_encode = gamma_flag;
-    descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
-  }
   put_imgui_texture(&descriptor);
 }
 
@@ -692,12 +703,16 @@ void put_imgui_texture(Imgui_Texture_Descriptor *descriptor)
   ASSERT(descriptor);
   IMGUI_TEXTURE_DRAWS.push_back(*descriptor);
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
+  
+  float32 aspect = 0.0f;
+  if (descriptor->ptr);
+  aspect = (float32)descriptor->ptr->size.x / (float32)descriptor->ptr->size.y;
 
   if (descriptor->y_invert)
-    ImGui::Image((ImTextureID)data, ImVec2(descriptor->aspect * descriptor->size.x, descriptor->size.y), ImVec2(0, 1),
+    ImGui::Image((ImTextureID)data, ImVec2(aspect * descriptor->size.x, descriptor->size.y), ImVec2(0, 1),
         ImVec2(1, 0));
   else
-    ImGui::Image((ImTextureID)data, ImVec2(descriptor->aspect * descriptor->size.x, descriptor->size.y));
+    ImGui::Image((ImTextureID)data, ImVec2(aspect * descriptor->size.x, descriptor->size.y));
 }
 
 bool put_imgui_texture_button(Texture *t, glm::vec2 size, bool y_invert)
@@ -717,16 +732,6 @@ bool put_imgui_texture_button(std::shared_ptr<Texture_Handle> handle, glm::vec2 
   descriptor.ptr = handle;
   descriptor.y_invert = y_invert;
   descriptor.size = size;
-  if (descriptor.ptr)
-  {
-    descriptor.is_cubemap = handle->is_cubemap;
-    GLenum format = descriptor.ptr->get_format();
-    bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
-                      format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-
-    descriptor.gamma_encode = gamma_flag;
-    descriptor.aspect = (float32)handle->size.x / (float32)handle->size.y;
-  }
   return put_imgui_texture_button(&descriptor);
 }
 
@@ -736,9 +741,13 @@ bool put_imgui_texture_button(Imgui_Texture_Descriptor *descriptor)
   IMGUI_TEXTURE_DRAWS.push_back(*descriptor);
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
 
+  float32 aspect = 0.0f;
+  if (descriptor->ptr);
+  aspect = (float32)descriptor->ptr->size.x / (float32)descriptor->ptr->size.y;
+
   if (descriptor->y_invert)
-    return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / descriptor->aspect),
+    return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / aspect),
         ImVec2(0, 1), ImVec2(1, 0));
   else
-    return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / descriptor->aspect));
+    return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / aspect));
 }

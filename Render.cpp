@@ -647,6 +647,7 @@ void Texture::load()
         {
           glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
+          ASSERT(texture->internalformat != 0);
           glTextureStorage2D(texture->texture, t.levels, texture->internalformat, texture->size.x, texture->size.y);
           glTextureSubImage2D(
               texture->texture, 0, 0, 0, texture->size.x, texture->size.y, GL_RGBA, texture->datatype, 0);
@@ -693,6 +694,7 @@ void Texture::load()
       texture->size = t.size;
       texture->levels = t.levels;
       texture->internalformat = t.format;
+      ASSERT(texture->internalformat != 0);
 
       check_set_parameters();
       glGenerateTextureMipmap(texture->texture);
@@ -714,7 +716,7 @@ void Texture::load()
     texture->filename = t.name;
 
     TEXTURE2D_CACHE[t.key] = texture;
-    texture->internalformat = GL_RGBA8;
+    texture->internalformat = GL_SRGB8_ALPHA8;
     texture->size = ivec2(1);
     texture->datatype = GL_UNSIGNED_BYTE;
     uint8 arr[4] = {255, 255, 255, 255};
@@ -732,14 +734,14 @@ void Texture::load()
       texture = make_shared<Texture_Handle>();
       texture->filename = t.name + " - FILE MISSING";
       TEXTURE2D_CACHE[t.key] = texture;
-      texture->internalformat = GL_RGBA8;
+      texture->internalformat = GL_SRGB8_ALPHA8;
       texture->size = ivec2(1);
       texture->datatype = GL_UNSIGNED_BYTE;
       texture->levels = t.levels;
       uint8 arr[4] = {255, 255, 255, 255};
       glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
-      glTextureStorage2D(texture->texture, 1, GL_RGBA8, 1, 1);
-      glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &arr[0]);
+      glTextureStorage2D(texture->texture, 1, GL_SRGB8_ALPHA8, 1, 1);
+      glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_SRGB8_ALPHA8, GL_UNSIGNED_BYTE, &arr[0]);
       return;
     }
     texture = make_shared<Texture_Handle>();
@@ -1469,13 +1471,9 @@ void Renderer::draw_imgui()
           bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
                             format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
 
-          descriptor.gamma_encode = gamma_flag;
-          descriptor.is_cubemap = ptr->is_cubemap;
-
           ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
           ImGui::InputFloat("LOD", &ptr->imgui_mipmap_setting, 0.1f);
           descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
-          descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
           descriptor.size = ptr->imgui_size_scale * vec2(256);
           descriptor.y_invert = true;
           put_imgui_texture(&descriptor);
