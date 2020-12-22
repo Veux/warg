@@ -25,7 +25,8 @@ struct Animation_Object
 struct Interface_State
 {
   bool icon_setup_complete = false;
-  std::vector<Texture> action_bar_textures;
+  std::vector<Texture> action_bar_textures_sources;
+  std::vector<Texture> action_bar_textures_with_cooldown;
   Framebuffer duration_spiral_fbo;
   Shader duration_spiral_shader;
 };

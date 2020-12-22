@@ -1749,10 +1749,10 @@ void Warg_State::update_icons()
         if (cs.character != player_character_id)
           continue;
 
-        if (interface_state.action_bar_textures.size() < spell_index + 1)
-          interface_state.action_bar_textures.emplace_back(SPELL_DB.icon[cs.spell]);
+        if (interface_state.action_bar_textures_sources.size() < spell_index + 1)
+          interface_state.action_bar_textures_sources.emplace_back(SPELL_DB.icon[cs.spell]);
 
-        Texture *icon = &interface_state.action_bar_textures[spell_index];
+        Texture *icon = &interface_state.action_bar_textures_sources[spell_index];
 
         spell_index += 1;
         if (!icon->bind(0))
@@ -1762,9 +1762,9 @@ void Warg_State::update_icons()
       }
     }
 
-    for (size_t i = 0; i < interface_state.action_bar_textures.size(); ++i)
+    for (size_t i = 0; i < interface_state.action_bar_textures_sources.size(); ++i)
     {
-      Texture *icon = &interface_state.action_bar_textures[i];
+      Texture *icon = &interface_state.action_bar_textures_sources[i];
       if (!icon->bind(0))
         return;
     }
@@ -1773,14 +1773,18 @@ void Warg_State::update_icons()
     duration_spiral_descriptor.source = "generate";
     duration_spiral_descriptor.minification_filter = GL_LINEAR;
     duration_spiral_descriptor.size = vec2(90, 90);
-    duration_spiral_descriptor.format = GL_RGB;
+    duration_spiral_descriptor.format = GL_RGB8;
     duration_spiral_descriptor.levels = 1;
-    framebuffer->color_attachments.resize(interface_state.action_bar_textures.size());
-    for (size_t i = 0; i < interface_state.action_bar_textures.size(); ++i)
+    framebuffer->color_attachments.resize(interface_state.action_bar_textures_sources.size());
+    for (size_t i = 0; i < framebuffer->color_attachments.size(); ++i)
     {
       duration_spiral_descriptor.name = s("duration-spiral-", i);
-      framebuffer->color_attachments[i] = interface_state.action_bar_textures[i];
+      framebuffer->color_attachments[i] = duration_spiral_descriptor;
+      while (!framebuffer->color_attachments[i].bind(0))
+      {
+      }
     }
+    interface_state.action_bar_textures_with_cooldown = framebuffer->color_attachments;
     interface_state.icon_setup_complete = true;
   }
 
@@ -1814,11 +1818,19 @@ void Warg_State::update_icons()
               cg->remaining / lc->effective_stats.cast_speed > scd->cooldown_remaining))
         cooldown_percent = cg->remaining / lc->effective_stats.global_cooldown;
     }
-    shader->set_uniform(s("progress", i).c_str(), cooldown_percent);
+
+    std::string uniform_str = s("progress", i);
+
+    
+    //std::string msg_id = s("setting spiral i:", i);
+    //std::string msg = s("uniform slot: ", uniform_str, "value:", cooldown_percent);
+    //set_message(msg_id, msg, 1.0f);
+
+    shader->set_uniform(uniform_str.c_str(), cooldown_percent);
     i++;
   }
 
-  run_pixel_shader(shader, &interface_state.action_bar_textures, framebuffer);
+  run_pixel_shader(shader, &interface_state.action_bar_textures_sources, framebuffer);
 }
 
 void Warg_State::update_action_bar()
@@ -1828,7 +1840,7 @@ void Warg_State::update_action_bar()
   update_icons();
 
   const vec2 resolution = CONFIG.resolution;
-  const size_t number_abilities = interface_state.action_bar_textures.size();
+  const size_t number_abilities = interface_state.action_bar_textures_with_cooldown.size();
   Layout_Grid grid(vec2(500, 40), vec2(2), vec2(1), vec2(number_abilities, 1), vec2(1, 1), 1);
 
   bool display_action_bar = true;
@@ -1841,10 +1853,10 @@ void Warg_State::update_action_bar()
   ImGui::Begin("action_bar", &display_action_bar,
       ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
           ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
-  for (size_t i = 0; i < interface_state.action_bar_textures.size(); i++)
+  for (size_t i = 0; i < interface_state.action_bar_textures_with_cooldown.size(); i++)
   {
     ImGui::SetCursorPos(v(grid.get_position(i, 0)));
-    put_imgui_texture(&interface_state.action_bar_textures[i], grid.get_section_size(1, 1));
+    put_imgui_texture(&interface_state.action_bar_textures_with_cooldown[i], grid.get_section_size(1, 1));
   }
   ImGui::End();
   ImGui::PopStyleVar(2);

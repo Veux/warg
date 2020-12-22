@@ -110,12 +110,11 @@ void Framebuffer::init()
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
   glDrawBuffers(uint32(draw_buffers.size()), &draw_buffers[0]);
-  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
-  if (true)//depth_enabled)
+  if (depth_enabled)
   {//sponge this is all pretty bad
-    if (depth_size == ivec2(0))
+    //if (depth_size == ivec2(0))
     {
-      depth_size = color_attachments[0].t.size;
+     // depth_size = color_attachments[0].t.size;
     }
 
     if (use_renderbuffer_depth && depth == nullptr)
@@ -144,7 +143,9 @@ void Framebuffer::init()
       }
     }
   }
+
   check_FBO_status(fbo->fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
 }
 
 void Framebuffer::bind_for_drawing_dst()
@@ -682,6 +683,7 @@ void Texture::load()
       static uint32 i = 0;
       ++i;
       string key = s("Generated texture ID:", i, " Name:", t.name, ",", t.format);
+      t.key = key;
       TEXTURE2D_CACHE[key] = texture;
       ASSERT(t.name != "");
       glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
@@ -693,6 +695,7 @@ void Texture::load()
       texture->internalformat = t.format;
 
       check_set_parameters();
+      glGenerateTextureMipmap(texture->texture);
     }
     return;
   }
@@ -1617,12 +1620,15 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   if (clear_dst)
   {
     glClearColor(0, 0, 0, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   }
 
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
-  glDisable(GL_CULL_FACE);
+  glDisable(GL_CULL_FACE);/*
+  glFrontFace(GL_CCW);
+  glCullFace(GL_BACK);*/
+  
   // glBindVertexArray(quad.get_vao());
   shader->use();
   shader->set_uniform("transform", fullscreen_quad());
