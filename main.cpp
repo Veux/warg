@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
   bool client = false;
   std::string address;
   std::string char_name;
-  uint8_t team;
+  uint8_t team = 0;
   int port = 8765;
 
   generator.seed(uint32(SDL_GetPerformanceCounter()));
