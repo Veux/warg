@@ -300,7 +300,7 @@ int main(int argc, char *argv[])
     set_message(ss.str());
 
     window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
-    int32 flags = SDL_WINDOW_OPENGL;
+    int32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
     // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
@@ -380,6 +380,9 @@ int main(int argc, char *argv[])
     }
     char_name = argv[2];
   }
+
+  if (!WARG_SERVER)
+    SDL_ShowWindow(window);
 
   Session *warg_session = nullptr;
   if (client)
