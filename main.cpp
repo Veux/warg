@@ -378,7 +378,7 @@ int main(int argc, char *argv[])
                 << std::endl;
       return 1;
     }
-    char_name = argv[3];
+    char_name = argv[2];
   }
 
   Session *warg_session = nullptr;
