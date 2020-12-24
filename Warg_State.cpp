@@ -1007,7 +1007,7 @@ void Warg_State::draw_gui()
   // opengl code is allowed in here
   IMGUI_LOCK lock(this); // you must own this lock during ImGui:: calls
 
-  if (!interface_state.icons_loaded)
+  while (!interface_state.icons_loaded)
   {
     int n_unready = 0;
     for (auto &[spell, icon] : SPELL_DB.icon)
