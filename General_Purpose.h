@@ -160,6 +160,7 @@ struct Config
   float32 shadow_map_scale = 1.0f;
   bool use_low_quality_specular = false;
   bool render_simple = false;
+  std::string wargspy_address;
 
   void load(std::string filename);
   void save(std::string filename);

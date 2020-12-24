@@ -274,36 +274,6 @@ int main(int argc, char *argv[])
   uint8_t team;
   int port = 8765;
 
-  WARG_SERVER = false;
-  ASSERT(!enet_initialize());
-  atexit(enet_deinitialize);
-  if (argc > 1 && std::string(argv[1]) == "--server")
-  {
-    WARG_SERVER = true;
-    ASSERT(WARG_SERVER);
-    Warg_Server *server = new Warg_Server();
-    server->run(port);
-    return 0;
-  }
-  else if (argc > 1 && std::string(argv[1]) == "--connect")
-  {
-    std::cout << "CONNECTING" << std::endl;
-    client = true;
-
-    if (argc <= 4)
-    {
-      std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
-                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
-                   "127.0.0.1 Cubeboi 0"
-                << std::endl;
-      return 1;
-    }
-    address = argv[2];
-    char_name = argv[3];
-    team = std::stoi(argv[4]);
-  }
-
-  ASSERT(!WARG_SERVER);
   generator.seed(uint32(SDL_GetPerformanceCounter()));
 
   SDL_GLContext context = nullptr;
@@ -383,12 +353,40 @@ int main(int argc, char *argv[])
   // glad_set_post_callback(glad_callback);
   // Local_Session warg_session = Local_Session();
 
+  WARG_SERVER = false;
+  ASSERT(!enet_initialize());
+  atexit(enet_deinitialize);
+  if (argc > 1 && std::string(argv[1]) == "--server")
+  {
+    WARG_SERVER = true;
+    ASSERT(WARG_SERVER);
+    Warg_Server *server = new Warg_Server();
+    ASSERT(CONFIG.wargspy_address.size());
+    server->run(CONFIG.wargspy_address.c_str());
+    return 0;
+  }
+  else if (argc > 1 && std::string(argv[1]) == "--connect")
+  {
+    std::cout << "CONNECTING" << std::endl;
+    client = true;
+
+    if (argc < 3)
+    {
+      std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
+                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
+                   "Cubeboi"
+                << std::endl;
+      return 1;
+    }
+    char_name = argv[3];
+  }
+
   Session *warg_session = nullptr;
   if (client)
   {
     std::cout << "CLIENT TRUE" << std::endl;
     Network_Session *network_session = new Network_Session();
-    network_session->connect(address.c_str(), port);
+    network_session->connect(CONFIG.wargspy_address.c_str());
     warg_session = (Session *)network_session;
     std::cout << "connected successfully" << std::endl;
   }

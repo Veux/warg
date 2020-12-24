@@ -25,11 +25,8 @@ struct Chat_Message
 struct Warg_Server
 {
   Warg_Server();
-  ~Warg_Server();
-  void run(int32 port);
+  void run(const char *wargspy_address);
 
-  ENetAddress addr;
-  ENetHost *server;
 
   std::map<UID, Peer> peers;
   std::unique_ptr<Map> map;

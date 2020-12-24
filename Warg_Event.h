@@ -30,6 +30,8 @@ void serialize_(Buffer &b, uint32_t n);
 void serialize_(Buffer &b, std::string_view s);
 void serialize_(Buffer &b, quat q);
 void serialize_(Buffer &b, Game_State &gs);
+void deserialize(Buffer &b, uint8 &n);
+void deserialize(Buffer &b, uint16 &n);
 void deserialize(Buffer &b, Game_State &gs);
 void deserialize(Buffer &b, int32 &n);
 void deserialize(Buffer &b, std::string &s);

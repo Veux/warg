@@ -34,6 +34,8 @@
 #define MAX_SPELLS 16
 #define MAX_SPELLS 16
 #define MAX_FILENAME_LENGTH 128
+#define WARGSPY_PORT 1234
+#define GAME_PORT 1234
 
 #ifdef __linux__
 #define ROOT_PATH std::string("../")

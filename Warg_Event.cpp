@@ -234,6 +234,11 @@ void deserialize(Buffer &b, int32 &n)
   n = *(int32 *)b.read(sizeof(n));
 }
 
+void deserialize(Buffer &b, uint16 &n)
+{
+  n = *(uint32 *)b.read(sizeof(n));
+}
+
 void deserialize(Buffer &b, uint32 &n)
 {
   n = *(uint32 *)b.read(sizeof(n));

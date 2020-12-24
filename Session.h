@@ -44,7 +44,7 @@ public:
   Network_Session() {}
   ~Network_Session();
 
-  void connect(const char *address, int32 port);
+  void connect(const char *wargspy_address);
   void send(Buffer &b);
 
   void get_state(Game_State &gs, UID &pc);

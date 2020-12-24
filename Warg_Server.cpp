@@ -8,27 +8,29 @@ Warg_Server::Warg_Server() : scene(&resource_manager)
     add_dummy(game_state, *map, {1, i, 5});
 }
 
-Warg_Server::~Warg_Server()
+void Warg_Server::run(const char *wargspy_address)
 {
-  enet_host_destroy(server);
-}
+  ENetHost *server;
+  {
+    ENetAddress addr;
+    addr.host = ENET_HOST_ANY;
+    addr.port = GAME_PORT;
+    server = enet_host_create(&addr, 32, 2, 0, 0);
+  }
 
-void Warg_Server::run(int32 port)
-{
-  /* Bind the server to the default localhost.     */
-  /* A specific host address can be specified by   */
-  /* enet_address_set_host (& address, "x.x.x.x"); */
-  /* Bind the server to port 1234. */
-  addr.host = ENET_HOST_ANY;
-  addr.port = 1234;
-  server = enet_host_create(
-    &addr /* the address to bind the server host to */,
-    32 /* allow up to 32 clients and/or outgoing connections */,
-    2 /* allow up to 2 channels to be used, 0 and 1 */,
-    0 /* assume any amount of incoming bandwidth */,
-    0 /* assume any amount of outgoing bandwidth */
-  );
-  ASSERT(server);
+  ENetPeer *wargspy;
+  {
+    ENetAddress addr;
+    enet_address_set_host(&addr, wargspy_address);
+    addr.port = WARGSPY_PORT;
+    wargspy = enet_host_connect(server, &addr, 2, 0);
+  }
+
+  {
+    ENetEvent event;
+    enet_host_service(server, &event, 5000);
+    // > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
+  }
   
   float64 current_time = 0.0;
   float64 last_time = get_real_time() - dt;
@@ -41,23 +43,27 @@ void Warg_Server::run(int32 port)
     while (current_time + dt < last_time + elapsed_time)
     {
       current_time += dt;
-      ENetEvent event;
-      while (enet_host_service(server, &event, 0) > 0)
+      
       {
-        switch (event.type)
+        uint8 byte = 1;
+        ENetPacket *packet = enet_packet_create(&byte, 1, 0);
+        enet_peer_send(wargspy, 0, packet);
+      }
+
+      {
+        ENetEvent event;
+        while (enet_host_service(server, &event, 0) > 0)
         {
-          case ENET_EVENT_TYPE_CONNECT:
-            printf("A new client connected from %x:%u.\n", event.peer->address.host, event.peer->address.port);
-            /* Store any relevant client information here. */
+          switch (event.type)
+          {
+            case ENET_EVENT_TYPE_CONNECT:
             {
-              Peer p;
-              p.peer = event.peer;
               UID peer_id = uid();
-              peers[peer_id] = p;
               event.peer->data = (void *)peer_id;
+              peers[peer_id].peer = event.peer;
+              break;
             }
-            break;
-          case ENET_EVENT_TYPE_RECEIVE:
+            case ENET_EVENT_TYPE_RECEIVE:
             {
               Buffer b;
               b.insert(event.packet->data, event.packet->dataLength);
@@ -95,7 +101,7 @@ void Warg_Server::run(int32 port)
                   UID character = peer.character;
                   peer.last_input = command;
                   auto t = std::find_if(game_state.character_targets.begin(), game_state.character_targets.end(),
-                      [&](auto &t) { return t.character == character; });
+                    [&](auto &t) { return t.character == character; });
                   if (t != game_state.character_targets.end())
                     t->target = target_id;
                   else
@@ -137,26 +143,26 @@ void Warg_Server::run(int32 port)
                   }
                 }
               }
+
+              enet_packet_destroy(event.packet);
+              break;
             }
 
-            enet_packet_destroy(event.packet);
-
-            break;
-
-          case ENET_EVENT_TYPE_DISCONNECT:
-            printf("peer %u disconnected.\n", (UID)event.peer->data);
-            std::cout << std::endl;
-            /* Reset the peer's client information. */
-            peers.erase((UID)event.peer->data);
-            event.peer->data = NULL;
-            break;
+            case ENET_EVENT_TYPE_DISCONNECT:
+            {
+              peers.erase((UID)event.peer->data);
+              break;
+            }
+          }
         }
       }
 
-      std::map<UID, Input> inputs;
-      for (auto &p : peers)
-        inputs[p.second.character] = p.second.last_input;
-      update_game(game_state, *map, scene, inputs);
+      {
+        std::map<UID, Input> inputs;
+        for (auto &p : peers)
+          inputs[p.second.character] = p.second.last_input;
+        update_game(game_state, *map, scene, inputs);
+      }
 
       for (auto &p : peers)
       {
@@ -172,5 +178,5 @@ void Warg_Server::run(int32 port)
     }
     SDL_Delay(5);
   }
-  std::cout << "closing like an idiot " << std::endl;
+  enet_host_destroy(server);
 }

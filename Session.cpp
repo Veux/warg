@@ -58,7 +58,7 @@ Network_Session::~Network_Session()
   enet_host_destroy(client);
 }
 
-void Network_Session::connect(const char *address, int32 port)
+void Network_Session::connect(const char *wargspy_address)
 {
   client = enet_host_create(
     NULL, /* create a client host */
@@ -72,17 +72,55 @@ void Network_Session::connect(const char *address, int32 port)
   ENetAddress addr;
   ENetEvent event;
 
-  /* Connect to some.server.net:1234. */
-  enet_address_set_host(&addr, "127.0.0.1");
-  addr.port = 1234;
+  {
+    ENetPeer *wargspy;
+    enet_address_set_host(&addr, wargspy_address);
+    addr.port = WARGSPY_PORT;
+    wargspy = enet_host_connect(client, &addr, 2, 0);
 
-  /* Initiate the connection, allocating the two channels 0 and 1. */
-  server = enet_host_connect(client, &addr, 2, 0);
-  ASSERT(server);
+    ASSERT(enet_host_service(client, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
 
-  /* Wait up to 5 seconds for the connection attempt to succeed. */
-  ASSERT(enet_host_service(client, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
+    {
+      uint8 byte = 2;
+      ENetPacket *packet = enet_packet_create(&byte, 1, 0);
+      enet_peer_send(wargspy, 0, packet);
+      enet_host_flush(client);
+    }
 
+    ENetEvent event;
+    enet_host_service(client, &event, 10000);
+
+    ASSERT(event.type == ENET_EVENT_TYPE_RECEIVE);
+
+    Buffer b;
+    b.insert(event.packet->data, event.packet->dataLength);
+
+    uint8 type;
+    deserialize(b, type);
+    if (type == 1)
+    {
+      uint32 host;
+      deserialize(b, host);
+      addr.host = host;
+      addr.port = GAME_PORT;
+    }
+    else
+    {
+      return;
+    }
+
+    enet_peer_disconnect_now(wargspy, 0);
+  }
+
+  {
+    /* Initiate the connection, allocating the two channels 0 and 1. */
+    server = enet_host_connect(client, &addr, 2, 0);
+    ASSERT(server);
+
+    /* Wait up to 5 seconds for the connection attempt to succeed. */
+    int res = enet_host_service(client, &event, 5000);
+    ASSERT(res > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
+  }
 }
 
 void Network_Session::send(Buffer &b)
