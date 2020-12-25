@@ -1384,7 +1384,7 @@ void Warg_State::add_character_mesh(UID character_id)
 
   {
     const auto &character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
-    if (character != current_game_state.characters.end() && character->name == "veux")
+    if (character != current_game_state.characters.end() && character->name == "Veux")
     {
       add_girl_character_mesh(character_id);
       return;
