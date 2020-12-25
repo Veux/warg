@@ -158,7 +158,6 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
           {
             deserialize(b, last_state);
             deserialize(b, character);
-            pc = character;
             break;
           }
 
@@ -179,6 +178,9 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     }
   }
 
+  if (pc == 0)
+    predicted_state = last_state;
+  pc = character;
   merge_states(gs);
 }
 
@@ -199,6 +201,7 @@ void Network_Session::merge_states(Game_State &gs)
     return;
 
   sc->physics = pc->physics;
+  //predicted_state = gs;
 }
 
 void Network_Session::request_spawn(std::string_view name, int32 team)
