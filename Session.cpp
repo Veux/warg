@@ -44,14 +44,23 @@ void Local_Session::try_cast_spell(UID target, UID spell)
   cast_spell(game_state, scene, character, target, spell);
 }
 
-void Local_Session::send_chat_message(std::string_view message) {
-  return;
+void Local_Session::send_chat_message(std::string_view chat_message)
+{
+  auto c = find_if(game_state.characters, [&](auto &c) { return c.id == character; });
+  Chat_Message cm;
+  if (c != game_state.characters.end())
+    cm.name = c->name;
+  else
+    cm.name = "Unknown";
+  cm.message = chat_message;
+  chat_log.push_back(cm);
 }
 
-std::vector<Chat_Message> Local_Session::get_chat_log()
+std::vector<Chat_Message> Session::get_chat_log()
 {
-  return {};
+  return chat_log;
 }
+
 
 Network_Session::~Network_Session()
 {
