@@ -211,6 +211,7 @@ struct Resource_Manager
 {
   Material_Index push_custom_material(Material_Descriptor *d);
   Mesh_Index push_custom_mesh(Mesh_Descriptor *d);
+  void clear() {}
 
 
 #define MAX_POOL_SIZE 5000

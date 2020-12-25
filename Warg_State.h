@@ -34,9 +34,10 @@ struct Interface_State
 
 struct Warg_State : protected State
 {
-  Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session,
-    std::string_view character_name, int32 team);
+  Warg_State(std::string name, SDL_Window *window, ivec2 window_size, std::string_view character_name, int32 team);
   ~Warg_State();
+  void set_session(Session *session);
+  void session_swapper();
   void update();
   void draw_gui();
   virtual void handle_input_events() final;
@@ -63,7 +64,7 @@ struct Warg_State : protected State
 
   Session *session = nullptr;
 
-  Map *map;
+  Map *map = nullptr;
 
   UID player_character_id = 0;
   UID target_id = 0;

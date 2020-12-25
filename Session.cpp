@@ -69,24 +69,19 @@ Network_Session::~Network_Session()
 
 void Network_Session::connect(const char *wargspy_address)
 {
-  client = enet_host_create(
-    NULL, /* create a client host */
-    1 /* only allow 1 outgoing connection */,
-    2 /* allow up 2 channels to be used, 0 and 1 */,
-    0 /* assume any amount of incoming bandwidth */,
-    0 /* assume any amount of outgoing bandwidth */
-  );
+  client = enet_host_create(NULL, 1, 2, 0, 0);
   ASSERT(client);
 
-  ENetAddress addr;
-  ENetEvent event;
 
+  // get game server ip address from wargspy
+  ENetAddress addr;
   {
     ENetPeer *wargspy;
     enet_address_set_host(&addr, wargspy_address);
     addr.port = WARGSPY_PORT;
     wargspy = enet_host_connect(client, &addr, 2, 0);
 
+    ENetEvent event;
     ASSERT(enet_host_service(client, &event, 5000) > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
 
     {
@@ -96,7 +91,6 @@ void Network_Session::connect(const char *wargspy_address)
       enet_host_flush(client);
     }
 
-    ENetEvent event;
     enet_host_service(client, &event, 10000);
 
     ASSERT(event.type == ENET_EVENT_TYPE_RECEIVE);
@@ -106,27 +100,21 @@ void Network_Session::connect(const char *wargspy_address)
 
     uint8 type;
     deserialize(b, type);
-    if (type == 1)
-    {
-      uint32 host;
-      deserialize(b, host);
-      addr.host = host;
-      addr.port = GAME_PORT;
-    }
-    else
-    {
-      return;
-    }
+    ASSERT(type == 1);
+    uint32 host;
+    deserialize(b, host);
+    addr.host = host;
+    addr.port = GAME_PORT;
 
     enet_peer_disconnect_now(wargspy, 0);
   }
 
+  // connect to game server
   {
-    /* Initiate the connection, allocating the two channels 0 and 1. */
+    ENetEvent event;
     server = enet_host_connect(client, &addr, 2, 0);
     ASSERT(server);
 
-    /* Wait up to 5 seconds for the connection attempt to succeed. */
     int res = enet_host_service(client, &event, 5000);
     ASSERT(res > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
   }

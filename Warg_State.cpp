@@ -34,24 +34,39 @@ extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
 //  dst->bool_uniforms["water_use_uv"] = true;
 //}
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, Session *session_,
+Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
     std::string_view character_name, int32 team)
     : State(name, window, window_size), character_name(character_name), team(team)
 {
-  session = session_;
+  //session = session_;
 
+  set_session((Session *)new Local_Session());
+
+}
+
+Warg_State::~Warg_State()
+{
+  delete map;
+}
+
+void Warg_State::set_session(Session *session)
+{
+  if (this->session) delete this->session;
+  this->session = session;
+
+  player_character_id = 0;
+  target_id = 0;
+  character_nodes.clear();
+  spell_object_nodes.clear();
+  animation_objects.clear();
+  scene.clear();
+  resource_manager.clear();
+  if (map) delete map;
   map = new Blades_Edge(scene);
-  // map.node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
-  // map.node = scene.add_aiscene("Blades Edge", "Blades_Edge/bea2.fbx", &map.material);
-  // collider_cache = collect_colliders(scene);
-
-  // scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
-  //    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
   scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
-      "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
   session->request_spawn(character_name, team);
-
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
@@ -133,9 +148,23 @@ Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size, 
   light->shadow_map_resolution = ivec2(4096, 4096);
 }
 
-Warg_State::~Warg_State()
+void Warg_State::session_swapper()
 {
-  delete map;
+  ImGui::Begin("Session swapper");
+
+  if (ImGui::Button("Local"))
+  {
+    set_session((Session *)new Local_Session());
+  }
+
+  if (ImGui::Button("Cyber"))
+  {
+    Network_Session *network_session = new Network_Session();
+    network_session->connect(CONFIG.wargspy_address.c_str());
+    set_session((Session *)network_session);
+  }
+
+  ImGui::End();
 }
 
 void Warg_State::handle_input_events()
@@ -1026,6 +1055,7 @@ void Warg_State::draw_gui()
   update_game_interface();
   draw_chat_box();
   scene.draw_imgui(state_name);
+  session_swapper();
 }
 
 void Warg_State::draw_chat_box()

@@ -268,10 +268,6 @@ int main(int argc, char *argv[])
   const char *config_filename = "config.json";
   CONFIG.load(config_filename);
   // SDL_Delay(1000); ??
-  bool client = false;
-  std::string address;
-  std::string char_name;
-  uint8_t team = 0;
   int port = 8765;
 
   generator.seed(uint32(SDL_GetPerformanceCounter()));
@@ -364,40 +360,9 @@ int main(int argc, char *argv[])
     game_server(CONFIG.wargspy_address.c_str());
     return 0;
   }
-  else if (argc > 1 && std::string(argv[1]) == "--connect")
-  {
-    std::cout << "CONNECTING" << std::endl;
-    client = true;
-
-    if (argc < 3)
-    {
-      std::cout << "Please provide arguments in format: --connect IP_ADDRESS "
-                   "CHARACTER_NAME CHARACTER_TEAM\nFor example: warg --connect "
-                   "Cubeboi"
-                << std::endl;
-      return 1;
-    }
-    char_name = argv[2];
-  }
 
   if (!WARG_SERVER)
     SDL_ShowWindow(window);
-
-  Session *warg_session = nullptr;
-  if (client)
-  {
-    std::cout << "CLIENT TRUE" << std::endl;
-    Network_Session *network_session = new Network_Session();
-    network_session->connect(CONFIG.wargspy_address.c_str());
-    warg_session = (Session *)network_session;
-    std::cout << "connected successfully" << std::endl;
-  }
-  else
-  {
-    warg_session = (Session *)new Local_Session();
-    char_name = "Cubeboi";
-    team = 0;
-  }
 
   IMGUI.init(window);
   ImGui::SetCurrentContext(IMGUI.context);
@@ -470,8 +435,7 @@ int main(int argc, char *argv[])
 
   std::vector<State *> states;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
-
-  states.emplace_back((State *)new Warg_State("Warg", window, window_size, (Session *)warg_session, char_name, team));
+  states.emplace_back((State *)new Warg_State("Warg", window, window_size, CONFIG.character_name, 0));
 
   states[0]->recieves_input = true;
   states[0]->draws_imgui = true;
