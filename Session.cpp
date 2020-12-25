@@ -191,7 +191,7 @@ void Network_Session::merge_states(Game_State &gs)
   update_game(predicted_state, *map, scene, inputs);
 
   auto sc = find_if(gs.characters, [&](auto &c) { return c.id == character; });
-  if (sc == last_state.characters.end())
+  if (sc == gs.characters.end())
     return;
 
   auto pc = find_if(predicted_state.characters, [&](auto &c) { return c.id == character; });
