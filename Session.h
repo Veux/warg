@@ -45,7 +45,8 @@ public:
   ~Network_Session();
 
   void connect(const char *wargspy_address);
-  void send(Buffer &b);
+  void send_reliable(Buffer &b);
+  void send_unreliable(Buffer &b);
 
   void get_state(Game_State &gs, UID &pc);
   void request_spawn(std::string_view name, int team);

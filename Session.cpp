@@ -123,7 +123,14 @@ void Network_Session::connect(const char *wargspy_address)
   }
 }
 
-void Network_Session::send(Buffer &b)
+void Network_Session::send_reliable(Buffer &b)
+{
+  ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  enet_peer_send(server, 0, packet);
+  enet_host_flush(client);
+}
+
+void Network_Session::send_unreliable(Buffer &b)
 {
   ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
   enet_peer_send(server, 0, packet);
@@ -179,7 +186,7 @@ void Network_Session::request_spawn(std::string_view name, int32 team)
   serialize_(b, SPAWN_MESSAGE);
   serialize_(b, name);
   serialize_(b, team);
-  send(b);
+  send_reliable(b);
 }
 
 void Network_Session::move_command(int m, quat orientation, UID target_id)
@@ -189,7 +196,7 @@ void Network_Session::move_command(int m, quat orientation, UID target_id)
   serialize_(b, m);
   serialize_(b, orientation);
   serialize_(b, target_id);
-  send(b);
+  send_unreliable(b);
 }
 
 void Network_Session::try_cast_spell(UID target, UID spell) {
@@ -197,16 +204,12 @@ void Network_Session::try_cast_spell(UID target, UID spell) {
   serialize_(b, CAST_MESSAGE);
   serialize_(b, target);
   serialize_(b, spell);
-  send(b);
+  send_reliable(b);
 }
 
 void Network_Session::send_chat_message(std::string_view chat_message) {
   Buffer b;
   serialize_(b, CHAT_MESSAGE);
   serialize_(b, chat_message);
-  send(b);
-}
-
-std::vector<Chat_Message> Network_Session::get_chat_log() {
-  return chat_log;
+  send_reliable(b);
 }
