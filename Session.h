@@ -43,7 +43,7 @@ public:
 class Network_Session : Session
 {
 public:
-  Network_Session() {}
+  Network_Session();
   ~Network_Session();
 
   void connect(const char *wargspy_address);
@@ -55,10 +55,16 @@ public:
   void move_command(int m, quat orientation, UID target_id);
   void try_cast_spell(UID target, UID spell);
   void send_chat_message(std::string_view chat_message);
+  void merge_states(Game_State &gs);
 
 private:
   ENetHost *client = nullptr;
   ENetPeer *server = nullptr;
   Game_State last_state;
+  Game_State predicted_state;
   UID character = 0;
+  Input last_input;
+  Resource_Manager resource_manager;
+  Flat_Scene_Graph scene;
+  std::unique_ptr<Map> map;
 };

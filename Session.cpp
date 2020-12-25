@@ -61,6 +61,10 @@ std::vector<Chat_Message> Session::get_chat_log()
   return chat_log;
 }
 
+Network_Session::Network_Session() : scene(&resource_manager)
+{  
+  map = std::make_unique<Map>(Blades_Edge(scene));
+}
 
 Network_Session::~Network_Session()
 {
@@ -154,7 +158,6 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
           {
             deserialize(b, last_state);
             deserialize(b, character);
-            gs = last_state;
             pc = character;
             break;
           }
@@ -175,6 +178,28 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
       }
     }
   }
+
+  merge_states(gs);
+}
+
+void Network_Session::merge_states(Game_State &gs)
+{
+  gs = last_state;
+
+  std::map<UID, Input> inputs;
+  inputs[character] = last_input;
+  update_game(predicted_state, *map, scene, inputs);
+
+  auto sc = find_if(gs.characters, [&](auto &c) { return c.id == character; });
+  if (sc == last_state.characters.end())
+    return;
+
+  auto pc = find_if(predicted_state.characters, [&](auto &c) { return c.id == character; });
+  if (pc == predicted_state.characters.end())
+    return;
+
+  sc->physics = pc->physics;
+  predicted_state = gs;
 }
 
 void Network_Session::request_spawn(std::string_view name, int32 team)
@@ -194,6 +219,17 @@ void Network_Session::move_command(int m, quat orientation, UID target_id)
   serialize_(b, orientation);
   serialize_(b, target_id);
   send_unreliable(b);
+
+  Input command;
+  command.number = 0;
+  command.orientation = orientation;
+  command.m = m;
+  last_input = command;
+  auto t = find_if(predicted_state.character_targets, [&](auto &t) { return t.character == character; });
+  if (t != predicted_state.character_targets.end())
+    t->target = target_id;
+  else
+    predicted_state.character_targets.push_back({character, target_id});
 }
 
 void Network_Session::try_cast_spell(UID target, UID spell) {
