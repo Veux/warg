@@ -1,6 +1,11 @@
 #include "stdafx.h"
 #include "Warg_Server.h"
 
+UID uid_of(const ENetPeer const *peer)
+{
+  return peer ? (UID)peer->data : 0;
+}
+
 void game_server(const char *wargspy_address)
 {
   ENetHost *server;
@@ -68,6 +73,7 @@ void game_server(const char *wargspy_address)
                 peers[peer_id].peer = event.peer;
                 break;
               }
+              
               case ENET_EVENT_TYPE_RECEIVE:
               {
                 Buffer b;
@@ -82,7 +88,7 @@ void game_server(const char *wargspy_address)
                     int32 team;
                     deserialize(b, name);
                     deserialize(b, team);
-                    Peer &peer = peers[(UID)event.peer->data];
+                    Peer &peer = peers[uid_of(event.peer)];
                     if (none_of(game_state.living_characters, [&](auto& lc) { return lc.id == peer.character; }))
                     {
                       UID character = add_char(game_state, *map, team, name);
@@ -102,7 +108,7 @@ void game_server(const char *wargspy_address)
                     command.number = 0;
                     command.orientation = orientation;
                     command.m = m;
-                    Peer &peer = peers[(UID)event.peer->data];
+                    Peer &peer = peers[uid_of(event.peer)];
                     UID character = peer.character;
                     peer.last_input = command;
                     auto t = find_if(game_state.character_targets, [&](auto &t) { return t.character == character; });
@@ -117,7 +123,7 @@ void game_server(const char *wargspy_address)
                     UID target, spell;
                     deserialize(b, target);
                     deserialize(b, spell);
-                    Peer &peer = peers[(UID)event.peer->data];
+                    Peer &peer = peers[uid_of(event.peer)];
                     UID character = peer.character;
                     cast_spell(game_state, *scene, character, target, spell);
                     break;
@@ -126,7 +132,7 @@ void game_server(const char *wargspy_address)
                   {
                     std::string chat_message;
                     deserialize(b, chat_message);
-                    Peer &peer = peers[(UID)event.peer->data];
+                    Peer &peer = peers[uid_of(event.peer)];
                     auto character = find_if(game_state.characters, [&](auto &c) { return c.id == peer.character; });
                     Chat_Message cm;
                     if (character != game_state.characters.end())
@@ -143,7 +149,6 @@ void game_server(const char *wargspy_address)
                     {
                       ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
                       enet_peer_send(p.second.peer, 0, packet);
-                      enet_host_flush(server);
                     }
                   }
                 }
@@ -154,7 +159,7 @@ void game_server(const char *wargspy_address)
 
               case ENET_EVENT_TYPE_DISCONNECT:
               {
-                peers.erase((UID)event.peer->data);
+                peers.erase(uid_of(event.peer));
                 break;
               }
             }
@@ -177,9 +182,9 @@ void game_server(const char *wargspy_address)
 
           ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
           enet_peer_send(p.second.peer, 0, packet);
-          enet_host_flush(server);
         }
       }
+      enet_host_flush(server);
       SDL_Delay(5);
     }
   }
