@@ -22,17 +22,4 @@ struct Chat_Message
   std::string message;
 };
 
-struct Warg_Server
-{
-  Warg_Server();
-  void run(const char *wargspy_address);
-
-
-  std::map<UID, Peer> peers;
-  std::unique_ptr<Map> map;
-  Resource_Manager resource_manager;
-  Flat_Scene_Graph scene;
-  Game_State game_state;
-
-  std::vector<Chat_Message> chat_log;
-};
+void game_server(const char *wargspy_address);

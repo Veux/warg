@@ -360,9 +360,8 @@ int main(int argc, char *argv[])
   {
     WARG_SERVER = true;
     ASSERT(WARG_SERVER);
-    Warg_Server *server = new Warg_Server();
     ASSERT(CONFIG.wargspy_address.size());
-    server->run(CONFIG.wargspy_address.c_str());
+    game_server(CONFIG.wargspy_address.c_str());
     return 0;
   }
   else if (argc > 1 && std::string(argv[1]) == "--connect")
