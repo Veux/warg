@@ -690,6 +690,9 @@ void Config::load(string filename)
 
   if ((i = j.find("WargSpy Address")) != j.end())
     wargspy_address = i->get<std::string>();
+
+  if ((i = j.find("Character Name")) != j.end())
+    character_name = i->get<std::string>();
 }
 
 void Config::save(string filename)
@@ -702,6 +705,7 @@ void Config::save(string filename)
   j["Low Quality Specular Convolution"] = use_low_quality_specular;
   j["Render Simple"] = render_simple;
   j["WargSpy Address"] = wargspy_address;
+  j["Character Name"] = character_name;
 
   string str = pretty_dump(j);
   fstream file(filename, ios::out);

@@ -161,6 +161,7 @@ struct Config
   bool use_low_quality_specular = false;
   bool render_simple = false;
   std::string wargspy_address;
+  std::string character_name = "Cubeboi";
 
   void load(std::string filename);
   void save(std::string filename);
