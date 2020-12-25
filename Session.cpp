@@ -199,7 +199,6 @@ void Network_Session::merge_states(Game_State &gs)
     return;
 
   sc->physics = pc->physics;
-  predicted_state = gs;
 }
 
 void Network_Session::request_spawn(std::string_view name, int32 team)
