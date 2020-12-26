@@ -27,12 +27,10 @@ void Local_Session::request_spawn(std::string_view name, int team)
 void Local_Session::move_command(int m, quat orientation, UID target_id)
 {
   Input command;
-  command.number = 0;
   command.orientation = orientation;
   command.m = m;
   last_input = command;
-  auto t = std::find_if(game_state.character_targets.begin(), game_state.character_targets.end(),
-      [&](auto &t) { return t.character == character; });
+  auto t = find_if(game_state.character_targets, [&](auto &t) { return t.character == character; });
   if (t != game_state.character_targets.end())
     t->target = target_id;
   else
@@ -156,8 +154,11 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
         {
           case STATE_MESSAGE:
           {
-            deserialize(b, last_state);
-            deserialize(b, character);
+            deserialize(b, server_state.gs);
+            deserialize(b, server_state.tick);
+            deserialize(b, server_state.character);
+            deserialize(b, server_state.input_number);
+
             break;
           }
 
@@ -178,30 +179,12 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     }
   }
 
-  if (pc == 0)
-    predicted_state = last_state;
-  pc = character;
-  merge_states(gs);
-}
-
-void Network_Session::merge_states(Game_State &gs)
-{
-  gs = last_state;
-
-  std::map<UID, Input> inputs;
-  inputs[character] = last_input;
-  update_game(predicted_state, *map, scene, inputs);
-
-  auto sc = find_if(gs.characters, [&](auto &c) { return c.id == character; });
-  if (sc == gs.characters.end())
-    return;
-
-  auto pc = find_if(predicted_state.characters, [&](auto &c) { return c.id == character; });
-  if (pc == predicted_state.characters.end())
-    return;
-
-  sc->physics = pc->physics;
-  //predicted_state = gs;
+  gs = server_state.gs;
+  pc = character = server_state.character;
+  for (int i = server_state.input_number + 1; i < inputs.size(); i++)
+  {
+    predict(gs, *map, scene, pc, inputs[i]);
+  }
 }
 
 void Network_Session::request_spawn(std::string_view name, int32 team)
@@ -215,23 +198,19 @@ void Network_Session::request_spawn(std::string_view name, int32 team)
 
 void Network_Session::move_command(int m, quat orientation, UID target_id)
 {
+  Input in;
+  in.m = m;
+  in.orientation = orientation;
+  inputs.push_back(in);
+
+
   Buffer b;
   serialize_(b, MOVE_MESSAGE);
+  serialize_(b, (uint32)(inputs.size()-1));
   serialize_(b, m);
   serialize_(b, orientation);
   serialize_(b, target_id);
   send_unreliable(b);
-
-  Input command;
-  command.number = 0;
-  command.orientation = orientation;
-  command.m = m;
-  last_input = command;
-  auto t = find_if(predicted_state.character_targets, [&](auto &t) { return t.character == character; });
-  if (t != predicted_state.character_targets.end())
-    t->target = target_id;
-  else
-    predicted_state.character_targets.push_back({character, target_id});
 }
 
 void Network_Session::try_cast_spell(UID target, UID spell) {

@@ -282,15 +282,10 @@ bool Character_Physics::operator!=(const Character_Physics &b) const
   return !(*this == b);
 }
 
-bool Character_Physics::operator<(const Character_Physics &b) const
-{
-  return command_number < b.command_number;
-}
-
 bool Input::operator==(const Input &b) const
 {
   auto &a = *this;
-  return a.number == b.number && a.orientation == b.orientation && a.m == b.m;
+  return a.orientation == b.orientation && a.m == b.m;
 }
 
 bool Input::operator!=(const Input &b) const
@@ -298,66 +293,66 @@ bool Input::operator!=(const Input &b) const
   return !(*this == b);
 }
 
-size_t Input_Buffer::size()
-{
-  if (start <= end)
-    return end - start;
-  else
-    return (capacity - start) + end;
-}
-
-Input &Input_Buffer::operator[](size_t i)
-{
-  ASSERT(i < size());
-
-  if (start + i < capacity)
-    return buffer[start + i];
-  else
-    return buffer[i - (capacity - start)];
-}
-
-Input Input_Buffer::back()
-{
-  ASSERT(size());
-  return buffer[end];
-}
-
-void Input_Buffer::push(Input &input)
-{
-  size_t size_ = size();
-
-  if (size_ < capacity)
-  {
-    if (end < capacity)
-      buffer[end++] = input;
-    else
-    {
-      buffer[0] = input;
-      end = 1;
-    }
-    return;
-  }
-
-  buffer[start] = input;
-  end = start + 1;
-  if (start < capacity - 1)
-    start++;
-  else
-    start = 0;
-}
-
-void Input_Buffer::pop_older_than(uint32 input_number)
-{
-  uint32 delta = input_number - buffer[start].number + 1;
-  size_t size_ = size();
-
-  if (delta > size_)
-    start = end = 0;
-  else if (start + delta < capacity)
-    start += delta;
-  else
-    start = delta - (capacity - start);
-}
+//size_t Input_Buffer::size()
+//{
+//  if (start <= end)
+//    return end - start;
+//  else
+//    return (capacity - start) + end;
+//}
+//
+//Input &Input_Buffer::operator[](size_t i)
+//{
+//  ASSERT(i < size());
+//
+//  if (start + i < capacity)
+//    return buffer[start + i];
+//  else
+//    return buffer[i - (capacity - start)];
+//}
+//
+//Input Input_Buffer::back()
+//{
+//  ASSERT(size());
+//  return buffer[end];
+//}
+//
+//void Input_Buffer::push(Input &input)
+//{
+//  size_t size_ = size();
+//
+//  if (size_ < capacity)
+//  {
+//    if (end < capacity)
+//      buffer[end++] = input;
+//    else
+//    {
+//      buffer[0] = input;
+//      end = 1;
+//    }
+//    return;
+//  }
+//
+//  buffer[start] = input;
+//  end = start + 1;
+//  if (start < capacity - 1)
+//    start++;
+//  else
+//    start = 0;
+//}
+//
+//void Input_Buffer::pop_older_than(uint32 input_number)
+//{
+//  uint32 delta = input_number - buffer[start].number + 1;
+//  size_t size_ = size();
+//
+//  if (delta > size_)
+//    start = end = 0;
+//  else if (start + delta < capacity)
+//    start += delta;
+//  else
+//    start = delta - (capacity - start);
+//}
 
 void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage)
 {
@@ -820,4 +815,42 @@ void update_game(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID
   update_casts(gs, scene);
   remove_dead_characters(gs);
   respawn_dummy(gs.characters, gs.living_characters, gs, map);
+}
+
+void predict(Game_State &gs, Map &map, Flat_Scene_Graph &scene, UID character_id, Input input)
+{
+  auto c_it = find_if(gs.characters, [&](auto &c) { return c.id == character_id; });
+  if (c_it == gs.characters.end())
+    return;
+  auto &c = *c_it;
+
+  vec3 old_pos = c.physics.position;
+  move_char(gs, c, input, scene);
+  if (_isnan(c.physics.position.x) || _isnan(c.physics.position.y) || _isnan(c.physics.position.z))
+    c.physics.position = map.spawn_pos[c.team];
+  if (c.physics.position.z < -50)
+    c.physics.position = map.spawn_pos[c.team];
+  if (any_of(gs.living_characters, [&](auto &lc) { return lc.id == c.id; }))
+  {
+    if (c.physics.position != old_pos)
+    {
+      erase_if(gs.character_casts, [&](auto &cc) { return cc.caster == c.id; });
+      erase_if(gs.character_gcds, [&](auto &cg) { return cg.character == c.id; });
+    }
+  }
+  else
+  {
+    c.physics.orientation = angleAxis(-half_pi<float32>(), vec3(1.f, 0.f, 0.f));
+  }
+}
+
+bool verify_prediction(Game_State &a, Game_State &b, UID character_id)
+{
+  auto ac = find_if(a.characters, [&](auto &c) { return c.id == character_id; });
+  auto bc = find_if(b.characters, [&](auto &c) { return c.id == character_id; });
+
+  if (ac == a.characters.end()) return bc == b.characters.end();
+  if (bc == b.characters.end()) return ac == a.characters.end();
+
+  return ac->physics == bc->physics;
 }

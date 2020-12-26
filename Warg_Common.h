@@ -35,38 +35,34 @@ struct Input
   bool operator==(const Input &) const;
   bool operator!=(const Input &) const;
 
-  uint32 number = 0;
   int m = Move_Status::None;
   quat orientation = quat();
 };
 
-struct Input_Buffer
-{
-  Input &operator[](size_t i);
-  Input back();
-  size_t size();
-  void push(Input &input);
-  void pop_older_than(uint32 input_number);
-
-private:
-  const size_t capacity = INPUT_BUFFER_SIZE;
-  std::array<Input, INPUT_BUFFER_SIZE> buffer;
-  size_t start = 0;
-  size_t end = 0;
-};
+//struct Input_Buffer
+//{
+//  Input &operator[](size_t i);
+//  Input back();
+//  size_t size();
+//  void push(Input &input);
+//  void pop_older_than(uint32 input_number);
+//
+//private:
+//  const size_t capacity = INPUT_BUFFER_SIZE;
+//  std::array<Input, INPUT_BUFFER_SIZE> buffer;
+//  size_t start = 0;
+//  size_t end = 0;
+//};
 
 struct Character_Physics
 {
   bool operator==(const Character_Physics &) const;
   bool operator!=(const Character_Physics &) const;
-  bool operator<(const Character_Physics &) const;
 
   vec3 position = vec3(0.f);
   quat orientation = quat();
   vec3 velocity = vec3(0.f);
   bool grounded = false;
-  uint32 command_number = 0;
-  Input command;
 };
 
 struct Character
@@ -166,12 +162,15 @@ struct Seed_of_Corruption
   float32 damage_taken;
 };
 
+struct Game_Static_Data
+{
+  Map map;
+  Flat_Scene_Graph scene;
+};
+
 struct Game_State
 {
-  Map *map = nullptr;
-
   uint32 tick = 0;
-  uint32 input_number = 0;
 
   std::vector<Character> characters;
   std::vector<Living_Character> living_characters;
@@ -198,3 +197,4 @@ void cast_spell(Game_State &game_state, Flat_Scene_Graph &scene, UID caster_id, 
 void update_game(Game_State &game_state, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs);
 void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage);
 void end_buff(Game_State &gs, Character_Buff &cb);
+void predict(Game_State &gs, Map &map, Flat_Scene_Graph &scene, UID character_id, Input input);

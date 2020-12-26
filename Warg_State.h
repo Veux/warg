@@ -72,9 +72,6 @@ struct Warg_State : protected State
   std::deque<Game_State> state_buffer;
   Game_State current_game_state;
 
-  Input_Buffer input_buffer;
-  uint32 input_number = 0;
-
   // veux: why not put these Node_Index inside of the Character struct?
   std::map<UID, Node_Index> character_nodes;
   std::map<UID, Node_Index> spell_object_nodes;
@@ -86,6 +83,4 @@ struct Warg_State : protected State
 
   std::string character_name;
   int32 team;
-
-
 };

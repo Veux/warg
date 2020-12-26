@@ -42,6 +42,7 @@ void game_server(const char *wargspy_address)
   }
   
   {
+    uint32 tick = 0;
     float64 current_time = 0.0;
     float64 last_time = get_real_time() - dt;
     float64 elapsed_time = 0.0;
@@ -98,19 +99,21 @@ void game_server(const char *wargspy_address)
                   }
                   case MOVE_MESSAGE:
                   {
+                    uint32 input_number;
                     int m;
                     quat orientation;
                     UID target_id;
+                    deserialize(b, input_number);
                     deserialize(b, m);
                     deserialize(b, orientation);
                     deserialize(b, target_id);
                     Input command;
-                    command.number = 0;
                     command.orientation = orientation;
                     command.m = m;
                     Peer &peer = peers[uid_of(event.peer)];
                     UID character = peer.character;
                     peer.last_input = command;
+                    peer.last_input_number = input_number;
                     auto t = find_if(game_state.character_targets, [&](auto &t) { return t.character == character; });
                     if (t != game_state.character_targets.end())
                       t->target = target_id;
@@ -178,13 +181,17 @@ void game_server(const char *wargspy_address)
           Buffer b;
           serialize_(b, STATE_MESSAGE);
           serialize_(b, game_state);
+          serialize_(b, tick);
           serialize_(b, p.second.character);
+          serialize_(b, p.second.last_input_number);
 
           ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
           enet_peer_send(p.second.peer, 0, packet);
         }
+        enet_host_flush(server);
+
+        tick++;
       }
-      enet_host_flush(server);
       SDL_Delay(5);
     }
   }

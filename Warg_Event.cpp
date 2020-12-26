@@ -91,7 +91,6 @@ void serialize_(Buffer& b, quat q)
 
 void serialize_(Buffer& b, Input &i)
 {
-  serialize_(b, i.number);
   serialize_(b, i.m);
   serialize_(b, i.orientation);
 }
@@ -101,8 +100,6 @@ void serialize_(Buffer& b, Character_Physics& cp) {
   serialize_(b, cp.orientation);
   serialize_(b, cp.velocity);
   serialize_(b, cp.grounded);
-  serialize_(b, cp.command_number);
-  serialize_(b, cp.command);
 }
 
 void serialize_(Buffer& b, Character_Stats& cs) {
@@ -204,7 +201,6 @@ template <typename T> void serialize_(Buffer &b, std::vector<T> vec)
 
 void serialize_(Buffer& b, Game_State& gs) {
   serialize_(b, gs.tick);
-  serialize_(b, gs.input_number);
   serialize_(b, gs.characters);
   serialize_(b, gs.living_characters);
   serialize_(b, gs.character_targets);
@@ -282,7 +278,6 @@ void deserialize(Buffer &b, quat &q)
 
 void deserialize(Buffer &b, Input &i)
 {
-  deserialize(b, i.number);
   deserialize(b, i.m);
   deserialize(b, i.orientation);
 }
@@ -293,8 +288,6 @@ void deserialize(Buffer &b, Character_Physics &cp)
   deserialize(b, cp.orientation);
   deserialize(b, cp.velocity);
   deserialize(b, cp.grounded);
-  deserialize(b, cp.command_number);
-  deserialize(b, cp.command);
 }
 
 void deserialize(Buffer &b, Character_Stats &cs)
@@ -406,7 +399,6 @@ template <typename T> void deserialize(Buffer& b, std::vector<T>& vec) {
 void deserialize(Buffer &b, Game_State &gs)
 {
   deserialize(b, gs.tick);
-  deserialize(b, gs.input_number);
   deserialize(b, gs.characters);
   deserialize(b, gs.living_characters);
   deserialize(b, gs.character_targets);
