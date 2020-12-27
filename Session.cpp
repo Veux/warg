@@ -154,10 +154,12 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
         {
           case STATE_MESSAGE:
           {
-            deserialize(b, server_state.gs);
-            deserialize(b, server_state.tick);
-            deserialize(b, server_state.character);
-            deserialize(b, server_state.input_number);
+            State_Update su;
+            deserialize(b, su.gs);
+            deserialize(b, su.character);
+            deserialize(b, su.input_number);
+
+            server_state = su;
 
             break;
           }
@@ -179,11 +181,45 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     }
   }
 
-  gs = server_state.gs;
-  pc = character = server_state.character;
-  for (int i = server_state.input_number + 1; i < inputs.size(); i++)
+
   {
-    predict(gs, *map, scene, pc, inputs[i]);
+    gs = server_state.gs;
+    pc = server_state.character;
+
+    while (inputs.size() && inputs.front().sequence_number <= server_state.input_number)
+      inputs.pop_front();
+
+    for (auto &input : inputs)
+      gs = predict(gs, *map, scene, pc, input);
+
+    //std::cout << s("num inputs: ", inputs.size(), "\n");
+
+
+    //while (predicted_states.size() && predicted_states.front().input_number < server_state.input_number)
+    //  predicted_states.pop_front();
+
+    //if (predicted_states.empty() || !verify_prediction(predicted_states.front().gs, server_state.gs, pc))
+    //{
+    //  std::cout << "incorrect on input number: " << server_state.input_number << '\n';
+
+    //  while (predicted_states.size())
+    //    predicted_states.pop_front();
+    //  predicted_states.push_back(State_Prediction{server_state.gs, server_state.input_number});
+    //}
+
+    //auto start_input_it = find_if(inputs,
+    //  [&](auto &in){ return in.sequence_number == predicted_states.back().input_number + 1; });
+
+    //for (auto it = start_input_it; it != inputs.end(); it++)
+    //{
+    //  predicted_states.push_back(State_Prediction{
+    //    .gs = predict(predicted_states.back().gs, *map, scene, pc, *it),
+    //    .input_number = it->sequence_number
+    //  });
+    //}
+
+    //if (predicted_states.size())
+    //  merge_prediction(gs, predicted_states.back().gs, pc);
   }
 }
 
@@ -198,17 +234,19 @@ void Network_Session::request_spawn(std::string_view name, int32 team)
 
 void Network_Session::move_command(int m, quat orientation, UID target_id)
 {
-  Input in;
-  in.m = m;
-  in.orientation = orientation;
-  inputs.push_back(in);
+  Input in = {
+    .sequence_number = input_counter++,
+    .m = m,
+    .orientation = orientation
+  };
 
+  inputs.push_back(in);
 
   Buffer b;
   serialize_(b, MOVE_MESSAGE);
-  serialize_(b, (uint32)(inputs.size()-1));
-  serialize_(b, m);
-  serialize_(b, orientation);
+  serialize_(b, in.sequence_number);
+  serialize_(b, in.m);
+  serialize_(b, in.orientation);
   serialize_(b, target_id);
   send_unreliable(b);
 }

@@ -224,6 +224,8 @@ std::string to_string(Light_Type &value);
 std::string to_string(glm::mat4 &m);
 std::string to_string(Array_String &s);
 std::string to_string(vec4 &value);
+std::string to_string(vec3 &v);
+std::string to_string(quat &q);
 // std::string to_string(ivec4& value);
 
 vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);

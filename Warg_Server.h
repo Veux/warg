@@ -12,9 +12,8 @@
 struct Peer
 {
   UID character = 0;
-  Input last_input;
-  uint32 last_input_number;
-  ENetPeer *peer;
+  Input last_input = {0};
+  ENetPeer *peer = nullptr;
 };
 
 struct Chat_Message

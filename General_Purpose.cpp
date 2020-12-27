@@ -443,6 +443,16 @@ std::string qtos(glm::quat v)
   return result;
 }
 
+std::string to_string(glm::quat &q)
+{
+  return s("x = ", q.x, ", y = ", q.y, ", z = ", q.z, ", w = ", q.w);
+}
+
+std::string to_string(glm::vec3 &v)
+{
+  return s("x = ", v.x, ", y = ", v.y, ", z = ", v.z);
+}
+
 std::string to_string(glm::mat4 &m)
 {
   string result = "";

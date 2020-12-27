@@ -42,10 +42,15 @@ public:
 
 struct State_Update
 {
-  Game_State gs;
-  uint32 tick;
-  uint32 input_number;
-  UID character;
+  Game_State gs = {0};
+  uint32 input_number = 0;
+  UID character = 0;
+};
+
+struct State_Prediction
+{
+  Game_State gs = {0};
+  uint32 input_number = 0;
 };
 
 class Network_Session : Session
@@ -67,10 +72,12 @@ public:
 private:
   ENetHost *client = nullptr;
   ENetPeer *server = nullptr;
-  State_Update server_state;
-  std::vector<Input> inputs;
+  State_Update server_state = {0};
+  std::list<State_Prediction> predicted_states;
+  std::list<Input> inputs;
   UID character = 0;
   Resource_Manager resource_manager;
   Flat_Scene_Graph scene;
   std::unique_ptr<Map> map;
+  uint32 input_counter = 0;
 };

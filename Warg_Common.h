@@ -35,6 +35,7 @@ struct Input
   bool operator==(const Input &) const;
   bool operator!=(const Input &) const;
 
+  uint32 sequence_number;
   int m = Move_Status::None;
   quat orientation = quat();
 };
@@ -197,4 +198,6 @@ void cast_spell(Game_State &game_state, Flat_Scene_Graph &scene, UID caster_id, 
 void update_game(Game_State &game_state, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs);
 void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage);
 void end_buff(Game_State &gs, Character_Buff &cb);
-void predict(Game_State &gs, Map &map, Flat_Scene_Graph &scene, UID character_id, Input input);
+Game_State predict(Game_State gs, Map &map, Flat_Scene_Graph &scene, UID character_id, Input input);
+bool verify_prediction(Game_State &a, Game_State &b, UID character_id);
+void merge_prediction(Game_State &dst, const Game_State &pred, UID character_id);
