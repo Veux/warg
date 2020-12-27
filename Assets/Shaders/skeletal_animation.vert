@@ -2,7 +2,7 @@
 //#extension GL_ARB_separate_shader_objects : enable
 
 #define MAX_LIGHTS 10
-#define MAX_BONES 210u
+#define MAX_BONES 216u
 
 // Total amount of constant memory: 65536 bytes.
 // Total amount of shared memory per block: 49152 bytes.

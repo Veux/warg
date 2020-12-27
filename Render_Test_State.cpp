@@ -237,7 +237,9 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  rach = scene.add_aiscene_new("racharound/racharound.fbx");
+  rach = scene.add_aiscene_new("racharound/rach5.fbx");
+
+  scene.nodes[rach].scale = vec3(15);
 
   terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
@@ -658,7 +660,58 @@ void Render_Test_State::update()
     {
       Skeletal_Animation_State *anim_ptr =
           &scene.resource_manager->animation_state_pool[rach_ptr->animation_state_pool_index];
-      anim_ptr->time = current_time;
+
+      if (!anim_ptr->paused)
+        anim_ptr->time += anim_ptr->time_scale * dt;
+    }
+  }
+}
+
+void anim_name_sort(std::vector<std::pair<std::string, std::string>> &result)
+{
+  std::sort(
+      result.begin(), result.end(), [](std::pair<std::string, std::string> &l, std::pair<std::string, std::string> &r) {
+        std::string &a = l.first;
+
+        uint32 a_num = 0;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+          const char *c = &a[i];
+          if (!isdigit(*c))
+          {
+            continue;
+          }
+
+          a_num = atoi(c);
+          break;
+        }
+
+        std::string &b = r.first;
+
+        uint32 b_num = 0;
+        for (size_t i = 0; i < b.size(); ++i)
+        {
+          const char *c = &b[i];
+          if (!isdigit(*c))
+          {
+            continue;
+          }
+          b_num = atoi(c);
+          break;
+        }
+
+        return a_num < b_num;
+      });
+
+  for (auto &name : result)
+  {
+    if (name.first.size() > 15)
+    {
+      name.second = name.first.substr(name.first.size() - 15);
+    }
+    else
+    {
+      name.second = name.first;
     }
   }
 }
@@ -680,15 +733,70 @@ void Render_Test_State::draw_gui()
     if (rach != NODE_NULL)
     {
 
+
+
       Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
       if (rach_ptr->animation_state_pool_index != NODE_NULL)
       {
         Skeletal_Animation_State *anim_ptr =
             &scene.resource_manager->animation_state_pool[rach_ptr->animation_state_pool_index];
-        anim_ptr->time = current_time;
+
         Skeletal_Animation_Set *anim_set = &scene.resource_manager->animation_set_pool[anim_ptr->animation_set_index];
 
-        const char *currently_playing = anim_set->animation_set[anim_ptr->currently_playing_animation].animation_name.c_str();
+        ImGui::Checkbox("paused", &anim_ptr->paused);
+        ImGui::SliderFloat("Speed", &anim_ptr->time_scale, 0.f, 2.f);
+        ImGui::DragFloat("Time", &anim_ptr->time, 0.005f, 0.f, 0.f, "%.5f");
+        ImGui::DragFloat("TimeScale", &anim_ptr->time_scale, 0.005f, 0.f, 0.f, "%.5f");
+
+        std::string bone_shorthand = anim_ptr->name_of_manually_posed_bone;
+        if (bone_shorthand.size() > 15)
+        {
+          bone_shorthand =
+              anim_ptr->name_of_manually_posed_bone.substr(anim_ptr->name_of_manually_posed_bone.size() - 15);
+        }
+
+        const char* current_posed_bone = bone_shorthand.c_str();
+        if (ImGui::BeginCombo("BonePose", current_posed_bone))
+        {
+
+          //.second is shorthand
+          std::vector<std::pair<std::string, std::string>> vec;
+          for (auto &bone : anim_ptr->final_bone_transforms)
+          {
+            vec.push_back({bone.first, ""});
+          }
+          anim_name_sort(vec);
+
+          const size_t count = anim_ptr->final_bone_transforms.size();
+          for (auto &bone : vec)
+          {
+            const char *this_bone_name = bone.second.c_str();
+            if (ImGui::Selectable(this_bone_name, current_posed_bone))
+            {
+              anim_ptr->name_of_manually_posed_bone = bone.first;
+              anim_ptr->bone_pose_overrides[bone.first] = anim_ptr->time;
+            }
+            if (anim_ptr->name_of_manually_posed_bone == bone.first)
+              ImGui::SetItemDefaultFocus();
+          }
+          ImGui::EndCombo();
+        }
+
+        if (anim_ptr->name_of_manually_posed_bone != "")
+        {
+          ASSERT(anim_ptr->final_bone_transforms.contains(anim_ptr->name_of_manually_posed_bone));
+          float32 *pose_time = &anim_ptr->bone_pose_overrides[anim_ptr->name_of_manually_posed_bone];
+          ImGui::DragFloat("Bone_Pose", pose_time, 0.003f, 0.f, 0.0f, "%.5f");
+        }
+        if (ImGui::Button("Clear poses"))
+        {
+          anim_ptr->bone_pose_overrides.clear();
+          anim_ptr->name_of_manually_posed_bone = "";
+        }
+
+        const char *currently_playing =
+            anim_set->animation_set[anim_ptr->currently_playing_animation].animation_name.c_str();
+
         if (ImGui::BeginCombo("Anim", currently_playing))
         {
           const size_t count = anim_set->animation_set.size();

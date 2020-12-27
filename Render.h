@@ -1102,6 +1102,26 @@ struct Particle_Emitter
 // ability to select out of any texture in the cache to edit
 // put a door in blades edge and put it on the map
 
+
+
+//todo: painter: add these blend types
+//    /** T = T1 * T2 */
+//aiTextureOp_Multiply = 0x0,
+//
+///** T = T1 + T2 */
+//aiTextureOp_Add = 0x1,
+//
+///** T = T1 - T2 */
+//aiTextureOp_Subtract = 0x2,
+//
+///** T = T1 / T2 */
+//aiTextureOp_Divide = 0x3,
+//
+///** T = (T1 + T2) - (T1 * T2) */
+//aiTextureOp_SmoothAdd = 0x4,
+//
+///** T = T1 + (T2-0.5) */
+//aiTextureOp_SignedAdd = 0x5,
 struct Texture_Paint
 {
   Texture_Paint() {}
@@ -1373,7 +1393,7 @@ struct Renderer
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
-  bool do_depth_prepass = true;
+  bool do_depth_prepass = false;
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:

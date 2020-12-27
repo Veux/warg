@@ -71,6 +71,14 @@ struct Skeletal_Animation
   float64 duration;
   float64 ticks_per_sec;
   std::vector<Bone_Animation> bone_animations;
+
+
+  //some bones are not animated, but have a set pose
+  //this mapping stores all the default transformations of all animation nodes
+  std::unordered_map<std::string, mat4> default_pose_for_nodes;
+
+
+
 };
 
 //a set of available animations that a model can use
@@ -88,6 +96,15 @@ struct Skeletal_Animation_State
   uint32 currently_playing_animation = 0;
   float32 time = 0.f;
 
+
+  bool paused = false;
+  float32 time_scale = 1.0f;
+
+
+
+
+
+
   //pointer to our available animations
   uint32 animation_set_index = NODE_NULL;  
 
@@ -98,6 +115,11 @@ struct Skeletal_Animation_State
 
   //bone names to their completed transformations
   std::unordered_map<std::string,mat4> final_bone_transforms;
+
+  //debug utility for now to manually pose bones
+  std::string name_of_manually_posed_bone = "";
+  float32 time_of_manually_posed_bone = 0.f;
+  std::unordered_map<std::string, float32> bone_pose_overrides;
 };
  
 struct Model_Bone_Set
@@ -114,6 +136,11 @@ struct Mesh_Data
   std::vector<vec3> bitangents;
   std::vector<uint32> indices;
   std::vector<Vertex_Bone_Data> bone_weights;
+
+  //store mapping from model bone indices to mesh bone indices here?
+  //find all the bones that affect this mesh and change the indices to be
+  //mesh specific rather than total bone set specific
+
 
 
   void reserve(uint32 size)
@@ -172,7 +199,7 @@ struct Mesh_Descriptor
   }
   std::string name = "";
   Mesh_Data mesh_data;
-  std::vector<Bone> bones;
+  std::vector<Bone> mesh_specific_bones;
 
   std::string unique_identifier = "";
   const std::string& get_unique_identifier()  {

@@ -71,6 +71,12 @@ std::string fix_filename(std::string str)
 std::string copy(aiString str)
 {
   std::string result;
+
+  if (str.length > 10000)
+  {
+    set_message("Unusually long or invalid aiString", "", 10.0f);
+    return string();
+  }
   result.resize(str.length);
   result = str.C_Str();
   return result;
@@ -78,7 +84,14 @@ std::string copy(aiString str)
 std::string copy(const aiString *str)
 {
   ASSERT(str);
+
   std::string result;
+  if (str->length > 10000)
+  {
+    set_message("Unusually long or invalid aiString", "", 10.0f);
+    return result;
+  }
+
   result.resize(str->length);
   result = str->C_Str();
   return result;

@@ -198,6 +198,10 @@ void Shader::set_uniform_array(const char *name, const mat4 *matrices, uint32 co
     glUniformMatrix4fv(iloc,1, GL_FALSE, &mat[0][0]);
   }
 }
+
+
+std::vector<std::string> already_warned_uniform_errors;
+
 GLint Shader_Handle::get_uniform_location(const char *name)
 {
   GLint location;
@@ -213,7 +217,22 @@ GLint Shader_Handle::get_uniform_location(const char *name)
 
   if (location == -1)
   {
-    set_message("Invalid shader uniform:", s(name," :[",vs,"] [", fs,"]"), 10.f);
+    std::string err = s("Invalid shader uniform: ", name, " :[", vs, "] [", fs, "]");
+    bool found = false;
+    for (auto& sent : already_warned_uniform_errors)
+    {
+      if (err == sent)
+      {
+        found = true;
+        break;
+      }
+    }
+
+    if(!found)
+    set_message(err, "", 100.f);
+
+    already_warned_uniform_errors.push_back(err);
+    
   }
 
 
@@ -235,10 +254,10 @@ static double get_time()
 }
 bool Shader::check_err(GLint loc, const char *name)
 {
-  if (loc == -1)
-  {
-    set_message("Shader invalid uniform: ", name);
-  }
+  //if (loc == -1)
+ //{
+    //set_message("Invalid shader uniform:", s(name, " :[", vs, "] [", fs, "]"), 10.f);
+  //}
   return loc == -1;
 }
 

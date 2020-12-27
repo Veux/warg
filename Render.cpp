@@ -465,7 +465,6 @@ Texture::Texture(Texture_Descriptor &td)
 {
   t = td;
   t.key = s(t.source, ",", t.format);
-  // load(); why arent we calling load anymore?
 }
 
 Texture::Texture(string name, ivec2 size, uint8 levels, GLenum internalformat, GLenum minification_filter,
@@ -2010,11 +2009,13 @@ void Renderer::opaque_pass(float64 time)
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
 
+    
     if (entity.animation)
     {
        ASSERT(shader.vs == "skeletal_animation.vert");
        Skeletal_Animation_State *animation = entity.animation;
-       std::vector<Bone>* bones = &entity.mesh->mesh->descriptor.bones;
+       std::vector<Bone>* bones = &entity.mesh->mesh->descriptor.mesh_specific_bones;
+       ASSERT(bones->size() < MAX_BONES);
        for (size_t i = 0; i < bones->size(); ++i)
        {
          Bone* to_bind = &(*bones)[i];
@@ -2062,6 +2063,7 @@ void Renderer::opaque_pass(float64 time)
     {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+
     entity.mesh->draw();
   }
 

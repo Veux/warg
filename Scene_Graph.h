@@ -32,9 +32,6 @@ enum struct imgui_pane
 
 //check: 
 
-//can use to get around our vertex shader register limit
-// aiProcess_SplitByBoneCount 
-
 //can use to do unit conversion on import
 //aiProcess_GlobalScale
 
@@ -48,6 +45,7 @@ const uint32 default_assimp_flags = // aiProcess_FlipWindingOrder |
                                     // aiProcess_FlipUVs |
     aiProcess_CalcTangentSpace |
   aiProcess_ValidateDataStructure|
+ aiProcess_SplitByBoneCount |
     // aiProcess_MakeLeftHanded|
     // aiProcess_JoinIdenticalVertices |
     // aiProcess_PreTransformVertices | 
@@ -277,7 +275,18 @@ struct Imported_Scene_Data
   std::vector<Material_Descriptor> materials;
   std::vector<Skeletal_Animation> animations;
 
-  // for all bones in the import
+  //okay so....
+  //gather_mesh_bones ONLY touches bones that will affect vertices directly
+  //meaning, bones that only control other bones will be missing
+
+  //the animation itself however may reference those bones too
+  //yet they wont exist when we go to animate, thus we get that fail in the search
+  //and those are the ruined vertices
+
+  //we need to make sure we can find the node that represents those 
+
+
+  // for all bones for the meshes in the import
   std::unordered_map<std::string, Bone> all_imported_bones;
 
   float64 scale_factor = 1.;
@@ -332,7 +341,7 @@ struct Resource_Manager
   Imported_Scene_Data *request_valid_resource(std::string assimp_path, bool wait_for_valid = true);
 
   static Imported_Scene_Node _import_aiscene_node(
-      std::string assimp_filename, const aiScene *scene, const aiNode *node);
+    Imported_Scene_Data* data, const aiScene *scene, const aiNode *node);
 
 #if 0
   // pure - gets rid of nodes that have no meshes
@@ -365,7 +374,7 @@ struct Scene_Graph_Node
   uint32 animation_state_pool_index = NODE_NULL;
 
   // the set of bones our import had
-  uint32 model_bone_set_pool_index = NODE_NULL;
+  //uint32 model_bone_set_pool_index = NODE_NULL;
 
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
@@ -481,7 +490,7 @@ private:
   glm::mat4 __build_transformation(Node_Index node_index);
   void assert_valid_parent_ptr(Node_Index child);
   Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node,
-      const std::pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_pool_index,
+      const std::pair<Mesh_Index, Material_Index> &base_indices, 
       uint32 animation_state_pool_index);
 
   // imgui:

@@ -1838,25 +1838,6 @@ void Scene_Graph::draw_imgui(std::string name)
 
   ImGui::End();
 }
-//
-// void Flat_Scene_Graph::copy_all_materials_to_new_pool_slots(
-//    Node_Index i, Material_Descriptor *material, bool modify_or_overwrite)
-//{
-//  if (i == NODE_NULL)
-//    return;
-//  Flat_Scene_Graph_Node *node = &nodes[i];
-//
-//  for (uint32 c = 0; c < node->model.size(); ++c)
-//  {
-//    if (node->model[c].second.i == NODE_NULL)
-//      continue;
-//    copy_material_to_new_pool_slot(i, c, material, modify_or_overwrite);
-//  }
-//  for (uint32 c = 0; c < node->children.size(); ++c)
-//  {
-//    copy_all_materials_to_new_pool_slots(node->children[c], material, modify_or_overwrite);
-//  }
-//}
 
 Scene_Graph::Scene_Graph(Resource_Manager *manager) : resource_manager(manager) {}
 
@@ -1960,7 +1941,7 @@ Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string
   }
 
   Node_Index root_for_import =
-      add_import_node(resource, &resource->root_node, base_indices, model_bone_set_index, animation_state_pool_index);
+      add_import_node(resource, &resource->root_node, base_indices, animation_state_pool_index);
   Scene_Graph_Node *root_node = &nodes[root_for_import];
 
   root_node->scale = float32(resource->scale_factor) * root_node->scale;
@@ -1973,82 +1954,8 @@ Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string
   return root_for_import;
 }
 
-// Node_Index Scene_Graph::add_aiscene_old1(std::string scene_file_path, std::string name, bool wait_on_resource)
-//{
-//  scene_file_path = BASE_MODEL_PATH + scene_file_path;
-//  Imported_Scene_Data *resource = resource_manager->request_valid_resource(scene_file_path, wait_on_resource);
-//  if (!resource)
-//  {
-//    ASSERT(!wait_on_resource);
-//    return NODE_NULL;
-//  }
-//
-//  uint32 base_mesh_import_index = resource_manager->current_mesh_pool_size;
-//  uint32 base_material_import_index = resource_manager->current_material_pool_size;
-//
-//  // all meshes with the same name will get the same mesh_index and material_index
-//  // because we are using the mesh name to select the textures for it so why not
-//  // we cant because theres no guarantee that the names are unique
-//  unordered_map<string, pair<Mesh_Index, Material_Index>> indices;
-//
-//  for (size_t i = 0; i < resource->meshes.size(); ++i)
-//  {
-//    string &name = resource->meshes[i].name;
-//    size_t last_dot = name.find_last_of('.');
-//    std::string name_before_dot = name.substr(0, last_dot);
-//    if (!indices.contains(name_before_dot))
-//    {
-//      Mesh_Index mesh_i = resource_manager->push_custom_mesh(&resource->meshes[i]);
-//      std::string path = resource->assimp_filename;
-//      Material_Descriptor material;
-//      path = path.substr(0, path.find_last_of("/\\")) + "/Textures/";
-//      if (name_before_dot.find("collide_") != std::string::npos)
-//      {
-//        material.emissive.mod = vec4(1.0f, 2.0f, 4.0f, 1.0f);
-//        material.frag_shader = "emission.frag";
-//        material.wireframe = true;
-//        material.backface_culling = false;
-//        this->collision_octree.push(&resource->meshes[i]);
-//      }
-//      else
-//      {
-//        material.albedo = path + name_before_dot + "_albedo.png";
-//        material.normal = path + name_before_dot + "_normal.png";
-//        material.roughness = path + name_before_dot + "_roughness.png";
-//        material.metalness = path + name_before_dot + "_metalness.png";
-//        material.emissive = path + name_before_dot + "_emissive.png";
-//        material.ambient_occlusion = path + name_before_dot + "_ao.png";
-//        material.vertex_shader = "vertex_shader.vert";
-//        material.frag_shader = "fragment_shader.frag";
-//      }
-//      Material_Index mat_i = resource_manager->push_custom_material(&material);
-//      indices[name_before_dot] = {mesh_i, mat_i};
-//    }
-//  }
-//
-//  Node_Index root_for_import = new_node();
-//  Scene_Graph_Node *root_node = &nodes[root_for_import];
-//  root_node->filename_of_import = scene_file_path;
-//  root_node->name = name;
-//
-//  const size_t number_of_children = resource->root_node.size();
-//  for (size_t i = 0; i < number_of_children; ++i)
-//  {
-//    Node_Index child_index = add_import_node(resource, &resource->root_node[i], scene_file_path, &indices);
-//    set_parent(child_index, root_for_import);
-//
-//    // assimp is giving us a scale of vec3(100) for blender fbx exports with scale:meters and Unit Scale: 1.0....
-//    // but only for the un-parented objects of the import
-//    // technically there is no root node for a blender export but we are grouping all objects in the import
-//    // under a single root for convenience, so this is where we scale from cm to meters
-//    const float32 cm_to_meters = 0.01f;
-//    nodes[child_index].scale = cm_to_meters * nodes[child_index].scale;
-//  }
-//  return root_for_import;
-//}
-
 Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *import_node,
-    const pair<Mesh_Index, Material_Index> &base_indices, uint32 bone_set_index, uint32 animation_state_pool_index)
+    const pair<Mesh_Index, Material_Index> &base_indices, uint32 animation_state_pool_index)
 {
   Node_Index node_index = new_node();
   Scene_Graph_Node *node = &nodes[node_index];
@@ -2062,11 +1969,12 @@ Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Sce
   const size_t number_of_material_indices = import_node->material_indices.size();
   const auto &[mesh_offset, material_offset] = base_indices;
 
-  if (bone_set_index != NODE_NULL)
+  if (animation_state_pool_index != NODE_NULL)
   { // our import had some bones - theyre all in resource_manager->model_bone_set_pool
-    ASSERT(animation_state_pool_index != NODE_NULL);
-    node->model_bone_set_pool_index = bone_set_index;
     node->animation_state_pool_index = animation_state_pool_index;
+
+    uint32 bone_set_index = resource_manager->animation_state_pool[animation_state_pool_index].model_bone_set_index;
+
     // if we find our name in the pool, we're a bone
     if (resource_manager->model_bone_set_pool[bone_set_index].bones.contains(s(node->name)))
     {
@@ -2093,8 +2001,7 @@ Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Sce
   for (size_t i = 0; i < number_of_children; ++i)
   {
     Imported_Scene_Node *child_node = &import_node->children[i];
-    Node_Index child_index =
-        add_import_node(scene, child_node, base_indices, bone_set_index, animation_state_pool_index);
+    Node_Index child_index = add_import_node(scene, child_node, base_indices, animation_state_pool_index);
     set_parent(child_index, node_index);
     Scene_Graph_Node *child_ptr = &nodes[child_index];
     bool child_is_collider = strncmp(&child_ptr->name.str[0], "collide_", 8) == 0;
@@ -2362,7 +2269,12 @@ std::vector<Render_Entity> Scene_Graph::visit_nodes_start()
     if (node->parent == NODE_NULL)
     { // node is visible and its parent is the null node, add its branch
 
-      mat4 inverse_root = inverse(__build_transformation(i));
+
+      //should root really be inverted here?
+      //appears to make scale incorrect..
+
+      //mat4 inverse_root = inverse(__build_transformation(i));
+      mat4 inverse_root = mat4(1);
       visit_nodes(i, mat4(1), inverse_root, accumulator);
     }
   }
@@ -2505,10 +2417,10 @@ void Scene_Graph::push_particle_emitters_for_renderer(Renderer *r)
 
 // we should be guaranteed that all bones above us are already computed
 // for this frame in the calculated_bone_data vector...
-mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Animation_Set *anim_set, Bone *bone)
+mat4 animation_resolve(Skeletal_Animation_State *anim_state, Skeletal_Animation_Set *anim_set, Bone *bone)
 {
   const string_view bone_name = bone->name;
-  const Skeletal_Animation *selected_animation = &anim_set->animation_set[anim_state->currently_playing_animation];
+  Skeletal_Animation *selected_animation = &anim_set->animation_set[anim_state->currently_playing_animation];
 
   Bone_Animation const *bone_animation = nullptr;
 
@@ -2526,23 +2438,49 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
     }
   }
 
-  // odd... not all bones are found in the animation...
-  // perhaps they should just stay identity?
+  // all the bone names ARE imported - just that some of them done have channels(animations)
+  // so we traversed the node tree of the import anyway to gather their default transformations for the bones
+  //(remember how we were completely overwriting the RST matrix with the transformation result?)
+  // well, for the nodes that dont have channels, we also had no default transformation data, now we do
+  // hopefully this fixes it
+
+  // if it does, we should probably put the default transform into the bone animation struct
+  // so that its a bit cleaner, each bone would have a bone animation struct mapped to it
+  // just - some would have no keyframes, and just a pose to apply
 
   if (!bone_animation)
   {
-    // this should not be hit...
+    mat4 t = selected_animation->default_pose_for_nodes[string(bone_name)];
+    return t;
     set_message(bone->name, "Bone not found in animation", 10.f);
-    return mat4(1); //??
-    return mat4(sin(get_real_time()));
+    set_message(s("animation_resolve for bone:\n", bone->name, "\n"), "Bone not found in animation", 10.f);
   }
 
-  ASSERT(bone_animation);
+  float32 ticks_per_sec = selected_animation->ticks_per_sec != 0 ? selected_animation->ticks_per_sec : 30;
+  float32 time_in_ticks = 1000.f * anim_state->time * ticks_per_sec;
 
-  // not sure exactly why its calculated using 'ticks'...
-  const float32 ticks_per_sec = selected_animation->ticks_per_sec != 0 ? selected_animation->ticks_per_sec : 60;
-  const float32 time_in_ticks = anim_state->time * ticks_per_sec;
-  const float32 animation_time = fmod(time_in_ticks, selected_animation->duration);
+  bool custom_pose = anim_state->bone_pose_overrides.contains(bone->name);
+  if (custom_pose)
+  {
+    time_in_ticks = 1000.f * anim_state->bone_pose_overrides[bone->name] * ticks_per_sec;
+  }
+
+  float32 animation_time = fmod(time_in_ticks, selected_animation->duration);
+
+  if (bone->name.substr(bone->name.size() - 3) == "_13")
+  {
+    /*
+    bugged anim:
+    knockdown[53]
+    bone _13
+    pose time  .654
+    */
+
+    if (animation_time > .65 && animation_time < .66)
+    {
+      int a = 3;
+    }
+  }
 
   size_t left_i = 0;
   size_t right_i = 0;
@@ -2564,6 +2502,11 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
   const float64 max_time = right_time - left_time;
   t = t / max_time;
 
+  if (selected_animation->duration == 0)
+  {
+    t = 0;
+  }
+
   // ASSERT(t >= 0.f || t <= 1.0f);
   if (t < 0.f || t > 1.0f)
   {
@@ -2577,13 +2520,9 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, const Skeletal_Anim
 
   // result in bone space
   mat4 transformed_bone = translate(translation_result) * toMat4(rotation_result) * scale(scale_result);
+
   return transformed_bone;
 }
-
-// note: the node with the character mesh in it may visit first
-// in which case the bone animations for it have not yet been applied
-// however, since it is a pointer to the animation state, it should eventually
-// be modified by visit nodes to be updated for this frame when the tree traversal gets there
 
 // this should not be a problem for child node models of a bone, because we modify the stack
 // as we go down the tree, so it will always be correct for children
@@ -2622,18 +2561,23 @@ void Scene_Graph::visit_nodes(
     anim_set = &resource_manager->animation_set_pool[anim_state->animation_set_index];
 
     // find our bone
-    bone_set = &resource_manager->model_bone_set_pool[entity->model_bone_set_pool_index];
+    uint32 model_bone_set_pool_index = anim_state->model_bone_set_index;
+    bone_set = &resource_manager->model_bone_set_pool[model_bone_set_pool_index];
     ASSERT(bone_set->bones.contains(s(entity->name)));
     bone = &bone_set->bones[s(entity->name)];
+
     // pose it in bone space
     const mat4 posed_bone = animation_resolve(anim_state, anim_set, bone);
 
-    // assign our transformation to our node
-    RST = posed_bone; // technically should just replace it but we'll see if this is useful
-
-    if (posed_bone == mat4(1))
+    if (posed_bone != mat4(1))
     {
-      int a = 3;
+
+      // assign our transformation to our node
+      RST = posed_bone;
+    }
+    else
+    {
+      // ASSERT(0);
     }
   }
 
@@ -2735,7 +2679,6 @@ bool Resource_Manager::import_aiscene_async(Imported_Scene_Data *dst)
   //*@note One Importer instance is not thread - safe.If you use multiple
   //  * threads for loading, each thread should maintain its own Importer instance.
 
-
   ASSERT(dst->valid != true);
   if (!thread_active)
   {
@@ -2749,14 +2692,14 @@ bool Resource_Manager::import_aiscene_async(Imported_Scene_Data *dst)
 }
 
 Imported_Scene_Node Resource_Manager::_import_aiscene_node(
-    std::string assimp_filename, const aiScene *scene, const aiNode *ainode)
+    Imported_Scene_Data *data, const aiScene *scene, const aiNode *ainode)
 {
   Imported_Scene_Node node;
   node.name = copy(&ainode->mName);
 
   if (node.name == "" && ainode->mNumChildren == 1 && ainode->mNumMeshes == 0)
   { // blank node, skip it
-    return _import_aiscene_node(assimp_filename, scene, ainode->mChildren[0]);
+    return _import_aiscene_node(data, scene, ainode->mChildren[0]);
   }
 
   for (uint32 i = 0; i < ainode->mNumMeshes; ++i)
@@ -2776,7 +2719,7 @@ Imported_Scene_Node Resource_Manager::_import_aiscene_node(
   for (uint32 i = 0; i < ainode->mNumChildren; ++i)
   {
     const aiNode *n = ainode->mChildren[i];
-    Imported_Scene_Node child = _import_aiscene_node(assimp_filename, scene, n);
+    Imported_Scene_Node child = _import_aiscene_node(data, scene, n);
     node.children.push_back(child);
   }
   return node;
@@ -2788,10 +2731,13 @@ std::string name_from_ai_type(aiMaterial *ai_material, aiTextureType type)
   const int count = ai_material->GetTextureCount(type);
   aiString name;
   ai_material->GetTexture(type, 0, &name);
+
+  if (name.length > 10000)
+    return {};
   return copy(&name);
 }
 
-void set_texture_from_ai_type(Texture_Descriptor *t, string_view dir, aiMaterial *ai_material, aiTextureType type)
+bool set_texture_from_ai_type(Texture_Descriptor *t, string_view dir, aiMaterial *ai_material, aiTextureType type)
 {
   ASSERT(ai_material);
   const int count = ai_material->GetTextureCount(type);
@@ -2800,9 +2746,10 @@ void set_texture_from_ai_type(Texture_Descriptor *t, string_view dir, aiMaterial
   std::string filename = fix_filename(copy(&name));
   if (filename == "." || filename == "")
   {
-    return;
+    return false;
   }
   t->source = s(dir, "/", filename, ".png");
+  return true;
 }
 
 #if 0
@@ -2862,13 +2809,81 @@ void Resource_Manager::propagate_transformations_of_empty_nodes(
 }
 
 #endif
+//
+// void gather_animation_node_mapping(Imported_Scene_Data* data)
+//{
+//  _gather_animation_node_mapping(&data->root_node, result);
+//};
+//
+//
+// std::sort(result.begin(), result.end(), [](animdatapack &l, animdatapack &r) {
+//  string &a = l.name;
+//
+//  uint32 a_num = 0;
+//  for (size_t i = 0; i < a.size(); ++i)
+//  {
+//    const char *c = &a[i];
+//    if (!isdigit(*c))
+//    {
+//      continue;
+//    }
+//
+//    a_num = atoi(c);
+//    break;
+//  }
+//
+//  string &b = r.name;
+//
+//  uint32 b_num = 0;
+//  for (size_t i = 0; i < b.size(); ++i)
+//  {
+//    const char *c = &b[i];
+//    if (!isdigit(*c))
+//    {
+//      continue;
+//    }
+//    b_num = atoi(c);
+//    break;
+//  }
+//
+//  return a_num < b_num;
+//});
+// return result;
+//}
+
+/*
+
+
+we should gather all the node names in the animations
+and then we should do a map for the name -> its default transformation
+
+i bet the nodes that are missing from the transformation, have a transformation matrix that should be its default
+we should always find and apply the nodes transform, even if the animation doesnt refer to/animate the node
+//this is why the face is always screwy too, all the animations leave it alone
+
+
+
+
+if the node isnt in the channels list
+
+
+
+
+*/
+
+void gather_animation_node_name_transform_mapping(Imported_Scene_Node *node, Skeletal_Animation *anim)
+{
+  anim->default_pose_for_nodes[node->name] = node->transform;
+  for (auto &e : node->children)
+  {
+    gather_animation_node_name_transform_mapping(&e, anim);
+  }
+}
 
 void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
 {
-
   for (uint32 i = 0; i < scene->mNumAnimations; ++i)
   {
-
     aiAnimation *anim = scene->mAnimations[i];
     aiString *animation_name = &anim->mName;
     float64 duration = anim->mDuration;
@@ -2878,9 +2893,10 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
     animation.animation_name = copy(animation_name);
     animation.duration = duration;
     animation.ticks_per_sec = tickspersec;
+    gather_animation_node_name_transform_mapping(&dst->root_node, &animation);
 
-    // The channel contains a name which must match one of the nodes in the heirarchy and three transformation arrays.
     // a channel is a bone
+    // bones not found here are not animated and simply use their mtransformation matrix
     uint32 bone_count = anim->mNumChannels;
     animation.bone_animations.reserve(bone_count);
     ASSERT(bone_count < MAX_BONES);
@@ -2890,7 +2906,7 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
     {
       aiNodeAnim *nodeanim = anim->mChannels[i];
 
-      aiString *nodename = &nodeanim->mNodeName;
+      aiString *bone_node_name = &nodeanim->mNodeName;
       uint32 num_pos_keys = nodeanim->mNumPositionKeys;
       aiVectorKey *pos_keys = nodeanim->mPositionKeys;
 
@@ -2900,8 +2916,8 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
       uint32 num_scale_keys = nodeanim->mNumScalingKeys;
       aiVectorKey *scale_keys = nodeanim->mScalingKeys;
 
-      aiAnimBehaviour *prestate = &nodeanim->mPreState;
-      aiAnimBehaviour *poststate = &nodeanim->mPostState;
+      // aiAnimBehaviour *prestate = &nodeanim->mPreState;
+      // aiAnimBehaviour *poststate = &nodeanim->mPostState;
 
       ASSERT(num_pos_keys == num_rot_keys);
       ASSERT(num_pos_keys == num_scale_keys);
@@ -2909,7 +2925,7 @@ void gather_animations(const aiScene *scene, Imported_Scene_Data *dst)
       uint32 keyframe_count = num_pos_keys;
 
       Bone_Animation bone_animation;
-      bone_animation.bone_node_name = copy(nodename);
+      bone_animation.bone_node_name = copy(bone_node_name);
       bone_animation.translations.reserve(keyframe_count);
       bone_animation.scales.reserve(keyframe_count);
       bone_animation.rotations.reserve(keyframe_count);
@@ -2939,52 +2955,48 @@ void assert_valid_aimesh(const aiMesh *aimesh, const aiScene *scene)
   ASSERT(aimesh->HasPositions());
   ASSERT(aimesh->GetNumUVChannels() == 1);
   ASSERT(aimesh->HasTextureCoords(0));
-  if (!aimesh->HasTangentsAndBitangents())
-  {
-    const aiScene *s = aiApplyPostProcessing(scene, aiProcess_CalcTangentSpace);
-    std::string err = aiGetErrorString();
-    ASSERT(s == scene); // post process failed
-  }
   ASSERT(aimesh->HasTangentsAndBitangents());
   ASSERT(aimesh->HasVertexColors(0) == false); // TODO: add support for vertex colors
   ASSERT(aimesh->mNumUVComponents[0] == 2);
 }
 
-void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *bones)
+void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d)
 {
+  vector<Bone> *mesh_specific_bones = &d->mesh_specific_bones;
   const size_t vertex_count = d->mesh_data.positions.size();
   d->mesh_data.bone_weights = vector<Vertex_Bone_Data>(vertex_count);
 
+  // ASSERT(aimesh->mNumBones < MAX_BONES);
+  if (aimesh->mNumBones > MAX_BONES)
+  {
+    int a = 3;
+  }
+
   // all the bones this mesh is affected by
+  // actually no, this is all the bones in the entire model for
+  // wow asset imports
+  // likely exported by wmv like this, if we process the bones with assimp
+  // it culls them, which we should be doing now
+
+  // not all the bones in the scenegraph will show up here
+  // there can exist bones that do not affect any
+  // vertices directly - only transform other bones
   for (uint32 i = 0; i < aimesh->mNumBones; ++i)
   {
     const aiBone *aibone = aimesh->mBones[i];
 
-    // i believe it is correct that not all the bones in the scenegraph
-    // will show up here - there can exist bones that do not affect any
-    // vertices directly - only transform other bones
+    uint32 num_of_vertices_affected_by_this_bone = aibone->mNumWeights;
+    if (num_of_vertices_affected_by_this_bone == 0)
+      continue;
+
     const string bone_name = aibone->mName.data;
     const mat4 offsetmatrix = copy(aibone->mOffsetMatrix);
 
-    int32 shader_bone_index = -1;
-    for (size_t j = 0; j < bones->size(); ++j)
-    {
-      if ((*bones)[j].name == bone_name)
-      {
-        shader_bone_index = j;
-        DEBUGASSERT((*bones)[j].offset == offsetmatrix);
-        break;
-      }
-    }
-    if (shader_bone_index == -1)
-    {
-      bones->emplace_back();
-      bones->back().name = bone_name;
-      bones->back().offset = offsetmatrix;
-      shader_bone_index = int32(bones->size()) - 1;
-    }
+    mesh_specific_bones->emplace_back();
+    mesh_specific_bones->back().name = aibone->mName.data;
+    mesh_specific_bones->back().offset = copy(aibone->mOffsetMatrix);
+    int32 mesh_specific_shader_bone_index = int32(mesh_specific_bones->size()) - 1;
 
-    uint32 num_of_vertices_affected_by_this_bone = aibone->mNumWeights;
     for (uint32 j = 0; j < num_of_vertices_affected_by_this_bone; ++j)
     {
       const aiVertexWeight weight = aibone->mWeights[j];
@@ -2994,13 +3006,15 @@ void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *b
       {
         if (d->mesh_data.bone_weights[vertex_index].weights[k] == 0.0f)
         {
-          d->mesh_data.bone_weights[vertex_index].indices[k] = shader_bone_index;
+          d->mesh_data.bone_weights[vertex_index].indices[k] = mesh_specific_shader_bone_index;
           d->mesh_data.bone_weights[vertex_index].weights[k] = weight.mWeight;
           break;
         }
+        ASSERT(k != 3);
       }
     }
-    // sponge
+
+#ifndef NDEBUG
     for (Vertex_Bone_Data &e : d->mesh_data.bone_weights)
     {
       float32 sum = 0.f;
@@ -3013,6 +3027,7 @@ void gather_mesh_bones(const aiMesh *aimesh, Mesh_Descriptor *d, vector<Bone> *b
         ASSERT(0);
       }
     }
+#endif
   }
 }
 
@@ -3027,10 +3042,6 @@ void gather_mesh_indices(std::vector<uint32> &indices, const aiMesh *aimesh)
       {
         indices.push_back(face.mIndices[j]);
       }
-    }
-    else
-    {
-      // set_message("non-triangle error", "", 5);
     }
   }
   if (indices.size() < 3)
@@ -3057,16 +3068,62 @@ void gather_meshes(const aiScene *scene, Imported_Scene_Data *dst)
     copy_mesh_data(d.mesh_data.bitangents, aimesh->mBitangents, num_vertices);
     copy_mesh_data(d.mesh_data.texture_coordinates, aimesh->mTextureCoords[0], num_vertices);
     gather_mesh_indices(d.mesh_data.indices, aimesh);
-    gather_mesh_bones(aimesh, &d, &d.bones);
+    gather_mesh_bones(aimesh, &d);
+
+    // for (uint32 i = 0; i < aimesh->mNumBones; ++i)
+    //{
+    //  const aiBone* aibone = aimesh->mBones[i];
+    //  Bone bone;
+    //  bone.name = aibone->mName.data;
+    //  bone.offset = copy(aibone->mOffsetMatrix);
+
+    //  bool found = false;
+    //  for (auto& exists : dst->all_imported_bones)
+    //  {
+    //    Bone& existing_bone = exists.second;
+    //    if (existing_bone.name == bone.name)
+    //    {
+    //      found = true;
+    //      mat4& existing_matrix = existing_bone.offset;
+    //      mat4& mesh_bone_matrix = bone.offset;
+    //      ASSERT(existing_matrix == mesh_bone_matrix);
+    //      break;
+    //      //if we find matching names with mismatching offsets something is broken...
+    //    }
+    //  }
+    //  if(!found)
+    //  dst->all_imported_bones[bone.name] = bone;
+    //}
+
+#if 0
+
+    //this wasnt right because the import was giving us every bone for every mesh
+    //if we exclude the ones with 0 affected vertices, we dont gather the bone name
+    //into the mapping
+
 
     // unfortunately this is a copy, there is no easy way to
     // retrieve the bone offset data from within the meshes
     // from the scene graph - the meshes are in an entirely different
     // tree branch even...
-    for (size_t i = 0; i < d.bones.size(); ++i)
+    for (size_t i = 0; i < d.mesh_specific_bones.size(); ++i)
     {
-      dst->all_imported_bones[d.bones[i].name] = d.bones[i];
+      Bone& mesh_bone = d.mesh_specific_bones[i];
+      for (auto& exists : dst->all_imported_bones)
+      {
+        Bone& existing_bone = exists.second;
+        if (existing_bone.name == mesh_bone.name)
+        {
+          mat4& existing_matrix = existing_bone.offset;
+          mat4& mesh_bone_matrix = mesh_bone.offset;
+          ASSERT(existing_matrix == mesh_bone_matrix);
+          //if we find matching names with mismatching offsets something is broken...
+        }
+      }
+      dst->all_imported_bones[d.mesh_specific_bones[i].name] = d.mesh_specific_bones[i];
     }
+
+#endif
   }
 }
 
@@ -3083,7 +3140,15 @@ void gather_all_assimp_materials(aiMaterial *mat)
   string opacity = name_from_ai_type(mat, aiTextureType_OPACITY);
   string displacement = name_from_ai_type(mat, aiTextureType_DISPLACEMENT);
   string lightmap = name_from_ai_type(mat, aiTextureType_LIGHTMAP);
-  string reflection = name_from_ai_type(mat, aiTextureType_REFLECTION);
+
+  // pbr
+  string BASE_COLOR = name_from_ai_type(mat, aiTextureType_BASE_COLOR);
+  string NORMAL_CAMERA = name_from_ai_type(mat, aiTextureType_NORMAL_CAMERA);
+  string EMISSION_COLOR = name_from_ai_type(mat, aiTextureType_EMISSION_COLOR);
+  string METALNESS = name_from_ai_type(mat, aiTextureType_METALNESS);
+  string DIFFUSE_ROUGHNESS = name_from_ai_type(mat, aiTextureType_DIFFUSE_ROUGHNESS);
+  string AMBIENT_OCCLUSION = name_from_ai_type(mat, aiTextureType_AMBIENT_OCCLUSION);
+
   const uint32 count = mat->GetTextureCount(aiTextureType_UNKNOWN);
   vector<string> unknowns;
   for (uint32 i = 0; i < count; ++i)
@@ -3106,22 +3171,22 @@ Material_Descriptor build_material_descriptor(const aiScene *scene, uint32 i, co
 
   aiMaterial *mat = scene->mMaterials[i];
   gather_all_assimp_materials(mat);
-  if (extension == ".FBX" || extension == ".fbx")
+
+  if (!set_texture_from_ai_type(&d.albedo, dir, mat, aiTextureType_BASE_COLOR))
   {
     set_texture_from_ai_type(&d.albedo, dir, mat, aiTextureType_DIFFUSE);
-    set_texture_from_ai_type(&d.emissive, dir, mat, aiTextureType_EMISSIVE);
-    set_texture_from_ai_type(&d.normal, dir, mat, aiTextureType_NORMALS);
-    set_texture_from_ai_type(&d.roughness, dir, mat, aiTextureType_SHININESS);
-    set_texture_from_ai_type(&d.metalness, dir, mat, aiTextureType_SPECULAR);
-    set_texture_from_ai_type(&d.ambient_occlusion, dir, mat, aiTextureType_REFLECTION);
   }
-  else
+  if (!set_texture_from_ai_type(&d.emissive, dir, mat, aiTextureType_EMISSION_COLOR))
   {
-    ASSERT(0);
-    // only .fbx supported for now
-    // helper function for material assignments:
-    // void gather_all_assimp_materials(aiMaterial* m);
+    set_texture_from_ai_type(&d.emissive, dir, mat, aiTextureType_EMISSIVE);
   }
+  if (!set_texture_from_ai_type(&d.normal, dir, mat, aiTextureType_NORMAL_CAMERA))
+  {
+    set_texture_from_ai_type(&d.normal, dir, mat, aiTextureType_NORMALS);
+  }
+  set_texture_from_ai_type(&d.roughness, dir, mat, aiTextureType_DIFFUSE_ROUGHNESS);
+  set_texture_from_ai_type(&d.metalness, dir, mat, aiTextureType_METALNESS);
+  set_texture_from_ai_type(&d.ambient_occlusion, dir, mat, aiTextureType_AMBIENT_OCCLUSION);
 
   if (scene->mNumAnimations != 0)
   {
@@ -3222,15 +3287,15 @@ void gather_animation_subfolder(Imported_Scene_Data *dst)
 
   for (size_t i = 0; i < animation_filenames.size(); ++i)
   {
-    const aiScene *aiscene = IMPORTER.ReadFile(animation_filenames[i].c_str(), dst->import_flags);
+    const aiScene *aiscene =
+        IMPORTER.ReadFile(animation_filenames[i].c_str(), dst->import_flags & ~aiProcess_SplitByBoneCount);
 
     // AI_SCENE_FLAGS_INCOMPLETE is set if there are no meshes or no materials
     // the fbx animation only files will always trigger it regardless
-
+    string err = IMPORTER.GetErrorString();
     if (!aiscene)
     {
-      std::string error = IMPORTER.GetErrorString();
-      set_message("ERROR::ASSIMP::", error);
+      set_message("ERROR::ASSIMP::", err);
       continue;
     }
 
@@ -3238,10 +3303,71 @@ void gather_animation_subfolder(Imported_Scene_Data *dst)
   }
 }
 
+void gather_unprocessed_bones(Imported_Scene_Data *dst)
+{
+
+  uint32 flags = dst->import_flags;
+  //disable splitting because assimp appears to be culling bones that dont affect
+  //any vertices
+  flags = flags & ~aiProcess_SplitByBoneCount; 
+  flags = flags & ~aiProcess_CalcTangentSpace; //we dont need tangent space vectors for just bones here
+  const aiScene *aiscene1 =
+      IMPORTER.ReadFile(dst->assimp_filename.c_str(), dst->import_flags & ~aiProcess_SplitByBoneCount);
+  for (uint32 i = 0; i < aiscene1->mNumMeshes; ++i)
+  {
+
+    aiMesh *aimesh = aiscene1->mMeshes[i];
+    for (uint32 i = 0; i < aimesh->mNumBones; ++i)
+    {
+      const aiBone *aibone = aimesh->mBones[i];
+      Bone bone;
+      bone.name = aibone->mName.data;
+      bone.offset = copy(aibone->mOffsetMatrix);
+
+      bool found = false;
+      for (auto &exists : dst->all_imported_bones)
+      {
+        Bone &existing_bone = exists.second;
+        if (existing_bone.name == bone.name)
+        {
+          found = true;
+          mat4 &existing_matrix = existing_bone.offset;
+          mat4 &mesh_bone_matrix = bone.offset;
+          ASSERT(existing_matrix == mesh_bone_matrix);
+          break;
+          // if we find matching names with mismatching offsets something is broken...
+        }
+      }
+      if (!found)
+        dst->all_imported_bones[bone.name] = bone;
+    }
+  }
+}
+
 bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
 {
   ASSERT(dst);
+
+  //i forget why using the split flag doesnt work
+  //we cant gather all scene bones after doing it?
+  //               aiProcess_SplitByBoneCount
+  //is the assimp flag actually optimizing out bones that it feels are unused 
+  //because there is no animation for them defined in this specific fbx file?
+  //if it does thats wrong because we use separate fbx files per animation
+  //that expect them to exist
+
+  //gather all the unprocessed bones of the entire model first
+  //currently just reads the aiscene file without the processing step
+  //can it be sped up by applying the processing afterwards?
+  gather_unprocessed_bones(dst);
+
+
+
+  // default here is 60 but we can do more
+  AI_SBBC_DEFAULT_MAX_BONES;
+  // IMPORTER.SetPropertyInteger(AI_CONFIG_PP_SBBC_MAX_BONES, 216);
   const aiScene *aiscene = IMPORTER.ReadFile(dst->assimp_filename.c_str(), dst->import_flags);
+
   if (!aiscene || aiscene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
   {
     set_message("ERROR::ASSIMP::", IMPORTER.GetErrorString());
@@ -3250,22 +3376,26 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
   ASSERT(aiscene->mRootNode);
   ASSERT(aiscene->mRootNode->mNumMeshes == 0);
 
+  //is being applied to the root node's scale vector
   aiscene->mMetaData->Get("UnitScaleFactor", dst->scale_factor);
 
+  // the flat mesh array
   gather_meshes(aiscene, dst);
+
   // if we can pack all the anims into the same file this alone will work - would be easier
   gather_animations(aiscene, dst);
 
+  // the flat material array
   gather_materials(aiscene, dst);
 
-  dst->root_node = _import_aiscene_node(dst->assimp_filename, aiscene, aiscene->mRootNode);
+  // just gathering names/transforms/meshindices/materialindices/children
+  dst->root_node = _import_aiscene_node(dst, aiscene, aiscene->mRootNode);
 
-  // since the animations aren't stored in the same file we need to search the folder for
-  // an Animations subfolder and collect all the animations inside it into this dst struct
-  // this must be done after the above scene was imported
-  // because assimp deletes the old scene when you load a new one
+  // all animations seem to be importing correctly
+  // they all have 247 names, all sequential
   gather_animation_subfolder(dst);
 
+  //assign the materials for this import to use skeletal animation vertex shader here
   if (dst->animations.size())
   {
     for (size_t i = 0; i < dst->materials.size(); ++i)
@@ -3276,44 +3406,6 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
 
   dst->valid = true;
   return true;
-
-#if 0 
-
-  //an entire import will have its own empty root node i believe
-  //one place this is really handy is that there is a single root node for two trees of a single
-  //import that has a tree for the mesh data itself, and also an adjacent tree for the
-  //skeleton that animates it, we can use and move the blank root node for the entire import
-  //and the skeleton moves with it
-  //perhaps we can detect that there is only one child of this blank root and then
-  //get rid of it in just that case
-
-
-  // since root here is almost guaranteed to be empty, all of the children of the entire import
-  // are going to end up in this vector
-  std::vector<Imported_Scene_Node> temp_new_children;
-
-  for (int32 i = 0; i < number_of_children; ++i)
-  {
-    Imported_Scene_Node* child = &dst.children[i];
-    propagate_transformations_of_empty_nodes(child, &temp_new_children);
-
-    // delete this child if its empty
-    if (child->mesh_indices.size() == 0)
-    {
-      ASSERT(child->children.size() == 0);
-      int32 last_i = number_of_children - 1;
-      bool last = (i == last_i);
-      if (!last)
-        dst.children[i] = std::move(dst.children[last_i]);
-      dst.children.pop_back();
-      i -= 1;
-      number_of_children -= 1;
-    }
-  }
-  // put the children back in to the import root
-  std::move(std::begin(temp_new_children), std::end(temp_new_children), std::back_inserter(dst.children));
-
-#endif
 }
 
 Material_Index Resource_Manager::push_material(Material_Descriptor *d)
@@ -3362,18 +3454,6 @@ uint32 Resource_Manager::push_animation_state()
   current_animation_state_pool_size += 1;
   return current_animation_state_pool_size - 1;
 }
-
-// uint32 Resource_Manager::push_bone_set(std::vector<Bone> *bones)
-//{
-//  if (bones->size() == 0)
-//  {
-//    return NODE_NULL;
-//  }
-//  ASSERT(current_model_bone_set_pool_size < MAX_POOL_SIZE);
-//  import_bone_set_pool[current_model_bone_set_pool_size].import_bone_data = *bones;
-//  current_model_bone_set_pool_size += 1;
-//  return current_model_bone_set_pool_size - 1;
-//}
 
 Imported_Scene_Data *Resource_Manager::request_valid_resource(std::string path, bool wait_for_valid)
 {
