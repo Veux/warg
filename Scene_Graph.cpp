@@ -3367,7 +3367,7 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
   //if there are bones that dont directly affect any vertices in the primary fbx
   //then those bones will only exist in the rig graph 
 
-  //gather_unprocessed_mesh_only_bones(dst);
+  gather_unprocessed_mesh_only_bones(dst);
 
 
 

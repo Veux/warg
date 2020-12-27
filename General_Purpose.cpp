@@ -347,14 +347,14 @@ float64 get_real_time()
   Uint64 elapsed = current - begin_time;
   return (float64)elapsed / (float64)freq;
 }
-struct Message
+struct Warg_Debug_Message
 {
   string identifier;
   string message;
   float64 time_of_expiry;
   string thread_id;
 };
-static vector<Message> warg_messages;
+static vector<Warg_Debug_Message> warg_messages;
 static string message_log = "";
 std::string get_message_log()
 {
@@ -388,7 +388,7 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   }
   if (!found)
   {
-    Message m = {identifier, message, time + msg_duration, ss.str()};
+    Warg_Debug_Message m = {identifier, message, time + msg_duration, ss.str()};
     warg_messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
