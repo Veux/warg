@@ -189,8 +189,15 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     while (inputs.size() && inputs.front().sequence_number <= server_state.input_number)
       inputs.pop_front();
 
-    for (auto &input : inputs)
-      gs = predict(gs, *map, scene, pc, input);
+    if (prediction_enabled)
+    {
+      // pop old inputs
+
+      // starting from the latest server state
+      // reapply all newer inputs to the server state
+      for (auto &input : inputs)
+        gs = predict(gs, *map, scene, pc, input);
+    }
 
     //std::cout << s("num inputs: ", inputs.size(), "\n");
 

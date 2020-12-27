@@ -164,6 +164,8 @@ void Warg_State::session_swapper()
     set_session((Session *)network_session);
   }
 
+  ImGui::Checkbox("Enable prediction", &session->prediction_enabled);
+
   ImGui::End();
 }
 

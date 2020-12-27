@@ -17,6 +17,7 @@ public:
   virtual void send_chat_message(std::string_view chat_message) = 0;
   std::vector<Chat_Message> get_chat_log();
 
+  bool prediction_enabled = true;
 protected:
   std::vector<Chat_Message> chat_log;
 };
