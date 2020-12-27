@@ -2702,10 +2702,14 @@ Imported_Scene_Node Resource_Manager::_import_aiscene_node(
     return _import_aiscene_node(data, scene, ainode->mChildren[0]);
   }
 
+
   for (uint32 i = 0; i < ainode->mNumMeshes; ++i)
   {
     uint32 mesh_index = ainode->mMeshes[i];
     const aiMesh *aimesh = scene->mMeshes[mesh_index];
+
+    
+
 
     Mesh_Index mesh_result{mesh_index};
     node.mesh_indices.push_back(mesh_result);
@@ -3303,7 +3307,7 @@ void gather_animation_subfolder(Imported_Scene_Data *dst)
   }
 }
 
-void gather_unprocessed_bones(Imported_Scene_Data *dst)
+void gather_unprocessed_mesh_only_bones(Imported_Scene_Data *dst)
 {
 
   uint32 flags = dst->import_flags;
@@ -3359,7 +3363,11 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
   //gather all the unprocessed bones of the entire model first
   //currently just reads the aiscene file without the processing step
   //can it be sped up by applying the processing afterwards?
-  gather_unprocessed_bones(dst);
+
+  //if there are bones that dont directly affect any vertices in the primary fbx
+  //then those bones will only exist in the rig graph 
+
+  //gather_unprocessed_mesh_only_bones(dst);
 
 
 

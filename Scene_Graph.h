@@ -286,7 +286,12 @@ struct Imported_Scene_Data
   //we need to make sure we can find the node that represents those 
 
 
-  // for all bones for the meshes in the import
+  // for all bones in the import
+  // this really should be only set by the 
+  // graph traversal, not the mesh bone import itself...
+  // but how do we actually tell if a graph node is a bone node
+  // or not? its supposed to be if they are referenced by an
+  // animation, right? but this import has no animations...
   std::unordered_map<std::string, Bone> all_imported_bones;
 
   float64 scale_factor = 1.;
