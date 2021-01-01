@@ -739,9 +739,9 @@ vec3 get_water_normal()
 
   waterp = .231f * frag_world_position.xy;
 
-  h = ambient_waves(waterp, .2350f, 11);
-  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 11);
-  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .2350f, 11);
+  h = ambient_waves(waterp, .12350f, 11);
+  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .12350f, 11);
+  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .12350f, 11);
   dx = hdx - h;
   dy = hdy - h;
   vec3 waternormaltest = normalize(vec3(dx, dy, eps));
@@ -1025,7 +1025,12 @@ void main()
   }
   depth_of_object = 215.1f * depth_of_object;
   float density = pow(premultiply_alpha, 1);
+
+  //sponge get depth of object working
   float A = pow(1 - density, pow(depth_of_object, 0.85f));
+  A = pow(1 - density, pow(depth_of_scene, 0.85f));
+  
+
 
   if (isinf(len_offset) || isnan(len_offset))
   {
@@ -1040,6 +1045,7 @@ void main()
   float shore_fbm2 =
       pow(saturate(.755f * fbm_h_n(1.5f * frag_world_position.xy + .65f * vec2(sin(time)), 0.8125f, 2)), 2);
   float shore_t = shore_fbm2 * shore_fbm * (1 - smoothstep(.00, 0.001519f, water_depth));
+  
   // A = mix(A,0.9f,step(0.9,A));
 
   // light that reaches v from sea floor
@@ -1047,32 +1053,41 @@ void main()
   // vec3 rKs = fresnelSchlickRoughness(rndotv, F0, m.roughness);
   // vec3 tD = (1 - rKs); // transmissive minus internal specular
   vec3 tD = vec3(1.f);
+
+
+
+  //todo: get the water working again
+  //the scene and self depth stuff isnt right
+  //perhaps its just the material setting for the water?
+  
+
+  A = 0.15f;
+
+
   vec3 transmission = tD * A * refraction_src.rgb;
 
   vec3 total_specular = direct_specular + ambient_specular;
   vec3 total_diffuse = direct_diffuse + ambient_diffuse;
 
   vec3 mist_result = vec3(mistf * saturate(saturate(shore_t) + saturate(mistlocation)));
+  
   // mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
-  vec3 result = transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
-  // result += (1 - A) * 2.f * mist_result * total_specular;
-  result += 15 * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
-  // result = (1 - A) *mist_result*Kd;
+  //transmission = vec3(0);
+  vec3 result = m.emissive + transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
+  result += (1 - A) * 2.f * mist_result * total_specular;
+  
+  //result += 15 * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
+  
   vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
-  // result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
-  result += m.emissive; //+ transmission;
+  //result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
+ 
+ 
+ 
 
-  // result = vec3(smoothstep(0.000, 0.115, depth_of_object));
-  // result = vec3(Ks*smoothstep(0.01,0.1,water_depth));
-  // result = vec3(A);
   if (debug != vec3(-9))
   {
     result = debug;
   }
-  // float height_t =  1-smoothstep(0,.4141,pow(lenpd,.25f));
-  // result = 1000.f*vec3(length(velocity));
-
-  //
 
   // basic fog:
   const float LOG2 = 1.442695;
@@ -1088,14 +1103,10 @@ void main()
   result = mix(color, result, fogFactor);
 
   /*
-    i think if you compare the pixel height to the height of the pixel sampled 1 lod lower u can get an idea for
+    i think if u compare the pixel height to the height of the pixel sampled 1 lod lower u can get an idea for
     if the pixel is generally lower or higher than the pixels around it and with this u can blend more towards green
     than blue
-
   */
 
-  // result = total_specular;//total_diffuse;
-  // result = m.normal;
-  // result = vec3(mistf*shore_t);
   out0 = vec4(result, 1);
 }

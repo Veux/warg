@@ -1266,6 +1266,8 @@ struct Renderer
   //fxaa should probably be done after the scene is resized to the screen
   //when dragging the render scale, going higher can sometimes make it look worse
 
+  //todo: exposure before bloom, not after, a high exposure isnt affecting the bloom result at all
+
   // todo: irradiance map generation
   // todo: skeletal animation
   // todo: screen space reflections
@@ -1348,6 +1350,7 @@ struct Renderer
   Shader water = Shader("vertex_shader.vert", "water.frag");
   void bind_white_to_all_textures();
 
+  int selected_tonemap_function = 1;
   Texture uv_map_grid;
   Texture brdf_integration_lut;
 

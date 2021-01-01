@@ -29,26 +29,22 @@ enum struct imgui_pane
   end
 };
 
+// check:
 
-//check: 
+// can use to do unit conversion on import
+// aiProcess_GlobalScale
 
-//can use to do unit conversion on import
-//aiProcess_GlobalScale
-
-//some sort of auto texture searching feature similar to what we hardcoded before
-//aiProcess_EmbedTextures
-
+// some sort of auto texture searching feature similar to what we hardcoded before
+// aiProcess_EmbedTextures
 
 extern std::vector<Imgui_Texture_Descriptor> IMGUI_TEXTURE_DRAWS;
 const uint32 default_assimp_flags = // aiProcess_FlipWindingOrder |
                                     // aiProcess_Triangulate |
                                     // aiProcess_FlipUVs |
-    aiProcess_CalcTangentSpace |
-  aiProcess_ValidateDataStructure|
- aiProcess_SplitByBoneCount |
+    aiProcess_CalcTangentSpace | aiProcess_ValidateDataStructure | aiProcess_SplitByBoneCount |
     // aiProcess_MakeLeftHanded|
     // aiProcess_JoinIdenticalVertices |
-    // aiProcess_PreTransformVertices | 
+    // aiProcess_PreTransformVertices |
     // aiProcess_GenUVCoords |
     // aiProcess_OptimizeGraph|
     // aiProcess_ImproveCacheLocality|
@@ -275,19 +271,18 @@ struct Imported_Scene_Data
   std::vector<Material_Descriptor> materials;
   std::vector<Skeletal_Animation> animations;
 
-  //okay so....
-  //gather_mesh_bones ONLY touches bones that will affect vertices directly
-  //meaning, bones that only control other bones will be missing
+  // okay so....
+  // gather_mesh_bones ONLY touches bones that will affect vertices directly
+  // meaning, bones that only control other bones will be missing
 
-  //the animation itself however may reference those bones too
-  //yet they wont exist when we go to animate, thus we get that fail in the search
-  //and those are the ruined vertices
+  // the animation itself however may reference those bones too
+  // yet they wont exist when we go to animate, thus we get that fail in the search
+  // and those are the ruined vertices
 
-  //we need to make sure we can find the node that represents those 
-
+  // we need to make sure we can find the node that represents those
 
   // for all bones in the import
-  // this really should be only set by the 
+  // this really should be only set by the
   // graph traversal, not the mesh bone import itself...
   // but how do we actually tell if a graph node is a bone node
   // or not? its supposed to be if they are referenced by an
@@ -345,8 +340,7 @@ struct Resource_Manager
   // eventually produce the Imported_Scene_Data
   Imported_Scene_Data *request_valid_resource(std::string assimp_path, bool wait_for_valid = true);
 
-  static Imported_Scene_Node _import_aiscene_node(
-    Imported_Scene_Data* data, const aiScene *scene, const aiNode *node);
+  static Imported_Scene_Node _import_aiscene_node(Imported_Scene_Data *data, const aiScene *scene, const aiNode *node);
 
 #if 0
   // pure - gets rid of nodes that have no meshes
@@ -379,7 +373,7 @@ struct Scene_Graph_Node
   uint32 animation_state_pool_index = NODE_NULL;
 
   // the set of bones our import had
-  //uint32 model_bone_set_pool_index = NODE_NULL;
+  // uint32 model_bone_set_pool_index = NODE_NULL;
 
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
@@ -388,6 +382,7 @@ struct Scene_Graph_Node
   bool propagate_visibility = true;
   bool wait_on_resource = true;
   bool is_a_bone = false;
+  bool is_root_of_wow_import = false;
 
   // require the mesh and materials to be available immediately
   bool interpolate_this_node_with_last = false; // if set to true, prepare_renderer can interpolate the last two
@@ -411,6 +406,8 @@ struct Scene_Graph
 
   Node_Index add_aiscene_new(
       std::string scene_file_path, std::string name = "Unnamed_Node", bool wait_on_resource = true);
+
+  void set_wow_asset_import_transformation(Node_Index node);
 
   // todo: collider object grabbyhand thing
 
@@ -490,13 +487,11 @@ private:
   uint32 highest_allocated_node = 0;
   std::vector<Render_Entity> accumulator;
   std::vector<World_Object> accumulator1;
-  void visit_nodes(
-      Node_Index Node_Index, const mat4 &M, const mat4 &INVERSE_ROOT, std::vector<Render_Entity> &accumulator);
+  void visit_nodes(Node_Index Node_Index, const mat4 &M, mat4 &ROOT, std::vector<Render_Entity> &accumulator);
   glm::mat4 __build_transformation(Node_Index node_index);
   void assert_valid_parent_ptr(Node_Index child);
   Node_Index add_import_node(Imported_Scene_Data *scene, Imported_Scene_Node *node,
-      const std::pair<Mesh_Index, Material_Index> &base_indices, 
-      uint32 animation_state_pool_index);
+      const std::pair<Mesh_Index, Material_Index> &base_indices, uint32 animation_state_pool_index);
 
   // imgui:
   Node_Index imgui_selected_node = NODE_NULL;

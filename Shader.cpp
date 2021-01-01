@@ -228,10 +228,11 @@ GLint Shader_Handle::get_uniform_location(const char *name)
       }
     }
 
-    if(!found)
-    set_message(err, "", 100.f);
-
-    already_warned_uniform_errors.push_back(err);
+    if (!found)
+    {
+      set_message(err, "", 100.f);
+      already_warned_uniform_errors.push_back(err);
+    }
     
   }
 

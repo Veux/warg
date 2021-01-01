@@ -1691,6 +1691,7 @@ void Renderer::draw_imgui()
       ImGui::Begin("Tonemapping", &show_tonemap);
       ImGui::DragFloat("Exposure", &exposure, 0.0001f, 0.f, 20.f, "%.3f", 2.5f);
       ImGui::ColorPicker3("Exposure Color", &exposure_color[0]);
+      ImGui::InputInt("tonemapper", &selected_tonemap_function);
 
       ImGui::End();
     }
@@ -2771,6 +2772,7 @@ void Renderer::render(float64 state_time)
     tonemapping_target_srgb8.bind_for_drawing_dst();
     tonemapping.use();
     tonemapping.set_uniform("transform", fullscreen_quad());
+    tonemapping.set_uniform("function_select", selected_tonemap_function);
     tonemapping.set_uniform("texture0_mod", vec4(exposure * exposure_color, 1));
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     draw_target.color_attachments[0].bind_for_sampling_at(0);

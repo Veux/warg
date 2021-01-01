@@ -35,6 +35,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #include <SDL_image.h>
+#include <SDL_ttf.h>
 #include <time.h>
 #include <thread>
 #include <type_traits>

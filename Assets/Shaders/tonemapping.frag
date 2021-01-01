@@ -1,7 +1,9 @@
 #version 330
 uniform sampler2D texture0;
 uniform vec4 texture0_mod = vec4(1, 1, 1, 1);
+uniform int function_select;
 in vec2 frag_uv;
+
 
 layout(location = 0) out vec4 out0;
 
@@ -19,8 +21,16 @@ vec4 Tonemap_ACES(vec4 x)
 void main()
 {
   vec4 result = texture0_mod * texture(texture0, frag_uv);
-  // out0 = result;
-  out0 = Tonemap_ACES(result);
+  
 
+  if(function_select == 0)
+  {//clipping
+	out0 = result;
+  }
+
+  if(function_select ==1)
+  {
+	out0 = Tonemap_ACES(result);
+  }
   // todo: need to do tonemap exposure before bloom
 }

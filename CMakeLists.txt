@@ -2,10 +2,30 @@ cmake_minimum_required (VERSION 3.4 FATAL_ERROR)
 include (FindPkgConfig)
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
+
+
+#set(CMAKE_SYSTEM_VERSION 10.0.18362.0 CACHE STRING INTERNAL FORCE)
+#set(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION 10.0.18362.0 CACHE STRING INTERNAL FORCE)
+
 project (warg)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4305")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Gm-")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+
+
+
+
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4251")
+
+
+
+
+
+
+
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-#glbinding spams warning 4251
 
 set (CMAKE_BUILD_TYPE Debug)
 file (GLOB CPP_FILES "*.cpp")
@@ -32,14 +52,7 @@ file (GLOB THIRD_PARTY "Third_party/imgui/*.h" "Third_party/imgui/*.cpp" "Third_
 add_executable (warg ${CPP_FILES} ${HEADER_FILES} ${SHADER_FILES} ${THIRD_PARTY})
 
 set_target_properties(warg PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/")
-
-if (MSVC) 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4251")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4305")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Gm-")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-  target_link_options(warg PUBLIC /SUBSYSTEM:WINDOWS)
-endif (MSVC)
+target_link_options(warg PUBLIC /SUBSYSTEM:WINDOWS)
 
 
 
@@ -86,6 +99,9 @@ include_directories (${GLAD_INCLUDE_DIRS})
 target_include_directories (warg PRIVATE "Third_Party/freetype-windows-binaries-2.10.2/include/")
 target_link_libraries (warg "${CMAKE_SOURCE_DIR}/Third_party/freetype-windows-binaries-2.10.2/win64/freetype.lib")
 
+#sdl_ttf
+target_include_directories(warg PRIVATE "Third_Party/SDL2_ttf-2.0.15/include/")
+target_link_libraries (warg "${CMAKE_SOURCE_DIR}/Third_party/SDL2_ttf-2.0.15/lib/x64/SDL2_ttf.lib")
 
 target_include_directories (warg PRIVATE "Third_Party")
 target_include_directories (warg PRIVATE "Third_Party/imgui")
@@ -114,6 +130,7 @@ set(DLL_COPIES ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/assimp/x64/Release/assimp
                ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/SDL2_image-2.0.3/lib/x64/SDL2_image.dll
                ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/SDL2_image-2.0.3/lib/x64/zlib1.dll
                ${CMAKE_CURRENT_SOURCE_DIR}/Third_party/freetype-windows-binaries-2.10.2/win64/freetype.dll
+               ${CMAKE_SOURCE_DIR}/Third_party/SDL2_ttf-2.0.15/lib/x64/SDL2_ttf.dll
                )
 
                 

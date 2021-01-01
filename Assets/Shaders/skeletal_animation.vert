@@ -41,8 +41,9 @@ void main()
   vertex_to_pose += (bones[bone_index.y] * bone_weights.y);
   vertex_to_pose += (bones[bone_index.z] * bone_weights.z);
   vertex_to_pose += (bones[bone_index.w] * bone_weights.w);
+  
+  mat4 vertex_to_pose_to_world = Model*vertex_to_pose;
 
-  mat4 vertex_to_pose_to_world = Model * vertex_to_pose;
 
   vec3 t = normalize(vertex_to_pose_to_world * normalize(vec4(tangent, 0))).xyz;
   vec3 b = normalize(vertex_to_pose_to_world * normalize(vec4(bitangent, 0))).xyz;

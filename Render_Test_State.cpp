@@ -238,8 +238,25 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.pos = vec3(3.3, 2.3, 1.4);
 
   rach = scene.add_aiscene_new("racharound/rach5.fbx");
+  scene.set_wow_asset_import_transformation(rach);
 
-  scene.nodes[rach].scale = vec3(15);
+
+  static Material_Descriptor material;
+  material.albedo = "crate_diffuse.png";
+  material.normal = "test_normal.png";
+  material.roughness = "crate_roughness.png";
+  material.vertex_shader = "vertex_shader.vert";
+  material.frag_shader = "fragment_shader.frag";
+  material.translucent_pass = true;
+  material.albedo.mod = vec4(1, 1, 1, 0.5);
+
+
+  vec3 radius = vec3(0.5f) * vec3(.39, 0.30, 1.61); // avg human in meters
+  static Node_Index ghost_mesh = scene.add_mesh(cube, "human_size_mesh", &material);
+  scene.nodes[ghost_mesh].position = vec3(0,0,0);
+  scene.nodes[ghost_mesh].scale = radius * vec3(2);
+
+
 
   terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
@@ -647,6 +664,8 @@ void update_test_triangle(Scene_Graph *scene)
 }
 void Render_Test_State::update()
 {
+
+
   // update_planets(&scene, current_time);
   scene.lights.lights[1].position = vec3(5 * cos(current_time * .0172), 5 * sin(current_time * .0172), 2.);
   renderer.set_camera(camera.pos, camera.dir);

@@ -10,6 +10,7 @@ using namespace std;
 using namespace ImGui;
 
 Assimp::Importer IMPORTER;
+mat4 get_wow_asset_import_transformation();
 bool TriangleAABB(const Triangle_Normal &triangle, const AABB &aabb);
 uint32 new_ID()
 {
@@ -2270,12 +2271,22 @@ std::vector<Render_Entity> Scene_Graph::visit_nodes_start()
     { // node is visible and its parent is the null node, add its branch
 
 
-      //should root really be inverted here?
-      //appears to make scale incorrect..
+      //sponge clenaup
+      mat4 inverse_root;
+      mat4 global_parent;
+      if (node->is_root_of_wow_import)
+      {
+        inverse_root = inverse(__build_transformation(i));// *get_wow_asset_import_transformation());
+        //global_parent = get_wow_asset_import_transformation();
+        global_parent = mat4(1);
+      }
+      else
+      {
+        inverse_root = inverse(__build_transformation(i));
+        global_parent = mat4(1);
+      }
 
-      //mat4 inverse_root = inverse(__build_transformation(i));
-      mat4 inverse_root = mat4(1);
-      visit_nodes(i, mat4(1), inverse_root, accumulator);
+      visit_nodes(i, global_parent, inverse_root, accumulator);
     }
   }
 
@@ -2296,8 +2307,12 @@ glm::mat4 Scene_Graph::__build_transformation(Node_Index node_index)
   const mat4 S_non = scale(node->scale_vertex);
   const mat4 R = toMat4(node->orientation);
   // const mat4 B = node->import_basis;
-  const mat4 STACK = M * T * R * S_prop;
+  mat4 STACK = M * T * R * S_prop;
 
+  if (node->is_root_of_wow_import)
+  {
+    //STACK = STACK * get_wow_asset_import_transformation();
+  }
   return STACK;
 }
 
@@ -2524,10 +2539,36 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, Skeletal_Animation_
   return transformed_bone;
 }
 
+void Scene_Graph::set_wow_asset_import_transformation(Node_Index ni)
+{
+  Scene_Graph_Node *node = &nodes[ni];
+  //node->is_root_of_wow_import = true;
+
+  //sponge match better here or do it on import
+  //cleanup the member
+  node = &nodes[node->children[0]];
+
+
+  quat a = angleAxis(half_pi<float32>(), vec3(1, 0, 0));
+  quat b = angleAxis(half_pi<float32>(), vec3(0, 0, 1));
+
+  node->orientation = b*a;
+  node->scale = vec3(.017);
+  //static mat4 result = toMat4(a) * toMat4(b) * scale(vec3(.13f));
+
+}
+mat4 get_wow_asset_import_transformation()
+{
+  static quat a = angleAxis(-half_pi<float32>(), vec3(1, 0, 0));
+  static quat b = angleAxis(-half_pi<float32>(), vec3(0, 0, 1));
+  static mat4 result = toMat4(a) * toMat4(b) * scale(vec3(.13f));
+  return result;
+}
+
 // this should not be a problem for child node models of a bone, because we modify the stack
 // as we go down the tree, so it will always be correct for children
 void Scene_Graph::visit_nodes(
-    Node_Index node_index, const mat4 &P, const mat4 &INVERSE_ROOT, std::vector<Render_Entity> &accumulator)
+    Node_Index node_index, const mat4 &Parent, mat4 &INVERSE_ROOT, std::vector<Render_Entity> &accumulator)
 {
   if (node_index == NODE_NULL)
     return;
@@ -2538,20 +2579,22 @@ void Scene_Graph::visit_nodes(
     return;
   assert_valid_parent_ptr(node_index);
 
+
   const mat4 T = translate(entity->position);
   const mat4 S_o = scale(entity->oriented_scale);
   const mat4 S_prop = scale(entity->scale);
-  const mat4 S_non = scale(entity->scale_vertex);
+  // const mat4 S_non = scale(entity->scale_vertex);
   const mat4 R = toMat4(entity->orientation);
   // const mat4 B = entity->import_basis;
 
   // this node's transform alone
-  mat4 RST = T * S_o * R;
+  mat4 TSRS = T * S_o * R * S_prop;
 
   Skeletal_Animation_State *anim_state;
   Skeletal_Animation_Set *anim_set;
   Model_Bone_Set *bone_set;
   Bone *bone;
+
   if (entity->is_a_bone)
   {
     // the current user-set state of the animation
@@ -2571,9 +2614,8 @@ void Scene_Graph::visit_nodes(
 
     if (posed_bone != mat4(1))
     {
-
-      // assign our transformation to our node
-      RST = posed_bone;
+      //this node's bone, posed only in bone space
+      TSRS = posed_bone;
     }
     else
     {
@@ -2581,16 +2623,20 @@ void Scene_Graph::visit_nodes(
     }
   }
 
-  mat4 PRST = P * RST;
+  mat4 PTSRS = Parent * TSRS;
 
   if (entity->is_a_bone)
   {
     // data that is bound in the uniform array in the vertex shader
-    anim_state->final_bone_transforms[s(entity->name)] = INVERSE_ROOT * PRST * bone->offset;
+    //the shader expects no transforms by the root node, aka model matrix - but the PTSRS has it inside
+    //the P for parent
+    //so the inverse root must be the complete inverse of the transformation of the root node
+    //to this node
+    anim_state->final_bone_transforms[s(entity->name)] = INVERSE_ROOT * PTSRS * bone->offset;
   }
 
-  // this node specifically
-  const mat4 BASIS = PRST; // *S_non;
+  // the matrix to be supplied to the 'Model' uniform in the vertex shader if this node has meshes
+  const mat4 BASIS = PTSRS; // *S_non;
 
   const size_t num_meshes = entity->model.size();
   for (size_t i = 0; i < num_meshes; ++i)
@@ -2621,10 +2667,23 @@ void Scene_Graph::visit_nodes(
     if (entity->visible)
       accumulator.emplace_back(entity->name, mesh_ptr, material_ptr, animation_ptr, BASIS, node_index);
   }
+
+
+  if (false && entity->is_a_bone)
+  {
+    static Mesh bone_cube = Mesh_Descriptor(cube, "some bone");
+    static Material bone_mat;
+
+    accumulator.emplace_back(entity->name, &bone_cube, &bone_mat, nullptr, BASIS, node_index);
+
+
+
+  }
+
   for (uint32 i = 0; i < entity->children.size(); ++i)
   {
     Node_Index child = entity->children[i];
-    visit_nodes(child, PRST, INVERSE_ROOT, accumulator);
+    visit_nodes(child, PTSRS, INVERSE_ROOT, accumulator);
   }
 }
 
@@ -2702,14 +2761,10 @@ Imported_Scene_Node Resource_Manager::_import_aiscene_node(
     return _import_aiscene_node(data, scene, ainode->mChildren[0]);
   }
 
-
   for (uint32 i = 0; i < ainode->mNumMeshes; ++i)
   {
     uint32 mesh_index = ainode->mMeshes[i];
     const aiMesh *aimesh = scene->mMeshes[mesh_index];
-
-    
-
 
     Mesh_Index mesh_result{mesh_index};
     node.mesh_indices.push_back(mesh_result);
@@ -3311,10 +3366,10 @@ void gather_unprocessed_mesh_only_bones(Imported_Scene_Data *dst)
 {
 
   uint32 flags = dst->import_flags;
-  //disable splitting because assimp appears to be culling bones that dont affect
-  //any vertices
-  flags = flags & ~aiProcess_SplitByBoneCount; 
-  flags = flags & ~aiProcess_CalcTangentSpace; //we dont need tangent space vectors for just bones here
+  // disable splitting because assimp appears to be culling bones that dont affect
+  // any vertices
+  flags = flags & ~aiProcess_SplitByBoneCount;
+  flags = flags & ~aiProcess_CalcTangentSpace; // we dont need tangent space vectors for just bones here
   const aiScene *aiscene1 =
       IMPORTER.ReadFile(dst->assimp_filename.c_str(), dst->import_flags & ~aiProcess_SplitByBoneCount);
   for (uint32 i = 0; i < aiscene1->mNumMeshes; ++i)
@@ -3352,24 +3407,22 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
 {
   ASSERT(dst);
 
-  //i forget why using the split flag doesnt work
-  //we cant gather all scene bones after doing it?
+  // i forget why using the split flag doesnt work
+  // we cant gather all scene bones after doing it?
   //               aiProcess_SplitByBoneCount
-  //is the assimp flag actually optimizing out bones that it feels are unused 
-  //because there is no animation for them defined in this specific fbx file?
-  //if it does thats wrong because we use separate fbx files per animation
-  //that expect them to exist
+  // is the assimp flag actually optimizing out bones that it feels are unused
+  // because there is no animation for them defined in this specific fbx file?
+  // if it does thats wrong because we use separate fbx files per animation
+  // that expect them to exist
 
-  //gather all the unprocessed bones of the entire model first
-  //currently just reads the aiscene file without the processing step
-  //can it be sped up by applying the processing afterwards?
+  // gather all the unprocessed bones of the entire model first
+  // currently just reads the aiscene file without the processing step
+  // can it be sped up by applying the processing afterwards?
 
-  //if there are bones that dont directly affect any vertices in the primary fbx
-  //then those bones will only exist in the rig graph 
+  // if there are bones that dont directly affect any vertices in the primary fbx
+  // then those bones will only exist in the rig graph
 
   gather_unprocessed_mesh_only_bones(dst);
-
-
 
   // default here is 60 but we can do more
   AI_SBBC_DEFAULT_MAX_BONES;
@@ -3384,7 +3437,7 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
   ASSERT(aiscene->mRootNode);
   ASSERT(aiscene->mRootNode->mNumMeshes == 0);
 
-  //is being applied to the root node's scale vector
+  // is being applied to the root node's scale vector
   aiscene->mMetaData->Get("UnitScaleFactor", dst->scale_factor);
 
   // the flat mesh array
@@ -3403,7 +3456,7 @@ bool Resource_Manager::import_aiscene_new(Imported_Scene_Data *dst)
   // they all have 247 names, all sequential
   gather_animation_subfolder(dst);
 
-  //assign the materials for this import to use skeletal animation vertex shader here
+  // assign the materials for this import to use skeletal animation vertex shader here
   if (dst->animations.size())
   {
     for (size_t i = 0; i < dst->materials.size(); ++i)

@@ -373,6 +373,13 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   ss << this_thread::get_id();
   const float64 time = get_real_time();
   bool found = false;
+  if (message_log.size() > 100000)
+  {
+    //message_log.clear();
+    return;
+  }
+
+
   if (identifier != "")
   {
     for (auto &msg : warg_messages)
