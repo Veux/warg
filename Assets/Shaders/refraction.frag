@@ -381,21 +381,8 @@ void main()
   vec3 r = reflect(v, m.normal);
   vec3 F0 = vec3(dielectric_reflectivity);
   F0 = mix(F0, m.albedo, m.metalness);
-
   float ndotv = clamp(dot(m.normal, v), 0, 1);
-
   float roughnessclamp = clamp(m.roughness, 0.00, 1);
-
-  /*
-  metal should mul specular by albedo because albedo map means F0
-
-  plastic should not mul specular by albedo
-
-
-
-
-  */
-
   vec3 direct_ambient = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -458,8 +445,9 @@ void main()
     float denominator = max(4.0f * ndotl * ndotv, 0.000001);
     vec3 specular = (F * G * D) / denominator;
     vec3 radiance = lights[i].flux * at;
-    // specular result
     vec3 specular_result = radiance * specular;
+
+
     // diffuse result
     vec3 fakeF = F0;
     vec3 Kd = (1.0f - fakeF) * (1 - m.metalness); // Ks = F
@@ -475,14 +463,14 @@ void main()
 
     // result += (specular_result + diffuse_result) * visibility * ndotl;
     // ambient
-    direct_ambient += lights[i].ambient * at;
+    direct_ambient += lights[i].ambient * at * m.albedo;
   }
-
+  vec3 direct = result;
   // ambient light
 
   // ambient specular
-  vec3 Ks = fresnelSchlickRoughness(clamp(ndotv, 0, 1), F0, m.roughness);
-  const float MAX_REFLECTION_LOD = 5.0;
+  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  const float MAX_REFLECTION_LOD = 6.0;
   vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
   vec3 ambient_specular =
@@ -498,7 +486,7 @@ void main()
   vec3 irradiance1 = texture(texture7, -m.normal).rgb;
   vec3 irradiance2 = texture(texture7, m.normal).rgb;
   vec3 irradiance = 0.5f * (irradiance1 + irradiance2);
-  vec3 ambient_diffuse = Kd * irradiance * m.albedo / PI;
+  vec3 ambient_diffuse = Kd * irradiance * m.albedo;
   // ambient result;
   vec3 ambient = (ambient_specular + ambient_diffuse);
 
@@ -506,7 +494,7 @@ void main()
   result += m.emissive;
 
   // refraction sampling
-  vec3 refracted_view = normalize(refract(v, m.normal, index_of_refraction).xyz);
+  vec3 refracted_view = normalize(refract(v, -m.normal, index_of_refraction).xyz);
 
   vec2 offset = vec2(dot(refracted_view, camera_right), dot(refracted_view, camera_up));
   float inv_aspect = viewport_size.y / viewport_size.x;
@@ -538,12 +526,12 @@ void main()
     // result = result + ((1.0-palpha)*refraction_src.rgb);
   }
 
-  result = vec3(refraction_src);
+  //result = vec3(refraction_src);
 
   if (multiply_result_by_a)
   {
     result = alpha * result;
   }
 
-  out0 = vec4(result, alpha);
+  out0 = vec4(result, 1);
 }

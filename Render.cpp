@@ -132,11 +132,13 @@ void Framebuffer::init()
       if (!depth_texture.texture)
       {
         depth_texture.t.size = depth_size;
-        depth_texture.t.format = GL_DEPTH_COMPONENT32F;
+        depth_texture.t.format = depth_format;
+
         if (depth_texture.t.name == "default")
           depth_texture.t.name = "some unnamed depth texture";
         depth_texture.t.source = "generate";
         depth_texture.load();
+        ASSERT(depth_texture.get_handle());
         glNamedFramebufferTexture(fbo->fbo, GL_DEPTH_ATTACHMENT, depth_texture.get_handle(), 0);
       }
     }
@@ -1291,6 +1293,7 @@ void Material::bind()
   shader.set_uniform("include_ao_in_uv_scale", descriptor.include_ao_in_uv_scale);
   shader.set_uniform("discard_threshold", descriptor.discard_threshold);
   shader.set_uniform("dielectric_reflectivity", descriptor.dielectric_reflectivity);
+  shader.set_uniform("index_of_refraction", descriptor.ior);
 
   // if (shader.vs == "displacement.vert")
   {
@@ -1381,34 +1384,6 @@ void Material::bind()
   }
 }
 
-//
-// bool Light::operator==(const Light &rhs) const
-//{
-//  bool b1 = position == rhs.position;
-//  bool b2 = direction == rhs.direction;
-//  bool b3 = color == rhs.color;
-//  bool b4 = attenuation == rhs.attenuation;
-//  bool b5 = ambient == rhs.ambient;
-//  bool b6 = cone_angle == rhs.cone_angle;
-//  bool b7 = type == rhs.type;
-//  bool b8 = brightness == rhs.brightness;
-//  return b1 & b2 & b3 & b4 & b5 & b6 & b7 & b8;
-//}
-//
-// bool Light_Array::operator==(const Light_Array &rhs)
-//{
-//  if (light_count != rhs.light_count)
-//    return false;
-//  if (lights != rhs.lights)
-//  {
-//    return false;
-//  }
-//  if (additional_ambient != rhs.additional_ambient)
-//  {
-//    return false;
-//  }
-//  return true;
-//}
 Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index)
     : mesh(mesh), material(material), transformation(world_to_model), name(n), node(node_index)
 {
@@ -2408,10 +2383,19 @@ void Renderer::translucent_pass(float64 time)
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
 
+    if (entity.material->descriptor.wireframe)
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+
     glDepthMask(GL_FALSE);
     if (entity.material->descriptor.require_self_depth)
-    {
-      // depth info for this object's back faces
+    {// depth info for this object's back faces
+      glDepthMask(GL_TRUE);
       self_object_depth.bind_for_drawing_dst();
       glCullFace(GL_FRONT);
       glDrawBuffer(GL_NONE);
@@ -2419,10 +2403,21 @@ void Renderer::translucent_pass(float64 time)
       entity.mesh->draw();
       self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
       draw_target.bind_for_drawing_dst();
+      glCullFace(GL_BACK);
+      glDepthMask(GL_FALSE);
     }
     // depth of closest front face will be in the main rendering call below
     // depth of the world will be in translucent sample source - dont need to render to it
     // depth of closest back face is in self_object_depth
+
+
+    //the translucent sample source does NOT have the depth info for other translucent objects, even their
+    //front faces...
+
+
+    //if the depth of the front face is close to the back face we can blend towards green
+
+
 
     draw_target.bind_for_drawing_dst();
     translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
@@ -2454,17 +2449,21 @@ void Renderer::translucent_pass(float64 time)
     {
       glBlendFunc(GL_ONE, GL_ONE);
     }
-    if (entity.material->descriptor.wireframe)
-    {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    }
-    else
-    {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
+
     glEnable(GL_BLEND);
     entity.mesh->draw();
+
+    if (true)
+    {//this will copy back the result into the scene so there can be multi layers of refraction-enabled objects
+      //might be too slow
+      glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
+        render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+        GL_NEAREST);
+    }
   }
+  self_object_depth.bind_for_drawing_dst();
+  glClear(GL_DEPTH_BUFFER_BIT);
+  draw_target.bind_for_drawing_dst();
   bind_white_to_all_textures();
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -2823,6 +2822,7 @@ void Renderer::resize_window(ivec2 window_size)
 {
   this->window_size = window_size;
   set_vfov(vfov);
+  init_render_targets();
 }
 
 void Renderer::set_render_scale(float32 scale)
@@ -3020,8 +3020,7 @@ void Renderer::init_render_targets()
   self_object_depth.depth_enabled = true;
   self_object_depth.use_renderbuffer_depth = false;
   self_object_depth.depth_size = render_target_size;
-  self_object_depth.depth_texture.t.name = td.name;
-  self_object_depth.depth_texture.load();
+  self_object_depth.depth_texture.t.name = td.name + "'s depth texture";
   self_object_depth.init();
 
   // full render scaled, clamped and encoded srgb
@@ -5586,6 +5585,7 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   material.frag_shader = "water.frag";
   material.backface_culling = true;
   material.translucent_pass = true;
+  material.ior = 1.2f;
   material.uniform_set.bool_uniforms["ground"] = false;
 
   water = state->scene.add_mesh("water", &mesh, &material);

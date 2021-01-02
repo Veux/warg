@@ -537,7 +537,7 @@ void main()
 
   // i will be assigning the snow color to the grass variable because thats whats actually getting rendered, jank
 
-  float snow_fbm = .4 + .6 * fbm_n(130 * frag_uv, 3);
+  float snow_fbm = .4 + .6 * fbm_n(.02*130 * frag_uv, 3);
   float snow_top = smoothstep(11. * snow_fbm, 14. * snow_fbm, 95 * ground_height);
   grass = grass * (1 - snow_top) + snow_top * vec3(1);
 
@@ -587,8 +587,23 @@ void main()
   float water_depth_t = clamp(pow(12.1f * water_depth, 1.f), 0, 1);
 
   m.albedo = max(charr_contribution + soil_contribution + grass_contribution, 0);
+
+
   m.emissive = max(fire_contribution, vec3(0));
   m.roughness = 1.0f - (is_soil * soil_t);
+
+  
+  //sponge textures
+  float fbm_texture_mix =  pow(saturate(fbm_h_n(1.4*frag_world_position.xy,1.51,4)),1);
+  //low/left is rocks, high/right is grass
+  m.albedo = mix(texture(texture0,frag_uv).rgb,m.albedo,fbm_texture_mix);
+  m.roughness = mix(texture(texture2,frag_uv).r,m.roughness,fbm_texture_mix);
+
+  //hijacked emissive for a 2nd normal map
+  vec3 normal2 = TBN * normalize(texture2D(texture1, frag_normal_uv).rgb * 2.0f - 1.0f);
+  m.normal = normalize(mix(m.normal,normal2,fbm_texture_mix));
+  //m.albedo = vec3(fbm_texture_mix);
+  // /sponge
 
   float terrain_ao = 0.1f + 0.9 * smoothstep(0, 7, pow(255.f * ground_height, 1.0));
   m.ambient_occlusion = terrain_ao;

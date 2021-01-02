@@ -38,10 +38,15 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
-uniform float alpha_albedo_override;
 uniform float dielectric_reflectivity;
 uniform vec2 viewport_size;
 uniform float aspect_ratio;
+
+uniform float discard_threshold;
+uniform bool multiply_albedo_by_a;
+uniform bool multiply_result_by_a;
+uniform bool multiply_pixelalpha_by_moda;
+
 uniform float index_of_refraction;
 uniform float refraction_offset_factor;
 uniform float water_eps;
@@ -737,7 +742,7 @@ vec3 get_water_normal()
 
   vec3 waternormal = normalize(waternormalfine + waternormallarge);
 
-  waterp = .231f * frag_world_position.xy;
+  waterp = .63231f * frag_world_position.xy;
 
   h = ambient_waves(waterp, .12350f, 11);
   hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .12350f, 11);
@@ -752,11 +757,13 @@ vec3 get_water_normal()
 void main()
 {
 
-  vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
+  vec4 albedo_tex = texture2D(texture0, frag_uv);
   if (discard_on_alpha)
   {
-    if (albedo_tex.a < 0.3)
-      discard;
+    if (texture0_mod.a * albedo_tex.a < discard_threshold)
+    {
+      //discard;
+    }
   }
   gather_shadow_moments();
 
@@ -767,14 +774,12 @@ void main()
 
   Material m;
 
-  float premultiply_alpha = albedo_tex.a;
-  if (alpha_albedo_override != -1.0f)
+
+  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+  if (multiply_albedo_by_a)
   {
-    premultiply_alpha = alpha_albedo_override;
+    m.albedo = texture0_mod.a * albedo_tex.a * m.albedo;
   }
-  premultiply_alpha = premultiply_alpha * max(texture0_mod.a, 0);
-  premultiply_alpha = clamp(premultiply_alpha, 0, 1);
-  m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
 
   float dist_to_pixel = length(camera_position - frag_world_position);
   float dist_factor = dist_to_pixel;
@@ -965,7 +970,7 @@ void main()
   float diffuse_loss = .120; //.315f; // lobe?
 
   // refraction sampling
-  vec3 refracted_view = normalize(refract(v, m.normal, 1.02).xyz);
+  vec3 refracted_view = normalize(refract(v, m.normal, index_of_refraction).xyz);
   vec2 offset = vec2(dot(refracted_view, camera_right), dot(refracted_view, camera_up));
   float inv_aspect = viewport_size.y / viewport_size.x;
   offset.x = offset.x * inv_aspect;
@@ -1001,89 +1006,95 @@ void main()
   vec3 irradiance = texture(texture7, -m.normal).rgb; // likely also wrong for flipped y
   vec3 ambient_diffuse = Kd * irradiance * m.albedo;
 
+
+  //refraction and volumentrics
   vec4 refraction_src = texture2D(texture9, ref_sample_loc);
-  // volumetric absorb
-  //
-  float depth_of_scene = texture2D(texture10, ref_sample_loc).r; // texture2D(texture10, this_pixel).r;
-  float depth_of_self = texture2D(texture13, this_pixel).r;      // texture2D(texture10, this_pixel).r;
-                                                                 // texture2D(texture9, this_pixel).rgb;
 
-  if (linearize_depth(depth_of_scene) < linearize_depth(gl_FragCoord.z) - 0.011f)
-  {
+  //which do we want?
+  //float scene_depth_sample = texture2D(texture10, ref_sample_loc).r;
+  float scene_depth_sample = texture2D(texture10, this_pixel).r;
+
+  //depth of scene behind this object
+  float depth_of_scene = linearize_depth(scene_depth_sample);
+
+
+  //1.0 or depth of the closest camera-facing backface
+  float this_object_backface_depth = linearize_depth(texture2D(texture13, this_pixel).r);
+
+  //typical z-depth value for this object
+  float this_object_frontface_depth = linearize_depth(gl_FragCoord.z);
+  
+  //thickness of this specific object, calculated using backfaces
+  float this_object_thickness = this_object_backface_depth - this_object_frontface_depth;
+    
+  //depth from frontface to to scene behind this object
+  float depth_to_scene = depth_of_scene-this_object_frontface_depth;
+
+  //fix that prevents refraction sampling from objects closer to the camera
+  if (linearize_depth(depth_of_scene) < this_object_frontface_depth - 0.011f)
+  { 
     refraction_src = texture2D(texture9, this_pixel);
-    // refraction_src = vec4(1,0,0,1);
-    // depth_of_scene = texture2D(texture10, this_pixel).r;
+    // depth_of_scene = texture2D(texture10, this_pixel).r; technically better but not needed
   }
-  depth_of_scene = texture2D(texture10, this_pixel).r;
-  // roughly world space but not exact, frustrum values differ in the linearize_depth function from the projection
-  // matrix
-  float depth_of_object = linearize_depth(depth_of_scene) - linearize_depth(gl_FragCoord.z);
-  if (linearize_depth(depth_of_scene) > 10)
-  { // probably is env map behind water
-    // depth_of_object = linearize_depth(depth_of_self) - linearize_depth(gl_FragCoord.z);
-    // debug = vec3(pow(linearize_depth(gl_FragCoord.z),1),0,0);
-  }
-  depth_of_object = 215.1f * depth_of_object;
-  float density = pow(premultiply_alpha, 1);
 
-  //sponge get depth of object working
-  float A = pow(1 - density, pow(depth_of_object, 0.85f));
-  A = pow(1 - density, pow(depth_of_scene, 0.85f));
+  //this clamps our self depth to that of the ground behind the surface
+  //however this is going to be incorrect with a translucent object under the water surface
+  //if that object is writing depth data to the scene - which we changed it to do
+  //so that refraction can be layered
+  if(this_object_thickness > depth_to_scene)
+  {
+    this_object_thickness = depth_to_scene;
+  }
+
+  //for this shader we will just use the alpha channel as our volumetric absorb
+  float density = texture0_mod.a;
+
+  //i think this is incorrect anyway
+  //i believe physically based is /d rather than pow^d
+  float A = pow(1 - density, pow(200.f*this_object_thickness, 0.85f));
   
 
+  //this looked wrong before, why?
+  //float A = 1./max((this_object_thickness*density),1.);
+  // A = saturate(    (1 * density)/depth_of_object       );      ?????
 
-  if (isinf(len_offset) || isnan(len_offset))
-  {
-    // A = 1.0f;
-  }
 
-  // A = saturate((1 * density)/depth_of_object);
+
   float trim_very_thin_water =
-      saturate(smoothstep(0.0015, 0.015, water_depth) + smoothstep(0.0015, 0.015, depth_of_object));
+      saturate(smoothstep(0.0015, 0.015, water_depth) + smoothstep(0.0015, 0.015, this_object_thickness));
   float trim_very_thin_water2 = smoothstep(0.0005, 0.00445, water_depth);
   float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
   float shore_fbm2 =
       pow(saturate(.755f * fbm_h_n(1.5f * frag_world_position.xy + .65f * vec2(sin(time)), 0.8125f, 2)), 2);
   float shore_t = shore_fbm2 * shore_fbm * (1 - smoothstep(.00, 0.001519f, water_depth));
   
-  // A = mix(A,0.9f,step(0.9,A));
-
   // light that reaches v from sea floor
-  float rndotv = clamp(-dot(-m.normal, -refracted_view), 0, 1);
+  //float rndotv = clamp(-dot(-m.normal, -refracted_view), 0, 1);
   // vec3 rKs = fresnelSchlickRoughness(rndotv, F0, m.roughness);
   // vec3 tD = (1 - rKs); // transmissive minus internal specular
   vec3 tD = vec3(1.f);
-
-
-
-  //todo: get the water working again
-  //the scene and self depth stuff isnt right
-  //perhaps its just the material setting for the water?
-  
-
-  A = 0.15f;
-
-
   vec3 transmission = tD * A * refraction_src.rgb;
-
-  vec3 total_specular = direct_specular + ambient_specular;
-  vec3 total_diffuse = direct_diffuse + ambient_diffuse;
+  vec3 total_specular = m.ambient_occlusion *(direct_specular + ambient_specular);
+  vec3 total_diffuse = m.ambient_occlusion *(direct_diffuse + ambient_diffuse);
 
   vec3 mist_result = vec3(mistf * saturate(saturate(shore_t) + saturate(mistlocation)));
   
-  // mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
-  //transmission = vec3(0);
-  vec3 result = m.emissive + transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
-  result += (1 - A) * 2.f * mist_result * total_specular;
   
-  //result += 15 * clamp(2 * mist_result, vec3(0), vec3(1)) * length(total_diffuse);
   
-  vec3 ambient = m.ambient_occlusion * (ambient_specular + ambient_diffuse + max(direct_ambient, 0));
-  //result = m.emissive + ambient +direct_specular + direct_diffuse;//+ transmission;
- 
- 
- 
+  //old result good:
+  //vec3 result = m.emissive + transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
 
+  //not trimming thin water anymore:
+  vec3 result = m.emissive + transmission + (1 - A) * max(total_diffuse + total_specular, vec3(0));
+
+
+  //mist stuff:
+  // mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
+  //result += (1 - A) * 2.f * mist_result * total_specular;
+  
+ 
+ 
+ 
   if (debug != vec3(-9))
   {
     result = debug;
@@ -1099,7 +1110,7 @@ void main()
   randfog = 1;
   float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
-  vec3 color = textureLod(texture6, v, 2).rgb; // mix(vec3(104,142,173)/vec3(255)
+  vec3 color = textureLod(texture6, v, 2).rgb;
   result = mix(color, result, fogFactor);
 
   /*
@@ -1107,6 +1118,19 @@ void main()
     if the pixel is generally lower or higher than the pixels around it and with this u can blend more towards green
     than blue
   */
+  
+  
 
-  out0 = vec4(result, 1);
+//
+//  if (multiply_result_by_a)
+//  {
+//    result = texture0_mod.a * albedo_tex.a * result;
+//  }
+//  float pixelalpha = albedo_tex.a;
+//  if (multiply_pixelalpha_by_moda)
+//  {
+//    pixelalpha = texture0_mod.a * pixelalpha;
+//  }
+
+  out0  = vec4(result, 1);
 }

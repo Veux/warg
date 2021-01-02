@@ -464,9 +464,7 @@ void main()
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(dielectric_reflectivity); // default dielectrics
-  // todo: could put dielectric reflectivity in a uniform
-  // this would let us specify more light absorbant materials
+  vec3 F0 = vec3(dielectric_reflectivity);
   F0 = mix(F0, m.albedo, m.metalness);
 
   float ndotv = clamp(dot(m.normal, v), 0, 1);

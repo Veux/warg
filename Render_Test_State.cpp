@@ -11,7 +11,7 @@ bool spawn_test_spheres(Scene_Graph &scene);
 void world_water_settings(Uniform_Set_Descriptor *dst)
 {
 
-  dst->float32_uniforms["index_of_refraction"] = 1.15f;
+  //dst->float32_uniforms["index_of_refraction"] = 1.15f;
   dst->float32_uniforms["refraction_offset_factor"] = 0.01501;
   dst->float32_uniforms["water_eps"] = 0.001;
   dst->float32_uniforms["water_scale"] = .87;
@@ -25,29 +25,11 @@ void world_water_settings(Uniform_Set_Descriptor *dst)
   dst->float32_uniforms["water_time2"] = 0.192;
   dst->float32_uniforms["surfdotv_exp"] = 2.35f;
   dst->bool_uniforms["water_use_uv"] = false;
-
-  // if (imgui_this_tick)
-  //{
-  //  ImGui::DragFloat("ior", &ior, 0.001f, -5.f, 5.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("refraction_offset_factor", &offset_factor, 0.0001f, .000001f, 2.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_eps", &water_eps, 0.00001f, .0000001f, 2.f, "%.8f", 2.0f);
-  //  ImGui::DragFloat("water_scale", &water_scale, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_speed", &water_speed, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_dist_min", &water_dist_min, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_dist_scale", &water_dist_scale, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_dist_exp", &water_dist_exp, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_height_scale", &water_height_scale, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_scale2", &water_scale2, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("height_scale2", &height_scale2, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("water_time2", &water_time2, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::DragFloat("surfdotv_exp", &surfdotv_exp, 0.001f, -51.f, 51.f, "%.4f", 2.0f);
-  //  ImGui::Checkbox("do_extra_water", &do_extra_water);
-  //}
 }
 
 void small_object_water_settings(Uniform_Set_Descriptor *dst)
 {
-  dst->float32_uniforms["index_of_refraction"] = 1.15f;
+  //dst->float32_uniforms["index_of_refraction"] = 1.15f;
   dst->float32_uniforms["refraction_offset_factor"] = 0.02501;
   dst->float32_uniforms["water_eps"] = 0.0001;
   dst->float32_uniforms["water_scale"] = 4.87;
@@ -65,7 +47,7 @@ void small_object_water_settings(Uniform_Set_Descriptor *dst)
 
 void small_object_refraction_settings(Uniform_Set_Descriptor *dst)
 {
-  dst->float32_uniforms["index_of_refraction"] = 1.15f;
+  //dst->float32_uniforms["index_of_refraction"] = 1.15f;
   dst->float32_uniforms["refraction_offset_factor"] = 0.201;
 }
 
@@ -237,8 +219,8 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   camera.theta = -1.5f * half_pi<float32>();
   camera.pos = vec3(3.3, 2.3, 1.4);
 
-  rach = scene.add_aiscene_new("racharound/rach5.fbx");
-  scene.set_wow_asset_import_transformation(rach);
+  //rach = scene.add_aiscene_new("racharound/rach5.fbx");
+  //scene.set_wow_asset_import_transformation(rach);
 
 
   static Material_Descriptor material;
@@ -265,7 +247,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   // spawn_grabbyarm(&scene,vec3(0,0,1));
   // spawn_test_triangle(&scene);
   // spawn_compass(&scene);
-  // spawn_test_spheres(scene);
+  //spawn_test_spheres(scene);
 
   // spawn_map(&scene);
 
@@ -673,7 +655,6 @@ void Render_Test_State::update()
 
   if (rach != NODE_NULL)
   {
-
     Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
     if (rach_ptr->animation_state_pool_index != NODE_NULL)
     {
@@ -751,8 +732,6 @@ void Render_Test_State::draw_gui()
 
     if (rach != NODE_NULL)
     {
-
-
 
       Scene_Graph_Node *rach_ptr = &scene.nodes[rach];
       if (rach_ptr->animation_state_pool_index != NODE_NULL)
@@ -843,12 +822,16 @@ void Render_Test_State::draw_gui()
 
 bool spawn_test_spheres(Scene_Graph &scene)
 {
-  Node_Index test = scene.add_aiscene_new("smoothsphere.fbx", "spheretest", false);
+  //temp so we can wait for the sphere to load
+  Node_Index test = scene.add_aiscene_new("smoothsphere.fbx", "spheretest", true);
   if (test == NODE_NULL)
   {
     return false;
   }
   scene.delete_node(test);
+
+
+
 
   Material_Descriptor material;
   // material.emissive = "";
@@ -879,25 +862,29 @@ bool spawn_test_spheres(Scene_Graph &scene)
         material.metalness.mod = vec4(metalness);
         material.translucent_pass = false;
         material.casts_shadows = true;
-
         material.frag_shader = "fragment_shader.frag";
+        material.require_self_depth = false;
+
+        
         if (j == 1)
-        {
+        { //refraction
           material.casts_shadows = false;
           material.translucent_pass = true;
           material.albedo.mod.a = mix(0.0f, 0.4f, float(k) / float(kcount - 1));
           material.roughness.mod = vec4(0);
           material.frag_shader = "refraction.frag";
+          material.require_self_depth = false;
           small_object_refraction_settings(&material.uniform_set);
-          material.uniform_set.float32_uniforms["index_of_refraction"] = mix(1.001f, 1.30f, roughness);
+          material.ior = mix(1.001f, 1.30f, roughness);
           // material.uniform_set.float32_uniforms[""] = color;
         }
         if (j == 2)
-        {
+        {//water
           material.casts_shadows = false;
           material.translucent_pass = true;
           material.albedo.mod.a = roughness;
           material.metalness.mod.a = 0.8f;
+          material.require_self_depth = true;
           small_object_water_settings(&material.uniform_set);
           material.uniform_set.float32_uniforms["water_scale"] = mix(3.5f, 10.f, roughness);
           material.uniform_set.float32_uniforms["water_scale2"] = mix(0.5f, 3.f, roughness);

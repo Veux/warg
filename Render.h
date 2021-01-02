@@ -407,7 +407,7 @@ struct Material_Descriptor
   bool include_ao_in_uv_scale = true;
   vec2 normal_uv_scale = vec2(1);
   float32 derivative_offset = 0.008;
-
+  float32 ior = 0.f;
   bool translucent_pass = false;
   Material_Blend_Mode blendmode = Material_Blend_Mode::blend;
   bool require_self_depth = true;
@@ -684,7 +684,7 @@ struct Framebuffer
   std::shared_ptr<Renderbuffer_Handle> depth;
   Texture depth_texture;
   glm::ivec2 depth_size = glm::ivec2(0);
-  GLenum depth_format = GL_DEPTH_COMPONENT;
+  GLenum depth_format = GL_DEPTH_COMPONENT24;
   bool depth_enabled = false;
   bool use_renderbuffer_depth = true;
   std::vector<GLenum> draw_buffers;

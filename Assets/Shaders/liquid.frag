@@ -180,20 +180,20 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
   float total_force_out = (force_out - force_in);
   float water_acceleration = water_pillar_area * gravity * viscosity * dt * total_force_out;
 
-  float ground_absorbtion_threshold = 0.0001f;
+  float ground_absorbtion_threshold = 0.000005f;
   float sintime = 0.5f + 0.5f * sin(time);
   float sintimerand = float(sin(gl_FragCoord.x + gl_FragCoord.y * 0.1234 * time) < -0.99999f);
-  float ground_absorbtion_rate = 0.000011f;
+  float ground_absorbtion_rate = 0.000001f;
   float ground_absorbtion = 0.0f;
-  float surface_tension_factor = 0.000000f;
+  float surface_tension_factor = 0.000110f;
   if (abs(water_acceleration) < surface_tension_factor)
   {
     // only absorb on negative slopes or else we absorb at shores
     if (water_depth < ground_absorbtion_threshold) // && ground_height >= other_ground_height)
     {
-      // ground_absorbtion = ground_absorbtion_rate;
+      //ground_absorbtion = ground_absorbtion_rate;
     }
-    water_acceleration = 0.f;
+    //water_acceleration = 0.f;
   }
 
   // not energy conserving

@@ -372,14 +372,14 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   stringstream ss;
   ss << this_thread::get_id();
   const float64 time = get_real_time();
-  bool found = false;
   if (message_log.size() > 100000)
   {
-    //message_log.clear();
+    message_log.clear();
     return;
   }
 
 
+  bool found = false;
   if (identifier != "")
   {
     for (auto &msg : warg_messages)
@@ -393,7 +393,7 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
       }
     }
   }
-  if (!found)
+  //if (!found)
   {
     Warg_Debug_Message m = {identifier, message, time + msg_duration, ss.str()};
     warg_messages.push_back(std::move(m));
@@ -641,8 +641,21 @@ const char *texture_format_to_string(GLenum texture_format)
       return "GL_R32F";
     case GL_R16F:
       return "GL_R16F";
+    case GL_DEPTH_COMPONENT16:
+      return "GL_DEPTH_COMPONENT16";
+    case GL_DEPTH_COMPONENT24:
+      return "GL_DEPTH_COMPONENT24";
+    case GL_DEPTH_COMPONENT32F:
+      return "GL_DEPTH_COMPONENT32F";
+    case GL_DEPTH32F_STENCIL8:
+      return "GL_DEPTH32F_STENCIL8";
+    case GL_DEPTH24_STENCIL8:
+      return "GL_DEPTH24_STENCIL8";
+    case GL_STENCIL_INDEX8:
+      return "GL_STENCIL_INDEX8";
     default:
       return "UNKNOWN";
+      
   }
 }
 

@@ -206,7 +206,7 @@ void Scene_Graph::draw_imgui_specific_material(Material_Index material_index)
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
   ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold, 0.01f, 0.f, 1.f);
   ImGui::Checkbox("include_AO_in_uv_scale", &ptr->descriptor.include_ao_in_uv_scale);
-
+  ImGui::SliderFloat("index of refraction", &ptr->descriptor.ior, 0.0, 2.0,"%.4f");
   ImGui::Checkbox("require_self_depth", &ptr->descriptor.require_self_depth);
   ImGui::Checkbox("multiply_albedo_by_alpha", &ptr->descriptor.multiply_albedo_by_alpha);
   ImGui::Checkbox("multiply_result_by_alpha", &ptr->descriptor.multiply_result_by_alpha);
