@@ -51,23 +51,28 @@ void push_log_to_disk();
 std::string get_message_log();
 template <typename T> void _errr(T t, const char *file, uint32 line)
 {
+  using namespace std;
 #ifndef DISABLE_ASSERT
   if (!t)
   {
-    set_message("", "Assertion failed in:" + std::string(file) + "\non line:" + std::to_string(line), 1.0);
-    std::string message_log = get_message_log();
+    set_message("", "Assertion failed in:" + string(file) + "\non line:" + to_string(line), 1.0);
+    string message_log = get_message_log();
     push_log_to_disk();
-    //std::string end_of_log;
-    //size_t length = message_log.size();
-    //size_t char_count = 1000;
-    //if (length < char_count)
-    //  char_count = length;
-    //else
+    string end_of_log;
+   // size_t length = message_log.size();
+    size_t char_count = 10000;
+   // if (length < char_count)
+     // char_count = length;
+   // else
     //{
-    //  end_of_log = message_log.substr(length - char_count, std::string::npos);
-    //}
-    //std::cout << end_of_log << std::endl;
-    //SDL_Delay(500);
+     // end_of_log = message_log.substr(length - char_count, string::npos);
+   // }
+    //end_of_log = end_of_log + "sdlfjghnserokghnbwesroiujkghbnw4eour5ghbnw3e4ourjlgh";
+    fstream file("warg_crash_log.txt", ios::trunc | ios::out );
+    file.write(message_log.c_str(), message_log.size());
+    file.flush();
+    file.close();
+    cout << end_of_log << endl;
     throw;
   }
 #endif

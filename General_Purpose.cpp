@@ -372,10 +372,9 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   stringstream ss;
   ss << this_thread::get_id();
   const float64 time = get_real_time();
-  if (message_log.size() > 100000)
+  if (message_log.length() > 11000)
   {
-    message_log.clear();
-    return;
+    message_log = message_log.substr(10000);
   }
 
 
