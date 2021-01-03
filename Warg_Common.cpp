@@ -105,6 +105,19 @@ UID add_char(Game_State &gs, Map &map, int team, std::string_view name)
 
 void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_Graph &scene)
 {
+  if (command.m & Move_Status::Forwards)
+  {
+    character.physics.position.y += 10 *dt;
+    character.physics.velocity = vec3(10000);//ebinj
+  }
+  else
+  {
+    character.physics.velocity = vec3(0);//ebinj
+  }
+  if (command.m & Move_Status::Backwards)
+    character.physics.position.y -= 10 *dt;
+  return;
+
   vec3 &pos = character.physics.position;
   character.physics.orientation = command.orientation;
   vec3 dir = command.orientation * vec3(0, 1, 0);
@@ -373,7 +386,7 @@ bool Input::operator!=(const Input &b) const
 
 void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage)
 {
-  auto tlc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == object_id; });
+  auto tlc = find_by(gs.living_characters, &Living_Character::id, object_id);
 
   tlc->hp -= damage;
 
@@ -424,13 +437,13 @@ void update_spell_objects(Game_State &gs, Flat_Scene_Graph &scene)
 {
   for (auto &so : gs.spell_objects)
   {
-    auto t = find_if(gs.characters, [&](auto &c) { return c.id == so.target; });
+    auto t = find_by(gs.characters, &Character::id, so.target);
     auto speed = SPELL_DB.sobj_speed[so.spell_id];
     so.pos += normalize(t->physics.position - so.pos) * (speed *dt);
   }
 
   auto first_hit = std::partition(gs.spell_objects.begin(), gs.spell_objects.end(), [&](auto &so) {
-    auto t = find_if(gs.characters, [&](auto &c) { return c.id == so.target; });
+    auto t = find_by(gs.characters, &Character::id, so.target);
     auto speed = SPELL_DB.sobj_speed[so.spell_id];
     float d = length(t->physics.position - so.pos);
     float epsilon = speed * dt / 2.f * 1.05f;
@@ -499,8 +512,8 @@ void end_buff(Game_State &gs, Character_Buff &b)
     while (!seeds_to_detonate.empty())
     {
       auto soc = seeds_to_detonate.front();
-
-      auto c = find_if(gs.characters, [&](auto &c) { return c.id == soc.character; });
+      
+      auto c = find_by(gs.characters, &Character::id, soc.character);
       auto pos = c->physics.position;
 
       for (auto &c1 : gs.characters)
@@ -539,7 +552,7 @@ void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs)
   {
     b.duration -= dt;
     b.time_since_last_tick += dt;
-    auto lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == b.character; });
+    auto lc = find_by(gs.living_characters, &Living_Character::id, b.character);
 
     auto stats_modifiers = SPELL_DB.buff_stats_modifiers.find(b.buff_id);
     if (stats_modifiers != SPELL_DB.buff_stats_modifiers.end())
@@ -573,7 +586,7 @@ void cast_spell(Game_State &gs, Flat_Scene_Graph &scene, UID caster_id, UID targ
   if (none_of(gs.character_spells, [&](auto &cs) { return cs.character == caster_id && cs.spell == spell_id; }))
     return;
 
-  auto caster_lc = find_if(gs.living_characters, [&](auto &lc) { return lc.id == caster_id; });
+  auto caster_lc = find_by(gs.living_characters, &Living_Character::id, caster_id);
 
   if (SPELL_DB.targets[spell_id] == Spell_Targets::Self)
     target_id = caster_id;
@@ -843,7 +856,7 @@ Game_State predict(Game_State gs, Map &map, Flat_Scene_Graph &scene, UID charact
   std::map<UID, Input> inputs;
   inputs[character_id] = input;
 
-  auto c_it = find_if(gs.characters, [&](auto &c){ return c.id == character_id; });
+  auto c_it = find_by(gs.characters, &Character::id, character_id);
   if (c_it != gs.characters.end())
     move_character(gs, map, scene, inputs, *c_it);
 

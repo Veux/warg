@@ -186,7 +186,7 @@ void game_server(const char *wargspy_address)
           serialize_(b, p.second.character);
           serialize_(b, p.second.last_input.sequence_number);
 
-          ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+          ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
           enet_peer_send(p.second.peer, 0, packet);
         }
         enet_host_flush(server);

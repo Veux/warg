@@ -131,7 +131,7 @@ void Network_Session::send_reliable(Buffer &b)
 
 void Network_Session::send_unreliable(Buffer &b)
 {
-  ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
   enet_peer_send(server, 0, packet);
   enet_host_flush(client);
 }
@@ -186,18 +186,25 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     gs = server_state.gs;
     pc = server_state.character;
 
+    auto c_it = find_if(gs.characters, [&](auto &c) { return c.id == pc; });
+
+    if (c_it == gs.characters.end())
+      return;
+
+    // pop old inputs
+    std::cout << s("stepping ", inputs.size(), " steps forward from server=", server_state.input_number, "\n");
     while (inputs.size() && inputs.front().sequence_number <= server_state.input_number)
       inputs.pop_front();
 
+    std::cout << s("\t", "from y = ", c_it->physics.position.y);
     if (prediction_enabled)
     {
-      // pop old inputs
-
       // starting from the latest server state
       // reapply all newer inputs to the server state
       for (auto &input : inputs)
         gs = predict(gs, *map, scene, pc, input);
     }
+    std::cout << s(" to y = ", c_it->physics.position.y, "\n");
 
     //std::cout << s("num inputs: ", inputs.size(), "\n");
 

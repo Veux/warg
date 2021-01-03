@@ -65,6 +65,10 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
 #endif
 }
 
+template <typename C, typename P, typename T> auto find_by(C &c, P p, T &t)
+{
+  return std::find_if(c.begin(), c.end(), [&](auto &v) { return std::invoke(p, v); });
+}
 template <typename C, typename F> auto erase_if(C &c, F f)
 {
   return c.erase(std::remove_if(c.begin(), c.end(), f), c.end());

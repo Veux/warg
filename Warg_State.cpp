@@ -397,8 +397,9 @@ void Warg_State::handle_input_events()
     character_to_camera = normalize(ry * character_to_camera);
 
     ASSERT(player_character_id);
-    auto player_character =
-        find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+    //auto player_character =
+    //    find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+    auto player_character = find_by(current_game_state.characters, &Character::id, player_character_id);
     ASSERT(player_character != current_game_state.characters.end());
 
     quat orientation;

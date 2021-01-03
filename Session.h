@@ -76,7 +76,6 @@ private:
   State_Update server_state = {0};
   std::list<State_Prediction> predicted_states;
   std::list<Input> inputs;
-  UID character = 0;
   Resource_Manager resource_manager;
   Flat_Scene_Graph scene;
   std::unique_ptr<Map> map;
