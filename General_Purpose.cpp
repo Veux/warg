@@ -493,7 +493,7 @@ std::string to_string(const glm::vec3 &v)
   return s("x = ", v.x, ", y = ", v.y, ", z = ", v.z);
 }
 
-std::string to_string(glm::mat4 &m)
+std::string to_string(const glm::mat4 &m)
 {
   string result = "";
   for (uint32 column = 0; column < 4; ++column)

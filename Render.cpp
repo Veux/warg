@@ -767,7 +767,7 @@ void Texture::load()
       uint8 arr[4] = {255, 255, 255, 255};
       glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
       glTextureStorage2D(texture->texture, 1, GL_SRGB8_ALPHA8, 1, 1);
-      glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_SRGB8_ALPHA8, GL_UNSIGNED_BYTE, &arr[0]);
+      glTextureSubImage2D(texture->texture, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, &arr[0]);
       return;
     }
     texture = make_shared<Texture_Handle>();
@@ -1588,11 +1588,7 @@ void draw_texture_handle_info(shared_ptr<Texture_Handle> ptr)
   Imgui_Texture_Descriptor descriptor;
   descriptor.ptr = ptr;
   GLenum format = descriptor.ptr->get_format();
-  bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
-                    format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
 
-  descriptor.gamma_encode = gamma_flag;
-  descriptor.is_cubemap = ptr->is_cubemap;
   ImGui::Checkbox("Use alpha in thumbnail", &ptr->imgui_use_alpha);
   ImGui::SetNextItemWidth(200);
   ImGui::DragFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.02f);
@@ -1601,7 +1597,6 @@ void draw_texture_handle_info(shared_ptr<Texture_Handle> ptr)
   ImGui::SetNextItemWidth(200);
   ImGui::SliderFloat("Mipmap LOD", &ptr->imgui_mipmap_setting, 0.f, float32(mip_levels), "%.2f");
   descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
-  descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
   descriptor.size = ptr->imgui_size_scale * vec2(256);
   descriptor.y_invert = false;
   descriptor.use_alpha = ptr->imgui_use_alpha;
@@ -4329,11 +4324,11 @@ Particle misc_particle_emitter_step(
   new_particle.orientation = o * second_orientation * first_orientation;
 
   vec3 extra_scale;
-  std::normal_distribution<float32> dist(0.f, d->initial_extra_scale_variance.x);
+  std::normal_distribution<float32> dist(0.f, d->initial_extra_scale_variance.x+.00001);
   extra_scale.x = dist(generator);
-  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.y);
+  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.y + .00001);
   extra_scale.y = dist(generator);
-  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.z);
+  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.z + .00001);
   extra_scale.z = dist(generator);
   new_particle.scale = d->initial_scale + extra_scale;
   new_particle.scale =
@@ -5239,7 +5234,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
   glGenerateTextureMipmap(display_surface.texture->texture);
 
-  put_imgui_texture(&display_surface, ivec2(texture_size), false, false);
+  put_imgui_texture(&display_surface, ivec2(texture_size), false);
 
   // ImGui::SameLine();
   // ImGui::Dummy(ImVec2(120.0f, 0.f));

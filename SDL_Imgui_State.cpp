@@ -156,6 +156,15 @@ void SDL_Imgui_State::render()
           bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
             format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
 
+          if (itd.use_alpha)
+          {
+            glEnable(GL_BLEND);
+          }
+          else
+          {
+            glDisable(GL_BLEND);
+          }
+
 
           if (itd.ptr->is_cubemap || itd.ptr == nullptr)
           {
@@ -225,6 +234,7 @@ void SDL_Imgui_State::render()
               glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, tex.ptr->magnification_filter);
             }
           }
+          glEnable(GL_BLEND);
         }
       }
       idx_buffer_offset += pcmd->ElemCount;

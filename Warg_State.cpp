@@ -1045,7 +1045,6 @@ void Warg_State::draw_gui()
   //terrain.run(this);
   ImGui::End();
   draw_chat_box();
-  scene.draw_imgui(state_name);
   session_swapper();
 }
 

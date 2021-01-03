@@ -240,11 +240,11 @@ std::string to_string(const Light_Type &value);
 std::string to_string(const Particle_Emission_Type& t);
 std::string to_string(const Particle_Physics_Type& t);
 std::string to_string(const glm::mat4 &m);
-std::string to_string(const Array_String &s);
+std::string to_string(Array_String &s);
 std::string to_string(const vec4 &value);
 std::string to_string(const vec3 &v);
 std::string to_string(const quat &q);
-std::string to_string(const std::string_view& value);
+std::string to_string(std::string_view& value);
 // std::string to_string(ivec4& value);
 
 glm::mat4 copy(aiMatrix4x4 m);

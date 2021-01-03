@@ -1651,7 +1651,7 @@ void Scene_Graph::draw_imgui(std::string name)
 {
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   const float32 selected_node_draw_height = 340;
-  const float32 horizontal_tile_size = 1350;
+  const float32 horizontal_tile_size = 350;
   const float32 vertical_tile_size = 400;
   // ImGuiWindowFlags flags = ImGuiWindowFlags_HorizontalScrollbar;
   ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize;
@@ -1949,8 +1949,8 @@ Node_Index Scene_Graph::add_aiscene_new(std::string scene_file_path, std::string
   root_node->filename_of_import = scene_file_path;
 
   // still needed or did we just miss this the whole time in the root node itself?
-  // const float32 cm_to_meters = 0.01f;
-  // root_node->scale = cm_to_meters * root_node->scale;
+  const float32 cm_to_meters = 0.01f;
+  root_node->scale = cm_to_meters * root_node->scale;
 
   return root_for_import;
 }

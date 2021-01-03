@@ -7,9 +7,9 @@ Array_String::Array_String()
 {
   str[0] = '\0';
 }
-Array_String::Array_String(const std::string &rhs)
+Array_String::Array_String(const std::string& rhs)
 {
-  const char *cstr = rhs.c_str();
+  const char* cstr = rhs.c_str();
   uint32 len = strlen(cstr);
   ASSERT(len <= MAX_ARRAY_STRING_LENGTH);
   strcpy_s(&str[0], MAX_ARRAY_STRING_LENGTH + 1, cstr);
@@ -40,12 +40,20 @@ bool Array_String::operator==(const char* rhs)
   return strncmp(&str[0], rhs, MAX_ARRAY_STRING_LENGTH + 1) == 0;
 }
 
-Array_String::operator const char *()
+Array_String::operator const char* ()
 {
   return &str[0];
 }
 
-Array_String::Array_String(const char *rhs)
+Array_String& Array_String::operator=(const char* rhs)
+{
+  uint32 len = strnlen_s(rhs, MAX_ARRAY_STRING_LENGTH + 1);
+  ASSERT(len <= MAX_ARRAY_STRING_LENGTH);
+  strcpy(&str[0], rhs);
+  return *this;
+}
+
+Array_String::Array_String(const char* rhs)
 {
   uint32 len = strnlen_s(rhs, MAX_ARRAY_STRING_LENGTH + 1);
   ASSERT(len <= MAX_ARRAY_STRING_LENGTH);

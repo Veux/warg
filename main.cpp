@@ -555,7 +555,7 @@ int main(int argc, char *argv[])
   std::vector<SDL_Event> imgui_event_accumulator;
   //Local_Session warg_session = Local_Session();
   std::vector<State *> states;
-  states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
+  //states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   states.emplace_back((State *)new Warg_State("Warg", window, window_size, CONFIG.character_name, 0));
 
   states[0]->recieves_input = true;

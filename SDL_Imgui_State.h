@@ -18,6 +18,7 @@ struct Imgui_Texture_Descriptor
   bool y_invert = false;
   GLenum internalformat = 0;
   bool is_mipmap_list_command = false;
+  bool use_alpha = true;
 };
 
 struct SDL_Imgui_State
