@@ -144,6 +144,10 @@ void Warg_State::handle_input_events()
       {
         WANT_CLEAR_OCTREE = true;
       }
+      if (_e.key.keysym.sym == SDLK_RETURN)
+      {
+        interface_state.focus_chat = true;
+      }
     }
     else if (_e.type == SDL_KEYUP)
     {
@@ -1052,24 +1056,73 @@ void Warg_State::draw_chat_box()
 {
   std::vector<Chat_Message> chat_log = session->get_chat_log();
 
-  ImGui::Begin("chatbox");
+  const int w = 500, h = 250;
 
-  static char chat_input_buffer[1000];
-  if (ImGui::InputText("", chat_input_buffer, 1000, ImGuiInputTextFlags_EnterReturnsTrue, NULL, NULL) &&
-      strlen(chat_input_buffer))
-  {
-    session->send_chat_message(chat_input_buffer);
-    std::fill(chat_input_buffer, chat_input_buffer + 1000, 0);
-  }
+  vec2 resolution = CONFIG.resolution;
+  bool display = true;
+  //ImGui::SetNextWindowPos(position);
+  ImGui::SetNextWindowPos(ImVec2(
+    10,
+    resolution.y - h - 40
+  ));
+  ImGui::SetNextWindowSize(ImVec2(w, h+30));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(10, 10));
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+  ImGui::Begin("chatbox", &display,
+    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
+    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
 
-  ImGui::BeginChild("chatbox_log_region");
+  //ImGui::SetCursorPos(v(grid.get_position(0, 0)));
+  //ImGui::ProgressBar(progress, v(grid.get_section_size(1, 1)), "");
+
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
+
+  static int  want_scroll_down = 0;
+
+  ImGuiWindowFlags childflags = ImGuiWindowFlags_None;
+  ImGui::BeginChild("Console_Log:", ImVec2(w, h), true, childflags);
+
   for (auto &m : chat_log)
   {
     ImGui::TextWrapped("%s: %s", m.name.c_str(), m.message.c_str());
   }
+  //ImGui::TextWrapped(graph_console_log.c_str());
+  if (want_scroll_down > 0)
+  {
+    ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    want_scroll_down = want_scroll_down - 1;
+  }
   ImGui::EndChild();
 
+
+  ImGui::BeginChild("Console_Cmd:");
+  static std::string buf;
+  buf.resize(512);
+  size_t size = buf.size();
+  ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue;
+  // ImGui::InputTextMultiline("blah", &buf[0], size, section_size, flags);
+  ImGui::SetNextItemWidth(w);
+  if (ImGui::InputText("", &buf[0], int(size), flags))
+  {
+    std::string_view sv = {buf.c_str(), strlen(buf.c_str())};
+    session->send_chat_message(sv);
+    buf.clear();
+    buf.resize(512);
+    want_scroll_down = 3;
+    interface_state.focus_chat = false;
+  }
+
+  if (interface_state.focus_chat)
+  {
+    ImGui::SetKeyboardFocusHere(-1);
+    interface_state.focus_chat = false;
+  }
+
+  ImGui::IsItemEdited();
+  ImGui::EndChild();
   ImGui::End();
+  ImGui::PopStyleVar(4);
 }
 
 void Warg_State::add_girl_character_mesh(UID character_id)

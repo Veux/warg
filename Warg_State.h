@@ -30,6 +30,7 @@ struct Interface_State
   std::vector<Texture> action_bar_textures_with_cooldown;
   Framebuffer duration_spiral_fbo;
   Shader duration_spiral_shader;
+  bool focus_chat = false;
 };
 
 struct Warg_State : protected State
