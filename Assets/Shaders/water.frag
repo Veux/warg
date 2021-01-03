@@ -1045,13 +1045,15 @@ void main()
   {
     this_object_thickness = depth_to_scene;
   }
+  //actually looks better huh?
+  this_object_thickness = depth_to_scene;
 
   //for this shader we will just use the alpha channel as our volumetric absorb
   float density = texture0_mod.a;
 
   //i think this is incorrect anyway
   //i believe physically based is /d rather than pow^d
-  float A = pow(1 - density, pow(200.f*this_object_thickness, 0.85f));
+  float A = pow(1 - density, pow(250.f*this_object_thickness, 0.85f));
   
 
   //this looked wrong before, why?
