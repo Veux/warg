@@ -2070,9 +2070,9 @@ void Renderer::instance_pass(float64 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
-  set_message("forward_v", s(forward_v), 1.0f);
-  set_message("right_v", s(right_v), 1.0f);
-  set_message("up_v", s(up_v), 1.0f);
+  //set_message("forward_v", s(forward_v), 1.0f);
+  //set_message("right_v", s(right_v), 1.0f);
+  //set_message("up_v", s(up_v), 1.0f);
 
   if (!use_txaa)
   {
@@ -5591,8 +5591,9 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   mesh.mesh_data = generate_grid(resolution);
   Material_Descriptor material;
 
+
   material.emissive.mod = vec4(0, 0, 0.005, 1);
-  material.albedo.mod = vec4(.034, .215, .289, .367);
+  material.albedo.mod = vec4(.034, .215, .289, .75351);
   material.uv_scale = vec2(1);
   material.roughness.source = "white";
   material.roughness.mod = vec4(0.054);
@@ -5606,8 +5607,14 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
 
   water = state->scene.add_mesh("water", &mesh, &material);
   state->scene.nodes[water].scale = size;
-  state->scene.nodes[water].position = pos - vec3(0, 0, 0.03);
+  state->scene.nodes[water].position = pos - vec3(0, 0, 0.1);
   material.frag_shader = "terrain.frag";
+
+  //specific for terrain shader
+  material.albedo.source = "grass_albedo.png";
+  material.normal.source = "ground1_normal.png";
+  material.emissive.source = "Snow006_2K_Normal.jpg";
+  material.uv_scale = vec2(85);
   material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;
   ground = state->scene.add_mesh("ground", &mesh, &material);

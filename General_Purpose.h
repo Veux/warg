@@ -222,10 +222,7 @@ bool all_equal(int32 a, int32 b, int32 c, int32 d);
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f);
 bool all_equal(int32 a, int32 b, int32 c, int32 d, int32 f, int32 g);
 float32 wrap_to_range(const float32 input, const float32 min, const float32 max);
-template <typename T> uint32 array_count(T t)
-{
-  return sizeof(t) / sizeof(t[0]);
-}
+
 float32 rand(float32 min, float32 max);
 vec3 rand(vec3 max);
 // used to fix double escaped or wrong-slash file paths

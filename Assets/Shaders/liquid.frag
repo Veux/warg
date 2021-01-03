@@ -159,7 +159,7 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
 
   float water_depth = water_height - ground_height;
   float other_water_depth = other_water_height - other_ground_height;
-  const float viscosity = 1.201f;
+  const float viscosity = .0736201f;
   const float gravity = -1.0;
   const float water_pillar_edge_size = 1.0f; // used for resolution scaling
   const float water_pillar_area = water_pillar_edge_size * water_pillar_edge_size;
@@ -203,7 +203,7 @@ vec4 calc_contribution_ambient(vec4 this_pixel, ivec2 p, ivec2 other_p, float ve
   float slope = water_height / max((abs(water_height - max(other_water_height, other_ground_height))), 0.000001);
   float vel_dampening = 1.f - (0.01 + .000 * 1. / slope);
 
-  float energy_loss = .9991f;
+  float energy_loss = .9998f;
   // energy_loss = 1.f;
   float updated_velocity = energy_loss * (velocity_into_this_pixel) + water_acceleration;
 

@@ -392,7 +392,7 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
       }
     }
   }
-  //if (!found)
+  if (!found)
   {
     Warg_Debug_Message m = {identifier, message, time + msg_duration, ss.str()};
     warg_messages.push_back(std::move(m));

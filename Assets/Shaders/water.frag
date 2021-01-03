@@ -1110,7 +1110,8 @@ void main()
       1.4 + 00.7 * fbm_h_n(.112f * (frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f * time), .820f, 3);
   z *= randfog;
   randfog = 1;
-  float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
+  float fog_density = .000065131f;
+  float fogFactor = exp2(-fog_density * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   vec3 color = textureLod(texture6, v, 2).rgb;
   result = mix(color, result, fogFactor);

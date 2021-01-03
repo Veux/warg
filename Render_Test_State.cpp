@@ -207,7 +207,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
 {
 
   scene.initialize_lighting(
-      "Environment_Maps/Frozen_Waterfall/irradiance.hdr", "Environment_Maps/Frozen_Waterfall/irradiance.hdr");
+      "Environment_Maps/Shiodome_Stairs/irradiance.hdr", "Environment_Maps/Ice_Lake/irradiance.hdr");
 
   // scene.initialize_lighting("Environment_Maps/GrandCanyon_C_YumaPoint/GCanyon_C_YumaPoint_8k.jpg",
   //  "Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
@@ -240,7 +240,7 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
 
 
 
-  terrain.init(this, vec3(0, 0, -2), 25, ivec2(HEIGHTMAP_RESOLUTION));
+  terrain.init(this, vec3(0, 0, -2.5), 55, ivec2(HEIGHTMAP_RESOLUTION));
   // spawn_ground(&scene);
   // spawn_gun(&scene, vec3(0));
   // spawn_planets(&scene, vec3(12, 6, 3));
@@ -280,10 +280,10 @@ Render_Test_State::Render_Test_State(std::string name, SDL_Window *window, ivec2
   Light *light0 = &scene.lights.lights[0];
   light0->position = vec3(804.00000, -414.00000, 401.00000);
   light0->direction = vec3(0.00000, 0.00000, 0.00000);
-  light0->brightness = 500.00000;
+  light0->brightness = 2555.00000;
   light0->color = vec3(1.00);
   light0->attenuation = vec3(1.00000, 0.22000, 0.00000);
-  light0->ambient = 0.00001;
+  light0->ambient = 0.00401;
   light0->radius = 22.00000;
   light0->cone_angle = 5.00000;
   light0->type = Light_Type::spot;
@@ -413,7 +413,7 @@ void Render_Test_State::handle_input_events()
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
-        set_message("mouse grab event", "", 1.0f);
+      //  set_message("mouse grab event", "", 1.0f);
 
         mouse_grabbed = true;
         last_grabbed_cursor_position = cursor_position;
@@ -424,23 +424,23 @@ void Render_Test_State::handle_input_events()
         IMGUI.ignore_all_input = true;
       }
 
-      draw_cursor = false;
-      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      draw_cursor = false;/*
+      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);*/
       camera.theta += mouse_delta.x * MOUSE_X_SENS;
-      camera.phi += mouse_delta.y * MOUSE_Y_SENS;
-      set_message("mouse is grabbed", "", 1.0f);
+      camera.phi += mouse_delta.y * MOUSE_Y_SENS;/*
+      set_message("mouse is grabbed", "", 1.0f);*/
     }
     else
     { // not holding button
-      set_message("mouse is free", "", 1.0f);
+      //set_message("mouse is free", "", 1.0f);
       if (mouse_grabbed)
       { // first unhold
-        set_message("mouse release event", "", 1.0f);
+        //set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-        set_message("mouse warp:",
-            s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
-                last_grabbed_cursor_position.y),
-            1.0f);
+        //set_message("mouse warp:",
+        //    s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
+        //        last_grabbed_cursor_position.y),
+        //    1.0f);
         mouse_relative_mode = false;
         request_cursor_warp_to = last_grabbed_cursor_position;
       }

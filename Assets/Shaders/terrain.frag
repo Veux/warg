@@ -538,8 +538,8 @@ void main()
   // i will be assigning the snow color to the grass variable because thats whats actually getting rendered, jank
 
   float snow_fbm = .4 + .6 * fbm_n(.02*130 * frag_uv, 3);
-  float snow_top = smoothstep(11. * snow_fbm, 14. * snow_fbm, 95 * ground_height);
-  grass = grass * (1 - snow_top) + snow_top * vec3(1);
+  float snow_t = smoothstep(11. * snow_fbm, 14. * snow_fbm, 95 * ground_height);
+  grass = grass * (1 - snow_t) + snow_t * vec3(1);
 
   vec3 soil = fbm_h_n(10.f * frag_world_position.xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);
   float rock_t = fbm_h_n(20.f * frag_world_position.xy, .01f, 1);
@@ -601,6 +601,7 @@ void main()
 
   //hijacked emissive for a 2nd normal map
   vec3 normal2 = TBN * normalize(texture2D(texture1, frag_normal_uv).rgb * 2.0f - 1.0f);
+  m.normal = normalize(mix(m.normal,normal2,snow_t));
   m.normal = normalize(mix(m.normal,normal2,fbm_texture_mix));
   //m.albedo = vec3(fbm_texture_mix);
   // /sponge
@@ -725,7 +726,10 @@ void main()
       1.4 + 00.7 * fbm_h_n(.112f * (frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f * time), .820f, 3);
   z *= randfog;
   randfog = 1;
-  float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
+  //float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
+
+  float fog_density = .000065131f;
+  float fogFactor = exp2(-fog_density * randfog * z * z * LOG2);
   fogFactor = clamp(fogFactor, 0.0, 1.0);
   vec3 color = textureLod(texture6, v, 2).rgb;
   result = mix(color, result, fogFactor);

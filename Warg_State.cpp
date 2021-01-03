@@ -253,7 +253,7 @@ void Warg_State::handle_input_events()
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
-        set_message("mouse grab event", "", 1.0f);
+        //set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_cursor_position = cursor_position;
         mouse_relative_mode = true;
@@ -264,22 +264,22 @@ void Warg_State::handle_input_events()
         IMGUI.ignore_all_input = true;
       }
       draw_cursor = false;
-      set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+     // set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
       camera.theta += mouse_delta.x * MOUSE_X_SENS;
       camera.phi += mouse_delta.y * MOUSE_Y_SENS;
-      set_message("mouse is grabbed", "", 1.0f);
+     // set_message("mouse is grabbed", "", 1.0f);
     }
     else
     { // not holding button
-      set_message("mouse is free", "", 1.0f);
+      //set_message("mouse is free", "", 1.0f);
       if (mouse_grabbed)
       { // first unhold
-        set_message("mouse release event", "", 1.0f);
+        //set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-        set_message("mouse warp:",
-            s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
-                last_grabbed_cursor_position.y),
-            1.0f);
+        //set_message("mouse warp:",
+           // s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
+            //    last_grabbed_cursor_position.y),
+          //  1.0f);
         mouse_relative_mode = false;
         request_cursor_warp_to = last_grabbed_cursor_position;
       }
