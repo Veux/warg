@@ -1106,10 +1106,13 @@ void Warg_State::draw_chat_box()
   if (ImGui::InputText("", &buf[0], int(size), flags))
   {
     std::string_view sv = {buf.c_str(), strlen(buf.c_str())};
-    session->send_chat_message(sv);
-    buf.clear();
-    buf.resize(512);
-    want_scroll_down = 3;
+    if (sv.length())
+    {
+      session->send_chat_message(sv);
+      buf.clear();
+      buf.resize(512);
+      want_scroll_down = 3;
+    }
     interface_state.focus_chat = false;
   }
 
