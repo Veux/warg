@@ -1124,8 +1124,9 @@ void Warg_State::draw_chat_box()
 
   ImGui::IsItemEdited();
   ImGui::EndChild();
+  ImGui::PopStyleVar(1);
   ImGui::End();
-  ImGui::PopStyleVar(4);
+  ImGui::PopStyleVar(3);
 }
 
 void Warg_State::add_girl_character_mesh(UID character_id)
