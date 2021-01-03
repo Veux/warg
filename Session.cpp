@@ -186,17 +186,10 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
     gs = server_state.gs;
     pc = server_state.character;
 
-    auto c_it = find_if(gs.characters, [&](auto &c) { return c.id == pc; });
-
-    if (c_it == gs.characters.end())
-      return;
-
     // pop old inputs
-    std::cout << s("stepping ", inputs.size(), " steps forward from server=", server_state.input_number, "\n");
     while (inputs.size() && inputs.front().sequence_number <= server_state.input_number)
       inputs.pop_front();
 
-    std::cout << s("\t", "from y = ", c_it->physics.position.y);
     if (prediction_enabled)
     {
       // starting from the latest server state
@@ -204,7 +197,9 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
       for (auto &input : inputs)
         gs = predict(gs, *map, scene, pc, input);
     }
-    std::cout << s(" to y = ", c_it->physics.position.y, "\n");
+
+
+
 
     //std::cout << s("num inputs: ", inputs.size(), "\n");
 
