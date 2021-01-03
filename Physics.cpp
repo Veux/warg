@@ -327,7 +327,7 @@ bool ray_intersects_triangle(vec3 origin, vec3 dir, Triangle tri, vec3 *intersec
   }
 }
 
-std::vector<Triangle_Normal> collect_colliders_with_normal(Flat_Scene_Graph &scene)
+std::vector<Triangle_Normal> collect_colliders_with_normal(Scene_Graph &scene)
 {
   std::vector<Triangle_Normal> collider_cache;
   // these normals arent interpolated

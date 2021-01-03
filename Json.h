@@ -7,8 +7,8 @@ using json = nlohmann::json;
 using namespace glm;
 #define JSON_INDENT 2
 
-void to_json(json &result, const Flat_Scene_Graph &p);
-void from_json(const json &j, Flat_Scene_Graph &p);
+void to_json(json &result, const Scene_Graph &p);
+void from_json(const json &j, Scene_Graph &p);
 
 void to_json(json &result, const Mesh_Data &p);
 void from_json(const json &j, Mesh_Data &p);
@@ -214,7 +214,7 @@ template <> struct adl_serializer<glm::mat4>
 
 // does the magical dejsonificationing, will dump the json to warg_log if it
 // fails and default-construct the scene
-// void dejsonificate(Flat_Scene_Graph *scene, json j);
+// void dejsonificate(Scene_Graph *scene, json j);
 
 void _pretty_json(std::string &pretty_json, const std::string &json_string, std::string::size_type &pos, size_t le = 0,
     size_t indent = JSON_INDENT);

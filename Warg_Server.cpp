@@ -16,7 +16,7 @@ void game_server(const char *wargspy_address)
   std::map<UID, Peer> peers;
 
   auto resource_manager = new Resource_Manager();
-  auto scene = new Flat_Scene_Graph(resource_manager);
+  auto scene = new Scene_Graph(resource_manager);
 
   {
     map = std::make_unique<Map>(Blades_Edge(*scene));

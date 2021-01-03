@@ -7,7 +7,8 @@ std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
 
 GLuint load_shader(const std::string &vertex_path, const std::string &fragment_path)
 {
-  check_gl_error();
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  // check_gl_error();
   std::string full_vertex_path = BASE_SHADER_PATH + vertex_path;
   std::string full_fragment_path = BASE_SHADER_PATH + fragment_path;
   GLuint vert_shader = glCreateShader(GL_VERTEX_SHADER);
@@ -31,7 +32,7 @@ GLuint load_shader(const std::string &vertex_path, const std::string &fragment_p
   std::vector<GLchar> vertShaderError((logLength > 1) ? logLength : 1);
   glGetShaderInfoLog(vert_shader, logLength, NULL, &vertShaderError[0]);
   if (vertShaderError.size() != 1)
-    set_message(s("Vertex shader ", vertex_path, " compilation result: "), &vertShaderError[0]);
+    set_message(s("Vertex shader ", vertex_path, " compilation result: "), &vertShaderError[0], 30.f);
 
   // set_message("Compiling fragment shader: ", fragment_path);
   // set_message("Fragment Shader Source: \n", fs);
@@ -45,7 +46,7 @@ GLuint load_shader(const std::string &vertex_path, const std::string &fragment_p
   glGetShaderInfoLog(frag_shader, logLength, NULL, &fragShaderError[0]);
 
   if (fragShaderError.size() != 1)
-    set_message(s("Fragment shader ", fragment_path, " compilation result: "), &fragShaderError[0]);
+    set_message(s("Fragment shader ", fragment_path, " compilation result: "), &fragShaderError[0], 30.f);
 
   // set_message("Linking shaders");
   GLuint program = glCreateProgram();
@@ -60,7 +61,7 @@ GLuint load_shader(const std::string &vertex_path, const std::string &fragment_p
   glGetProgramInfoLog(program, logLength, NULL, &err[0]);
 
   if (err.size() != 1)
-    set_message(s("GL Shader linker output for: ", vertex_path, " ", fragment_path), &err[0]);
+    set_message(s("GL Shader linker output for: ", vertex_path, " ", fragment_path), &err[0], 30.f);
 
   glDeleteShader(vert_shader);
   glDeleteShader(frag_shader);
@@ -69,7 +70,6 @@ GLuint load_shader(const std::string &vertex_path, const std::string &fragment_p
   {
     set_message("GL Shader failed.");
     return 0;
-    //ASSERT(0);
   }
   set_message("Shader loaded successfully");
 
@@ -77,10 +77,19 @@ GLuint load_shader(const std::string &vertex_path, const std::string &fragment_p
   return program;
 }
 
-Shader_Handle::Shader_Handle(GLuint i) { program = i; }
-Shader_Handle::~Shader_Handle() { glDeleteProgram(program); }
+Shader_Handle::Shader_Handle(GLuint i)
+{
+  program = i;
+}
+Shader_Handle::~Shader_Handle()
+{
+  glDeleteProgram(program);
+}
 Shader::Shader() {}
-Shader::Shader(const std::string &vertex, const std::string &fragment) { load(vertex.c_str(), fragment.c_str()); }
+Shader::Shader(const std::string &vertex, const std::string &fragment)
+{
+  load(vertex.c_str(), fragment.c_str());
+}
 
 void Shader::load(const std::string &vertex, const std::string &fragment)
 {
@@ -109,64 +118,131 @@ void Shader::load(const std::string &vertex, const std::string &fragment)
 void Shader::set_uniform(const char *name, float32 f)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniform1fv(location, 1, &f);
 }
 
 void Shader::set_uniform(const char *name, uint32 i)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniform1ui(location, i);
 }
 void Shader::set_uniform(const char *name, int32 i)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniform1i(location, i);
 }
 
-void Shader::set_uniform(const char *name, const glm::vec2& v)
+void Shader::set_uniform(const char *name, const glm::vec2 &v)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniform2fv(location, 1, &v[0]);
 }
 
 void Shader::set_uniform(const char *name, const glm::vec3 &v)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniform3fv(location, 1, &v[0]);
 }
 void Shader::set_uniform(const char *name, const glm::vec4 &v)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniform4fv(location, 1, &v[0]);
 }
 void Shader::set_uniform(const char *name, const glm::mat4 &m)
 {
   GLint location = program->get_uniform_location(name);
-  check_err(location, name);
+  if (check_err(location, name))
+    return;
   glUniformMatrix4fv(location, 1, GL_FALSE, &m[0][0]);
 }
+void Shader::set_uniform_array(const char *name, const mat4 *matrices, uint32 count)
+{
+  GLint location = program->get_uniform_location(name);
+
+ // if (check_err(location, name))
+  //  return;
+
+  //sponge
+  glUniformMatrix4fv(location, count, GL_FALSE, &(*matrices)[0][0]);
+
+  return;
+  for (uint32 i = 0; i < count; ++i)
+  {
+    //sponge
+    std::string istr = s("bones", "[", i, "]");
+    GLuint iloc = program->get_uniform_location(istr.c_str());
+
+    mat4 mat(1);
+
+
+
+    if (iloc == -1)
+    {
+      int a = 3;
+    }
+
+
+
+    glUniformMatrix4fv(iloc,1, GL_FALSE, &mat[0][0]);
+  }
+}
+
+
+std::vector<std::string> already_warned_uniform_errors;
+
 GLint Shader_Handle::get_uniform_location(const char *name)
 {
   GLint location;
-  auto search = location_cache.find(name);
-  if (search == location_cache.end())
+
+  if (!location_cache.contains(s(name)))
   {
-    location = glGetUniformLocation(program, name);
-    location_cache[name] = location;
+    location = location_cache[name] = glGetUniformLocation(program, name);
   }
   else
   {
-    location = search->second;
+    location = location_cache[name];
   }
+
+  if (location == -1)
+  {
+    std::string err = s("Invalid shader uniform: ", name, " :[", vs, "] [", fs, "]");
+    bool found = false;
+    for (auto& sent : already_warned_uniform_errors)
+    {
+      if (err == sent)
+      {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found)
+    {
+      set_message(err, "", 10.f);
+      already_warned_uniform_errors.push_back(err);
+    }
+    
+  }
+
+
   return location;
 }
-void Shader::use() const { glUseProgram(program->program); }
+void Shader::use() const
+{
+  glUseProgram(program->program);
+}
 
 static double get_time()
 {
@@ -177,12 +253,13 @@ static double get_time()
   Uint64 elapsed = current - begin_time;
   return (float64)elapsed / (float64)freq;
 }
-void Shader::check_err(GLint loc, const char *name)
+bool Shader::check_err(GLint loc, const char *name)
 {
-  if (loc == -1)
-  {
-    // set_message("Shader invalid uniform: ", name);
-  }
+  //if (loc == -1)
+ //{
+    //set_message("Invalid shader uniform:", s(name, " :[", vs, "] [", fs, "]"), 10.f);
+  //}
+  return loc == -1;
 }
 
 void Shader_Handle::set_location_cache()

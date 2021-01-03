@@ -71,6 +71,12 @@ std::string fix_filename(std::string str)
 std::string copy(aiString str)
 {
   std::string result;
+
+  if (str.length > 10000)
+  {
+    set_message("Unusually long or invalid aiString", "", 10.0f);
+    return string();
+  }
   result.resize(str.length);
   result = str.C_Str();
   return result;
@@ -78,11 +84,53 @@ std::string copy(aiString str)
 std::string copy(const aiString *str)
 {
   ASSERT(str);
+
   std::string result;
+  if (str->length > 10000)
+  {
+    set_message("Unusually long or invalid aiString", "", 10.0f);
+    return result;
+  }
+
   result.resize(str->length);
   result = str->C_Str();
   return result;
 }
+
+vec3 copy(const aiVector3D v)
+{
+    vec3 result;
+    result.x = v.x;
+    result.y = v.y;
+    result.z = v.z;
+    return result;
+}
+
+quat copy(const aiQuaternion q)
+{
+    quat quat;
+    quat.x = q.x;
+    quat.y = q.y;
+    quat.z = q.z;
+    quat.w = q.w;
+    return quat;
+}
+
+glm::mat4 copy(aiMatrix4x4 m)
+{
+  // assimp is row-major
+  // glm is column-major
+  glm::mat4 result;
+  for (uint32 i = 0; i < 4; ++i)
+  {
+    for (uint32 j = 0; j < 4; ++j)
+    {
+      result[i][j] = m[j][i];
+    }
+  }
+  return result;
+}
+
 
 std::string read_file(const char *path)
 {
@@ -299,20 +347,24 @@ float64 get_real_time()
   Uint64 elapsed = current - begin_time;
   return (float64)elapsed / (float64)freq;
 }
-struct Message
+struct Warg_Debug_Message
 {
   string identifier;
   string message;
   float64 time_of_expiry;
   string thread_id;
 };
-static vector<Message> warg_messages;
+static vector<Warg_Debug_Message> warg_messages;
 static string message_log = "";
 std::string get_message_log()
 {
   return message_log;
 }
 std::mutex SET_MESSAGE_MUTEX;
+void nop(bool i)
+{
+  return;
+}
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *file, uint32 line)
 {
   lock_guard<mutex> l(SET_MESSAGE_MUTEX);
@@ -320,6 +372,13 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
   stringstream ss;
   ss << this_thread::get_id();
   const float64 time = get_real_time();
+  if (message_log.size() > 100000)
+  {
+    message_log.clear();
+    return;
+  }
+
+
   bool found = false;
   if (identifier != "")
   {
@@ -334,9 +393,9 @@ void __set_message(std::string identifier, std::string message, float64 msg_dura
       }
     }
   }
-  if (!found)
+  //if (!found)
   {
-    Message m = {identifier, message, time + msg_duration, ss.str()};
+    Warg_Debug_Message m = {identifier, message, time + msg_duration, ss.str()};
     warg_messages.push_back(std::move(m));
   }
 #if INCLUDE_FILE_LINE_IN_LOG
@@ -367,6 +426,7 @@ std::string get_messages()
 
 void push_log_to_disk()
 {
+  return;
   static bool first = true;
   if (first)
   {
@@ -379,52 +439,20 @@ void push_log_to_disk()
   file.close();
   message_log.clear();
 }
-std::string vtos(glm::vec2 v)
+std::string to_string(const glm::vec2 v)
 {
-  std::string result = "";
-  for (uint32 i = 0; i < 2; ++i)
-  {
-    if (v[i] >= 0.0f)
-    {
-      result += " ";
-    }
-    result += to_string(v[i]) + " ";
-  }
-  return result;
+  return s("(", v.x, ",", v.y, ")");
 }
-std::string vtos(glm::vec3 v)
+std::string to_string(const glm::vec3 v)
 {
-  std::string result = "";
-  for (uint32 i = 0; i < 3; ++i)
-  {
-    if (v[i] >= 0.0f)
-    {
-      result += " ";
-    }
-    result += to_string(v[i]) + " ";
-  }
-  return result;
+  return s("(", v.x, ",", v.y, ",", v.z, ")");
 }
-std::string vtos(glm::vec4 v)
+std::string to_string(const glm::vec4 v)
 {
-  std::string result = "";
-  for (uint32 i = 0; i < 4; ++i)
-  {
-    if (v[i] >= 0.0f)
-    {
-      result += " ";
-    }
-    string sf = to_string(v[i]);
-    while (sf.length() > 6)
-      sf.pop_back();
-    while (sf.length() <= 6)
-      sf.push_back('0');
-    result += sf + " ";
-  }
-  return result;
+  return s("(", v.x, ",", v.y, ",", v.z, ",", v.w, ")");
 }
 
-std::string qtos(glm::quat v)
+std::string qtos(const glm::quat v)
 {
   string result = "";
   for (uint32 i = 0; i < 4; ++i)
@@ -443,12 +471,24 @@ std::string qtos(glm::quat v)
   return result;
 }
 
-std::string to_string(glm::quat &q)
+std::string to_string(const Particle_Physics_Type &t)
+{
+  if (t == Particle_Physics_Type::simple)
+  {
+    return "Simple";
+  }
+  if (t == Particle_Physics_Type::wind)
+  {
+    return "Wind";
+  }
+  return "Unknown";
+}
+std::string to_string(const glm::quat &q)
 {
   return s("x = ", q.x, ", y = ", q.y, ", z = ", q.z, ", w = ", q.w);
 }
 
-std::string to_string(glm::vec3 &v)
+std::string to_string(const glm::vec3 &v)
 {
   return s("x = ", v.x, ", y = ", v.y, ", z = ", v.z);
 }
@@ -487,7 +527,7 @@ std::string to_string(glm::mat4 &m)
   return result;
 }
 
-std::string to_string(vec4 &value)
+std::string to_string(const vec4 &value)
 {
   string r = to_string(value.r);
   string g = to_string(value.g);
@@ -495,6 +535,8 @@ std::string to_string(vec4 &value)
   string a = to_string(value.a);
   return "(" + r + "," + g + "," + b + "," + a + ")";
 }
+
+
 template <> string s<const char *>(const char *value)
 {
   return string(value);
@@ -504,7 +546,7 @@ template <> string s<string>(string value)
   return value;
 }
 
-string to_string(Light_Type &value)
+string to_string(const Light_Type &value)
 {
   if (value == Light_Type::parallel)
     return "Parallel";
@@ -515,6 +557,31 @@ string to_string(Light_Type &value)
 
   return "s(): Unknown Light_Type";
 }
+std::string to_string(const Material_Blend_Mode& mode)
+{
+  if (mode == Material_Blend_Mode::blend)
+  {
+    return "blend";
+  }
+  if (mode == Material_Blend_Mode::add)
+  {
+    return "add";
+  }
+  return "Unknown";
+}
+
+std::string to_string(const Particle_Emission_Type &t)
+{
+  if (t == Particle_Emission_Type::stream)
+  {
+    return "Stream";
+  }
+  if (t == Particle_Emission_Type::explosion)
+  {
+    return "Explosion";
+  }
+  return "Unknown";
+}
 
 //#define check_gl_error() _check_gl_error(__FILE__, __LINE__)
 #define check_gl_error() _check_gl_error()
@@ -524,6 +591,27 @@ UID uid()
   static UID i = 1;
   ASSERT(i);
   return i++;
+}
+
+const char *filter_format_to_string(GLenum filter_format)
+{
+  switch (filter_format)
+  {
+    case GL_NEAREST:
+      return "GL_NEAREST";
+    case GL_NEAREST_MIPMAP_LINEAR:
+      return "GL_NEAREST_MIPMAP_LINEAR";
+    case GL_NEAREST_MIPMAP_NEAREST:
+      return "GL_NEAREST_MIPMAP_NEAREST";
+    case GL_LINEAR_MIPMAP_NEAREST:
+      return "GL_LINEAR_MIPMAP_NEAREST";
+    case GL_LINEAR_MIPMAP_LINEAR:
+      return "GL_LINEAR_MIPMAP_LINEAR";
+    case GL_LINEAR:
+      return "GL_LINEAR";
+    default:
+      return "UNKNOWN";
+  }
 }
 
 const char *texture_format_to_string(GLenum texture_format)
@@ -562,8 +650,21 @@ const char *texture_format_to_string(GLenum texture_format)
       return "GL_R32F";
     case GL_R16F:
       return "GL_R16F";
+    case GL_DEPTH_COMPONENT16:
+      return "GL_DEPTH_COMPONENT16";
+    case GL_DEPTH_COMPONENT24:
+      return "GL_DEPTH_COMPONENT24";
+    case GL_DEPTH_COMPONENT32F:
+      return "GL_DEPTH_COMPONENT32F";
+    case GL_DEPTH32F_STENCIL8:
+      return "GL_DEPTH32F_STENCIL8";
+    case GL_DEPTH24_STENCIL8:
+      return "GL_DEPTH24_STENCIL8";
+    case GL_STENCIL_INDEX8:
+      return "GL_STENCIL_INDEX8";
     default:
       return "UNKNOWN";
+      
   }
 }
 
@@ -647,7 +748,7 @@ std::string find_free_filename(std::string filename, std::string extension)
   uint32 i = 0;
   while (exists)
   {
-    exists = std::filesystem::exists(s(filename, i,extension));
+    exists = std::filesystem::exists(s(filename, i, extension));
     ++i;
   }
   return s(filename, i);
@@ -664,6 +765,11 @@ string to_string(Array_String &s)
     result.push_back(*ch);
   }
   return result;
+}
+
+string to_string(string_view& s)
+{
+  return string(s);
 }
 
 void Config::load(string filename)
@@ -703,6 +809,8 @@ void Config::load(string filename)
 
   if ((i = j.find("Character Name")) != j.end())
     character_name = i->get<std::string>();
+  if ((i = j.find("Fullscreen")) != j.end())
+    fullscreen = *i;
 }
 
 void Config::save(string filename)
@@ -716,13 +824,14 @@ void Config::save(string filename)
   j["Render Simple"] = render_simple;
   j["WargSpy Address"] = wargspy_address;
   j["Character Name"] = character_name;
+  j["Fullscreen"] = fullscreen;
 
   string str = pretty_dump(j);
   fstream file(filename, ios::out);
   file.write(str.c_str(), str.size());
 }
 
-Image_Data load_image(string path)
+Image_Data load_image(string path, GLenum desiredinternalformat)
 {
   Image_Data data;
 
@@ -732,7 +841,8 @@ Image_Data load_image(string path)
     path = BASE_TEXTURE_PATH + path;
   }
 
-  const bool is_hdr = stbi_is_hdr(path.c_str());
+  bool is_hdr = stbi_is_hdr(path.c_str());
+  is_hdr = is_float_format(desiredinternalformat);
   if (is_hdr)
   {
     data.data = stbi_loadf(path.c_str(), &data.x, &data.y, &data.comp, 4);
@@ -770,7 +880,7 @@ void Image_Loader::loader_loop(Image_Loader *loader)
     string filename = task.substr(0, back);
     string fmt = task.substr(back + 1);
     GLenum gl_texture_internalformat = stoi(fmt);
-    Image_Data data = load_image(filename);
+    Image_Data data = load_image(filename, gl_texture_internalformat);
 
     if (data.data_type != GL_FLOAT)
     {
@@ -794,6 +904,10 @@ void Image_Loader::loader_loop(Image_Loader *loader)
           b = (uint8)glm::clamp((uint32)round(c.b), 0u, 255u);
           //((uint32 *)data.data)[i] = (24 << a) | (16 << b) | (8 << g) | r;
         }
+      }
+      if (gl_texture_internalformat == GL_RGBA32F && data.data)
+      {
+        int a = 3;
       }
     }
     std::lock_guard<std::mutex> lock(loader->db_mtx);
@@ -886,6 +1000,16 @@ float32 random_between(float32 min, float32 max)
   std::uniform_real_distribution<float32> distribution(min, max);
   return distribution(generator);
 }
+
+glm::vec3 random_between(glm::vec3 min, glm::vec3 max)
+{
+  vec3 r;
+  r.x = random_between(min.x, max.x);
+  r.y = random_between(min.y, max.y);
+  r.z = random_between(min.z, max.z);
+  return r;
+}
+
 glm::vec2 random_within(const vec2 &vec)
 {
   std::uniform_real_distribution<float32> x(0, vec.x);

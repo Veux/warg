@@ -2,7 +2,11 @@
 #include "Globals.h"
 #include "Scene_Graph.h"
 
-const float32 dt = 1.0f / 100.0f;
+#ifdef NDEBUG
+const float32 dt = 1.0f / 144.0f;
+#else
+const float32 dt = 1.0f / 60.f;
+#endif
 const float32 MOVE_SPEED = 4.f;
 const float32 STEP_SIZE = MOVE_SPEED / 3.f;
 const float32 MOUSE_X_SENS = .0041f;
@@ -21,10 +25,16 @@ std::string SCRATCH_STRING;
 Timer PERF_TIMER = Timer(1000);
 Timer FRAME_TIMER = Timer(60);
 Timer SWAP_TIMER = Timer(60);
+std::atomic<float64> TICK_START_TIME = 0.;
+float64 get_time_left_in_this_tick()
+{
+  return dt - (get_real_time() - TICK_START_TIME);
+}
 Config CONFIG;
 bool WARG_SERVER;
 bool WARG_RUNNING = true;
 bool PROCESS_USES_SDL_AND_OPENGL = true;
+std::atomic<bool> SPIRAL_OF_DEATH = false;
 std::thread::id MAIN_THREAD_ID;
 SDL_Imgui_State IMGUI;
 std::mutex IMGUI_MUTEX;

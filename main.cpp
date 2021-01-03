@@ -103,24 +103,40 @@ void glad_callback(const char *name, void *funcptr, int len_args, ...)
     switch (error_code)
     {
       case GL_INVALID_OPERATION:
-        error = "INVALID_OPERATION";
+        error = "INVALID_OPERATION"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
+
+
       case GL_INVALID_ENUM:
-        error = "INVALID_ENUM";
+        error = "INVALID_ENUM"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
+
+
       case GL_INVALID_VALUE:
-        error = "INVALID_VALUE";
+        error = "INVALID_VALUE"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
+
+
       case GL_OUT_OF_MEMORY:
-        error = "OUT_OF_MEMORY";
+        error = "OUT_OF_MEMORY"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
+
+
       case GL_INVALID_FRAMEBUFFER_OPERATION:
-        error = "INVALID_FRAMEBUFFER_OPERATION";
+        error = "INVALID_FRAMEBUFFER_OPERATION"; set_message("GL ERROR", "GL_" + error);
+        push_log_to_disk();
+        ASSERT(0);
         break;
     }
-    set_message("GL ERROR", "GL_" + error);
-    push_log_to_disk();
-    ASSERT(0);
+    
   }
 }
 
@@ -145,7 +161,13 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
   {
     if (e.window.event == SDL_WINDOWEVENT_RESIZED)
     {
-      // resize
+      for (auto &state : available_states)
+      {
+        ivec2 size;
+        SDL_GetWindowSize(state->window, &size.x, &size.y);
+        state->renderer.resize_window(size);
+        CONFIG.resolution = size;
+      }
       return;
     }
     else if (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e.window.event == SDL_WINDOWEVENT_ENTER)
@@ -262,6 +284,118 @@ void input_preprocess(SDL_Event &e, State **current_state, std::vector<State *> 
   return;
 }
 
+
+void deus_ex_theme()
+{
+  ImVec4* colors = ImGui::GetStyle().Colors;
+  colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+  colors[ImGuiCol_TextDisabled] = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
+  colors[ImGuiCol_WindowBg] = ImVec4(0.18f, 0.18f, 0.19f, 0.78f);
+  colors[ImGuiCol_ChildBg] = ImVec4(0.96f, 0.33f, 0.00f, 0.00f);
+  colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
+  colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.50f);
+  colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  colors[ImGuiCol_FrameBg] = ImVec4(0.05f, 0.05f, 0.05f, 0.35f);
+  colors[ImGuiCol_FrameBgHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_FrameBgActive] = ImVec4(0.80f, 0.32f, 0.04f, 0.92f);
+  colors[ImGuiCol_TitleBg] = ImVec4(0.44f, 0.44f, 0.44f, 1.00f);
+  colors[ImGuiCol_TitleBgActive] = ImVec4(0.18f, 0.18f, 0.36f, 1.00f);
+  colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+  colors[ImGuiCol_MenuBarBg] = ImVec4(0.42f, 0.42f, 0.42f, 1.00f);
+  colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
+  colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
+  colors[ImGuiCol_CheckMark] = ImVec4(0.08f, 1.00f, 0.00f, 1.00f);
+  colors[ImGuiCol_SliderGrab] = ImVec4(0.00f, 0.77f, 0.08f, 1.00f);
+  colors[ImGuiCol_SliderGrabActive] = ImVec4(0.87f, 1.00f, 0.00f, 1.00f);
+  colors[ImGuiCol_Button] = ImVec4(0.87f, 0.85f, 0.83f, 0.59f);
+  colors[ImGuiCol_ButtonHovered] = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
+  colors[ImGuiCol_ButtonActive] = ImVec4(0.63f, 0.63f, 0.63f, 1.00f);
+  colors[ImGuiCol_Header] = ImVec4(0.53f, 0.53f, 0.53f, 0.31f);
+  colors[ImGuiCol_HeaderHovered] = ImVec4(0.44f, 0.44f, 0.44f, 0.80f);
+  colors[ImGuiCol_HeaderActive] = ImVec4(0.66f, 0.66f, 0.66f, 1.00f);
+  colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+  colors[ImGuiCol_SeparatorHovered] = ImVec4(0.10f, 0.40f, 0.75f, 0.78f);
+  colors[ImGuiCol_SeparatorActive] = ImVec4(0.10f, 0.40f, 0.75f, 1.00f);
+  colors[ImGuiCol_ResizeGrip] = ImVec4(0.71f, 0.70f, 0.70f, 0.72f);
+  colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.86f, 0.86f, 0.86f, 1.00f);
+  colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+  colors[ImGuiCol_Tab] = ImVec4(0.58f, 0.68f, 0.95f, 0.81f);
+  colors[ImGuiCol_TabHovered] = ImVec4(0.78f, 0.77f, 0.92f, 0.84f);
+  colors[ImGuiCol_TabActive] = ImVec4(0.60f, 0.60f, 0.60f, 1.00f);
+  colors[ImGuiCol_TabUnfocused] = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
+  colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
+  colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+  colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+  colors[ImGuiCol_PlotHistogram] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+  colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+  colors[ImGuiCol_TextSelectedBg] = ImVec4(0.36f, 0.15f, 0.00f, 0.96f);
+  colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+  colors[ImGuiCol_NavHighlight] = ImVec4(0.99f, 0.53f, 0.00f, 1.00f);
+  colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+  colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+  colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+
+
+
+
+}
+
+void orange_theme()
+{
+  ImVec4* colors = ImGui::GetStyle().Colors;
+  colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+  colors[ImGuiCol_TextDisabled] = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
+  colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.54f);
+  colors[ImGuiCol_ChildBg] = ImVec4(0.96f, 0.33f, 0.00f, 0.00f);
+  colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
+  colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.50f);
+  colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  colors[ImGuiCol_FrameBg] = ImVec4(0.00f, 0.39f, 1.00f, 0.25f);
+  colors[ImGuiCol_FrameBgHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_FrameBgActive] = ImVec4(1.00f, 0.31f, 0.00f, 0.92f);
+  colors[ImGuiCol_TitleBg] = ImVec4(0.04f, 0.04f, 0.04f, 1.00f);
+  colors[ImGuiCol_TitleBgActive] = ImVec4(1.00f, 0.28f, 0.00f, 1.00f);
+  colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+  colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+  colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
+  colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
+  colors[ImGuiCol_CheckMark] = ImVec4(0.08f, 1.00f, 0.00f, 1.00f);
+  colors[ImGuiCol_SliderGrab] = ImVec4(0.00f, 0.77f, 0.08f, 1.00f);
+  colors[ImGuiCol_SliderGrabActive] = ImVec4(0.87f, 1.00f, 0.00f, 1.00f);
+  colors[ImGuiCol_Button] = ImVec4(1.00f, 0.38f, 0.00f, 0.59f);
+  colors[ImGuiCol_ButtonHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_ButtonActive] = ImVec4(1.00f, 0.31f, 0.00f, 1.00f);
+  colors[ImGuiCol_Header] = ImVec4(0.94f, 0.36f, 0.00f, 0.31f);
+  colors[ImGuiCol_HeaderHovered] = ImVec4(0.98f, 0.40f, 0.00f, 0.80f);
+  colors[ImGuiCol_HeaderActive] = ImVec4(1.00f, 0.53f, 0.00f, 1.00f);
+  colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+  colors[ImGuiCol_SeparatorHovered] = ImVec4(0.10f, 0.40f, 0.75f, 0.78f);
+  colors[ImGuiCol_SeparatorActive] = ImVec4(0.10f, 0.40f, 0.75f, 1.00f);
+  colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 0.31f, 0.00f, 0.72f);
+  colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 0.35f, 0.00f, 1.00f);
+  colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_Tab] = ImVec4(0.81f, 0.33f, 0.00f, 0.81f);
+  colors[ImGuiCol_TabHovered] = ImVec4(1.00f, 0.35f, 0.00f, 0.84f);
+  colors[ImGuiCol_TabActive] = ImVec4(0.99f, 0.25f, 0.00f, 1.00f);
+  colors[ImGuiCol_TabUnfocused] = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
+  colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
+  colors[ImGuiCol_PlotLines] = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+  colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+  colors[ImGuiCol_PlotHistogram] = ImVec4(0.00f, 0.90f, 1.00f, 1.00f);
+  colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+  colors[ImGuiCol_TextSelectedBg] = ImVec4(0.36f, 0.15f, 0.00f, 0.96f);
+  colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+  colors[ImGuiCol_NavHighlight] = ImVec4(0.99f, 0.53f, 0.00f, 1.00f);
+  colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+  colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+  colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+}
+
+
 int main(int argc, char *argv[])
 {
   MAIN_THREAD_ID = std::this_thread::get_id();
@@ -296,13 +430,16 @@ int main(int argc, char *argv[])
     set_message(ss.str());
 
     window_size = {CONFIG.resolution.x, CONFIG.resolution.y};
-    int32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN;
+    int32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN;
+    if (CONFIG.fullscreen)
+      flags = flags | SDL_WINDOW_FULLSCREEN;
     // SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
     // SDL_GL_SetAttribute(SDL_GL_FRAMEBUFFER_SRGB_CAPABLE, 1);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     window = SDL_CreateWindow("Warg_Engine", 100, 130, window_size.x, window_size.y, flags);
+
     SDL_RaiseWindow(window);
     context = SDL_GL_CreateContext(window);
     SDL_GL_MakeCurrent(window, context);
@@ -321,6 +458,7 @@ int main(int argc, char *argv[])
     }
     // 1 vsync, 0 no vsync, -1 late-swap
     int32 swap = SDL_GL_SetSwapInterval(0);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 0);
     if (swap == -1)
     {
       swap = SDL_GL_SetSwapInterval(1);
@@ -345,10 +483,12 @@ int main(int argc, char *argv[])
     SDL_ClearError();
     SDL_SetRelativeMouseMode(SDL_bool(false));
   }
-  // glad_set_pre_callback(glad_callback);
-  // glad_set_post_callback(glad_callback);
-  // Local_Session warg_session = Local_Session();
 
+#ifndef NDEBUG
+  glad_set_pre_callback(glad_callback);
+  glad_set_post_callback(glad_callback);
+#endif
+  
   WARG_SERVER = false;
   ASSERT(!enet_initialize());
   atexit(enet_deinitialize);
@@ -374,7 +514,6 @@ int main(int argc, char *argv[])
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 14.0f);
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/Roboto-Medium.ttf", 16.0f);
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 16.0f);
-  // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 18.0f);
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/FrizQuadrataTT.ttf", 18.0f);
 
   // io.Fonts->AddFontFromFileTTF("Assets/Fonts/spleen-8x16.psfu", 18.0f);
@@ -403,36 +542,18 @@ int main(int argc, char *argv[])
   freetype_test.FontsMultiply = 1.35;
   bool show_freetype_window = false;
 
-  ImVec4 *colors = ImGui::GetStyle().Colors;
-  colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-  colors[ImGuiCol_TextDisabled] = ImVec4(0.54f, 0.54f, 0.54f, 1.00f);
-  colors[ImGuiCol_WindowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.84f);
-  colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-  colors[ImGuiCol_Border] = ImVec4(0.00f, 0.00f, 0.00f, 0.50f);
-  colors[ImGuiCol_FrameBg] = ImVec4(0.00f, 0.16f, 0.26f, 1.00f);
-  colors[ImGuiCol_FrameBgHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
-  colors[ImGuiCol_FrameBgActive] = ImVec4(1.00f, 0.31f, 0.00f, 0.92f);
-  colors[ImGuiCol_TitleBgActive] = ImVec4(1.00f, 0.28f, 0.00f, 1.00f);
-  colors[ImGuiCol_CheckMark] = ImVec4(0.08f, 1.00f, 0.00f, 1.00f);
-  colors[ImGuiCol_SliderGrab] = ImVec4(0.00f, 0.77f, 0.08f, 1.00f);
-  colors[ImGuiCol_SliderGrabActive] = ImVec4(0.87f, 1.00f, 0.00f, 1.00f);
-  colors[ImGuiCol_Button] = ImVec4(1.00f, 0.38f, 0.00f, 0.59f);
-  colors[ImGuiCol_ButtonHovered] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
-  colors[ImGuiCol_ButtonActive] = ImVec4(1.00f, 0.31f, 0.00f, 1.00f);
-  colors[ImGuiCol_Header] = ImVec4(0.94f, 0.36f, 0.00f, 0.31f);
-  colors[ImGuiCol_HeaderHovered] = ImVec4(0.98f, 0.40f, 0.00f, 0.80f);
-  colors[ImGuiCol_HeaderActive] = ImVec4(1.00f, 0.53f, 0.00f, 1.00f);
-  colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 0.31f, 0.00f, 0.72f);
-  colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 0.35f, 0.00f, 1.00f);
-  colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 0.25f, 0.00f, 1.00f);
-  colors[ImGuiCol_Tab] = ImVec4(0.81f, 0.33f, 0.00f, 0.81f);
-  colors[ImGuiCol_TabHovered] = ImVec4(1.00f, 0.35f, 0.00f, 0.84f);
-  colors[ImGuiCol_TabActive] = ImVec4(0.99f, 0.25f, 0.00f, 1.00f);
-  colors[ImGuiCol_TextSelectedBg] = ImVec4(0.36f, 0.15f, 0.00f, 0.96f);
-  colors[ImGuiCol_NavHighlight] = ImVec4(0.99f, 0.53f, 0.00f, 1.00f);
+
+
+  orange_theme();
+
+  deus_ex_theme();
+
+
+
+  timeBeginPeriod(1);
 
   std::vector<SDL_Event> imgui_event_accumulator;
-
+  //Local_Session warg_session = Local_Session();
   std::vector<State *> states;
   states.emplace_back((State *)new Render_Test_State("Render Test State", window, window_size));
   states.emplace_back((State *)new Warg_State("Warg", window, window_size, CONFIG.character_name, 0));
@@ -458,13 +579,23 @@ int main(int argc, char *argv[])
     const float64 time = get_real_time();
     elapsed_time = time - current_time;
     if (elapsed_time > 0.3)
+    {
+      SPIRAL_OF_DEATH = true;
+    }
+    else
+    {
+      SPIRAL_OF_DEATH = false;
+    }
+    if (SPIRAL_OF_DEATH)
+    {//warg server mightve set it, not us 
       elapsed_time = 0.3;
-
+    }
     last_time = current_time;
     imgui_frame_active = false;
     float64 imgui_dt_accumulator = 0;
     while (current_time + dt < last_time + elapsed_time)
     {
+      TICK_START_TIME = get_real_time();
       first_update = true;
       current_time += dt;
       imgui_dt_accumulator += dt;
@@ -491,8 +622,25 @@ int main(int argc, char *argv[])
       std::vector<SDL_Event> state_keyboard_events;
       std::vector<SDL_Event> state_mouse_events;
       SDL_Event e;
+
       while (SDL_PollEvent(&e))
       {
+        if (e.type == SDL_TEXTINPUT)
+        {
+          int a = 3;
+        }
+        if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_RETURN)
+        {
+          if (!IMGUI.context->IO.WantTextInput)
+          {
+            int a = 3;
+          }
+        }
+
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN)
+        {
+          int a = 3;
+        }
         input_preprocess(e, &rendered_state, states, IMGUI.context->IO.WantTextInput,
             IMGUI.context->IO.WantCaptureMouse, &imgui_event_accumulator, &state_keyboard_events, &state_mouse_events);
       }
@@ -505,6 +653,25 @@ int main(int argc, char *argv[])
       {
         IMGUI.cursor_position = cursor_position;
         IMGUI.mouse_state = mouse_state;
+
+        if (!IMGUI.context->IO.WantTextInput)
+        { // if we press enter in an entrybox, the 'keyup' of the enter doesnt get sent to imgui
+          // because it already set wanttextinput to false on the downpress, making imgui
+          // think enter is being held, we could do something smarter, but we can also
+          // just clear all the keys...
+
+          /*
+              int                     WantCaptureMouseNextFrame;          // Explicit capture via
+    CaptureKeyboardFromApp()/CaptureMouseFromApp() sets those flags int WantCaptureKeyboardNextFrame; int
+    WantTextInputNextFrame;
+
+          */
+          ImGuiIO &io = ImGui::GetIO();
+          for (uint32 i = 0; i < 512; ++i)
+          {
+            io.KeysDown[i] = false;
+          }
+        }
         IMGUI.handle_input(&imgui_event_accumulator);
 
         if (freetype_test.UpdateRebuild())
@@ -579,6 +746,8 @@ int main(int argc, char *argv[])
           }
         }
       }
+      
+
 
       uint32 count = 0;
       for (uint32 i = 0; i < states.size(); ++i)
@@ -624,6 +793,7 @@ int main(int argc, char *argv[])
       {
         show_freetype_window = !show_freetype_window;
       }
+      ImGui::SetNextItemWidth(20.f);
       std::string messages = get_messages();
       ImGui::Text("%s", messages.c_str());
 
@@ -662,22 +832,21 @@ int main(int argc, char *argv[])
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     vec2 texture_size_scaling = vec2(w, h) / vec2(window_size);
-    mat4 scale = glm::scale(scale_factor * vec3(texture_size_scaling,1) * vec3(1, -1, 1));
+    mat4 scale = glm::scale(scale_factor * vec3(texture_size_scaling, 1) * vec3(1, -1, 1));
 
-    mat4 transform = fullscreen_quad(); 
-    
+    mat4 transform = fullscreen_quad();
+
     transform = fullscreen_quad();
 
-    
     mat4 T = glm::translate(vec3());
     transform = fullscreen_quad();
 
-
     states[0]->renderer.passthrough.use();
-    states[0]->renderer.passthrough.set_uniform("transform", transform);//(window_size));
-    //states[0]->renderer.passthrough.set_uniform("transform",  ortho_projection(texture_size_scaling));
-   // states[0]->renderer.quad.draw();
+    states[0]->renderer.passthrough.set_uniform("transform", transform); //(window_size));
+    // states[0]->renderer.passthrough.set_uniform("transform",  ortho_projection(texture_size_scaling));
+    // states[0]->renderer.quad.draw();
     glDisable(GL_BLEND);
+    // glFinish();
     SDL_GL_SwapWindow(window);
     set_message("FRAME END", "");
     SWAP_TIMER.stop();

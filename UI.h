@@ -15,17 +15,14 @@ public:
   File_Picker(const char *directory);
   bool run();
   std::string get_result();
-  bool get_closed();
-
+  bool window_open = false;
 private:
   void set_dir(std::string directory);
-
   std::string dir;
   std::vector<FS_Node> dircontents;
   size_t ndirs = 0;
   int last_clicked_node = 0;
   std::string result;
-  bool display = true;
 };
 
 class Layout_Grid

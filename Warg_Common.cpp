@@ -4,7 +4,7 @@
 vec3 collide_char_with_world(Collision_Packet &colpkt, int &collision_recursion_depth, const vec3 &pos, const vec3 &vel,
     const std::vector<Triangle> &colliders);
 
-Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
+Blades_Edge::Blades_Edge(Scene_Graph &scene)
 {
   spawn_pos[0] = {0, 0, 15};
   spawn_pos[1] = {45, 45, 5};
@@ -17,7 +17,7 @@ Blades_Edge::Blades_Edge(Flat_Scene_Graph &scene)
   if (CONFIG.render_simple)
     material.albedo.mod = vec4(0.4f);
 
-  node = scene.add_aiscene("Blades_Edge/bea2.fbx", "Blades Edge");
+  node = scene.add_aiscene_new("Blades_Edge/bea2.fbx", "Blades Edge");
 }
 
 UID add_dummy(Game_State &game_state, Map &map, vec3 position)
@@ -103,7 +103,7 @@ UID add_char(Game_State &gs, Map &map, int team, std::string_view name)
   return id;
 }
 
-void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_Graph &scene)
+void move_char(Game_State &gs, Character &character, Input command, Scene_Graph &scene)
 {
   if (command.m & Move_Status::Forwards)
   {
@@ -159,7 +159,7 @@ void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_G
   collide_and_slide_char(character.physics, character.radius, v * dt, vec3(0, 0, vel.z) * dt, scene);
 }
 
-void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph &scene)
+void check_collision(Collision_Packet &colpkt, Scene_Graph &scene)
 {
 
   AABB box(colpkt.pos_r3);
@@ -180,7 +180,7 @@ void check_collision(Collision_Packet &colpkt, Flat_Scene_Graph &scene)
   }
 }
 
-vec3 collide_char_with_world(Collision_Packet &colpkt, vec3 start_pos, vec3 start_vel, Flat_Scene_Graph &scene)
+vec3 collide_char_with_world(Collision_Packet &colpkt, vec3 start_pos, vec3 start_vel, Scene_Graph &scene)
 {
   float epsilon = 0.005f;
 
@@ -233,7 +233,7 @@ vec3 collide_char_with_world(Collision_Packet &colpkt, vec3 start_pos, vec3 star
 }
 
 void collide_and_slide_char(
-    Character_Physics &physics, vec3 &radius, const vec3 &vel, const vec3 &gravity, Flat_Scene_Graph &scene)
+    Character_Physics &physics, vec3 &radius, const vec3 &vel, const vec3 &gravity, Scene_Graph &scene)
 {
   Collision_Packet colpkt;
 
@@ -279,6 +279,10 @@ void collide_and_slide_char(
   physics.grounded = colpkt.found_collision && gravity.z <= 0;
 
   final_pos *= colpkt.e_radius;
+
+  if(final_pos.z < -50)
+    final_pos = vec3(0,0,50);
+
   physics.position = final_pos;
 }
 
@@ -433,7 +437,7 @@ void remove_dead_characters(Game_State &gs)
   gs.living_characters.erase(first_dead, gs.living_characters.end());
 }
 
-void update_spell_objects(Game_State &gs, Flat_Scene_Graph &scene)
+void update_spell_objects(Game_State &gs, Scene_Graph &scene)
 {
   for (auto &so : gs.spell_objects)
   {
@@ -581,7 +585,7 @@ void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs)
     end_buff(gs, b);
 }
 
-void cast_spell(Game_State &gs, Flat_Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id)
+void cast_spell(Game_State &gs, Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id)
 {
   if (none_of(gs.character_spells, [&](auto &cs) { return cs.character == caster_id && cs.spell == spell_id; }))
     return;
@@ -710,7 +714,7 @@ int cmp(Character_Cast &cc, Living_Character &lc) { return -cmp(lc, cc); }
 
 // clang-format on
 
-void update_casts(Game_State &gs, Flat_Scene_Graph &scene)
+void update_casts(Game_State &gs, Scene_Graph &scene)
 {
   join_for(gs.character_casts, gs.living_characters,
       [](auto &cc, auto &lc) { cc.progress += lc.effective_stats.cast_speed * dt; });
@@ -799,7 +803,7 @@ void respawn_dummy(std::vector<Character> &cs, std::vector<Living_Character> &lc
     add_dummy(gs, map, {1, 1, 5});
 }
 
-void move_character(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs, Character &c)
+void move_character(Game_State &gs, Map &map, Scene_Graph &scene, std::map<UID, Input> &inputs, Character &c)
 {
   Input last_input;
   if (any_of(gs.living_characters, [&](auto &lc) { return lc.id == c.id; }))
@@ -829,13 +833,13 @@ void move_character(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<
   }
 }
 
-void move_characters(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs)
+void move_characters(Game_State &gs, Map &map, Scene_Graph &scene, std::map<UID, Input> &inputs)
 {
   for (auto &c : gs.characters)
     move_character(gs, map, scene, inputs, c);
 }
 
-void update_game(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs)
+void update_game(Game_State &gs, Map &map, Scene_Graph &scene, std::map<UID, Input> &inputs)
 {
   reset_stats(gs.characters, gs.living_characters);
   update_buffs(gs.character_buffs, gs);
@@ -851,7 +855,7 @@ void update_game(Game_State &gs, Map &map, Flat_Scene_Graph &scene, std::map<UID
   gs.tick++;
 }
 
-Game_State predict(Game_State gs, Map &map, Flat_Scene_Graph &scene, UID character_id, Input input)
+Game_State predict(Game_State gs, Map &map, Scene_Graph &scene, UID character_id, Input input)
 {
   std::map<UID, Input> inputs;
   inputs[character_id] = input;

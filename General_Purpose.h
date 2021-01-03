@@ -9,6 +9,14 @@
 enum struct Light_Type;
 #define ASSERT(x) _errr(x, __FILE__, __LINE__)
 
+void nop(bool i);
+
+#ifdef NDEBUG
+#define DEBUGASSERT(x) nop(x)
+#else
+#define DEBUGASSERT(x) ASSERT(x)
+#endif
+
 void __set_message(std::string identifier, std::string message, float64 msg_duration, const char *, uint32);
 #define CREATE_3(x, y, z) __set_message(x, y, z, __FILE__, __LINE__)
 #define CREATE_2(x, y) CREATE_3(x, y, 0.0)
@@ -49,17 +57,17 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
     set_message("", "Assertion failed in:" + std::string(file) + "\non line:" + std::to_string(line), 1.0);
     std::string message_log = get_message_log();
     push_log_to_disk();
-    std::string end_of_log;
-    size_t length = message_log.size();
-    size_t char_count = 1000;
-    if (length < char_count)
-      char_count = length;
-    else
-    {
-      end_of_log = message_log.substr(length - char_count, std::string::npos);
-    }
-    std::cout << end_of_log << std::endl;
-    SDL_Delay(500);
+    //std::string end_of_log;
+    //size_t length = message_log.size();
+    //size_t char_count = 1000;
+    //if (length < char_count)
+    //  char_count = length;
+    //else
+    //{
+    //  end_of_log = message_log.substr(length - char_count, std::string::npos);
+    //}
+    //std::cout << end_of_log << std::endl;
+    //SDL_Delay(500);
     throw;
   }
 #endif
@@ -164,6 +172,7 @@ struct Config
   float32 shadow_map_scale = 1.0f;
   bool use_low_quality_specular = false;
   bool render_simple = false;
+  bool fullscreen = false;
   std::string wargspy_address;
   std::string character_name = "Cubeboi";
 
@@ -218,24 +227,32 @@ vec3 rand(vec3 max);
 // probably need something better
 std::string fix_filename(std::string str);
 std::string copy(const aiString *str);
+vec3 copy(const aiVector3D v);
+quat copy(const aiQuaternion q);
 std::string read_file(const char *path);
-std::string vtos(glm::vec2 v);
-std::string vtos(glm::vec3 v);
-std::string vtos(glm::vec4 v);
-std::string qtos(glm::quat v);
-
-std::string to_string(Light_Type &value);
-std::string to_string(glm::mat4 &m);
-std::string to_string(Array_String &s);
-std::string to_string(vec4 &value);
-std::string to_string(vec3 &v);
-std::string to_string(quat &q);
+std::string to_string(const glm::vec2 v);
+//std::string to_string(glm::vec4 v);
+std::string qtos(const glm::quat v);
+std::string to_string(const Material_Blend_Mode& mode);
+enum Particle_Emission_Type;
+enum Particle_Physics_Type;
+std::string to_string(const Light_Type &value);
+std::string to_string(const Particle_Emission_Type& t);
+std::string to_string(const Particle_Physics_Type& t);
+std::string to_string(const glm::mat4 &m);
+std::string to_string(const Array_String &s);
+std::string to_string(const vec4 &value);
+std::string to_string(const vec3 &v);
+std::string to_string(const quat &q);
+std::string to_string(const std::string_view& value);
 // std::string to_string(ivec4& value);
 
+glm::mat4 copy(aiMatrix4x4 m);
 vec4 rgb_vec4(uint8 r, uint8 g, uint8 b);
 float64 random_between(float64 min, float64 max);
 int32 random_between(int32 min, int32 max);
 float32 random_between(float32 min, float32 max);
+glm::vec3 random_between(glm::vec3 min, glm::vec3 max);
 glm::vec2 random_within(const vec2 &vec);
 glm::vec3 random_within(const vec3 &vec);
 glm::vec4 random_within(const vec4 &vec);
@@ -246,12 +263,13 @@ vec3 random_3D_unit_vector(float32 azimuth_min, float32 azimuth_max, float32 alt
 // Uint32 string_to_U32_color(std::string color);
 // glm::vec4 string_to_float4_color(std::string color);
 const char *texture_format_to_string(GLenum texture_format);
+const char *filter_format_to_string(GLenum filter_format);
 bool has_img_file_extension(std::string name);
 bool has_hdr_file_extension(std::string name);
 bool is_float_format(GLenum texture_format);
 int32 save_texture(Texture *texture, std::string filename, uint32 level = 0);
 int32 save_texture_type(Texture *texture, std::string filename, std::string type = "png", uint32 level = 0);
-int32 save_texture_type(GLuint texture,ivec2 size, std::string filename, std::string type = "png", uint32 level = 0);
+int32 save_texture_type(GLuint texture, ivec2 size, std::string filename, std::string type = "png", uint32 level = 0);
 uint32 type_of_float_format(GLenum texture_format);
 uint32 components_of_float_format(GLenum texture_format);
 

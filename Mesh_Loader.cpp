@@ -3,14 +3,17 @@
 #include "Globals.h"
 #include "Render.h"
 
-Mesh_Data generate_grid(ivec2 tile_count)
+Mesh_Data generate_grid(ivec2 vertex_count)
 {
+  //assuming that tile_count meant vertex count for heightmaps, we need 1 fewer tile
+  //than we want vertices, in order for them to match properly
+  ivec2 tile_count = vertex_count -ivec2(1);
   Mesh_Data data;
 
-  for (uint32 y = 0; y < tile_count.y + 1; ++y)
+  for (uint32 y = 0; y < (uint32)tile_count.y + 1; ++y)
   {
 
-    for (uint32 x = 0; x < tile_count.x + 1; ++x)
+    for (uint32 x = 0; x < (uint32)tile_count.x + 1; ++x)
     {
       data.positions.push_back(vec3(vec2(x, y), 0));
       data.normals.push_back(vec3(0, 0, 1));
@@ -20,14 +23,14 @@ Mesh_Data generate_grid(ivec2 tile_count)
     }
   }
 
-  for (uint32 y = 0; y < tile_count.y; ++y)
+  for (uint32 y = 0; y < (uint32)tile_count.y; ++y)
   {
 
-    for (uint32 x = 0; x < tile_count.x; ++x)
+    for (uint32 x = 0; x < (uint32)tile_count.x; ++x)
     {
-      uint32 lower_left = y * (tile_count.x+1) + x;
+      uint32 lower_left = y * ((uint32)tile_count.x+1) + x;
       uint32 lower_right = lower_left + 1;
-      uint32 upper_left = lower_left + (tile_count.x+1);
+      uint32 upper_left = lower_left + ((uint32)tile_count.x+1);
       uint32 upper_right = upper_left + 1;
 
       data.indices.push_back(upper_left);
@@ -40,7 +43,7 @@ Mesh_Data generate_grid(ivec2 tile_count)
     }
   }
 
-  vec2 tile_size = vec2(1.f) / vec2(tile_count);
+  vec2 tile_size = vec2(1.f) / vec2(vertex_count);
   vec2 offset = vec2(-0.5f);
   for (uint32 i = 0; i < data.positions.size(); ++i)
   {
@@ -303,73 +306,14 @@ void copy_mesh_data(std::vector<vec3> &dst, aiVector3D *src, uint32 length)
   ASSERT(dst.size() == 0);
   dst.reserve(length);
   for (uint32 i = 0; i < length; ++i)
-    dst.push_back(vec3(src[i].x, src[i].y, src[i].z));
+    dst.emplace_back(src[i].x, src[i].y, src[i].z);
 }
 void copy_mesh_data(std::vector<vec2> &dst, aiVector3D *src, uint32 length)
 {
   ASSERT(dst.size() == 0);
   dst.reserve(length);
   for (uint32 i = 0; i < length; ++i)
-    dst.push_back(vec2(src[i].x, src[i].y));
+    dst.emplace_back(src[i].x, src[i].y);
 }
 
-Mesh_Descriptor build_mesh_descriptor(const aiScene *scene, uint32 i, std::string path)
-{
-  Mesh_Descriptor d;
-  const aiMesh *aimesh = scene->mMeshes[i];
-  ASSERT(aimesh);
-  ASSERT(aimesh->HasNormals());
-  ASSERT(aimesh->HasPositions());
-  ASSERT(aimesh->GetNumUVChannels() == 1);
-  ASSERT(aimesh->HasTextureCoords(0));
-  if (!aimesh->HasTangentsAndBitangents())
-  {
-    const aiScene *s = aiApplyPostProcessing(scene, aiProcess_CalcTangentSpace);
-    std::string err = aiGetErrorString();
-    ASSERT(s == scene); // post process failed
-  }
-  ASSERT(aimesh->HasTangentsAndBitangents());
-  ASSERT(aimesh->HasVertexColors(0) == false); // TODO: add support for vertex colors
-  ASSERT(aimesh->mNumUVComponents[0] == 2);
 
-  d.name = copy(&aimesh->mName);
-
-  const int32 num_vertices = aimesh->mNumVertices;
-  // const float32 cm_to_meters = 0.01;
-  d.mesh_data.positions.reserve(num_vertices);
-  for (uint32 i = 0; i < num_vertices; ++i)
-  {
-    d.mesh_data.positions.push_back(vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
-    // d.mesh_data.positions.push_back(
-    //   cm_to_meters * vec3(aimesh->mVertices[i].x, aimesh->mVertices[i].y, aimesh->mVertices[i].z));
-  }
-
-  copy_mesh_data(d.mesh_data.normals, aimesh->mNormals, num_vertices);
-  copy_mesh_data(d.mesh_data.tangents, aimesh->mTangents, num_vertices);
-  copy_mesh_data(d.mesh_data.bitangents, aimesh->mBitangents, num_vertices);
-
-  const uint32 uv_channel = 0; // only one uv channel supported
-  copy_mesh_data(d.mesh_data.texture_coordinates, aimesh->mTextureCoords[uv_channel], num_vertices);
-
-  for (uint32 i = 0; i < aimesh->mNumFaces; i++)
-  {
-    aiFace face = aimesh->mFaces[i];
-    if (face.mNumIndices == 3)
-    {
-      for (GLuint j = 0; j < 3; j++)
-      {
-        d.mesh_data.indices.push_back(face.mIndices[j]);
-      }
-    }
-    else
-    {
-      // set_message("non-triangle error", "", 5);
-    }
-  }
-  if (d.mesh_data.indices.size() < 3)
-  {
-    set_message("Error: No triangles in mesh:", d.name);
-    ASSERT(0); // will fail to upload
-  }
-  return d;
-}

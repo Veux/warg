@@ -9,8 +9,11 @@ uniform sampler2D texture5; // ambient occlusion
 uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
-uniform sampler2D texture9; // refraction source
-uniform sampler2D texture10; // uv map grid
+uniform sampler2D texture9;   // refraction
+uniform sampler2D texture10;  // depth of opaque scene
+// uniform sampler2D texture11;  // displacement
+uniform sampler2D texture12; // water velocity
+uniform sampler2D texture13; // depth of self
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
@@ -20,6 +23,7 @@ uniform vec4 texture5_mod;
 uniform vec4 texture6_mod;
 uniform vec4 texture10_mod;
 
+#define xor ^^
 #define MAX_LIGHTS 10
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
@@ -34,9 +38,15 @@ uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
-uniform float alpha_albedo_override;
+uniform float dielectric_reflectivity;
 uniform vec2 viewport_size;
 uniform float aspect_ratio;
+
+uniform float discard_threshold;
+uniform bool multiply_albedo_by_a;
+uniform bool multiply_result_by_a;
+uniform bool multiply_pixelalpha_by_moda;
+
 uniform float index_of_refraction;
 uniform float refraction_offset_factor;
 uniform float water_eps;
@@ -45,7 +55,7 @@ uniform float water_speed;
 uniform float water_height_scale;
 uniform float water_dist_exp;
 uniform float water_dist_scale;
-uniform float water_dist_min;    
+uniform float water_dist_min;
 uniform float water_scale2;
 uniform float height_scale2;
 uniform float water_time2;
@@ -71,8 +81,10 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
+in float water_depth;
+in float height_variance;
 
-in float blocking_terrain;
+in vec4 indebug;
 
 layout(location = 0) out vec4 out0;
 
@@ -90,7 +102,10 @@ float linearize_depth(float z)
   return (2.0 * near * far) / (far + near - depth * (far - near));
 }
 
-float saturate(float x) { return clamp(x, 0, 1); }
+float saturate(float x)
+{
+  return clamp(x, 0, 1);
+}
 struct Material
 {
   vec3 albedo;
@@ -115,49 +130,27 @@ float chebyshevUpperBound(vec2 moments, float distance, float max_variance)
 
 void gather_shadow_moments()
 {
-  frag_in_shadow_space_postw[0] =
-      vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
-  variance_depth[0] =
-      texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
-  frag_in_shadow_space_postw[1] =
-      vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
-  variance_depth[1] =
-      texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
-  frag_in_shadow_space_postw[2] =
-      vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
-  variance_depth[2] =
-      texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
-  frag_in_shadow_space_postw[3] =
-      vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
-  variance_depth[3] =
-      texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
-  frag_in_shadow_space_postw[4] =
-      vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
-  variance_depth[4] =
-      texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
-  frag_in_shadow_space_postw[5] =
-      vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
-  variance_depth[5] =
-      texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
-  frag_in_shadow_space_postw[6] =
-      vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
-  variance_depth[6] =
-      texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
-  frag_in_shadow_space_postw[7] =
-      vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
-  variance_depth[7] =
-      texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
-  frag_in_shadow_space_postw[8] =
-      vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
-  variance_depth[8] =
-      texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
-  frag_in_shadow_space_postw[9] =
-      vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
-  variance_depth[9] =
-      texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
+  frag_in_shadow_space_postw[0] = vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
+  variance_depth[0] = texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
+  frag_in_shadow_space_postw[1] = vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
+  variance_depth[1] = texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
+  frag_in_shadow_space_postw[2] = vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
+  variance_depth[2] = texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
+  frag_in_shadow_space_postw[3] = vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
+  variance_depth[3] = texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
+  frag_in_shadow_space_postw[4] = vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
+  variance_depth[4] = texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
+  frag_in_shadow_space_postw[5] = vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
+  variance_depth[5] = texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
+  frag_in_shadow_space_postw[6] = vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
+  variance_depth[6] = texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
+  frag_in_shadow_space_postw[7] = vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
+  variance_depth[7] = texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
+  frag_in_shadow_space_postw[8] = vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
+  variance_depth[8] = texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
+  frag_in_shadow_space_postw[9] = vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
+  variance_depth[9] = texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
 }
-
-
 
 // vec3 F_cook-torrance()
 //{
@@ -250,7 +243,6 @@ float D_GGX(float a, float ndoth)
   return a2 / (PI * x * x);
 }
 
-
 // Microfacet Models for Refraction through Rough Surfaces
 // Walter et al.
 // http://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.html
@@ -301,40 +293,37 @@ vec2 hammersley2d(uint i, uint N)
 
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
-} 
-
-
-
+  return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+}
 
 //
-//float random(float x) {
-// 
+// float random(float x) {
+//
 //    return fract(sin(x) * 10000.);
-//          
+//
 //}
 //
-//float noise(vec2 p) {
+// float noise(vec2 p) {
 //
 //    return random(p.x + p.y * 10000.);
-//            
+//
 //}
 //
-//vec2 sw(vec2 p) { return vec2(floor(p.x), floor(p.y)); }
-//vec2 se(vec2 p) { return vec2(ceil(p.x), floor(p.y)); }
-//vec2 nw(vec2 p) { return vec2(floor(p.x), ceil(p.y)); }
-//vec2 ne(vec2 p) { return vec2(ceil(p.x), ceil(p.y)); }
+// vec2 sw(vec2 p) { return vec2(floor(p.x), floor(p.y)); }
+// vec2 se(vec2 p) { return vec2(ceil(p.x), floor(p.y)); }
+// vec2 nw(vec2 p) { return vec2(floor(p.x), ceil(p.y)); }
+// vec2 ne(vec2 p) { return vec2(ceil(p.x), ceil(p.y)); }
 //
-//float smoothNoise(vec2 p) {
+// float smoothNoise(vec2 p) {
 //
 //    vec2 interp = smoothstep(0., 1., fract(p));
 //    float s = mix(noise(sw(p)), noise(se(p)), interp.x);
 //    float n = mix(noise(nw(p)), noise(ne(p)), interp.x);
 //    return mix(s, n, interp.y);
-//        
+//
 //}
 //
-//float fractalNoise(vec2 p) {
+// float fractalNoise(vec2 p) {
 //
 //    float x = 0.;
 //    x += smoothNoise(p      );
@@ -349,202 +338,432 @@ vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 //    x /= 1. + 1./2. + 1./4. + 1./8. + 1./16.+ 1./32.+ 1./64.+ 1./128.+ 1./256.;
 //    //x /= 1. + 1./2.;
 //    return x;
-//            
+//
 //}
 //
-//float movingNoise(vec2 p,float time) {
-// 
+// float movingNoise(vec2 p,float time) {
+//
 //    float x = fractalNoise(p + time);
 //    float y = fractalNoise(p - time);
-//    return fractalNoise(p + vec2(x, y));   
-//    
+//    return fractalNoise(p + vec2(x, y));
+//
 //}
 //
 //// call this for water noise function
-//float nestedNoise(vec2 p,float time) 
+// float nestedNoise(vec2 p,float time)
 //{
 //  float result;
 //  float x = movingNoise(p,time);
-//    
-//  
+//
+//
 //
 //    float y = movingNoise(p + 100.,time);
 //    result = movingNoise(p + vec2(x, y),time);
-// 
+//
 //  return result;
 //}
 
-float random ( vec2 st) {
-    return fract(sin(dot(st.xy,
-                         vec2(12.9898,78.233)))*
-        43758.5453123);
+vec2 hash(vec2 p)
+{
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
 }
 
+float noise_2(vec2 p, float level, float time)
+{
+  vec2 i = floor(p);
+  vec2 f = fract(p);
 
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float t = pow(2., level) * .4 * time;
+  mat2 R = mat2(cos(t), -sin(t), sin(t), cos(t));
+  if (mod(i.x + i.y, 2.) == 0.)
+    R = -R;
+  return 2. * mix(mix(dot(hash(i + vec2(0, 0)), (f - vec2(0, 0)) * R), dot(hash(i + vec2(1, 0)), -(f - vec2(1, 0)) * R),
+                      u.x),
+                  mix(dot(hash(i + vec2(0, 1)), -(f - vec2(0, 1)) * R), dot(hash(i + vec2(1, 1)), (f - vec2(1, 1)) * R),
+                      u.x),
+                  u.y);
+}
 
-float noise (vec2 st) {
-    vec2 i = floor(st);
-    vec2 f = fract(st);
+float random(vec2 st)
+{
+  return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+}
 
-    // Four corners in 2D of a tile
-    float a = random(i);
-    float b = random(i + vec2(1.0, 0.0));
-    float c = random(i + vec2(0.0, 1.0));
-    float d = random(i + vec2(1.0, 1.0));
+float noise(vec2 st)
+{
+  vec2 i = floor(st);
+  vec2 f = fract(st);
+  float a = random(i);
+  float b = random(i + vec2(1.0, 0.0));
+  float c = random(i + vec2(0.0, 1.0));
+  float d = random(i + vec2(1.0, 1.0));
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+}
 
-    vec2 u = f * f * (3.0 - 2.0 * f);
+float Mnoise(vec2 uv, float level, float time)
+{
+  // return noise(4.*uv);
+  return noise_2(2.f * uv, level, time);
+  // return -1. + 2.* (1.-abs(noise(uv,time)));  // flame like
+  return -1. + 2. * (abs(noise_2(uv, level, time))); // cloud like
+}
 
-    return mix(a, b, u.x) +
-            (c - a)* u.y * (1.0 - u.x) +
-            (d - b) * u.x * u.y;
+float turb_orig(vec2 uv, float time)
+{
+  float f = 0.0;
+
+  float level = 1.;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  f = 0.5000 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.2500 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.1250 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0625 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  // f += 0.0314 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  return f / .9375;
+}
+
+float turb(vec2 uv, float time)
+{
+  float f = 0.0;
+
+  float level = 1.;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  f = 0.5000 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.2500 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.1250 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0625 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0314 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  f += 0.0157 * Mnoise(uv, level, time);
+  uv = m * uv;
+  level++;
+  return 15 * f;
+}
+
+float fbm_h_n(vec2 x, float H, int n)
+{
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    t += a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+
+float fbm_h_n_dist_fade(vec2 x, float H, int n)
+{
+  vec3 partial_d = dFdy(frag_world_position);
+  float lenpd = 1 - length(partial_d);
+  float G = exp2(-H);
+  float f = 1.0;
+  float a = 1.0;
+  float t = 0.0;
+  for (int i = 0; i < n; i++)
+  {
+    lenpd = pow(lenpd, 2.2500f);
+    t += lenpd * a * noise(f * x);
+    f *= 2.0;
+    a *= G;
+  }
+  return t;
+}
+
+float fbm_n(vec2 uv, int n)
+{
+  float value = 0.0;
+  float amplitude = .5;
+  float frequency = 0.;
+  for (int i = 0; i < n; i++)
+  {
+    value += amplitude * noise(uv);
+    uv *= 2.;
+    amplitude *= .5;
+  }
+  return value;
 }
 
 #define NUM_OCTAVES 4
-float fbm (vec2 uv) {
-    float v = 0.0;
-    float a = 0.5;
-    vec2 shift = vec2(100.0);
-    // Rotate to reduce axial bias
-    mat2 rot = mat2(cos(0.5), sin(0.5),
-                    -sin(0.5), cos(0.50));
-    for (int i = 0; i < NUM_OCTAVES; ++i) {
-        v += a * noise(uv);
-        uv = rot * uv * 2.0 + shift;
-        a *= 0.5;
-    }
-    return v;
-
-
+float fbm(vec2 uv)
+{
+  float v = 0.0;
+  float a = 0.5;
+  vec2 shift = vec2(100.0);
+  // Rotate to reduce axial bias
+  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
+  for (int i = 0; i < NUM_OCTAVES; ++i)
+  {
+    v += a * noise(uv);
+    uv = rot * uv * 2.0 + shift;
+    a *= 0.5;
+  }
+  return v;
 }
 
 #define NUM_OCTAVES2 3
-float fbm2 (vec2 uv) {
-    float v = 0.0;
-    float a = 0.5;
-    vec2 shift = vec2(100.0);
-    // Rotate to reduce axial bias
-    mat2 rot = mat2(cos(0.5), sin(0.5),
-                    -sin(0.5), cos(0.50));
-    for (int i = 0; i < NUM_OCTAVES2; ++i) {
-        v += a * noise(uv);
-        uv = rot * uv * 2.0 + shift;
-        a *= 0.5;
-    }
-    return v;
-
-
+float fbm2(vec2 uv)
+{
+  float v = 0.0;
+  float a = 0.5;
+  vec2 shift = vec2(100.0);
+  // Rotate to reduce axial bias
+  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
+  for (int i = 0; i < NUM_OCTAVES2; ++i)
+  {
+    v += a * noise(uv);
+    uv = rot * uv * 2.0 + shift;
+    a *= 0.5;
+  }
+  return v;
 }
 
-float fbm3 (vec2 uv) {
-    float value = 0.0;
-    float amplitude = .5;
-    float frequency = 0.;
-    for (int i = 0; i < NUM_OCTAVES; i++) {
-        value += amplitude * noise(uv);
-        uv *= 2.;
-        amplitude *= .5;
-    }
-    return value;
+#define NUM_OCTAVES3 5
+float fbm3(vec2 uv)
+{
+  float value = 0.0;
+  float amplitude = .5;
+  float frequency = 0.;
+  for (int i = 0; i < NUM_OCTAVES3; i++)
+  {
+    value += amplitude * noise(uv);
+    uv *= 2.;
+    amplitude *= .5;
+  }
+  return value;
 }
 
 float waterheight(vec2 uv, float time)
 {
+  // much faster, but worse:
+  // return .5f * smoothstep(0.0, 2., fbm3(uv + vec2(.13f * time)) + fbm3(.829f * uv.yx - vec2(.13f * time)));
   vec2 q = vec2(0.);
-  q.x = fbm( uv + .00*time);
-  q.y = fbm( uv + vec2(1.0));
+  q.x = fbm3(uv + .00 * time);
+  q.y = fbm3(uv + vec2(1.0));
 
   vec2 r = vec2(0.);
-  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+ 0.15*time );
-  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+ 0.126*time);
-  float f = fbm(uv+r);
+  r.x = fbm(uv + 1.0 * q + vec2(1.7, 9.2) + 0.15 * time);
+  r.y = fbm(uv + 1.0 * q + vec2(8.3, 2.8) + 0.126 * time);
+  float f = fbm(uv + r);
 
-
-  
-  //vec3 partial_d = dFdx(frag_world_position);
   vec3 partial_d = dFdy(frag_world_position);
   float lenpd = length(partial_d);
-  
-  float divisor =  65.1f*lenpd;
 
-  divisor = max(1,divisor);
-  f = f/divisor;
-  //f = 0.2*f;
+  float divisor = 65.1f * lenpd;
+
+  divisor = max(1, divisor);
+  f = f / divisor;
+  // f = 0.2*f;
 
   float scale = 0.051f;
-  uv = scale*uv;
-  q.x = fbm( uv + .00*time);
-  q.y = fbm( uv + vec2(1.0));
-  r.x = fbm( uv + 1.0*q + vec2(1.7,9.2)+  scale*1.515*time );
-  r.y = fbm( uv + 1.0*q + vec2(8.3,2.8)+  scale*1.5126*time);
-  f = f + 3.f*fbm2(uv+r);
- 
+  uv = scale * uv;
+  q.x = fbm(uv + .00 * time);
+  q.y = fbm(uv + vec2(1.0));
+  r.x = fbm(uv + 1.0 * q + vec2(1.7, 9.2) + scale * 1.515 * time);
+  r.y = fbm(uv + 1.0 * q + vec2(8.3, 2.8) + scale * 1.5126 * time);
+  f = f + 3.f * fbm2(uv + r);
 
   return f;
 }
 
-float waterheightms(vec2 uv,float time)
+float ambient_waves(vec2 p, float timescale, int i)
 {
-     // vec3 partial_d = dFdx(frag_world_position);
-   vec3 partial_d = dFdy(frag_world_position);
+  // turb style:
+  return turb(p, timescale * 6 * time);
+
+  // fbm style:
+  float water_height = 0.f;
+  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(.9 * time, -.7 * time), .825960248501f, i);
+  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(-.85 * time, .8 * time), .825930248501f, i);
+  return water_height;
+}
+
+// terribly slow
+float waterheightms(vec2 uv, float time)
+{
+  // vec3 partial_d = dFdx(frag_world_position);
+  vec3 partial_d = dFdy(frag_world_position);
   float lenpd = length(partial_d);
 
-  float offset = 0.25f*lenpd;
+  float offset = 0.25f * lenpd;
 
-    float f0 = waterheight(uv,time);
-    vec2 o1 = vec2(0,offset);
-    vec2 o2 = vec2(offset,0);
-    vec2 o3 = vec2(0,-offset);
-    vec2 o4 = vec2(-offset,0);
+  float f0 = waterheight(uv, time);
+  vec2 o1 = vec2(0, offset);
+  vec2 o2 = vec2(offset, 0);
+  vec2 o3 = vec2(0, -offset);
+  vec2 o4 = vec2(-offset, 0);
 
   // float f1 = waterheight(uv+o1,time);
-//    float f2 = waterheight(uv-o2,time);
-   //float f3 = waterheight(uv+o3,time);
-//    float f4 = waterheight(uv+o4,time);
+  //    float f2 = waterheight(uv-o2,time);
+  // float f3 = waterheight(uv+o3,time);
+  //    float f4 = waterheight(uv+o4,time);
 
-    
-    
-    //float f = f0+f1+f2+f3+f4;
-    //f = f/5;
-   
-    
-    return f0;
+  // float f = f0+f1+f2+f3+f4;
+  // f = f/5;
+
+  return f0;
 }
 
-vec3 water(vec2 uv, float wave_scale, float height_scale, float water_time)
+const int ITER_GEOMETRY = 3;
+const int ITER_FRAGMENT = 1;
+const float SEA_HEIGHT = 1.5116;
+const float SEA_CHOPPY = .1000000100;
+const float SEA_SPEED = .31128;
+const float SEA_FREQ = .501010011015116;
+const vec3 SEA_BASE = vec3(0.0, 0.09, 0.18);
+const vec3 SEA_WATER_COLOR = vec3(0.8, 0.9, 0.6) * 0.6;
+#define SEA_TIME (1.0 + time * SEA_SPEED)
+const mat2 octave_m = mat2(1.6, 1.2, -1.2, 1.6);
+
+// sea
+float sea_octave(vec2 uv, float choppy)
 {
-  
-  float eps = 0.01f;
-  vec2 waterp = wave_scale*uv; 
-  float h = waterheightms(waterp,water_time);
-
-  vec2 dx_sample = vec2(waterp.x+eps,waterp.y);
-  float hdx = waterheightms(dx_sample,water_time);
-  vec3 pdx = vec3(dx_sample,hdx);
-  
-  vec2 dy_sample = vec2(waterp.x,waterp.y+eps);
-  float hdy = waterheightms(dy_sample,water_time);
-  vec3 pdy = vec3(dy_sample,hdy);
-  
-  vec3 wave_p = vec3(waterp,h);
-  vec3 right = normalize(pdx - wave_p);
-  vec3 forward = normalize(pdy - wave_p);
-  vec3 normal = cross(right,forward);
-  
-  return normalize(normal);
+  uv += noise(uv);
+  vec2 wv = 1.0 - abs(sin(uv));
+  vec2 swv = abs(cos(uv));
+  wv = mix(wv, swv, wv);
+  return pow(1.0 - pow(wv.x * wv.y, 0.65), choppy);
 }
 
+float map(vec3 p)
+{
 
+  float freq = SEA_FREQ;
+  float amp = SEA_HEIGHT;
+  float choppy = SEA_CHOPPY;
+  vec2 uv = p.xz;
+  uv.x *= 0.75;
 
+  float d, h = 0.0;
+  for (int i = 0; i < ITER_GEOMETRY; i++)
+  {
+    d = sea_octave((uv + SEA_TIME) * freq, choppy);
+    d += sea_octave((uv - SEA_TIME) * freq, choppy);
+    h += d * amp;
+    uv *= octave_m;
+    freq *= 1.9;
+    amp *= 0.22;
+    choppy = mix(choppy, 1.0, 0.2);
+  }
+  return p.y - h;
+}
+float map_detailed(vec3 p)
+{
+  float freq = SEA_FREQ;
+  float amp = SEA_HEIGHT;
+  float choppy = SEA_CHOPPY;
+  vec2 uv = p.xz;
+  uv.x *= 0.75;
+
+  float d, h = 0.0;
+  for (int i = 0; i < ITER_FRAGMENT; i++)
+  {
+    d = sea_octave((uv + SEA_TIME) * freq, choppy);
+    d += sea_octave((uv - SEA_TIME) * freq, choppy);
+    h += d * amp;
+    uv *= octave_m;
+    freq *= 1.9;
+    amp *= 0.22;
+    choppy = mix(choppy, 1.0, 0.2);
+  }
+  return p.y - h;
+}
+
+// tracing
+vec3 getNormal(vec3 p, float eps)
+{
+  p = 111.f * p;
+  vec3 n;
+  n.z = map_detailed(p);
+  n.x = map_detailed(vec3(p.x + eps, p.y, p.z)) - n.z;
+  n.y = map_detailed(vec3(p.x, p.y, p.z + eps)) - n.z;
+  n.z = eps;
+  return normalize(n);
+}
+
+vec3 getNormal2(vec3 p, float eps)
+{
+  vec3 n;
+  n.z = map(p);
+  n.x = map(vec3(p.x + eps, p.y, p.z)) - n.z;
+  n.y = map(vec3(p.x, p.y, p.z + eps)) - n.z;
+  n.z = eps;
+  return normalize(n);
+}
+
+vec3 get_water_normal()
+{
+  // newer not-really-working ambient waves:
+  float eps = 0.00004f;
+  vec3 partial_d = dFdx(frag_world_position);
+  float lenpd = length(partial_d);
+
+  vec2 waterp = 55.f * frag_world_position.xy;
+  float h = ambient_waves(waterp, 1.7310f, 4);
+  float hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), 1.7310f, 4);
+  float hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), 1.7310f, 4);
+  float dx = hdx - h;
+  float dy = hdy - h;
+  vec3 waternormalfine = normalize(vec3(dx, dy, lenpd * 5.f));
+
+  waterp = 3.1f * frag_world_position.xy;
+  h = ambient_waves(waterp, .2350f, 5);
+  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 5);
+  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .2350f, 5);
+  dx = hdx - h;
+  dy = hdy - h;
+  vec3 waternormallarge = normalize(vec3(dx, dy, lenpd * 3.75f));
+
+  vec3 waternormal = normalize(waternormalfine + waternormallarge);
+
+  waterp = .63231f * frag_world_position.xy;
+
+  h = ambient_waves(waterp, .12350f, 11);
+  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .12350f, 11);
+  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .12350f, 11);
+  dx = hdx - h;
+  dy = hdy - h;
+  vec3 waternormaltest = normalize(vec3(dx, dy, eps));
+  waternormaltest.z *= max(lenpd * 81121.f, .025251);
+  return normalize(waternormaltest);
+}
 
 void main()
 {
-  vec3 result = vec3(0);
 
-  vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
+  vec4 albedo_tex = texture2D(texture0, frag_uv);
   if (discard_on_alpha)
   {
-    if (albedo_tex.a < 0.3)
-      discard;
+    if (texture0_mod.a * albedo_tex.a < discard_threshold)
+    {
+      //discard;
+    }
   }
   gather_shadow_moments();
 
@@ -555,53 +774,37 @@ void main()
 
   Material m;
 
-  
-  float premultiply_alpha = albedo_tex.a;
-  if (alpha_albedo_override != -1.0f)
+
+  m.albedo = texture0_mod.rgb * albedo_tex.rgb;
+  if (multiply_albedo_by_a)
   {
-    premultiply_alpha = alpha_albedo_override;
+    m.albedo = texture0_mod.a * albedo_tex.a * m.albedo;
   }
-  premultiply_alpha *= texture0_mod.a;
 
-  m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
-
-  
-  
-  float dist_to_pixel = length(camera_position-frag_world_position);
+  float dist_to_pixel = length(camera_position - frag_world_position);
   float dist_factor = dist_to_pixel;
-  dist_factor = water_dist_scale*dist_factor;
+  dist_factor = water_dist_scale * dist_factor;
   dist_factor = 1.0f;
-  
-  //lets do less dist_factor when the camera is pointing at the surface
-  float surfdotv = 1.-dot(normalize(camera_position-frag_world_position),vec3(0,0,1));
 
-  surfdotv = clamp(surfdotv,0,1);
-  surfdotv = pow(surfdotv,surfdotv_exp);
+  // lets do less dist_factor when the camera is pointing at the surface
+  float surfdotv = 1. - dot(normalize(camera_position - frag_world_position), vec3(0, 0, 1));
 
- // dist_factor = surfdotv*dist_factor;
- // dist_factor = max(dist_factor,water_dist_min);
+  surfdotv = clamp(surfdotv, 0, 1);
+  surfdotv = pow(surfdotv, surfdotv_exp);
 
-
-  float height_scale = 1.0/pow(dist_factor,water_dist_exp);
-  //height_scale = clamp(height_scale,0,1);
-  //height_scale = 1.0/pow(dist_factor,1.5f);//sponge
+  float height_scale = 1.0 / pow(dist_factor, water_dist_exp);
   height_scale = 1.;
 
-  //SMALL WAVE PARAMETERS:
-  float height_scale1f = 0.35f*water_height_scale*height_scale;
-  float water_time1f = water_speed*time;
+  // SMALL WAVE PARAMETERS:
+  float height_scale1f = 0.35f * water_height_scale * height_scale;
+  float water_time1f = water_speed * time;
 
-  //height_scale = 1.0/pow(dist_factor,1.05);//sponge
-  //height_scale = .0325;
-  //height_scale = clamp(height_scale,0.000001,1);
-
-  //LARGE WAVE PARAMETERS:
-  float height_scale2f= height_scale2*height_scale;
- // height_scale2f = height_scale2;//sponge
-  float water_time2f = water_time2*time;
+  // LARGE WAVE PARAMETERS:
+  float height_scale2f = height_scale2 * height_scale;
+  float water_time2f = water_time2 * time;
 
   vec2 wateruv;
-  if(water_use_uv)
+  if (water_use_uv)
   {
     wateruv = frag_uv;
   }
@@ -609,46 +812,66 @@ void main()
   {
     wateruv = frag_world_position.xy;
   }
- 
 
+  // vec3 waternormal = water(wateruv,  water_scale,  height_scale1f,  water_time1f);
+  // vec3 waternormal2 = water(wateruv,  water_scale2,  height_scale2f,  water_time2f);
 
-  //vec3 waternormal = water(wateruv,  water_scale,  height_scale1f,  water_time1f);
-  //vec3 waternormal2 = water(wateruv,  water_scale2,  height_scale2f,  water_time2f);
-  
   vec3 partial_d = dFdx(frag_world_position);
   float lenpd = length(partial_d);
-  //vec3 vertical_scale_normal = vec3(0,0,0.1) + vec3(0,0,730.5*lenpd);
-  vec3 vertical_scale_normal = vec3(0,0,3.1) ;//+ vec3(0,0,1.5*lenpd);
- //waternormal = normalize(waternormal+waternormal2+vertical_scale_normal);
- vec3 waternormal = normalize(vertical_scale_normal+water(wateruv,  water_scale,  1.f,  water_time1f));
+  vec3 waternormal = get_water_normal();
+  // waternormal = vec3(0,0,1);
 
-  //float dy = nestedNoise(scale*vec2(waterp.x,waterp.y+eps));
+  vec4 velocity_sample = texture(texture12, frag_uv);
+  vec3 velocity = velocity_sample.r * vec3(-1, 0, 0) + velocity_sample.g * vec3(1, 0, 0) +
+                  velocity_sample.b * vec3(0, -1, 0) + velocity_sample.a * vec3(0, 1, 0);
 
+  vec2 fbmv = 4.f * vec2(pow(length(velocity), 1.2) / max(water_depth, 0.01));
+  // fbmv = smoothstep(75.1011f, 216.50f, fbmv + velocity.xy);
+  // fbmv = smoothstep(75.1011f, 216.50f, fbmv);
+  float mistlocation = smoothstep(0.05f, 3.f, length(fbmv));
+  // mistlocation =saturate(pow(31300.f * height_variance * smoothstep(.10, .15, pow(length(velocity), 0.85f)), 1.15));
 
+  float mistf1 =
+      fbm_n(150.f * frag_uv - vec2(time, .5f * time), 3) * fbm_n(160.f * frag_uv + vec2(.5f * time, time), 3);
+  float mistf2 = fbm_n(40.f * frag_uv - vec2(time, .5f * time), 1) + fbm_n(50.f * frag_uv + vec2(.5f * time, time), 1);
 
- // vec3 p2dy = p + vec3(waterp.x,waterp.y+dy,0);
-  //vec3 waternormal = vec3(dx,dy,0);
- // waternormal = 1400.*waternormal;
-  //waternormal = normalize(waternormal);
+  float mistf = 51.5f * pow(mistf1, 0.785f) * pow(mistf2, 0.685f);
 
+  float mist_dist_fade = min(1. / (.03 * pow(dist_to_pixel, 2)), 1);
+  float mist_dist_fade2 = min(1. / (.0004 * pow(dist_to_pixel, 2)), 1);
+  mistf1 = fbm_h_n(6150.f * frag_uv - 0.21f * vec2(time, .5f * time), .120f, 3) *
+           fbm_h_n(6160.f * frag_uv + 0.21f * vec2(.5f * time, time), .120f, 3);
+  mistf2 = fbm_h_n(240.f * frag_uv - 0.21f * vec2(time, .5f * time), .5120f, 5) +
+           fbm_h_n(250.f * frag_uv + 0.21f * vec2(.5f * time, time), .5120f, 5);
 
+  mistf1 = .51051 * mistf1;
+  mistf2 = .11 * pow(mistf2, 3);
 
-  m.normal = TBN*waternormal;
-   
-  m.roughness = 0.03;
+  // good:
+  // mistf = smoothstep(0, 35, mistf1* mistf2);
+  mistf = mist_dist_fade * mistf1 * mist_dist_fade2 * mistf2;
+  mistf = .1 * mistf1 * mistf2;
 
+  m.albedo = mix(m.albedo, vec3(mistf), mistlocation);
+  m.normal = normalize(TBN * waternormal);
+  m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
+  // m.roughness = mix(m.roughness, .6, mistlocation);
   m.ambient_occlusion = texture5_mod.r * texture2D(texture5, frag_uv).r;
+  m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
 
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.02); //0.02 F0 for water
-  F0 =  vec3(0.12);
-  float ndotv = clamp(dot(m.normal, v),0,1);
-  
+  vec3 F0 = vec3(dielectric_reflectivity); // 0.02 F0 for water
+  F0 = mix(F0, m.albedo, m.metalness);
+  // F0 = vec3(0.9512);
+  float ndotv = clamp(dot(m.normal, v), 0, 1); // allowing the backface ndotv to contribute for water
+
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
-  
+  vec3 debug = vec3(-9);
   vec3 direct_ambient = vec3(0);
+  vec3 direct_specular = vec3(0);
+  vec3 direct_diffuse = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
     vec3 l = lights[i].position - p;
@@ -683,35 +906,33 @@ void main()
       }
       if (shadow_map_enabled)
       {
-        float light_visibility = chebyshevUpperBound(
-            shadow_moments, shadow_space_postw.z, max_variance[i]);
+        float light_visibility = chebyshevUpperBound(shadow_moments, shadow_space_postw.z, max_variance[i]);
         visibility = visibility * light_visibility;
       }
     }
     // direct light
     float ndotl = saturate(dot(m.normal, l));
-    //we want to let light through the opposite side
-    //for diffuse component, but if we use ndotl, we get a seam
-    //at 90 degrees, so we use average of ndotl: 0.5
-    //but since the light is going through both sides
-    //we halve that again for conservation of energy
+    // we want to let light through the opposite side
+    // for diffuse component, but if we use ndotl, we get a seam
+    // at 90 degrees, so we use average of ndotl: 0.5
+    // but since the light is going through both sides
+    // we halve that again for conservation of energy
     float diffuse_ndotl = 0.25;
 
     float ndoth = saturate(dot(m.normal, h));
     float vdoth = saturate(dot(v, h));
     // float G = G_smith_GGX_denom(a,ndotv,ndotl);
     // specular brdf
-    vec3 F = F_schlick(F0, ndoth);
-    F = F_schlick(F0, 0.5f);
-    if(dot(m.normal, l) <0.0)
+
+    vec3 F = F_schlick(F0, ndoth); // sponge
+    //    F = F_schlick(F0, 0.5f);
+    if (dot(m.normal, l) < 0.0)
     {
-       // F = 0.1 + (F*0.9);
-
+      // F = 0.1 + (F*0.9);
     }
-
-
-
+    // vec3 F = fresnelSchlickRoughness(clamp(ndotv,0,1), F0, m.roughness);
     float G = G_smith_schlick_GGX_direct(m.roughness, ndotv, ndotl);
+    // float G = clamp(G_smith_GGX(m.roughness, vdoth, ndotl),0,1);
     float D = D_ggx(m.roughness, ndoth);
     float denominator = max(4.0f * ndotl * ndotv, 0.000001);
     vec3 specular = (F * G * D) / denominator;
@@ -719,107 +940,197 @@ void main()
     // specular result
     vec3 specular_result = radiance * specular;
     // diffuse result
-    //F = F0;
+    // F = F0;
     vec3 Kd = 1.0f - F;
     vec3 diffuse = Kd * m.albedo / PI;
     vec3 diffuse_result = radiance * diffuse;
 
-    //this is where we used the special diffuse ndotl
-    //specular is occluded on the back, and diffuse is let through
-    
-    result += specular_result*ndotl* visibility;
-    result += diffuse_result*diffuse_ndotl* visibility;
+    // this is where we used the special diffuse ndotl
+    // specular is occluded on the back, and diffuse is let through
 
-    //result += (specular_result + diffuse_result) * visibility * ndotl;
- 
+    direct_specular += specular_result * ndotl * visibility;
+    direct_diffuse += diffuse_result * ndotl * visibility;
+
+    // result += (specular_result + diffuse_result) * visibility * ndotl;
+
     direct_ambient += lights[i].ambient * at;
   }
 
-  // ambient light
- //m.roughness = mix(0,1,0.031*pow(dist_to_pixel,1.0/3.1));
-  //m.roughness = 0.1;
- // F0 = vec3(0.333);
- // m.metalness = 0.;
-  // ambient specular
+  vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
+  const float MAX_REFLECTION_LOD = 6.0;
 
-  
-  m.roughness = 0.131051;
-  m.metalness = 0.f;
-  
-  //vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
-  vec3 Ks = fresnelSchlickRoughness(1.f, F0, m.roughness);
-  //Ks = vec3(0.);
- // Ks = vec3(0);
-  //vec3 Ks = F_schlick(F0, ndotv);
-  //Ks = vec3(0.1);
-  const float MAX_REFLECTION_LOD = 5.0;
-  vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
-  vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
+  // dont reflect downward in the cubemap
+  // not the best but looks better because we know generally if we reflect downward
+  // we'd hit other water that would reflect back up
+  if (dot(r, vec3(0, 0, 1)) > 0)
+  {
+    r.z = -r.z;
+  }
 
-  vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
-  ambient_specular = mix(ambient_specular,m.albedo*ambient_specular,0.25f);
-  // ambient diffuse
+  float diffuse_loss = .120; //.315f; // lobe?
 
-  //as with direct diffuse, we want to let it bleed through
-  //and we want to keep conservation of energy
-  //lets sample both sides of the normal into the cubemap
-  //and average them
-  vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
-  //Kd = vec3(1.0f);
-  vec3 irradiance = texture(texture7, -m.normal).rgb;
-  //vec3 irradiance2 = texture(texture7, m.normal).rgb;
- // vec3 irradiance = 0.5f*(irradiance1 + irradiance2); 
-// vec3 irradiance = irradiance2;
-  vec3 ambient_diffuse = Kd * irradiance * m.albedo / PI;
-  // ambient result;
-  vec3 ambient = (ambient_specular + ambient_diffuse);
-
-  result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
-  result += m.emissive;
-  
-  //refraction sampling
-  vec3 refracted_view = normalize(refract(v,m.normal,index_of_refraction).xyz);
-
-  vec2 offset = vec2(dot(refracted_view,camera_right),dot(refracted_view,camera_up));
-  float inv_aspect = viewport_size.y/viewport_size.x;
-  offset.x = offset.x*inv_aspect;
-  offset = refraction_offset_factor*offset;
-
-  vec2 this_pixel = gl_FragCoord.xy/viewport_size;
+  // refraction sampling
+  vec3 refracted_view = normalize(refract(v, m.normal, index_of_refraction).xyz);
+  vec2 offset = vec2(dot(refracted_view, camera_right), dot(refracted_view, camera_up));
+  float inv_aspect = viewport_size.y / viewport_size.x;
+  offset.x = offset.x * inv_aspect;
+  // offset = refraction_offset_factor * offset; //sponge uniform offset factor
+  offset = .03f * offset;
+  offset = smoothstep(.01, .1f, water_depth) * offset;
+  // offset = vec2(0);
+  vec2 this_pixel = gl_FragCoord.xy / viewport_size;
   vec2 ref_sample_loc = this_pixel + offset;
-  //ref_sample_loc = ref_sample_loc;
-  if(ref_sample_loc.x < 0 || ref_sample_loc.x > 1)
+  if (ref_sample_loc.x < 0 || ref_sample_loc.x > 1)
   {
     ref_sample_loc.x = this_pixel.x;
-   // result = vec3(1,0,0);
-  }  
-  if(ref_sample_loc.y < 0 || ref_sample_loc.y > 1)
+  }
+  if (ref_sample_loc.y < 0 || ref_sample_loc.y > 1)
   {
     ref_sample_loc.y = this_pixel.y;
-   // result = vec3(1,0,0);
   }
 
-  vec4 refraction_src = texture2D(texture9,ref_sample_loc);
-  if(length(offset) > 0.00001)
+  float len_offset = length(offset);
+  if (isinf(len_offset) || isnan(len_offset))
   {
-    result = result + ((1.0-premultiply_alpha)*refraction_src.rgb);
+    ref_sample_loc = this_pixel;
   }
-  else
-  {
-   // result = vec3(1,0,0);
-  }
-  //float thet = 1.0-dot(waternormal,vec3(0,0,1));
- //result = ambient_specular;
 
- // result = vec3(waterheight(wateruv,  water_time1f));
+  // ambient specular
+  vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
+  vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
+  vec3 ambient_specular = diffuse_loss * mix(vec3(1), F0, m.metalness) * prefilteredColor *
+                          (mix(vec3(1), Ks, 1 - m.metalness) * envBRDF.x + envBRDF.y);
+
+  // ambient diffuse
+  vec3 Kd = diffuse_loss * vec3(1 - m.metalness) * (1.0 - Ks);
+  vec3 irradiance = texture(texture7, -m.normal).rgb; // likely also wrong for flipped y
+  vec3 ambient_diffuse = Kd * irradiance * m.albedo;
+
+
+  //refraction and volumentrics
+  vec4 refraction_src = texture2D(texture9, ref_sample_loc);
+
+  //which do we want?
+  //float scene_depth_sample = texture2D(texture10, ref_sample_loc).r;
+  float scene_depth_sample = texture2D(texture10, this_pixel).r;
+
+  //depth of scene behind this object
+  float depth_of_scene = linearize_depth(scene_depth_sample);
+
+
+  //1.0 or depth of the closest camera-facing backface
+  float this_object_backface_depth = linearize_depth(texture2D(texture13, this_pixel).r);
+
+  //typical z-depth value for this object
+  float this_object_frontface_depth = linearize_depth(gl_FragCoord.z);
+  
+  //thickness of this specific object, calculated using backfaces
+  float this_object_thickness = this_object_backface_depth - this_object_frontface_depth;
+    
+  //depth from frontface to to scene behind this object
+  float depth_to_scene = depth_of_scene-this_object_frontface_depth;
+
+  //fix that prevents refraction sampling from objects closer to the camera
+  if (linearize_depth(depth_of_scene) < this_object_frontface_depth - 0.011f)
+  { 
+    refraction_src = texture2D(texture9, this_pixel);
+    // depth_of_scene = texture2D(texture10, this_pixel).r; technically better but not needed
+  }
+
+  //this clamps our self depth to that of the ground behind the surface
+  //however this is going to be incorrect with a translucent object under the water surface
+  //if that object is writing depth data to the scene - which we changed it to do
+  //so that refraction can be layered
+  if(this_object_thickness > depth_to_scene)
+  {
+    this_object_thickness = depth_to_scene;
+  }
+
+  //for this shader we will just use the alpha channel as our volumetric absorb
+  float density = texture0_mod.a;
+
+  //i think this is incorrect anyway
+  //i believe physically based is /d rather than pow^d
+  float A = pow(1 - density, pow(200.f*this_object_thickness, 0.85f));
+  
+
+  //this looked wrong before, why?
+  //float A = 1./max((this_object_thickness*density),1.);
+  // A = saturate(    (1 * density)/depth_of_object       );      ?????
+
+
+
+  float trim_very_thin_water =
+      saturate(smoothstep(0.0015, 0.015, water_depth) + smoothstep(0.0015, 0.015, this_object_thickness));
+  float trim_very_thin_water2 = smoothstep(0.0005, 0.00445, water_depth);
+  float shore_fbm = saturate(0.45f * fbm_h_n(15.f * frag_world_position.xy + 2.f * vec2(sin(time)), 0.125f, 4));
+  float shore_fbm2 =
+      pow(saturate(.755f * fbm_h_n(1.5f * frag_world_position.xy + .65f * vec2(sin(time)), 0.8125f, 2)), 2);
+  float shore_t = shore_fbm2 * shore_fbm * (1 - smoothstep(.00, 0.001519f, water_depth));
+  
+  // light that reaches v from sea floor
+  //float rndotv = clamp(-dot(-m.normal, -refracted_view), 0, 1);
+  // vec3 rKs = fresnelSchlickRoughness(rndotv, F0, m.roughness);
+  // vec3 tD = (1 - rKs); // transmissive minus internal specular
+  vec3 tD = vec3(1.f);
+  vec3 transmission = tD * A * refraction_src.rgb;
+  vec3 total_specular = m.ambient_occlusion *(direct_specular + ambient_specular);
+  vec3 total_diffuse = m.ambient_occlusion *(direct_diffuse + ambient_diffuse);
+
+  vec3 mist_result = vec3(mistf * saturate(saturate(shore_t) + saturate(mistlocation)));
+  
+  
+  
+  //old result good:
+  //vec3 result = m.emissive + transmission + trim_very_thin_water * (1 - A) * max(total_diffuse + total_specular, vec3(0));
+
+  //not trimming thin water anymore:
+  vec3 result = m.emissive + transmission + (1 - A) * max(total_diffuse + total_specular, vec3(0));
+
+
+  //mist stuff:
+  // mist_result = vec3(mistf*shore_t) + vec3(mistf*mistlocation);
+  //result += (1 - A) * 2.f * mist_result * total_specular;
+  
  
-   if(blocking_terrain != 0.0f)// 0.015f)
+ 
+ 
+  if (debug != vec3(-9))
   {
-  float epsilon = 0.00001;
-   bool tile_light = (mod(frag_world_position.x+epsilon, 1) < 0.5) ^^ (mod(frag_world_position.y+epsilon, 1) < 0.5)^^ (mod(frag_world_position.z+epsilon, 1) < 0.5);
-    float value = float(tile_light);
-    result = vec3(0,value,0);
+    result = debug;
   }
 
-  out0 = vec4(result, premultiply_alpha);
+  // basic fog:
+  const float LOG2 = 1.442695;
+  float z = gl_FragCoord.z / gl_FragCoord.w;
+  float camera_relative_depth = length(frag_world_position - camera_position);
+  float randfog =
+      1.4 + 00.7 * fbm_h_n(.112f * (frag_world_position.xy + vec2(frag_world_position.z)) + vec2(.3f * time), .820f, 3);
+  z *= randfog;
+  randfog = 1;
+  float fogFactor = exp2(-.000015131f * randfog * z * z * LOG2);
+  fogFactor = clamp(fogFactor, 0.0, 1.0);
+  vec3 color = textureLod(texture6, v, 2).rgb;
+  result = mix(color, result, fogFactor);
+
+  /*
+    i think if u compare the pixel height to the height of the pixel sampled 1 lod lower u can get an idea for
+    if the pixel is generally lower or higher than the pixels around it and with this u can blend more towards green
+    than blue
+  */
+  
+  
+
+//
+//  if (multiply_result_by_a)
+//  {
+//    result = texture0_mod.a * albedo_tex.a * result;
+//  }
+//  float pixelalpha = albedo_tex.a;
+//  if (multiply_pixelalpha_by_moda)
+//  {
+//    pixelalpha = texture0_mod.a * pixelalpha;
+//  }
+
+  out0  = vec4(result, 1);
 }

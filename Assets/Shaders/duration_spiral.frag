@@ -32,7 +32,7 @@ float PI = 3.14159;
 
 vec4 compute(vec4 src, float progress)
 {
-  vec2 p = vec2(-(1.0 - frag_uv.y - 0.5), frag_uv.x - 0.5);  
+  vec2 p = vec2(-(1.0 - frag_uv.y - 0.5), frag_uv.x - 0.5);
 
   float progress_radians = progress * 2.0 * PI;
   float position_radians = atan(p.y, p.x) + PI;

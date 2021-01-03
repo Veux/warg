@@ -36,7 +36,7 @@ public:
   UID character = 0;
   Input last_input;
   Resource_Manager resource_manager;
-  Flat_Scene_Graph scene;
+  Scene_Graph scene;
   std::unique_ptr<Map> map;
   Game_State game_state;
 };
@@ -77,7 +77,7 @@ private:
   std::list<State_Prediction> predicted_states;
   std::list<Input> inputs;
   Resource_Manager resource_manager;
-  Flat_Scene_Graph scene;
+  Scene_Graph scene;
   std::unique_ptr<Map> map;
   uint32 input_counter = 0;
 };

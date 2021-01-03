@@ -10,6 +10,7 @@
 #include "Timer.h"
 #include "Scene_Graph.h"
 #include "UI.h"
+#include "State.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb/stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
@@ -47,10 +48,11 @@ const vec4 Conductor_Reflectivity::copper = vec4(0.95, 0.64, 0.54, 1.0f);
 const vec4 Conductor_Reflectivity::gold = vec4(1.0, 0.71, 0.29, 1.0f);
 const vec4 Conductor_Reflectivity::aluminum = vec4(0.91, 0.92, 0.92, 1.0f);
 const vec4 Conductor_Reflectivity::silver = vec4(0.95, 0.93, 0.88, 1.0f);
-const uint32 ENV_MAP_MIP_LEVELS = 6;
+const uint32 ENV_MAP_MIP_LEVELS = 7;
 static unordered_map<string, weak_ptr<Mesh_Handle>> MESH_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURE2D_CACHE;
 static unordered_map<string, weak_ptr<Texture_Handle>> TEXTURECUBEMAP_CACHE;
+shared_ptr<Texture_Handle> COPIED_TEXTURE_HANDLE;
 extern std::unordered_map<std::string, std::weak_ptr<Shader_Handle>> SHADER_CACHE;
 
 // if we overwrite an opengl object in a state thread that isnt the main thread
@@ -110,13 +112,9 @@ void Framebuffer::init()
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &current_fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
   glDrawBuffers(uint32(draw_buffers.size()), &draw_buffers[0]);
+  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
   if (depth_enabled)
-  {//sponge this is all pretty bad
-    //if (depth_size == ivec2(0))
-    {
-     // depth_size = color_attachments[0].t.size;
-    }
-
+  {
     if (use_renderbuffer_depth && depth == nullptr)
     {
       depth = make_shared<Renderbuffer_Handle>();
@@ -134,18 +132,18 @@ void Framebuffer::init()
       if (!depth_texture.texture)
       {
         depth_texture.t.size = depth_size;
-        depth_texture.t.format = GL_DEPTH_COMPONENT32F;
+        depth_texture.t.format = depth_format;
+
         if (depth_texture.t.name == "default")
           depth_texture.t.name = "some unnamed depth texture";
         depth_texture.t.source = "generate";
         depth_texture.load();
+        ASSERT(depth_texture.get_handle());
         glNamedFramebufferTexture(fbo->fbo, GL_DEPTH_ATTACHMENT, depth_texture.get_handle(), 0);
       }
     }
   }
-
   check_FBO_status(fbo->fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, current_fbo);
 }
 
 void Framebuffer::bind_for_drawing_dst()
@@ -153,7 +151,7 @@ void Framebuffer::bind_for_drawing_dst()
   ASSERT(fbo);
   ASSERT(fbo->fbo);
   glBindFramebuffer(GL_FRAMEBUFFER, fbo->fbo);
-  check_FBO_status(fbo->fbo);
+  // check_FBO_status();
 }
 
 Gaussian_Blur::Gaussian_Blur() {}
@@ -203,7 +201,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   gaussian_blur_shader.set_uniform("lod", uint32(1));
   gaussian_blur_shader.set_uniform("transform", fullscreen_quad());
-  src->bind(0);
+  src->bind_for_sampling_at(0);
 
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->quad.get_indices_buffer());
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
@@ -213,7 +211,7 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
   gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
   glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
 
-  intermediate_fbo.color_attachments[0].bind(0);
+  intermediate_fbo.color_attachments[0].bind_for_sampling_at(0);
 
   glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
 
@@ -224,13 +222,13 @@ void Gaussian_Blur::draw(Renderer *renderer, Texture *src, float32 radius, uint3
     glBindFramebuffer(GL_FRAMEBUFFER, intermediate_fbo.fbo->fbo);
     vec2 gaus_scale = vec2(aspect_ratio_factor * radius / dst_size->x, 0.0);
     gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
-    target.color_attachments[0].bind(0);
+    target.color_attachments[0].bind_for_sampling_at(0);
     glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
     gaus_scale.y = radius / dst_size->x;
     gaus_scale.x = 0;
     gaussian_blur_shader.set_uniform("gauss_axis_scale", gaus_scale);
     glBindFramebuffer(GL_FRAMEBUFFER, target.fbo->fbo);
-    intermediate_fbo.color_attachments[0].bind(0);
+    intermediate_fbo.color_attachments[0].bind_for_sampling_at(0);
     glDrawElements(GL_TRIANGLES, renderer->quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
   }
 
@@ -301,8 +299,8 @@ int32 save_texture(Texture *texture, std::string filename, uint32 level)
   if (is_float_format(texture->texture->internalformat))
   {
     uint32 comp = 4;
-    std::vector<float32> data(width * height * comp);
-    uint32 size = data.size() * sizeof(float32);
+    std::vector<float32> data((uint32)(width * height * comp));
+    uint32 size = uint32(data.size()) * (uint32)sizeof(float32);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
 
@@ -312,8 +310,8 @@ int32 save_texture(Texture *texture, std::string filename, uint32 level)
   else
   {
     uint32 comp = 4;
-    std::vector<uint8> data(width * height * comp);
-    uint32 size = data.size() * sizeof(uint8);
+    std::vector<uint8> data((uint32)(width * height * comp));
+    uint32 size = uint32(data.size()) * (uint32)sizeof(uint8);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
 
@@ -362,7 +360,7 @@ int32 save_texture_type(Texture *texture, std::string filename, std::string type
   {
     uint32 comp = 4;
     std::vector<float32> data(width * height * comp);
-    uint32 size = data.size() * sizeof(float32);
+    uint32 size = uint32(data.size()) * sizeof(float32);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_FLOAT, size, &data[0]);
 
@@ -373,7 +371,7 @@ int32 save_texture_type(Texture *texture, std::string filename, std::string type
   {
     uint32 comp = 4;
     std::vector<uint8> data(width * height * comp);
-    uint32 size = data.size() * sizeof(uint8);
+    uint32 size = uint32(data.size()) * sizeof(uint8);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glGetTextureImage(texture->texture->texture, level, GL_RGBA, GL_UNSIGNED_BYTE, size, &data[0]);
 
@@ -450,11 +448,25 @@ void dump_gl_float32_buffer(GLenum target, GLuint buffer, uint32 parse_stride)
   set_message("GL buffer dump: ", result);
 }
 
+Texture::Texture(std::shared_ptr<Texture_Handle> texture)
+{
+  t.name = s("Created from copied handle of: ", texture->filename);
+  t.source = texture->filename;
+  t.size = texture->size;
+  t.format = texture->internalformat;
+  t.key = s(t.source, ",", t.format);
+  t.wrap_s = texture->wrap_s;
+  t.wrap_t = texture->wrap_t;
+  t.minification_filter = texture->minification_filter;
+  t.magnification_filter = texture->magnification_filter;
+  t.levels = texture->levels;
+  this->texture = texture;
+}
+
 Texture::Texture(Texture_Descriptor &td)
 {
   t = td;
   t.key = s(t.source, ",", t.format);
-  // load(); why arent we calling load anymore?
 }
 
 Texture::Texture(const char *file_path)
@@ -570,20 +582,20 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
   glDepthFunc(GL_LESS);
-  // glEnable(GL_FRAMEBUFFER_SRGB);
+  glEnable(GL_FRAMEBUFFER_SRGB);
   glEnable(GL_SCISSOR_TEST);
 
   for (uint32 mip_level = 0; mip_level < ENV_MAP_MIP_LEVELS; ++mip_level)
   {
     uint32 width = (uint32)floor(size.x * pow(0.5, mip_level));
     uint32 height = (uint32)floor(size.y * pow(0.5, mip_level));
-    uint32 xf = floor(width / ibl_tile_max);
+    uint32 xf = (uint32)floor(width / ibl_tile_max);
     uint32 x = tilex * xf;
-    uint32 draw_width = ceil(float32(width) / ibl_tile_max);
+    uint32 draw_width = (uint32)ceil(float32(width) / ibl_tile_max);
 
-    uint32 yf = floor(height / ibl_tile_max);
+    uint32 yf = (uint32)floor(height / ibl_tile_max);
     uint32 y = tiley * yf;
-    uint32 draw_height = ceil(float32(height) / ibl_tile_max);
+    uint32 draw_height = (uint32)ceil(float32(height) / ibl_tile_max);
 
     glViewport(0, 0, width, height);
 
@@ -593,6 +605,7 @@ void Texture_Handle::generate_ibl_mipmaps(float32 time)
     glScissor(x - 15, y - 15, draw_width + 33, draw_height + 33);
     float roughness = (float)mip_level / (float)(ENV_MAP_MIP_LEVELS - 1);
     specular_filter.set_uniform("roughness", roughness);
+    specular_filter.set_uniform("size", float32(size.x));
     for (unsigned int i = 0; i < 6; ++i)
     {
       specular_filter.set_uniform("camera", cameras[i]);
@@ -657,9 +670,10 @@ void Texture::load()
 
         if (ready == GL_SIGNALED)
         {
+          t.size = texture->size;
           glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
           glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
-          ASSERT(texture->internalformat != 0);
+
           glTextureStorage2D(texture->texture, t.levels, texture->internalformat, texture->size.x, texture->size.y);
           glTextureSubImage2D(
               texture->texture, 0, 0, 0, texture->size.x, texture->size.y, GL_RGBA, texture->datatype, 0);
@@ -729,7 +743,7 @@ void Texture::load()
 
     TEXTURE2D_CACHE[t.key] = texture;
     texture->internalformat = GL_SRGB8_ALPHA8;
-    texture->size = ivec2(1);
+    t.size = texture->size = ivec2(1);
     texture->datatype = GL_UNSIGNED_BYTE;
     uint8 arr[4] = {255, 255, 255, 255};
     glCreateTextures(GL_TEXTURE_2D, 1, &texture->texture);
@@ -747,7 +761,7 @@ void Texture::load()
       texture->filename = t.name + " - FILE MISSING";
       TEXTURE2D_CACHE[t.key] = texture;
       texture->internalformat = GL_SRGB8_ALPHA8;
-      texture->size = ivec2(1);
+      t.size = texture->size = ivec2(1);
       texture->datatype = GL_UNSIGNED_BYTE;
       texture->levels = t.levels;
       uint8 arr[4] = {255, 255, 255, 255};
@@ -760,15 +774,21 @@ void Texture::load()
     TEXTURE2D_CACHE[t.key] = texture;
 
     struct stat attr;
-    stat(t.name.c_str(), &attr);
+    stat(t.source.c_str(), &attr);
     texture.get()->file_mod_t = attr.st_mtime;
 
+    if (t.name == "default")
+    {
+      t.name = t.source;
+    }
+
     t.size = texture->size = ivec2(imgdata.x, imgdata.y);
+    t.levels = 1 + floor(glm::log2(float32(glm::max(texture->size.x, texture->size.y))));
+    texture->levels = t.levels;
     texture->filename = t.name;
 
     texture->internalformat = t.format;
     texture->border_color = t.border_color;
-    texture->levels = t.levels;
 
     set_message(s("Texture load cache miss. Texture from disk: ", t.name,
                     "\nInternal_Format: ", texture_format_to_string(texture->internalformat)),
@@ -777,8 +797,10 @@ void Texture::load()
     glCreateBuffers(1, &texture->uploading_pbo);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture->uploading_pbo);
     glBufferData(GL_PIXEL_UNPACK_BUFFER, imgdata.data_size, imgdata.data, GL_STATIC_DRAW);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     PERF_TIMER.stop();
     texture->datatype = imgdata.data_type;
+
     stbi_image_free(imgdata.data);
     set_message("PERF:", PERF_TIMER.string_report(), 55.0f);
     set_message("SYNC STARTED FOR:", s(t.name, " ", t.source), 1.0f);
@@ -816,17 +838,17 @@ void Texture::check_set_parameters()
   }
 }
 
-bool Texture::bind(GLuint binding)
+bool Texture::bind_for_sampling_at(GLuint binding)
 {
   load();
   if (!texture)
   {
-    WHITE_TEXTURE.bind(binding);
+    WHITE_TEXTURE.bind_for_sampling_at(binding);
     return false;
   }
   if (texture->texture == 0)
   {
-    WHITE_TEXTURE.bind(binding);
+    WHITE_TEXTURE.bind_for_sampling_at(binding);
     return false;
   }
 
@@ -842,7 +864,7 @@ bool Texture::bind(GLuint binding)
     }
     else
     {
-      WHITE_TEXTURE.bind(binding);
+      WHITE_TEXTURE.bind_for_sampling_at(binding);
       return false;
     }
   }
@@ -894,53 +916,103 @@ void Mesh::draw()
 {
   load();
   mesh->enable_assign_attributes(); // also binds vao
+  if (!mesh->vao)
+  {
+    set_message("warning: draw called on mesh with no vao", "", 5.f);
+    return;
+  }
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->indices_buffer);
   glDrawElements(GL_TRIANGLES, mesh->indices_buffer_size, GL_UNSIGNED_INT, nullptr);
 }
 
 void Mesh_Handle::enable_assign_attributes()
 {
-  ASSERT(vao);
+  if (!vao)
+    return;
   glBindVertexArray(vao);
 
   if (position_buffer)
   {
     glEnableVertexAttribArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (normal_buffer)
   {
     glEnableVertexAttribArray(1);
     glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (uv_buffer)
   {
     glEnableVertexAttribArray(2);
     glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float32) * 2, 0);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (tangents_buffer)
   {
     glEnableVertexAttribArray(3);
     glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, 0);
   }
 
   if (bitangents_buffer)
   {
     glEnableVertexAttribArray(4);
     glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
-    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(float32) * 3, 0);
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  }
+
+  if (bone_indices_buffer)
+  {
+    glEnableVertexAttribArray(5);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_indices_buffer);
+    glVertexAttribIPointer(5, 4, GL_UNSIGNED_INT, GL_FALSE, 0);
+
+    glEnableVertexAttribArray(6);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
+    glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 0, 0);
+
+
+    ASSERT(6 < GL_MAX_VERTEX_ATTRIBS);
+    // glEnableVertexAttribArray(5);
+    // glVertexAttribPointer(5, 4, GL_INT, GL_FALSE, stride, 0);
+
+    // glEnableVertexAttribArray(6);
+    // glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, stride, (void *)(4 * sizeof(int32)));
+
+
+    /*
+    
+    
+    
+    
+    
+    When an array indexing expression, including struct field member accesses, results in an opaque types, the standard has special requirements on those array indices. Under GLSL version 3.30, Sampler arrays (the only opaque type 3.30 provides) can be declared, but they can only be accessed by compile-time integral Constant Expressions. So you cannot loop over an array of samplers, no matter what the array initializer, offset and comparison expressions are.
+
+Under GLSL 4.00 and above, array indices leading to an opaque value can be accessed by non-compile-time constants, but these index values must be dynamically uniform. The value of those indices must be the same value, in the same execution order, regardless of any non-uniform parameter values, for all shader invocations in the invocation group.
+
+For example, in 4.00, it is legal to loop over an array of samplers, so long as the loop index is based on constants and uniforms. So this is legal: 
+    
+    
+    
+    
+    */
+
+
+
   }
 }
 
 void Mesh_Handle::upload_data()
 {
+
+  if (descriptor.mesh_data.positions.size() == 0)
+    return;
+
   ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(vao == 0);
   Mesh_Data &mesh_data = descriptor.mesh_data;
@@ -962,44 +1034,112 @@ void Mesh_Handle::upload_data()
   glGenBuffers(1, &tangents_buffer);
   glGenBuffers(1, &bitangents_buffer);
 
-  uint32 positions_buffer_size = mesh_data.positions.size();
-  uint32 normal_buffer_size = mesh_data.normals.size();
-  uint32 uv_buffer_size = mesh_data.texture_coordinates.size();
-  uint32 tangents_size = mesh_data.tangents.size();
-  uint32 bitangents_size = mesh_data.bitangents.size();
-  uint32 indices_buffer_size = mesh_data.indices.size();
-
+  uint32 positions_buffer_size = uint32(mesh_data.positions.size());
+  uint32 normal_buffer_size = uint32(mesh_data.normals.size());
+  uint32 uv_buffer_size = uint32(mesh_data.texture_coordinates.size());
+  uint32 tangents_size = uint32(mesh_data.tangents.size());
+  uint32 bitangents_size = uint32(mesh_data.bitangents.size());
+  uint32 indices_buffer_size = uint32(mesh_data.indices.size());
   ASSERT(all_equal(positions_buffer_size, normal_buffer_size, uv_buffer_size, tangents_size, bitangents_size));
 
   // positions
-  uint32 buffer_size = mesh_data.positions.size() * sizeof(decltype(mesh_data.positions)::value_type);
+  uint32 buffer_size = (uint32)mesh_data.positions.size() * (uint32)sizeof(decltype(mesh_data.positions)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, position_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.positions[0], GL_STATIC_DRAW);
 
   // normals
-  buffer_size = mesh_data.normals.size() * sizeof(decltype(mesh_data.normals)::value_type);
+  buffer_size = (uint32)mesh_data.normals.size() * (uint32)sizeof(decltype(mesh_data.normals)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, normal_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.normals[0], GL_STATIC_DRAW);
 
   // texture_coordinates
-  buffer_size = mesh_data.texture_coordinates.size() * sizeof(decltype(mesh_data.texture_coordinates)::value_type);
+  buffer_size = (uint32)mesh_data.texture_coordinates.size() *
+                (uint32)sizeof(decltype(mesh_data.texture_coordinates)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, uv_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.texture_coordinates[0], GL_STATIC_DRAW);
 
   // indices
-  buffer_size = mesh_data.indices.size() * sizeof(decltype(mesh_data.indices)::value_type);
+  buffer_size = (uint32)mesh_data.indices.size() * (uint32)sizeof(decltype(mesh_data.indices)::value_type);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices_buffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer_size, &mesh_data.indices[0], GL_STATIC_DRAW);
 
   // tangents
-  buffer_size = mesh_data.tangents.size() * sizeof(decltype(mesh_data.tangents)::value_type);
+  buffer_size = (uint32)mesh_data.tangents.size() * (uint32)sizeof(decltype(mesh_data.tangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, tangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.tangents[0], GL_STATIC_DRAW);
 
   // bitangents
-  buffer_size = mesh_data.bitangents.size() * sizeof(decltype(mesh_data.bitangents)::value_type);
+  buffer_size = (uint32)mesh_data.bitangents.size() * (uint32)sizeof(decltype(mesh_data.bitangents)::value_type);
   glBindBuffer(GL_ARRAY_BUFFER, bitangents_buffer);
   glBufferData(GL_ARRAY_BUFFER, buffer_size, &mesh_data.bitangents[0], GL_STATIC_DRAW);
+
+  if (mesh_data.bone_weights.size())
+  {
+
+    size_t vertex_count = mesh_data.bone_weights.size();
+
+
+    ASSERT(vertex_count == mesh_data.positions.size());
+
+    buffer_size = vertex_count * sizeof(Vertex_Bone_Data);
+
+    // sponge repack this for cache
+
+    std::vector<uvec4> temp1;
+    std::vector<vec4> temp2;
+    temp1.resize(vertex_count);
+    temp2.resize(vertex_count);
+
+    uint32 max_index = 0;
+    uint32 min_index = 100000;
+
+    for (size_t i = 0; i < vertex_count; ++i)
+    {
+      uvec4 *a = (uvec4 *)&mesh_data.bone_weights[i].indices[0];
+      temp1[i] = *a;
+
+      // temp1[i] = ivec4(5);
+
+      max_index = max(max_index, a->r);
+      max_index = max(max_index, a->g);
+      max_index = max(max_index, a->b);
+      max_index = max(max_index, a->a);
+
+      min_index = min(min_index, a->r);
+      min_index = min(min_index, a->g);
+      min_index = min(min_index, a->b);
+      min_index = min(min_index, a->a);
+
+      float32 *b = &mesh_data.bone_weights[i].weights[0];
+      vec4 weight_v = vec4(*b, *(b + 1), *(b + 2), *(b + 3));
+
+      float32 sum = weight_v.x + weight_v.y + weight_v.z + weight_v.w;
+      ASSERT(sum < 1.1f || sum > -0.1f);
+
+
+      //the shader says its reading values out of range of max bones..............
+      //yet we upload them right here
+
+      temp2[i] = weight_v;
+    }
+
+
+    int a = sizeof(uvec4);
+    int b = sizeof(vec4);
+
+    if (max_index > MAX_BONES || min_index < 0)
+    {
+      ASSERT(0);
+    }
+
+    glGenBuffers(1, &bone_indices_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_indices_buffer);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(uint32) * 4, &(temp1[0]), GL_STATIC_DRAW);
+
+    glGenBuffers(1, &bone_weight_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
+    glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(float32) * 4, &(temp2[0]), GL_STATIC_DRAW);
+  }
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
@@ -1149,7 +1289,7 @@ void Material::load()
   {
     descriptor.frag_shader = DEFAULT_FRAG_SHADER;
   }
-
+  descriptor.derivative_offset = default_md.derivative_offset;
   shader = Shader(descriptor.vertex_shader, descriptor.frag_shader);
   reload_from_descriptor = false;
 }
@@ -1164,49 +1304,62 @@ void Material::bind()
     glDisable(GL_CULL_FACE);
 
   shader.use();
-
   shader.set_uniform("discard_on_alpha", descriptor.discard_on_alpha);
+  shader.set_uniform("include_ao_in_uv_scale", descriptor.include_ao_in_uv_scale);
+  shader.set_uniform("discard_threshold", descriptor.discard_threshold);
+  shader.set_uniform("dielectric_reflectivity", descriptor.dielectric_reflectivity);
+  shader.set_uniform("index_of_refraction", descriptor.ior);
 
-  bool success = albedo.bind(Texture_Location::albedo);
-  shader.set_uniform("texture0_mod", albedo.t.mod * albedo.t.mod);
+  // if (shader.vs == "displacement.vert")
+  {
+    shader.set_uniform("derivative_offset", descriptor.derivative_offset);
+    // ASSERT(descriptor.derivative_offset != 0.0);
+  }
 
-  success = emissive.bind(Texture_Location::emissive);
-  shader.set_uniform("texture1_mod", emissive.t.mod * emissive.t.mod);
+  bool success = albedo.bind_for_sampling_at(Texture_Location::albedo);
+  shader.set_uniform("texture0_mod", albedo.t.mod);
+
+  success = emissive.bind_for_sampling_at(Texture_Location::emissive);
+  shader.set_uniform("texture1_mod", emissive.t.mod);
   if (!success)
   {
     shader.set_uniform("texture1_mod", DEFAULT_EMISSIVE);
   }
 
-  success = roughness.bind(Texture_Location::roughness);
-  shader.set_uniform("texture2_mod", roughness.t.mod * roughness.t.mod);
+  success = roughness.bind_for_sampling_at(Texture_Location::roughness);
+  shader.set_uniform("texture2_mod", roughness.t.mod);
   if (!success)
   {
     shader.set_uniform("texture2_mod", DEFAULT_ROUGHNESS);
   }
 
-  success = normal.bind(Texture_Location::normal);
+  success = normal.bind_for_sampling_at(Texture_Location::normal);
   shader.set_uniform("texture3_mod", normal.t.mod);
   if (!success)
   {
     shader.set_uniform("texture3_mod", DEFAULT_NORMAL);
   }
 
-  success = metalness.bind(Texture_Location::metalness);
+  success = metalness.bind_for_sampling_at(Texture_Location::metalness);
   shader.set_uniform("texture4_mod", metalness.t.mod * metalness.t.mod);
   if (!success)
   {
     shader.set_uniform("texture4_mod", DEFAULT_METALNESS);
   }
 
-  success = displacement.bind(Texture_Location::displacement);
+  success = displacement.bind_for_sampling_at(Texture_Location::displacement);
   shader.set_uniform("texture11_mod", displacement.t.mod);
   if (!success)
   {
     shader.set_uniform("texture11_mod", DEFAULT_DISPLACEMENT);
   }
 
-  success = ambient_occlusion.bind(Texture_Location::ambient_occlusion);
+  success = ambient_occlusion.bind_for_sampling_at(Texture_Location::ambient_occlusion);
   shader.set_uniform("texture5_mod", ambient_occlusion.t.mod);
+
+  shader.set_uniform("multiply_albedo_by_a", descriptor.multiply_albedo_by_alpha);
+  shader.set_uniform("multiply_result_by_a", descriptor.multiply_result_by_alpha);
+  shader.set_uniform("multiply_pixelalpha_by_moda", descriptor.multiply_pixelalpha_by_moda);
 
   for (auto &uniform : descriptor.uniform_set.float32_uniforms)
   {
@@ -1240,38 +1393,21 @@ void Material::bind()
   {
     shader.set_uniform(uniform.first.c_str(), uniform.second);
   }
+  for (auto &uniform : descriptor.uniform_set.texture_uniforms)
+  {
+    uniform.second.bind_for_sampling_at(uniform.first);
+  }
 }
 
-//
-// bool Light::operator==(const Light &rhs) const
-//{
-//  bool b1 = position == rhs.position;
-//  bool b2 = direction == rhs.direction;
-//  bool b3 = color == rhs.color;
-//  bool b4 = attenuation == rhs.attenuation;
-//  bool b5 = ambient == rhs.ambient;
-//  bool b6 = cone_angle == rhs.cone_angle;
-//  bool b7 = type == rhs.type;
-//  bool b8 = brightness == rhs.brightness;
-//  return b1 & b2 & b3 & b4 & b5 & b6 & b7 & b8;
-//}
-//
-// bool Light_Array::operator==(const Light_Array &rhs)
-//{
-//  if (light_count != rhs.light_count)
-//    return false;
-//  if (lights != rhs.lights)
-//  {
-//    return false;
-//  }
-//  if (additional_ambient != rhs.additional_ambient)
-//  {
-//    return false;
-//  }
-//  return true;
-//}
 Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index)
     : mesh(mesh), material(material), transformation(world_to_model), name(n), node(node_index)
+{
+  ASSERT(mesh);
+  ASSERT(material);
+}
+Render_Entity::Render_Entity(Array_String n, Mesh *mesh, Material *material, Skeletal_Animation_State *animation,
+    mat4 world_to_model, Node_Index node_index)
+    : mesh(mesh), material(material), animation(animation), transformation(world_to_model), name(n), node(node_index)
 {
   ASSERT(mesh);
   ASSERT(material);
@@ -1293,10 +1429,10 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
 
   glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
   set_message("Initializing renderer...");
-  Mesh_Descriptor md(plane, "RENDERER's PLANE");
+  Mesh_Descriptor md(plane, "mesh primitive plane");
   quad = Mesh(md);
 
-  cube = Mesh({Mesh_Primitive::cube, "RENDERER's SKYBOX"});
+  cube = Mesh({Mesh_Primitive::cube, "mesh primitive cube"});
 
   Texture_Descriptor uvtd;
   uvtd.name = "uvgrid.png";
@@ -1314,7 +1450,7 @@ Renderer::Renderer(SDL_Window *window, ivec2 window_size, string name)
   brdf_lut_generator.set_uniform("transform", mat);
   set_message("drawing brdf lut..", "", 1.0f);
   quad.draw();
-  // save_and_log_texture(brdf_integration_lut.texture->texture);
+  save_texture(&brdf_integration_lut, "brdflut");
 
   Texture_Descriptor white_td;
 
@@ -1330,7 +1466,7 @@ void Renderer::bind_white_to_all_textures()
 {
   for (uint32 i = 0; i <= Texture_Location::displacement; ++i)
   {
-    WHITE_TEXTURE.bind(Texture_Location(i));
+    WHITE_TEXTURE.bind_for_sampling_at(Texture_Location(i));
   }
 }
 
@@ -1346,7 +1482,7 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
     const Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
 
     if (shadow_map->enabled)
-      spotlight_shadow_maps[i].blur.target.color_attachments[0].bind(Texture_Location::s0 + i);
+      spotlight_shadow_maps[i].blur.target.color_attachments[0].bind_for_sampling_at(Texture_Location::s0 + i);
 
     const mat4 offset = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.5, 0.5, 0.5, 1.0);
     const mat4 shadow_map_transform = offset * shadow_map->projection_camera;
@@ -1374,9 +1510,114 @@ void Renderer::set_uniform_shadowmaps(Shader &shader)
   }
 }
 
+void blit_attachment(Framebuffer &src, Framebuffer &dst)
+{
+  glBlitNamedFramebuffer(src.fbo->fbo, dst.fbo->fbo, 0, 0, src.color_attachments[0].t.size.x,
+      src.color_attachments[0].t.size.y, 0, 0, dst.color_attachments[0].t.size.x, dst.color_attachments[0].t.size.y,
+      GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+}
+
 mat4 fullscreen_quad()
 {
   return scale(vec3(2, 2, 1));
+}
+
+void draw_texture_handle_info(shared_ptr<Texture_Handle> ptr)
+{
+  if (!ptr.get())
+  {
+    ImGui::Text("No texture");
+    return;
+  }
+  uint32 addr = (uint32)ptr.get();
+  std::stringstream ss;
+  ss << std::hex << addr;
+  std::string str = ss.str();
+  ImGui::Text(s("Heap Address:", str).c_str());
+  ImGui::SameLine();
+  if (ImGui::Button("Copy Handle"))
+  {
+    COPIED_TEXTURE_HANDLE = ptr;
+  }
+  ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
+  ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
+
+  const char *min_filter_result = filter_format_to_string(ptr->minification_filter);
+  const char *mag_filter_result = filter_format_to_string(ptr->magnification_filter);
+  bool min_good = strcmp(min_filter_result, filter_format_to_string(GL_LINEAR_MIPMAP_LINEAR)) == 0;
+  bool mag_good = strcmp(mag_filter_result, filter_format_to_string(GL_LINEAR)) == 0;
+  ImGui::Text("Minification filter:");
+  ImGui::SameLine();
+  if (min_good)
+  {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), min_filter_result);
+  }
+  else
+  {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), min_filter_result);
+  }
+
+  ImGui::Text("Magnification filter:");
+  ImGui::SameLine();
+  if (mag_good)
+  {
+    ImGui::TextColored(ImVec4(0, 1, 0, 1), mag_filter_result);
+  }
+  else
+  {
+    ImGui::TextColored(ImVec4(1, 0, 0, 1), mag_filter_result);
+  }
+
+  ImGui::Text("Format:");
+  ImGui::SameLine();
+  ImGui::TextColored(ImVec4(1, 0, 1, 1), texture_format_to_string(ptr->internalformat));
+
+  if (ptr->is_cubemap)
+  {
+    ImGui::Text("Type:");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1, 0, 1, 1), "Cubemap");
+  }
+  else
+  {
+    ImGui::Text("Type:");
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(1, 0, 1, 1), "Texture2D");
+  }
+  ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
+  Imgui_Texture_Descriptor descriptor;
+  descriptor.ptr = ptr;
+  GLenum format = descriptor.ptr->get_format();
+  bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
+                    format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
+
+  descriptor.gamma_encode = gamma_flag;
+  descriptor.is_cubemap = ptr->is_cubemap;
+  ImGui::Checkbox("Use alpha in thumbnail", &ptr->imgui_use_alpha);
+  ImGui::SetNextItemWidth(200);
+  ImGui::DragFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.02f);
+  uint32 mip_levels = ptr->levels;
+  ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
+  ImGui::SetNextItemWidth(200);
+  ImGui::SliderFloat("Mipmap LOD", &ptr->imgui_mipmap_setting, 0.f, float32(mip_levels), "%.2f");
+  descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
+  descriptor.aspect = (float32)ptr->size.x / (float32)ptr->size.y;
+  descriptor.size = ptr->imgui_size_scale * vec2(256);
+  descriptor.y_invert = false;
+  descriptor.use_alpha = ptr->imgui_use_alpha;
+  put_imgui_texture(&descriptor);
+
+  if (ImGui::TreeNode("List Mipmaps"))
+  {
+    for (uint32 i = 0; i < mip_levels; ++i)
+    {
+      Imgui_Texture_Descriptor d = descriptor;
+      d.mip_lod_to_draw = (float)i;
+      d.is_mipmap_list_command = true;
+      put_imgui_texture(&d);
+    }
+    ImGui::TreePop();
+  }
 }
 
 void Renderer::draw_imgui()
@@ -1423,11 +1664,35 @@ void Renderer::draw_imgui()
       }
     }
 
-    if (ImGui::CollapsingHeader("GPU Textures"))
-    { // todo improve texture names for generated textures
+    if (ImGui::Button("Tonemapping"))
+    {
+      show_tonemap = !show_tonemap;
+    }
+    ImGui::Checkbox("Depth Prepass", &do_depth_prepass);
 
+    static float32 tempscale = render_scale;
+    ImGui::SliderFloat("scale", &tempscale, 0.05f, 2.f);
+    static float32 tempfov = vfov;
+    ImGui::SliderFloat("fov", &tempfov, 0.f, 360.f);
+    set_render_scale(tempscale);
+    set_vfov(tempfov);
+    if (show_tonemap)
+    {
+      ImGui::Begin("Tonemapping", &show_tonemap);
+      ImGui::DragFloat("Exposure", &exposure, 0.0001f, 0.f, 20.f, "%.3f", 2.5f);
+      ImGui::ColorPicker3("Exposure Color", &exposure_color[0]);
+      ImGui::InputInt("tonemapper", &selected_tonemap_function);
+
+      ImGui::End();
+    }
+    if (ImGui::CollapsingHeader("Copied Texture"))
+    {
+      draw_texture_handle_info(COPIED_TEXTURE_HANDLE);
+    }
+    if (ImGui::CollapsingHeader("GPU Textures"))
+    {
       ImGui::Indent(5);
-      vector<Imgui_Texture_Descriptor> imgui_texture_array; // all the unique textures
+      vector<Imgui_Texture_Descriptor> imgui_texture_array;
       for (auto &tex : TEXTURE2D_CACHE)
       {
         auto ptr = tex.second.lock();
@@ -1464,47 +1729,32 @@ void Renderer::draw_imgui()
         Imgui_Texture_Descriptor *itd = &imgui_texture_array[i];
         shared_ptr<Texture_Handle> ptr = itd->ptr;
 
-        ImGui::PushID(s(i).c_str());
-        if (ImGui::TreeNode(ptr->peek_filename().c_str()))
+        const char *label = ptr->peek_filename().c_str();
+        ImGui::PushID(s(ptr->texture, label).c_str());
+        bool popped = false;
+        ImGuiWindow *window = ImGui::GetCurrentWindow();
+        ImGuiID id = window->GetID(label);
+        bool node_is_open = ImGui::TreeNodeBehaviorIsOpen(id, ImGuiTreeNodeFlags_Framed);
+        if (node_is_open)
         {
-          ImGui::Text(s("Heap Address:", (uint32)ptr.get()).c_str());
-          ImGui::Text(s("Ptr Refcount:", (uint32)ptr.use_count()).c_str());
-          ImGui::Text(s("OpenGL handle:", ptr->texture).c_str());
-          ImGui::Text(s("Format:", texture_format_to_string(ptr->internalformat)).c_str());
-
-          if (ptr->is_cubemap)
-            ImGui::Text(s("Type:", "Cubemap").c_str());
-          else
-            ImGui::Text(s("Type:", "Texture2D").c_str());
-          ImGui::Text(s("Size:", ptr->size.x, "x", ptr->size.y).c_str());
-          Imgui_Texture_Descriptor descriptor;
-          descriptor.ptr = ptr;
-          GLenum format = descriptor.ptr->get_format();
-          bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F ||
-                            format == GL_RGBA32F || format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
-
-          ImGui::InputFloat("Thumbnail Size", &ptr->imgui_size_scale, 0.1f);
-          ImGui::InputFloat("LOD", &ptr->imgui_mipmap_setting, 0.1f);
-          descriptor.mip_lod_to_draw = ptr->imgui_mipmap_setting;
-          descriptor.size = ptr->imgui_size_scale * vec2(256);
-          descriptor.y_invert = true;
-          put_imgui_texture(&descriptor);
-
-          if (ImGui::TreeNode("List Mipmaps"))
-          {
-            uint32 mip_levels = ptr->levels;
-            ImGui::Text(s("Mipmap levels: ", mip_levels).c_str());
-            for (uint32 i = 0; i < mip_levels; ++i)
-            {
-              Imgui_Texture_Descriptor d = descriptor;
-              d.mip_lod_to_draw = (float)i;
-              d.is_mipmap_list_command = true;
-              put_imgui_texture(&d);
-            }
-            ImGui::TreePop();
-          }
-          ImGui::TreePop();
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 255, 0, 1));
         }
+        else
+        {
+          ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(255, 0, 0, 1));
+        }
+        if (ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_Framed))
+        {
+          ImGui::PopStyleColor();
+          popped = true;
+          float32 indent_width = 25;
+          ImGui::Indent(indent_width);
+          draw_texture_handle_info(ptr);
+          ImGui::TreePop();
+          ImGui::Unindent(indent_width);
+        }
+        if (!popped)
+          ImGui::PopStyleColor();
         ImGui::PopID();
       }
       ImGui::Unindent(5.f);
@@ -1549,15 +1799,19 @@ void Renderer::build_shadow_maps()
     shadow_map->enabled = true;
     ivec2 shadow_map_size = CONFIG.shadow_map_scale * vec2(light->shadow_map_resolution);
     shadow_map->init(shadow_map_size);
-    shadow_map->blur.target.color_attachments[0].bind(0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
+
+    glTextureParameteri(
+        shadow_map->blur.target.color_attachments[0].texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glViewport(0, 0, shadow_map_size.x, shadow_map_size.y);
-    // glEnable(GL_CULL_FACE);
-    glDisable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
+    // glDisable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
-    glCullFace(GL_FRONT);
+    glCullFace(GL_BACK);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->pre_blur.fbo->fbo);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1570,6 +1824,24 @@ void Renderer::build_shadow_maps()
     {
       if (entity.material->descriptor.casts_shadows)
       {
+        if (entity.material->displacement.t.source != "default")
+        {
+          variance_shadow_map_displacement.use();
+          bool displacement_success =
+              entity.material->displacement.bind_for_sampling_at(Texture_Location::displacement);
+          variance_shadow_map_displacement.set_uniform(
+              "transform", shadow_map->projection_camera * entity.transformation);
+          // sponge: jank code specific to the world sim thing:
+          bool is_ground = entity.name == "ground";
+          variance_shadow_map_displacement.set_uniform("ground", is_ground);
+          variance_shadow_map_displacement.set_uniform("displacement_map_size", uint32(HEIGHTMAP_RESOLUTION));
+          // variance_shadow_map_displacement.set_uniform("texture11_mod",
+          // entity.material->descriptor.displacement.mod);
+          // entity.material->displacement.bind_for_sampling_at(displacement);
+          ASSERT(entity.mesh);
+          entity.mesh->draw();
+          continue;
+        }
         variance_shadow_map.use();
         variance_shadow_map.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
         ASSERT(entity.mesh);
@@ -1580,7 +1852,7 @@ void Renderer::build_shadow_maps()
     shadow_map->blur.draw(
         this, &shadow_map->pre_blur.color_attachments[0], light->shadow_blur_radius, light->shadow_blur_iterations);
 
-    shadow_map->blur.target.color_attachments[0].bind(0);
+    shadow_map->blur.target.color_attachments[0].bind_for_sampling_at(0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -1622,7 +1894,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
 
   for (uint32 i = 0; i < src_textures->size(); ++i)
   {
-    (*src_textures)[i]->bind(i);
+    (*src_textures)[i]->bind_for_sampling_at(i);
   }
   ivec2 viewport_size = dst->color_attachments[0].t.size;
   glViewport(0, 0, viewport_size.x, viewport_size.y);
@@ -1654,7 +1926,7 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
   }
 }
 
-void Renderer::opaque_pass(float32 time)
+void Renderer::opaque_pass(float64 time)
 {
 
   // set_message("opaque_pass()");
@@ -1667,78 +1939,155 @@ void Renderer::opaque_pass(float32 time)
   glCullFace(GL_BACK);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LESS);
+  glDepthMask(GL_TRUE);
   // todo: depth pre-pass
 
   // set_message("opaque_pass projection:", s(projection), 1.0f);
   // set_message("opaque_pass camera:", s(camera), 1.0f);
   bind_white_to_all_textures();
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
+  brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
+
+  if (do_depth_prepass)
+  {
+
+    glDrawBuffer(GL_NONE);
+    // depth pass
+    for (Render_Entity &entity : render_entities)
+    {
+      if (entity.material->descriptor.wireframe)
+      {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      }
+      entity.material->bind();
+      Shader &shader = entity.material->shader;
+      shader.set_uniform("time", (float32)time);
+      shader.set_uniform("txaa_jitter", txaa_jitter);
+      shader.set_uniform("camera_position", camera_position);
+      shader.set_uniform("MVP", projection * camera * entity.transformation);
+      shader.set_uniform("Model", entity.transformation);
+      shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabledX
+      entity.mesh->draw();
+      if (entity.material->descriptor.wireframe)
+      {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      }
+    }
+    glDrawBuffers((uint32)draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
+    glDepthFunc(GL_EQUAL);
+  }
   for (Render_Entity &entity : render_entities)
   {
     bind_white_to_all_textures();
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
-    brdf_integration_lut.bind(brdf_ibl_lut);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
+    brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
     ASSERT(entity.mesh);
     entity.material->bind();
-    if (entity.material->descriptor.wireframe)
-    {
-      // glDisable(GL_CULL_FACE);
-      // glDisable(GL_DEPTH_TEST);
-      // glDepthMask(GL_TRUE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-    Material &material = *entity.material;
-    Texture &albedo = material.albedo;
-    if (albedo.texture)
-    {
-      // set_message(s("ALBEDObinding texture:", albedo.texture->texture), s(albedo.t.name), 155.0f);
-    }
 
     Shader &shader = entity.material->shader;
-    shader.set_uniform("time", time);
+    shader.set_uniform("time", (float32)time);
     shader.set_uniform("txaa_jitter", txaa_jitter);
     shader.set_uniform("camera_position", camera_position);
     shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
-    shader.set_uniform("MVP", projection * camera * entity.transformation);
+    if (entity.material->shader.vs == "skeletal_animation.vert")
+    {
+      ASSERT(entity.animation);
+      shader.set_uniform("VP", projection * camera);
+    }
+    else
+    {
+      shader.set_uniform("MVP", projection * camera * entity.transformation);
+    }
     shader.set_uniform("Model", entity.transformation);
     shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
-#if SHOW_UV_TEST_GRID
-    shader.set_uniform("texture10_mod", uv_map_grid.t.mod);
-#endif
+
+    
+    if (entity.animation)
+    {
+       ASSERT(shader.vs == "skeletal_animation.vert");
+       Skeletal_Animation_State *animation = entity.animation;
+       std::vector<Bone>* bones = &entity.mesh->mesh->descriptor.mesh_specific_bones;
+       ASSERT(bones->size() < MAX_BONES);
+       for (size_t i = 0; i < bones->size(); ++i)
+       {
+         Bone* to_bind = &(*bones)[i];
+         mat4* pose = &animation->final_bone_transforms[to_bind->name];
+         //*pose = mat4(1);
+         std::string bone_uniform_name = s("bones", "[", i, "]");
+         shader.set_uniform(bone_uniform_name.c_str(), *pose);
+       }
+    }
+    else
+    {
+      if (shader.vs == "skeletal_animation.vert")
+      {
+        static mat4 identity[MAX_BONES] = {mat4(1)};
+        shader.set_uniform_array("bones[0]", &identity[0], MAX_BONES);
+      }
+    }
+
     lights.bind(shader);
     set_uniform_shadowmaps(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
-    glViewport(0, 0, size.x, size.y);
-    // bind_white_to_all_textures();
-    entity.mesh->draw();
+    // environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+
+    if (entity.material->descriptor.depth_test)
+    {
+      glEnable(GL_DEPTH_TEST);
+    }
+    else
+    {
+      glDisable(GL_DEPTH_TEST);
+    }
+
+    if (entity.material->descriptor.depth_mask)
+    {
+      glDepthMask(GL_TRUE);
+    }
+    else
+    {
+      glDepthMask(GL_FALSE);
+    }
     if (entity.material->descriptor.wireframe)
     {
-      // glEnable(GL_CULL_FACE);
-      // glEnable(GL_DEPTH_TEST);
-      // glDepthMask(GL_TRUE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
+    {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+
+    entity.mesh->draw();
   }
+
+  glEnable(GL_DEPTH_TEST);
+  glDepthMask(GL_TRUE);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  glDepthFunc(GL_LESS);
   bind_white_to_all_textures();
 }
 
-void Renderer::instance_pass(float32 time)
+void Renderer::instance_pass(float64 time)
 {
   glDisable(GL_BLEND);
   vec3 forward_v = normalize(camera_gaze - camera_position);
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
+  set_message("forward_v", s(forward_v), 1.0f);
+  set_message("right_v", s(right_v), 1.0f);
+  set_message("up_v", s(up_v), 1.0f);
+
   if (!use_txaa)
   {
     previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
     previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
-    previous_draw_target.color_attachments[0].bind(0); // will set the wraps
+    previous_draw_target.color_attachments[0].bind_for_sampling_at(0); // will set the wraps
     previous_draw_target.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
+    glViewport(0, 0, render_target_size.x, render_target_size.y);
     passthrough.use();
-    draw_target.color_attachments[0].bind(0);
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
     passthrough.set_uniform("transform", fullscreen_quad());
     quad.draw();
     // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
@@ -1753,49 +2102,28 @@ void Renderer::instance_pass(float32 time)
   {
     entity.material->bind();
     ASSERT(entity.mesh);
-    Shader &shader = entity.material->shader;
-    ASSERT(shader.vs == "instance.vert");
+    Shader *shader = &entity.material->shader;
+    ASSERT(shader->vs == "instance.vert");
 
-    if (entity.material->descriptor.wireframe)
-    {
-      glDisable(GL_DEPTH_TEST);
-      glDepthMask(GL_FALSE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-
-    shader.set_uniform("time", time);
-    shader.set_uniform("txaa_jitter", txaa_jitter);
-    shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
-    shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
-    shader.set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
-    shader.set_uniform("viewport_size", vec2(size));
-    shader.set_uniform("aspect_ratio", size.x / size.y);
-    shader.set_uniform("camera_forward", forward_v);
-    shader.set_uniform("camera_right", right_v);
-    shader.set_uniform("camera_up", up_v);
-
-    lights.bind(shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+    shader->set_uniform("time", (float32)time);
+    shader->set_uniform("txaa_jitter", txaa_jitter);
+    shader->set_uniform("camera_position", camera_position);
+    shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+    shader->set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
+    shader->set_uniform("viewport_size", vec2(render_target_size));
+    shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
+    shader->set_uniform("camera_forward", forward_v);
+    shader->set_uniform("camera_right", right_v);
+    shader->set_uniform("camera_up", up_v);
+    shader->set_uniform("project", projection);
+    shader->set_uniform("use_billboarding", entity.use_billboarding);
+    lights.bind(*shader);
+    set_uniform_shadowmaps(*shader);
+    environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
     entity.mesh->load();
 
-    if (entity.material->descriptor.uses_transparency)
-    {
-      glEnable(GL_BLEND);
-      glDepthMask(GL_FALSE);
-      if (entity.material->descriptor.blending)
-      {
-        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-      }
-      else
-      {
-        glBlendFunc(GL_ONE, GL_ONE);
-      }
-    }
-
     glBindVertexArray(entity.mesh->get_vao());
-    ASSERT(glGetAttribLocation(shader.program->program, "instanced_MVP") == 5);
+    ASSERT(glGetAttribLocation(shader->program->program, "instanced_MVP") == 5);
     glEnableVertexAttribArray(5);
     glEnableVertexAttribArray(6);
     glEnableVertexAttribArray(7);
@@ -1810,7 +2138,7 @@ void Renderer::instance_pass(float32 time)
     glVertexAttribDivisor(7, 1);
     glVertexAttribDivisor(8, 1);
 
-    GLint instanced_model_location = glGetAttribLocation(shader.program->program, "instanced_model");
+    GLint instanced_model_location = glGetAttribLocation(shader->program->program, "instanced_model");
     if (instanced_model_location != -1)
     {
       ASSERT(instanced_model_location == 9);
@@ -1829,46 +2157,128 @@ void Renderer::instance_pass(float32 time)
       glVertexAttribDivisor(12, 1);
     }
 
-    int32 loc0 = glGetAttribLocation(shader.program->program, "attribute0");
-    if (loc0 != -1)
+    int32 loc_billboard_pos = glGetAttribLocation(shader->program->program, "billboard_position");
+    if (loc_billboard_pos != -1)
     {
-      ASSERT(loc0 == 13);
+      ASSERT(loc_billboard_pos == 13);
       glEnableVertexAttribArray(13);
-      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
+      glBindBuffer(GL_ARRAY_BUFFER, entity.instance_billboard_location_buffer);
       glVertexAttribPointer(13, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
       glVertexAttribDivisor(13, 1);
     }
 
-    int32 loc1 = glGetAttribLocation(shader.program->program, "attribute1");
-    if (loc1 != -1)
+    if (entity.use_attribute0)
     {
-      ASSERT(loc1 == 14);
-      glEnableVertexAttribArray(14);
-      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
-      glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-      glVertexAttribDivisor(14, 1);
+      int32 loc0 = glGetAttribLocation(shader->program->program, "attribute0");
+      if (loc0 != -1)
+      {
+        ASSERT(loc0 == 14);
+        glEnableVertexAttribArray(14);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute0_buffer);
+        glVertexAttribPointer(14, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(14, 1);
+      }
     }
 
-    int32 loc2 = glGetAttribLocation(shader.program->program, "attribute2");
-    if (loc2 != -1)
+    if (entity.use_attribute1)
     {
-      ASSERT(loc2 == 15);
-      glEnableVertexAttribArray(15);
-      glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
-      glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
-      glVertexAttribDivisor(15, 1);
+      int32 loc1 = glGetAttribLocation(shader->program->program, "attribute1");
+      if (loc1 != -1)
+      {
+        ASSERT(loc1 == 15);
+        glEnableVertexAttribArray(15);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute1_buffer);
+        glVertexAttribPointer(15, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(15, 1);
+      }
     }
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
-    glDrawElementsInstanced(
-        GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
+    if (entity.use_attribute2)
+    {
+      int32 loc2 = glGetAttribLocation(shader->program->program, "attribute2");
+      if (loc2 != -1)
+      {
+        ASSERT(loc2 == 16);
+        glEnableVertexAttribArray(16);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute2_buffer);
+        glVertexAttribPointer(16, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(16, 1);
+      }
+    }
+    if (entity.use_attribute3)
+    {
+      int32 loc2 = glGetAttribLocation(shader->program->program, "attribute2");
+      if (loc2 != -1)
+      {
+        ASSERT(loc2 == 17);
+        glEnableVertexAttribArray(17);
+        glBindBuffer(GL_ARRAY_BUFFER, entity.attribute3_buffer);
+        glVertexAttribPointer(17, 4, GL_FLOAT, GL_FALSE, sizeof(vec4), (void *)(0));
+        glVertexAttribDivisor(17, 1);
+      }
+    }
 
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
+    if (entity.material->descriptor.require_self_depth)
+    {
+      // depth info for this object's back faces
+      self_object_depth.bind_for_drawing_dst();
+      glCullFace(GL_FRONT);
+      glDrawBuffer(GL_NONE);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
+      glDrawElementsInstanced(
+          GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
+      self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
+      draw_target.bind_for_drawing_dst();
+    }
 
+    if (entity.material->descriptor.depth_test)
+    {
+      glEnable(GL_DEPTH_TEST);
+    }
+    else
+    {
+      glDisable(GL_DEPTH_TEST);
+    }
+
+    if (entity.material->descriptor.depth_mask)
+    {
+      glDepthMask(GL_TRUE);
+    }
+    else
+    {
+      glDepthMask(GL_FALSE);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::blend)
+    {
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::add)
+    {
+      glBlendFunc(GL_ONE, GL_ONE);
+    }
     if (entity.material->descriptor.wireframe)
+    {
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
     {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+    if (entity.material->descriptor.translucent_pass)
+    {
+      glEnable(GL_BLEND);
+    }
+    else
+    {
+      glDisable(GL_BLEND);
+    }
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->get_indices_buffer());
+    glDrawElementsInstanced(
+        GL_TRIANGLES, entity.mesh->get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0, entity.size);
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+
     bind_white_to_all_textures();
 
     glDisableVertexAttribArray(6);
@@ -1879,51 +2289,72 @@ void Renderer::instance_pass(float32 time)
     glDisableVertexAttribArray(11);
     glDisableVertexAttribArray(12);
     glDisableVertexAttribArray(13);
-    glDisableVertexAttribArray(14);
-    glDisableVertexAttribArray(15);
+    if (entity.use_attribute0)
+    {
+      glDisableVertexAttribArray(14);
+    }
+    if (entity.use_attribute1)
+    {
+      glDisableVertexAttribArray(15);
+    }
+    if (entity.use_attribute2)
+    {
+      glDisableVertexAttribArray(16);
+    }
+    if (entity.use_attribute3)
+    {
+      glDisableVertexAttribArray(17);
+    }
   }
 
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  glEnable(GL_DEPTH_TEST);
   glDepthMask(GL_TRUE);
   glDisable(GL_BLEND);
 }
 
-void Renderer::translucent_pass(float32 time)
+// pseudocode for gaussian blur for textured roughness translucent object surfaces
+// such as foggy glass windows
+
+// possible to jitter sample based on roughness and average refraction map instead - slower
+
+//
+// ivec2 current_size = size;
+// bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
+// const uint32 min_width = 40;
+// while (size.x > min_width)
+//{
+//  // allocate texture if needed
+
+//  // render draw_target, blurred downscaled by 50% from previous resolution
+
+//  // blur needs to be resolution independent - kernel distance must be % of
+//  // resolution not fixed
+//}
+
+// put these in a mipmap like the specular convolution
+// sample these maps in the translucent pass - use the material roughness to
+// pick a LOD  overwrite all pixels touched by translucent objects of the
+// original render target with this new blurred-by-roughness value, as well as
+// blending on top with the object itself?
+
+// how to handle blurry window in front of blurry window?
+// you have to either let it be wrong, or re-do the downscaling after each
+// translucent object draw
+
+// touch all translucent object pixels
+// store the total accumulated roughness for each pixel into a texture
+// draw full screen quad, passthrough, but selecting lod blur level by the
+// accumulated roughness
+
+// render all translucent objects back to front
+// store
+// sample accumulated roughness for each
+
+void Renderer::translucent_pass(float64 time)
 {
-
-  // ivec2 current_size = size;
-  // bool need_to_allocate_textures = downscaled_render_targets_for_translucent_pass.size == 0;
-  // const uint32 min_width = 40;
-  // while (size.x > min_width)
-  //{
-  //  // allocate texture if needed
-
-  //  // render draw_target, blurred downscaled by 50% from previous resolution
-
-  //  // blur needs to be resolution independent - kernel distance must be % of
-  //  // resolution not fixed
-  //}
-
-  // put these in a mipmap like the specular convolution
-  // sample these maps in the translucent pass - use the material roughness to
-  // pick a LOD  overwrite all pixels touched by translucent objects of the
-  // original render target with this new blurred-by-roughness value, as well as
-  // blending on top with the object itself?
-
-  // how to handle blurry window in front of blurry window?
-  // you have to either let it be wrong, or re-do the downscaling after each
-  // translucent object draw
-
-  // touch all translucent object pixels
-  // store the total accumulated roughness for each pixel into a texture
-  // draw full screen quad, passthrough, but selecting lod blur level by the
-  // accumulated roughness
-
-  // render all translucent objects back to front
-  // store
-  // sample accumulated roughness for each
-
-  brdf_integration_lut.bind(brdf_ibl_lut);
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
+  brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
 
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
@@ -1933,33 +2364,16 @@ void Renderer::translucent_pass(float32 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
-  // if txaa isnt being used, then we need to copy the frame into its buffer
-  // because itll be blank
-  // if txaa is used we can just sample from the last frame, the lag doesnt really matter
-  if (!use_txaa)
-  {
-    previous_draw_target.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
-    previous_draw_target.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
-    previous_draw_target.color_attachments[0].bind(0); // will set the wraps
-    previous_draw_target.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
-    passthrough.use();
-    draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", fullscreen_quad());
-    quad.draw();
-    // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    // glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    draw_target.bind_for_drawing_dst();
-  }
+  glNamedFramebufferDrawBuffers(translucent_sample_source.fbo->fbo, translucent_sample_source.draw_buffers.size(),
+      &translucent_sample_source.draw_buffers[0]);
+  glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
+      render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+      GL_NEAREST);
 
-  // we can do two passes!
-  // for each object, render the backfaces only and depth test for furthest
-  // so a sphere renders to a bowl
-  // 2nd pass renders the front only, and then we can use the depth difference between them
-  // to absorb light based on thiccness
-  glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
-  glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
+  bind_white_to_all_textures();
+  draw_target.bind_for_drawing_dst();
+  translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
+  translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_scene);
   for (Render_Entity &entity : translucent_entities)
   {
     if (CONFIG.render_simple)
@@ -1968,18 +2382,11 @@ void Renderer::translucent_pass(float32 time)
     }
     ASSERT(entity.mesh);
     entity.material->bind();
-    if (entity.material->descriptor.wireframe)
-    {
-      glDisable(GL_DEPTH_TEST);
-      glDepthMask(GL_FALSE);
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      // glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
     Shader *shader = &entity.material->shader;
     shader->set_uniform("camera_forward", forward_v);
     shader->set_uniform("camera_right", right_v);
     shader->set_uniform("camera_up", up_v);
-    shader->set_uniform("time", time);
+    shader->set_uniform("time", (float32)time);
     shader->set_uniform("txaa_jitter", txaa_jitter);
     shader->set_uniform("camera_position", camera_position);
     shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
@@ -1988,46 +2395,103 @@ void Renderer::translucent_pass(float32 time)
     shader->set_uniform("discard_on_alpha", false);
     shader->set_uniform("uv_scale", entity.material->descriptor.uv_scale);
     shader->set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
-    shader->set_uniform("alpha_albedo_override", entity.material->descriptor.albedo_alpha_override);
-    shader->set_uniform("viewport_size", vec2(size));
-    shader->set_uniform("aspect_ratio", size.x / size.y);
+    shader->set_uniform("viewport_size", vec2(render_target_size));
+    shader->set_uniform("aspect_ratio", render_target_size.x / render_target_size.y);
 
-    // bool is_default = shader->fs == "fragment_shader.frag";
-    if (entity.material->descriptor.blending)
-    {
-      // glDisable(GL_DEPTH_TEST);
-      // glDisable(GL_CULL_FACE);
-      glDepthMask(GL_FALSE);
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    }
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
 
-    // glDisable(GL_CULL_FACE);
-    entity.mesh->draw();
-    if (entity.material->descriptor.blending)
-    {
-      glDepthMask(GL_TRUE);
-      glDisable(GL_BLEND);
-    }
     if (entity.material->descriptor.wireframe)
     {
-      glEnable(GL_DEPTH_TEST);
-      glDepthMask(GL_TRUE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
+    {
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
-    bind_white_to_all_textures();
+    glDepthMask(GL_FALSE);
+    if (entity.material->descriptor.require_self_depth)
+    {// depth info for this object's back faces
+      glDepthMask(GL_TRUE);
+      self_object_depth.bind_for_drawing_dst();
+      glCullFace(GL_FRONT);
+      glDrawBuffer(GL_NONE);
+      glClear(GL_DEPTH_BUFFER_BIT);
+      entity.mesh->draw();
+      self_object_depth.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_self);
+      draw_target.bind_for_drawing_dst();
+      glCullFace(GL_BACK);
+      glDepthMask(GL_FALSE);
+    }
+    // depth of closest front face will be in the main rendering call below
+    // depth of the world will be in translucent sample source - dont need to render to it
+    // depth of closest back face is in self_object_depth
+
+
+    //the translucent sample source does NOT have the depth info for other translucent objects, even their
+    //front faces...
+
+
+    //if the depth of the front face is close to the back face we can blend towards green
+
+
+
+    draw_target.bind_for_drawing_dst();
+    translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
+    translucent_sample_source.depth_texture.bind_for_sampling_at(Texture_Location::depth_of_scene);
+    glNamedFramebufferDrawBuffers(draw_target.fbo->fbo, draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
+    glCullFace(GL_BACK);
+    if (entity.material->descriptor.depth_test)
+    {
+      glEnable(GL_DEPTH_TEST);
+    }
+    else
+    {
+      glDisable(GL_DEPTH_TEST);
+    }
+
+    if (entity.material->descriptor.depth_mask)
+    {
+      glDepthMask(GL_TRUE);
+    }
+    else
+    {
+      glDepthMask(GL_FALSE);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::blend)
+    {
+      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    if (entity.material->descriptor.blendmode == Material_Blend_Mode::add)
+    {
+      glBlendFunc(GL_ONE, GL_ONE);
+    }
+
+    glEnable(GL_BLEND);
+    entity.mesh->draw();
+
+    if (true)
+    {//this will copy back the result into the scene so there can be multi layers of refraction-enabled objects
+      //might be too slow
+      glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
+        render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
+        GL_NEAREST);
+    }
   }
+  self_object_depth.bind_for_drawing_dst();
+  glClear(GL_DEPTH_BUFFER_BIT);
+  draw_target.bind_for_drawing_dst();
+  bind_white_to_all_textures();
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, 0);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glEnable(GL_CULL_FACE);
   glDisable(GL_BLEND);
   glDepthMask(GL_TRUE);
 }
 
-void Renderer::postprocess_pass(float32 time)
+void Renderer::postprocess_pass(float64 time)
 {
   // Scene Luminance
 
@@ -2047,23 +2511,24 @@ void Renderer::postprocess_pass(float32 time)
 
   // bloom:
   bool need_to_allocate_textures = bloom_target.texture == nullptr;
-  const float32 scale_relative_to_1080p = this->size.x / 1920.f;
+  const float32 scale_relative_to_1080p = this->render_target_size.x / 1920.f;
   const int32 min_width = (int32)(80.f * scale_relative_to_1080p);
-  vector<ivec2> resolutions = {size};
+  vector<ivec2> resolutions = {render_target_size};
   while (resolutions.back().x / 2 > min_width)
   {
     resolutions.push_back(resolutions.back() / 2);
   }
 
-  const uint32 levels = resolutions.size();
-  const uint32 dst_mip_level_count = resolutions.size() - 1;
+  const uint32 levels = uint32(resolutions.size());
+  const uint32 dst_mip_level_count = uint32(resolutions.size()) - 1;
 
   if (need_to_allocate_textures)
   {
-    bloom_intermediate = Texture(name + s("'s Bloom Intermediate"), size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
-    bloom_target = Texture(name + s("'s Bloom Target"), size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
-    bloom_result =
-        Texture(name + "'s bloom_result", size, 1, GL_RGB16F, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+    bloom_intermediate =
+        Texture(name + s("'s Bloom Intermediate"), render_target_size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_target = Texture(name + s("'s Bloom Target"), render_target_size, levels, GL_RGB16F, GL_LINEAR_MIPMAP_LINEAR);
+    bloom_result = Texture(name + "'s bloom_result", render_target_size, 1, GL_RGB16F, GL_LINEAR, GL_LINEAR,
+        GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
     // glTextureParameteri(bloom_intermediate.texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     // glTextureParameteri(bloom_target.texture->texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -2089,8 +2554,8 @@ void Renderer::postprocess_pass(float32 time)
   bloom_fbo.bind_for_drawing_dst();
   high_pass_shader.use();
   high_pass_shader.set_uniform("transform", fullscreen_quad());
-  glViewport(0, 0, size.x, size.y);
-  draw_target.color_attachments[0].bind(0);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
+  draw_target.color_attachments[0].bind_for_sampling_at(0);
   quad.draw();
 
   static bool enabled = true;
@@ -2116,7 +2581,7 @@ void Renderer::postprocess_pass(float32 time)
     gaussian_blur_15x.use();
     glViewport(0, 0, resolution.x, resolution.y);
 
-    bloom_target.bind(0);
+    bloom_target.bind_for_sampling_at(0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_intermediate.get_handle(), i + 1);
     float32 aspect_ratio_factor = (float32)resolution.y / (float32)resolution.x;
     vec2 gaus_scale = vec2(aspect_ratio_factor * blur_radius, 0.0);
@@ -2127,7 +2592,7 @@ void Renderer::postprocess_pass(float32 time)
 
     gaus_scale = vec2(0.0f, blur_radius);
     gaussian_blur_15x.set_uniform("gauss_axis_scale", gaus_scale);
-    bloom_intermediate.bind(0);
+    bloom_intermediate.bind_for_sampling_at(0);
     gaussian_blur_15x.set_uniform("lod", i + 1);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_target.get_handle(), i + 1);
     quad.draw();
@@ -2141,7 +2606,7 @@ void Renderer::postprocess_pass(float32 time)
 
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_result.get_handle(), 0);
   bloom_mix.use();
-  bloom_target.bind(0);
+  bloom_target.bind_for_sampling_at(0);
   glViewport(0, 0, bloom_result.t.size.x, bloom_result.t.size.y);
   bloom_mix.set_uniform("transform", fullscreen_quad());
   bloom_mix.set_uniform("mip_count", levels);
@@ -2152,8 +2617,8 @@ void Renderer::postprocess_pass(float32 time)
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE);
   draw_target.bind_for_drawing_dst();
-  bloom_result.bind(0);
-  glViewport(0, 0, size.x, size.y);
+  bloom_result.bind_for_sampling_at(0);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
   passthrough.use();
   passthrough.set_uniform("transform", fullscreen_quad());
   if (enabled)
@@ -2162,7 +2627,7 @@ void Renderer::postprocess_pass(float32 time)
   glDisable(GL_BLEND);
 }
 
-void Renderer::skybox_pass(float32 time)
+void Renderer::skybox_pass(float64 time)
 {
 
   vec3 scalev = vec3(4000);
@@ -2171,11 +2636,11 @@ void Renderer::skybox_pass(float32 time)
   mat4 S = scale(scalev);
   mat4 transformation = T * S;
 
-  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, size);
-  glViewport(0, 0, size.x, size.y);
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
   glBindVertexArray(cube.get_vao());
   skybox.use();
-  skybox.set_uniform("time", time);
+  skybox.set_uniform("time", (float32)time);
   skybox.set_uniform("txaa_jitter", txaa_jitter);
   skybox.set_uniform("camera_position", camera_position);
   skybox.set_uniform("MVP", projection * camera * transformation);
@@ -2193,6 +2658,81 @@ void Renderer::skybox_pass(float32 time)
   glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
 
+void Renderer::copy_to_primary_framebuffer_and_txaa(float64 time)
+{
+  txaa_jitter = get_next_TXAA_sample();
+  // TODO: implement motion vector vertex attribute
+
+  // 1: blend draw_target with previous_draw_target, store in draw_target_srgb8
+  // 2: copy draw_target to previous_draw_target
+  // 3: run fxaa on draw_target_srgb8, drawing to screen
+
+  tonemapping_target_srgb8.bind_for_drawing_dst();
+  glViewport(0, 0, render_target_size.x, render_target_size.y);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  temporalaa.use();
+
+  // blend draw_target with previous_draw_target, store in draw_target_srgb8
+  if (previous_color_target_missing)
+  {
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
+    draw_target.color_attachments[0].bind_for_sampling_at(1);
+  }
+  else
+  {
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
+    previous_draw_target.color_attachments[0].bind_for_sampling_at(1);
+  }
+
+  temporalaa.set_uniform("transform", fullscreen_quad());
+  quad.draw();
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  // copy draw_target to previous_draw_target
+  previous_draw_target.bind_for_drawing_dst();
+  passthrough.use();
+  draw_target.color_attachments[0].bind_for_sampling_at(0);
+  passthrough.set_uniform("transform", fullscreen_quad());
+  quad.draw();
+
+  previous_color_target_missing = false;
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void Renderer::use_fxaa_shader(float64 state_time)
+{
+  static float EDGE_THRESHOLD_MIN = 0.0312;
+  static float EDGE_THRESHOLD_MAX = 0.125;
+  static float SUBPIXEL_QUALITY = 0.75f;
+  static int ITERATIONS = 8;
+  static int QUALITY = 1;
+
+  if (imgui_this_tick && show_imgui_fxaa)
+  {
+    ImGui::Begin("fxaa adjustment", &show_imgui_fxaa);
+    ImGui::SetWindowSize(ImVec2(300, 160));
+    ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
+    ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
+    ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
+    ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
+    ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
+    ImGui::End();
+  }
+
+  fxaa.use();
+  fxaa.set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
+  fxaa.set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
+  fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
+  fxaa.set_uniform("ITERATIONS", ITERATIONS);
+  fxaa.set_uniform("QUALITY", QUALITY);
+  fxaa.set_uniform("transform", fullscreen_quad());
+  fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
+  fxaa.set_uniform("time", (float32)state_time);
+}
+
 void Renderer::render(float64 state_time)
 {
   DEFERRED_MESH_DELETIONS.clear();
@@ -2206,9 +2746,6 @@ void Renderer::render(float64 state_time)
 #endif
 #if DYNAMIC_TEXTURE_RELOADING
   check_and_clear_expired_textures();
-#endif
-#if SHOW_UV_TEST_GRID
-  uv_map_grid.t.mod = vec4(1, 1, 1, clamp((float32)pow(sin(state_time), .25f), 0.0f, 1.0f));
 #endif
   if (imgui_this_tick)
   {
@@ -2233,179 +2770,62 @@ void Renderer::render(float64 state_time)
   translucent_pass(time);
   postprocess_pass(time);
 
-  // debug draw to screen
-
-  if (true)
-  {
-    glEnable(GL_FRAMEBUFFER_SRGB);
-    glViewport(0, 0, window_size.x, window_size.y);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    passthrough.use();
-    passthrough.set_uniform("transform", fullscreen_quad());
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    draw_target.color_attachments[0].bind(0);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-    FRAME_TIMER.stop();
-    SWAP_TIMER.start();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_FRAMEBUFFER_SRGB);
-    glBindVertexArray(0);
-
-    frame_count += 1;
-    return;
-  }
-  // end debug draw to screen
-
   // all pixel data is now in draw_target in 16f linear space
 
   glDisable(GL_DEPTH_TEST);
 
   if (use_txaa && previous_camera == camera)
   {
-    txaa_jitter = get_next_TXAA_sample();
-    // TODO: implement motion vector vertex attribute
-
-    // 1: blend draw_target with previous_draw_target, store in draw_target_srgb8
-    // 2: copy draw_target to previous_draw_target
-    // 3: run fxaa on draw_target_srgb8, drawing to screen
-
-    glBindVertexArray(quad.get_vao());
-    tonemapping_target_srgb8.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    temporalaa.use();
-
-    // blend draw_target with previous_draw_target, store in draw_target_srgb8
-    if (previous_color_target_missing)
-    {
-      draw_target.color_attachments[0].bind(0);
-      draw_target.color_attachments[0].bind(1);
-    }
-    else
-    {
-      draw_target.color_attachments[0].bind(0);
-      previous_draw_target.color_attachments[0].bind(1);
-    }
-
-    temporalaa.set_uniform("transform", fullscreen_quad());
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // copy draw_target to previous_draw_target
-    previous_draw_target.bind_for_drawing_dst();
-    glViewport(0, 0, size.x, size.y);
-    passthrough.use();
-    draw_target.color_attachments[0].bind(0);
-    passthrough.set_uniform("transform", fullscreen_quad());
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-    previous_color_target_missing = false;
-    glBindTexture(GL_TEXTURE_2D, 0);
+    copy_to_primary_framebuffer_and_txaa(state_time);
+    previous_camera = camera;
   }
   else
   {
     ///////////////////////////////////////
-    ///////////////////////////////////////
-    // HERE IS DRAWING TO TONEMAPPER FRAMEBUFFER
+    // DRAWING TO TONEMAPPER FRAMEBUFFER
     ////////////////////////////////////////
-    ////////////////////////////////////////
-    glDisable(GL_FRAMEBUFFER_SRGB);
-
-    glViewport(0, 0, size.x, size.y);
-    glBindVertexArray(quad.get_vao());
+    glEnable(GL_FRAMEBUFFER_SRGB);
+    glViewport(0, 0, render_target_size.x, render_target_size.y);
     tonemapping_target_srgb8.bind_for_drawing_dst();
     tonemapping.use();
     tonemapping.set_uniform("transform", fullscreen_quad());
+    tonemapping.set_uniform("function_select", selected_tonemap_function);
+    tonemapping.set_uniform("texture0_mod", vec4(exposure * exposure_color, 1));
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    draw_target.color_attachments[0].bind(0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-    glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    draw_target.color_attachments[0].bind_for_sampling_at(0);
+    quad.draw();
   }
 
   if (use_fxaa)
-    previous_camera = camera;
-
-  if (use_fxaa)
   {
-    static float EDGE_THRESHOLD_MIN = 0.0312;
-    static float EDGE_THRESHOLD_MAX = 0.125;
-    static float SUBPIXEL_QUALITY = 0.75f;
-    static int ITERATIONS = 8;
-    static int QUALITY = 1;
-
-    if (imgui_this_tick && show_imgui_fxaa)
-    {
-      ImGui::Begin("fxaa adjustment", &show_imgui_fxaa);
-      ImGui::SetWindowSize(ImVec2(300, 160));
-      ImGui::DragFloat("EDGE_MIN", &EDGE_THRESHOLD_MIN, 0.001f);
-      ImGui::DragFloat("EDGE_MAX", &EDGE_THRESHOLD_MAX, 0.001f);
-      ImGui::DragFloat("SUBPIXEL", &SUBPIXEL_QUALITY, 0.001f);
-      ImGui::DragInt("ITERATIONS", &ITERATIONS, 0.1f);
-      ImGui::DragInt("QUALITY", &QUALITY, 0.1f);
-      ImGui::End();
-    }
-
-    fxaa.use();
-    fxaa.set_uniform("EDGE_THRESHOLD_MIN", EDGE_THRESHOLD_MIN);
-    fxaa.set_uniform("EDGE_THRESHOLD_MAX", EDGE_THRESHOLD_MAX);
-    fxaa.set_uniform("SUBPIXEL_QUALITY", SUBPIXEL_QUALITY);
-    fxaa.set_uniform("ITERATIONS", ITERATIONS);
-    fxaa.set_uniform("QUALITY", QUALITY);
-    fxaa.set_uniform("transform", fullscreen_quad());
-    fxaa.set_uniform("inverseScreenSize", vec2(1.0f) / vec2(window_size));
-    fxaa.set_uniform("time", (float32)state_time);
-    // glDisable(GL_FRAMEBUFFER_SRGB);
+    use_fxaa_shader(state_time);
   }
   else
   {
     passthrough.use();
     passthrough.set_uniform("transform", fullscreen_quad());
-
-    // glDisable(GL_FRAMEBUFFER_SRGB);
   }
 
   ///////////////////////////////////////
-  ///////////////////////////////////////
-  // HERE IS DRAWING TO FXAA FRAMEBUFFER
-  ////////////////////////////////////////
+  // DRAWING TO FXAA FRAMEBUFFER
   ////////////////////////////////////////
   glEnable(GL_FRAMEBUFFER_SRGB);
-
   fxaa_target_srgb8.bind_for_drawing_dst();
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  tonemapping_target_srgb8.color_attachments[0].bind(0);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
-
-  glViewport(0, 0, window_size.x, window_size.y);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  tonemapping_target_srgb8.color_attachments[0].bind_for_sampling_at(0);
+  quad.draw();
 
   ///////////////////////////////////////
-  ///////////////////////////////////////
-  // HERE IS DRAWING TO DEFAULT FRAMEBUFFER
-  ////////////////////////////////////////
+  // DRAWING TO DEFAULT FRAMEBUFFER
   ////////////////////////////////////////
   glEnable(GL_FRAMEBUFFER_SRGB);
-
+  glViewport(0, 0, window_size.x, window_size.y);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   passthrough.use();
   passthrough.set_uniform("transform", fullscreen_quad());
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  fxaa_target_srgb8.color_attachments[0].bind(0);
-
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quad.get_indices_buffer());
-  glDrawElements(GL_TRIANGLES, quad.get_indices_buffer_size(), GL_UNSIGNED_INT, (void *)0);
+  fxaa_target_srgb8.color_attachments[0].bind_for_sampling_at(0);
+  quad.draw();
 
   FRAME_TIMER.stop();
   SWAP_TIMER.start();
@@ -2413,16 +2833,14 @@ void Renderer::render(float64 state_time)
   glBindTexture(GL_TEXTURE_2D, 0);
   glDisable(GL_FRAMEBUFFER_SRGB);
   glBindVertexArray(0);
-
   frame_count += 1;
 }
 
 void Renderer::resize_window(ivec2 window_size)
 {
-  ASSERT(0);
-  // todo: implement window resize, must notify imgui
   this->window_size = window_size;
   set_vfov(vfov);
+  init_render_targets();
 }
 
 void Renderer::set_render_scale(float32 scale)
@@ -2476,7 +2894,7 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
     vec3 translation = vec3((*m)[3][0], (*m)[3][1], (*m)[3][2]);
 
     float32 dist = length(translation - camera_position);
-    bool is_transparent = entity->material->descriptor.uses_transparency;
+    bool is_transparent = entity->material->descriptor.translucent_pass;
     if (is_transparent)
     {
       index_distances.push_back({i, dist});
@@ -2571,25 +2989,34 @@ void Renderer::init_render_targets()
 {
   set_message("init_render_targets()");
 
-  size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
+  render_target_size = ivec2(render_scale * window_size.x, render_scale * window_size.y);
 
   // these are setup in the bloom function itself
   bloom_result = Texture();
   bloom_intermediate = Texture();
   bloom_target = Texture();
   bloom_fbo = Framebuffer();
+  draw_target = Framebuffer();
+  previous_draw_target = Framebuffer();
+  translucent_sample_source = Framebuffer();
+  self_object_depth = Framebuffer();
+  tonemapping_target_srgb8 = Framebuffer();
+  fxaa_target_srgb8 = Framebuffer();
 
   Texture_Descriptor td;
   td.source = "generate";
   td.name = name + " Renderer::draw_target.color[0]";
-  td.size = size;
+  td.size = render_target_size;
   td.levels = 1;
   td.format = FRAMEBUFFER_FORMAT;
   td.minification_filter = GL_LINEAR;
   draw_target.color_attachments[0] = Texture(td);
   draw_target.color_attachments[0].load();
   draw_target.depth_enabled = true;
-  draw_target.depth_size = size;
+  td.name = name + " Renderer::draw_target.depth_texture";
+  draw_target.depth_texture.t.name = td.name;
+  draw_target.use_renderbuffer_depth = false;
+  draw_target.depth_size = render_target_size;
   draw_target.init();
 
   td.name = name + " Renderer::previous_frame.color[0]";
@@ -2597,13 +3024,33 @@ void Renderer::init_render_targets()
   previous_draw_target.color_attachments[0].load();
   previous_draw_target.init();
 
+  td.name = name + " Renderer::translucent_sample_source.color[0]";
+  translucent_sample_source.color_attachments[0] = Texture(td);
+  translucent_sample_source.color_attachments[0].t.wrap_s = GL_CLAMP_TO_EDGE;
+  translucent_sample_source.color_attachments[0].t.wrap_t = GL_CLAMP_TO_EDGE;
+  translucent_sample_source.color_attachments[0].load();
+  translucent_sample_source.depth_enabled = true;
+  translucent_sample_source.use_renderbuffer_depth = false;
+  translucent_sample_source.depth_size = render_target_size;
+  td.name = name + " Renderer::translucent_sample_source.depth_texture";
+  translucent_sample_source.depth_texture.t.name = td.name;
+  translucent_sample_source.init();
+
+  td.name = name + "Renderer::self_object_depth";
+  self_object_depth.color_attachments[0] = Texture(td);
+  self_object_depth.depth_enabled = true;
+  self_object_depth.use_renderbuffer_depth = false;
+  self_object_depth.depth_size = render_target_size;
+  self_object_depth.depth_texture.t.name = td.name + "'s depth texture";
+  self_object_depth.init();
+
   // full render scaled, clamped and encoded srgb
   Texture_Descriptor srgb8;
   srgb8.source = "generate";
   srgb8.name = name + " Renderer::draw_target_srgb8.color[0]";
-  srgb8.size = size;
+  srgb8.size = render_target_size;
   srgb8.levels = 1;
-  srgb8.format = GL_RGB16F;
+  srgb8.format = GL_SRGB8;
   srgb8.minification_filter = GL_LINEAR;
   tonemapping_target_srgb8.color_attachments[0] = Texture(srgb8);
   tonemapping_target_srgb8.color_attachments[0].load();
@@ -2613,9 +3060,9 @@ void Renderer::init_render_targets()
   Texture_Descriptor fxaa;
   fxaa.source = "generate";
   fxaa.name = name + " Renderer::draw_target_post_fxaa.color[0]";
-  fxaa.size = size;
+  fxaa.size = render_target_size;
   fxaa.levels = 1;
-  fxaa.format = GL_RGB8;
+  fxaa.format = GL_SRGB8;
   fxaa.minification_filter = GL_LINEAR;
   fxaa_target_srgb8.color_attachments[0] = Texture(fxaa);
   fxaa_target_srgb8.color_attachments[0].load();
@@ -2712,7 +3159,7 @@ mat4 Renderer::get_next_TXAA_sample()
   else
     translation = vec2(-0.5, -0.5);
 
-  mat4 result = translate(vec3(translation / vec2(size), 0));
+  mat4 result = translate(vec3(translation / vec2(render_target_size), 0));
   jitter_switch = !jitter_switch;
   return result;
 }
@@ -2756,7 +3203,7 @@ void Spotlight_Shadow_Map::init(ivec2 size)
 
   pre_blur.depth_enabled = true;
   pre_blur.depth_size = size;
-  pre_blur.depth_format = GL_DEPTH_COMPONENT32;
+  pre_blur.depth_format = GL_DEPTH_COMPONENT32F;
 
   Texture_Descriptor pre_blur_td;
   pre_blur_td.source = "generate";
@@ -2765,7 +3212,7 @@ void Spotlight_Shadow_Map::init(ivec2 size)
   pre_blur_td.format = format;
   pre_blur_td.minification_filter = GL_LINEAR;
   pre_blur.color_attachments[0] = Texture(pre_blur_td);
-  pre_blur.color_attachments[0].bind(0);
+  pre_blur.color_attachments[0].bind_for_sampling_at(0);
   pre_blur.init();
 
   ASSERT(pre_blur.color_attachments.size() == 1);
@@ -2799,7 +3246,7 @@ void Cubemap::bind(GLuint texture_unit)
     {
       if (source.texture && source.texture->texture != 0)
       {
-        if (!source.bind(0)) // attempting to bind the texture will check the transfer sync
+        if (!source.bind_for_sampling_at(0)) // attempting to bind the texture will check the transfer sync
         {
           return;
         }
@@ -2832,6 +3279,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
 
   handle->internalformat = GL_RGB16F;
   size = CONFIG.use_low_quality_specular ? ivec2(1024, 1024) : ivec2(2048, 2048);
+  size = ivec2(2048);
   handle->size = size;
 
   static Shader equi_to_cube("equi_to_cube.vert", "equi_to_cube.frag");
@@ -2860,13 +3308,8 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   glNamedFramebufferRenderbuffer(fbo, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
   glCreateTextures(GL_TEXTURE_CUBE_MAP, 1, &handle->texture);
-  glTextureStorage2D(handle->texture, ENV_MAP_MIP_LEVELS, GL_RGB16F, size.x, size.y);
-  // glBindTextureUnit(6, handle->texture);
-  // glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
-  for (uint32 i = 0; i < 6; ++i)
-  {
-    // glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, size.x, size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
-  }
+  uint32 level_count = 1 + uint32(floor(glm::log2(float32(glm::max(size.x, size.y)))));
+  glTextureStorage2D(handle->texture, level_count, GL_RGB16F, size.x, size.y);
 
   mat4 rot = toMat4(quat(1, 0, 0, radians(0.f)));
   glViewport(0, 0, size.x, size.y);
@@ -2875,7 +3318,7 @@ void Cubemap::produce_cubemap_from_equirectangular_source()
   equi_to_cube.set_uniform("rotation", rot);
   equi_to_cube.set_uniform("gamma_encoded", is_gamma_encoded);
   ASSERT(source.texture->texture != 0);
-  source.bind(0);
+  source.bind_for_sampling_at(0);
   glEnable(GL_CULL_FACE);
   glFrontFace(GL_CCW);
   glCullFace(GL_FRONT);
@@ -2923,7 +3366,7 @@ void Cubemap::produce_cubemap_from_texture_array()
   glBindTexture(GL_TEXTURE_CUBE_MAP, handle->texture);
   for (uint32 i = 0; i < 6; ++i)
   {
-    Image &face = sources[i];
+    Image2 &face = sources[i];
     glTexImage2D(
         GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, face.width, face.height, 0, GL_RGBA, GL_FLOAT, &face.data[0]);
     ASSERT(face.width == size.x && face.height == size.y); // generate_ibl_mipmaps() assumes all sizes are equal
@@ -2940,14 +3383,14 @@ void Cubemap::produce_cubemap_from_texture_array()
 
 // opengl z-forward space is ordered: right left top bottom back front
 // our coordinate space is +Z up, +X right, +Y forward
-std::array<Image, 6> load_cubemap_faces(array<string, 6> filenames)
+std::array<Image2, 6> load_cubemap_faces(array<string, 6> filenames)
 {
-  Image right = filenames[0];
-  Image left = filenames[1];
-  Image top = filenames[2];
-  Image bottom = filenames[3];
-  Image back = filenames[4];
-  Image front = filenames[5];
+  Image2 right = filenames[0];
+  Image2 left = filenames[1];
+  Image2 top = filenames[2];
+  Image2 bottom = filenames[3];
+  Image2 back = filenames[4];
+  Image2 front = filenames[5];
 
   right.rotate90();
   right.rotate90();
@@ -2958,7 +3401,7 @@ std::array<Image, 6> load_cubemap_faces(array<string, 6> filenames)
   front.rotate90();
   front.rotate90();
 
-  array<Image, 6> result;
+  array<Image2, 6> result;
   result[0] = left;
   result[1] = right;
   result[2] = back;
@@ -3142,9 +3585,8 @@ void Material_Descriptor::mod_by(const Material_Descriptor *override)
     frag_shader = override->frag_shader;
     backface_culling = override->backface_culling;
     uv_scale = override->uv_scale;
-    uses_transparency = override->uses_transparency;
+    translucent_pass = override->translucent_pass;
     casts_shadows = override->casts_shadows;
-    albedo_alpha_override = override->albedo_alpha_override;
     discard_on_alpha = override->discard_on_alpha;
 
     uniform_set = override->uniform_set;
@@ -3155,7 +3597,7 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, 
     : descriptor(d), mesh_index(m), material_index(mat)
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
-  shared_data->descriptor = descriptor;
+  shared_data->descriptor = &descriptor;
   t = std::thread(thread, shared_data);
   t.detach();
   thread_launched = true;
@@ -3164,22 +3606,19 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, 
 Particle_Emitter::Particle_Emitter()
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
+  shared_data->descriptor = &descriptor;
   t = std::thread(thread, shared_data);
   t.detach();
   thread_launched = true;
 }
 
-Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
+Particle_Emitter::Particle_Emitter(Particle_Emitter &rhs)
     : descriptor(rhs.descriptor), mesh_index(rhs.mesh_index), material_index(rhs.material_index)
 {
   shared_data = std::make_unique<Physics_Shared_Data>();
-  construct_physics_method(descriptor);
-  construct_emission_method(descriptor);
-  shared_data->descriptor = descriptor;
-
-  rhs.spin_until_up_to_date();
+  shared_data->descriptor = &descriptor;
+  rhs.fence();
   shared_data->particles = rhs.shared_data->particles;
-
   t = std::thread(thread, shared_data);
   t.detach();
   thread_launched = true;
@@ -3188,7 +3627,7 @@ Particle_Emitter::Particle_Emitter(const Particle_Emitter &rhs)
 Particle_Emitter::Particle_Emitter(Particle_Emitter &&rhs)
 {
   ASSERT(rhs.shared_data->request_thread_exit == false);
-  rhs.spin_until_up_to_date();
+  rhs.fence();
   t = std::move(rhs.t);
   thread_launched = rhs.thread_launched;
   shared_data = std::move(rhs.shared_data);
@@ -3204,22 +3643,22 @@ Particle_Emitter::Particle_Emitter(Particle_Emitter &&rhs)
 
 void Particle_Emitter::update(mat4 projection, mat4 camera, float32 dt)
 {
-  // todo: geometry collision interface
-  // todo: option to add parent node velocity or not
-  // todo: option to snap all particles to basis space or world space
+  // todo: option to snap all particles to emitter space or world space
 
   // locally calculate basis vector, or, change scene graph to store its last-calculated world basis, and read from
   // that here  take lock  modify the descriptor to change position, orientation, velocity  release lock
   ASSERT(shared_data);
   ASSERT(thread_launched);
-  spin_until_up_to_date();
-  shared_data->descriptor = descriptor;
+
+  fence();
+  shared_data->descriptor = &descriptor;
+  // ASSERT(shared_data->descriptor == &descriptor);
   shared_data->projection = projection;
   shared_data->camera = camera;
   shared_data->requested_tick += 1;
 }
 
-void Particle_Emitter::spin_until_up_to_date() const
+void Particle_Emitter::fence()
 {
   ASSERT(shared_data);
   if (shared_data->requested_tick != 0)
@@ -3230,6 +3669,21 @@ void Particle_Emitter::spin_until_up_to_date() const
       // Sleep(1);
     }
   }
+  idle = shared_data->idle;
+  active = shared_data->active;
+  time_allocations = shared_data->time_allocations;
+  attribute_times = shared_data->attribute_timer;
+
+  per_static_octree_test = shared_data->per_static_octree_test;
+  per_dynamic_octree_test = shared_data->per_dynamic_octree_test;
+
+  static_collider_count_max = shared_data->static_collider_count_max;
+  static_collider_count_sum = shared_data->static_collider_count_sum;
+  static_collider_count_samples = shared_data->static_collider_count_samples;
+
+  dynamic_collider_count_max = shared_data->dynamic_collider_count_max;
+  dynamic_collider_count_sum = shared_data->dynamic_collider_count_sum;
+  dynamic_collider_count_samples = shared_data->dynamic_collider_count_samples;
   return;
 }
 
@@ -3243,6 +3697,7 @@ std::unique_ptr<Particle_Physics_Method> Particle_Emitter::construct_physics_met
   {
     return std::make_unique<Wind_Particle_Physics>();
   }
+  return nullptr;
 }
 
 std::unique_ptr<Particle_Emission_Method> Particle_Emitter::construct_emission_method(Particle_Emitter_Descriptor d)
@@ -3255,36 +3710,75 @@ std::unique_ptr<Particle_Emission_Method> Particle_Emitter::construct_emission_m
   {
     return std::make_unique<Particle_Explosion_Emission>();
   }
+  return nullptr;
 }
 
 void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
 {
   ASSERT(shared_data);
-  std::unique_ptr<Particle_Emission_Method> emission = construct_emission_method(shared_data->descriptor);
-  std::unique_ptr<Particle_Physics_Method> physics = construct_physics_method(shared_data->descriptor);
-  Particle_Emission_Type emission_type = shared_data->descriptor.emission_descriptor.type;
-  Particle_Physics_Type physics_type = shared_data->descriptor.physics_descriptor.type;
+  std::unique_ptr<Particle_Emission_Method> emission = construct_emission_method(*shared_data->descriptor);
+  std::unique_ptr<Particle_Physics_Method> physics = construct_physics_method(*shared_data->descriptor);
+  Particle_Emission_Type emission_type = shared_data->descriptor->emission_descriptor.type;
+  Particle_Physics_Type physics_type = shared_data->descriptor->physics_descriptor.type;
   while (!shared_data->request_thread_exit)
   {
+    shared_data->idle.start();
     if (shared_data->requested_tick == shared_data->completed_update)
     {
+      // instead of this we should wait on an event that is triggered by setting the new tick...
+      // so that we can get to work immediately
       SDL_Delay(1);
       continue;
     }
+    shared_data->idle.stop();
 
-    if (emission_type != shared_data->descriptor.emission_descriptor.type)
-      emission = construct_emission_method(shared_data->descriptor);
-    if (physics_type != shared_data->descriptor.physics_descriptor.type)
-      physics = construct_physics_method(shared_data->descriptor);
+    // make the vertical slider bois in the renderer imgui window
+    // to auto assign to every shader as general 'knob0' 'knob1'... etc
+    // make the actual values global so that shader.use can see them and
+    // literally all shaders auto-set those uniforms
+
+    float64 last_attribute_calc_time_taken = clamp(shared_data->attribute_timer.get_last(), 0., float64(dt));
+    float64 time_left_for_tick = glm::clamp(get_time_left_in_this_tick(), 0., float64(dt));
+    float64 time_to_give = time_left_for_tick - last_attribute_calc_time_taken;
+    shared_data->time_allocations.insert_time(time_to_give);
+    shared_data->active.start();
+
+    if (emission_type != shared_data->descriptor->emission_descriptor.type)
+      emission = construct_emission_method(*shared_data->descriptor);
+    if (physics_type != shared_data->descriptor->physics_descriptor.type)
+      physics = construct_physics_method(*shared_data->descriptor);
+
+    emission_type = shared_data->descriptor->emission_descriptor.type;
+    physics_type = shared_data->descriptor->physics_descriptor.type;
+
+    shared_data->descriptor->emission_descriptor.dynamic_octree = shared_data->descriptor->dynamic_octree;
+    shared_data->descriptor->physics_descriptor.dynamic_octree = shared_data->descriptor->dynamic_octree;
+    shared_data->descriptor->emission_descriptor.static_octree = shared_data->descriptor->static_octree;
+    shared_data->descriptor->physics_descriptor.static_octree = shared_data->descriptor->static_octree;
+
+    shared_data->descriptor->emission_descriptor.static_geometry_collision =
+        shared_data->descriptor->static_geometry_collision;
+    shared_data->descriptor->physics_descriptor.static_geometry_collision =
+        shared_data->descriptor->static_geometry_collision;
+    shared_data->descriptor->emission_descriptor.dynamic_geometry_collision =
+        shared_data->descriptor->dynamic_geometry_collision;
+    shared_data->descriptor->physics_descriptor.dynamic_geometry_collision =
+        shared_data->descriptor->dynamic_geometry_collision;
+
+    shared_data->descriptor->emission_descriptor.maximum_octree_probe_size =
+        shared_data->descriptor->maximum_octree_probe_size;
+    shared_data->descriptor->physics_descriptor.maximum_octree_probe_size =
+        shared_data->descriptor->maximum_octree_probe_size;
 
     const float32 time = shared_data->completed_update * dt;
-    vec3 pos = shared_data->descriptor.position;
-    vec3 vel = shared_data->descriptor.velocity;
-    quat o = shared_data->descriptor.orientation;
-    emission->update(&shared_data->particles, &shared_data->descriptor.emission_descriptor, pos, vel, o, time, dt);
-    physics->step(&shared_data->particles, &shared_data->descriptor.physics_descriptor, time, dt);
+    vec3 pos = shared_data->descriptor->position;
+    vec3 vel = shared_data->descriptor->velocity;
+    quat o = shared_data->descriptor->orientation;
+    emission->update(&shared_data->particles, &shared_data->descriptor->emission_descriptor, pos, vel, o, time, dt,
+        shared_data.get());
+    physics->step(&shared_data->particles, &shared_data->descriptor->physics_descriptor, time, dt, shared_data.get());
     // delete expired particles:
-
+    shared_data->attribute_timer.start();
     for (uint i = 0; i < shared_data->particles.particles.size(); ++i)
     {
       shared_data->particles.particles[i].time_left_to_live -= dt;
@@ -3295,7 +3789,9 @@ void Particle_Emitter::thread(std::shared_ptr<Physics_Shared_Data> shared_data)
         --i;
       }
     }
-    shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera);
+    shared_data->particles.compute_attributes(shared_data->projection, shared_data->camera, &shared_data->active);
+    shared_data->attribute_timer.stop();
+    shared_data->active.stop();
     shared_data->completed_update += 1;
   }
   // possible problem: if requested_update doesnt match completed_update when the thread exits
@@ -3308,7 +3804,7 @@ bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulato
 {
   ASSERT(shared_data);
   ASSERT(accumulator);
-  spin_until_up_to_date();
+  fence();
   if (mesh_index != NODE_NULL && material_index != NODE_NULL)
   {
     return shared_data->particles.prepare_instance(accumulator);
@@ -3319,18 +3815,17 @@ bool Particle_Emitter::prepare_instance(std::vector<Render_Instance> *accumulato
 void Particle_Emitter::clear()
 {
   ASSERT(shared_data);
-  spin_until_up_to_date();
+  fence();
   shared_data->particles.particles.clear();
 }
 
-Particle_Emitter &Particle_Emitter::operator=(const Particle_Emitter &rhs)
+Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &rhs)
 {
-  rhs.spin_until_up_to_date();
-  spin_until_up_to_date();
+  rhs.fence();
+  fence();
+  shared_data = std::make_unique<Physics_Shared_Data>();
   descriptor = rhs.descriptor;
-  construct_physics_method(descriptor);
-  construct_emission_method(descriptor);
-  shared_data->descriptor = descriptor;
+  shared_data->descriptor = &descriptor;
   mesh_index = rhs.mesh_index;
   material_index = rhs.material_index;
   return *this;
@@ -3340,232 +3835,704 @@ Particle_Emitter &Particle_Emitter::operator=(Particle_Emitter &&rhs)
 {
   ASSERT(rhs.shared_data->request_thread_exit == false);
   ASSERT(shared_data->request_thread_exit == false);
-  rhs.spin_until_up_to_date();
-  spin_until_up_to_date();
+  rhs.fence();
+  fence();
   shared_data->request_thread_exit = true;
   t.join();
   t = std::move(rhs.t);
   shared_data = std::move(rhs.shared_data);
   descriptor = rhs.descriptor;
+  shared_data->descriptor = &descriptor;
   mesh_index = rhs.mesh_index;
   material_index = rhs.material_index;
   return *this;
 }
 
-void Simple_Particle_Physics::step(
-    Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 time, float32 dt)
+void physics_billboard_step(Particle &particle, const Particle_Physics_Method_Descriptor *d, float32 current_time)
 {
-  ASSERT(p);
-  ASSERT(d);
-  for (auto &particle : p->particles)
+  bool lock_z = particle.billboard_lock_z;
+
+  particle.billboard_angle += particle.billboard_rotation_velocity;
+  float32 applying_angle =
+      wrap_to_range(particle.billboard_angle + d->billboard_rotation_time_factor * current_time, 0, two_pi<float32>());
+  particle.orientation = angleAxis(applying_angle, vec3(0, 0, 1));
+}
+
+void misc_particle_attribute_iteration_step(
+    Particle &particle, const Particle_Physics_Method_Descriptor *d, float32 current_time)
+{
+  if (d->size_multiply_uniform_min != 1.f || d->size_multiply_uniform_max != 1.f)
   {
-    particle.velocity += dt * d->gravity;
-    particle.position += dt * particle.velocity;
+    particle.scale = random_between(d->size_multiply_uniform_min, d->size_multiply_uniform_max) * particle.scale;
+  }
+  if (d->size_multiply_min != vec3(1.f) || d->size_multiply_max != vec3(1.f))
+  {
+    particle.scale =
+        (d->size_multiply_min + random_within(d->size_multiply_max - d->size_multiply_min)) * particle.scale;
+  }
+
+  if (d->die_when_size_smaller_than != vec3(0))
+  {
+    bool3 greater = glm::greaterThan(particle.scale, d->die_when_size_smaller_than);
+    if (!any(greater))
+    {
+      particle.time_left_to_live = 0.f;
+    }
   }
 }
 
-void Wind_Particle_Physics::step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt)
+void simple_physics_step(Particle &particle, Particle_Physics_Method_Descriptor *d, float32 current_time)
+{
+  particle.position += (dt * particle.velocity);
+  float32 len_v = length(particle.velocity);
+  if (len_v > 100000)
+  {
+    particle.time_left_to_live = 0.f;
+  }
+  else
+  {
+//#define GODS_WAY
+#ifdef GODS_WAY
+    float32 density_of_air = 1.0f;
+    float32 area_of_front = 1.0f;
+    vec3 velocity_n = normalize(particle.velocity);
+    float32 speedsq = len_v * len_v;
+    float32 drag = d->drag * area_of_front * 0.5f * density_of_air * speedsq;
+    particle.velocity = particle.velocity - dt * drag * velocity_n;
+#endif
+
+#if 1
+    particle.velocity = particle.velocity * (1.0f - dt * len_v * 0.5f * d->drag);
+    particle.velocity += dt * d->gravity;
+
+#endif
+
+#if 0
+    vec3 vel_squared = particle.velocity*particle.velocity;
+    
+
+    if(particle.velocity.x < 0)
+    {
+      vel_squared.x = -vel_squared.x;
+    }
+    if (particle.velocity.y < 0)
+    {
+      vel_squared.y = -vel_squared.y;
+    }
+    if (particle.velocity.z < 0)
+    {
+      vel_squared.z = -vel_squared.z;
+    }
+
+    vec3 drag = dt * d->drag * 0.5f * vel_squared;
+    particle.velocity = particle.velocity - drag; 
+    particle.velocity += dt * d->gravity;
+#endif
+  }
+  misc_particle_attribute_iteration_step(particle, d, current_time);
+  if (particle.billboard)
+  {
+    physics_billboard_step(particle, d, current_time);
+  }
+}
+
+void Simple_Particle_Physics::step(
+    Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 time, float32 dt, Physics_Shared_Data *data)
+{
+  ASSERT(p);
+  ASSERT(d);
+  float32 current_time = (float32)get_real_time();
+  for (auto &particle : p->particles)
+  {
+    if (d->abort_when_late)
+    {
+      if (data->active.get_current() > (0.7 * dt) || SPIRAL_OF_DEATH)
+      {
+        return;
+      }
+    }
+    simple_physics_step(particle, d, current_time);
+  }
+}
+
+void Wind_Particle_Physics::step(
+    Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data *data)
 {
   ASSERT(p);
   ASSERT(d);
 
-  float32 rand = 0.75;
+  float32 current_time = (float32)get_real_time();
+  //
+  // float32 bounce_loss = 0.75;
   if (p->particles.size() > 0)
   {
-    rand = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
-    rand = lerp(d->bounce_min, d->bounce_max, rand);
+    // bounce_loss = fract(42.353123f * p->particles[0].position.x * p->particles[0].position.y);
+    // bounce_loss = lerp(d->bounce_min, d->bounce_max, rand);
   }
-  // rand = random_between(0.65f, 0.75f);
-  // rand = 1.0f;
+
+  bool want_out = false;
   for (Particle &particle : p->particles)
   {
-    vec3 wind = d->intensity * d->direction;
-    particle.velocity += dt * (d->gravity + wind);
-    // if (length(particle.velocity) < 0.1)
-    //{
-    //  particle.velocity = vec3(0);
-    //  continue;
-    //}
+    // bounce_loss = fract(42.353123f * particle.position.x * particle.position.y);
+    // bounce_loss = lerp(d->bounce_min, d->bounce_max, bounce_loss);
 
-    // vec3 ray = dt * particle.velocity;
-    // AABB probe;
-    // vec3 new_pos = particle.position + ray;
-    // vec3 probesize = 1.0f * particle.scale;
-    // probe.min = new_pos - 0.5f*probesize;
-    // probe.max = new_pos + 0.5f*probesize;
-
-    vec3 ray = dt * particle.velocity;
-    AABB probe(vec3(0));
-    probe.min = particle.position - 0.5f * particle.scale;
-    probe.max = particle.position + 0.5f * particle.scale;
-
-    vec3 min = probe.min;
-    vec3 max = probe.max;
-    push_aabb(probe, min + ray);
-    push_aabb(probe, max + ray);
-
-    uint32 counter = 0;
-    std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
-
-    if (colliders.size() == 0)
+    if (!want_out && d->abort_when_late)
     {
-      particle.position = particle.position + ray;
+      if (data->active.get_current() > (0.75f * data->time_allocations.get_last()) || SPIRAL_OF_DEATH)
+      {
+        want_out = true;
+        return; // sponge
+      }
+    }
+
+    if (want_out)
+    {
+      if (particle.billboard)
+      {
+        // physics_billboard_step(particle, d, current_time);//sponge
+      }
       continue;
     }
 
-    // float32 t = 0.5f; //% of dt we collide at
-    // float32 tt = 0.25f;
-    // bool high = true;
-    // AABB probe2;
-    // for (uint32 i = 0; i < 0; ++i)
-    //{
-    //  vec3 new_pos = particle.position + t * ray;
-    //  probe2.min = new_pos - 0.5f * particle.scale;
-    //  probe2.max = new_pos + 0.5f * particle.scale;
-    //  high = aabb_triangle_intersection(probe2, *collider);
+    // vec3 ray = (dt * particle.velocity) + (dt * d->gravity);
 
-    //  if (high)
-    //  {
-    //    t = t - tt;
-    //  }
-    //  else
-    //  {
-    //    t = t + tt;
-    //  }
-    //  tt = 0.5f * tt;
+    AABB probe(vec3(0));
 
-    //}
-    // if (high)
-    //  t = t - (2.f*tt);
+    // we are testing only the next position
+    Particle unmodified_particle = particle;
+    vec3 wind = dt * d->wind_intensity * d->direction;
+    simple_physics_step(particle, d, current_time);
 
-    // vec3 new_pos = particle.position + t * ray;
-    // probe2.min = new_pos - 0.5f * particle.scale;
-    // probe2.max = new_pos + 0.5f * particle.scale;
-    // high = aabb_triangle_intersection(probe2, *collider);
+    // if the probe is too big it grabs too many triangles
+    vec3 half_probe_scale = 0.5f * min(particle.scale, vec3(d->maximum_octree_probe_size));
+    probe.min = particle.position - half_probe_scale;
+    probe.max = particle.position + half_probe_scale;
+
+    ASSERT(!isnan(particle.position.x));
+    ASSERT(!isnan(particle.velocity.x));
+    // vec3 min = probe.min;
+    // vec3 max = probe.max;
+    // push_aabb(probe, min + 1.01f * ray);
+    // push_aabb(probe, max + 1.01f * ray);
+
+    uint32 counter = 0;
+    thread_local static std::vector<Triangle_Normal> colliders;
+    colliders.clear();
+    uint32 static_collider_count = 0;
+    uint32 dynamic_collider_count = 0;
+    if (d->static_octree && d->static_geometry_collision)
+    {
+      data->per_static_octree_test.start();
+      d->static_octree->test_all(probe, &counter, &colliders);
+      data->per_static_octree_test.stop();
+
+      static_collider_count = (uint32)colliders.size();
+      static_collider_count = counter;
+      // if (static_collider_count > 1000)
+      //{
+      //  std::vector<Triangle_Normal> colliderstest;
+      //  d->static_octree->test_all(probe, &counter, &colliderstest);
+      //}
+
+      data->static_collider_count_max = glm::max(data->static_collider_count_max, static_collider_count);
+      data->static_collider_count_samples += 1;
+      data->static_collider_count_sum = data->static_collider_count_sum + static_collider_count;
+    }
+    if (d->dynamic_octree && d->dynamic_geometry_collision)
+    {
+      data->per_static_octree_test.start();
+      data->per_dynamic_octree_test.start();
+      data->per_dynamic_octree_test.start();
+      d->dynamic_octree->test_all(probe, &counter, &colliders);
+      data->per_dynamic_octree_test.stop();
+
+      dynamic_collider_count = (uint32)colliders.size() - static_collider_count;
+      data->dynamic_collider_count_max = glm::max(data->dynamic_collider_count_max, dynamic_collider_count);
+      data->dynamic_collider_count_samples += 1;
+      data->dynamic_collider_count_sum += dynamic_collider_count;
+    }
+    if (colliders.size() == 0) //|| particle.last_frame_collided)
+    {
+      // if (colliders.size() == 0)
+      //{
+      // particle.last_frame_collided = false;
+      // particle.last_frame_collision_normal = vec3(0);
+      //}
+      ASSERT(!isnan(particle.position.x));
+      ASSERT(!isnan(particle.velocity.x));
+
+      particle.velocity = particle.velocity + wind;
+      continue;
+    }
 
     // bool aabb_triangle_intersection(const AABB &aabb, const Triangle_Normal &triangle)
 
+    vec3 approach_velocity = unmodified_particle.velocity;
     vec3 reflection_normal = vec3(0);
     vec3 collider_velocity = vec3(0);
 
     // jank way to 'identify' different objects instead of using an id
+    // this was meant to cull multiple triangles of the same object
+    // for the purpose of avoiding adding the velocity of a single (multitriangle) object more than once
+    // however it is technically broken when there is more than one object with the same velocity
+    // which is not common for moving objects, but stationary ones....
+
+    // for now we are just using it to cull triangles we are approaching from behind
     std::vector<vec3> velocities_found;
     for (uint32 i = 0; i < colliders.size(); ++i)
     {
-      bool found = false;
-      for (uint32 j = 0; j < velocities_found.size(); ++j)
+      // bool found = false;
+      // for (uint32 j = 0; j < velocities_found.size(); ++j)
+      //{
+      //  if (velocities_found[j] == colliders[i].v)
+      //  {
+      //    found = true;
+      //    break;
+      //  }
+      //}
+      // if (!found)
       {
-        if (velocities_found[j] == colliders[i].v)
+        vec3 approach_velocity = particle.velocity - colliders[i].v;
+        if (dot(-approach_velocity, colliders[i].n) > 0.f)
         {
-          found = true;
-          break;
+          velocities_found.push_back(colliders[i].v);
+          reflection_normal = reflection_normal + colliders[i].n;
+          collider_velocity = collider_velocity + colliders[i].v;
         }
-      }
-      if (!found)
-      {
-        velocities_found.push_back(colliders[i].v);
-        reflection_normal = reflection_normal + colliders[i].n;
-        collider_velocity = collider_velocity + colliders[i].v;
       }
     }
 
     if (reflection_normal == vec3(0))
     {
-      reflection_normal = vec3(0, 0, 1);
+      // all the colliders were backfaces
+      continue;
     }
     reflection_normal = normalize(reflection_normal);
 
-    float32 t = 0.5f;
-    particle.position = particle.position + (t * ray);
-    particle.velocity = reflect(particle.velocity, reflection_normal);
-    particle.position = particle.position + dt * (1.0f - t) * particle.velocity;
-    particle.velocity = rand * particle.velocity + collider_velocity;
-
-    particle.position += 0.002f * reflection_normal;
-    bool colliding = true;
-
-    for (uint32 i = 0; i < 5; ++i)
+    // if we get here, our next position isn't valid, we intersected a triangle facing us
+    bool moving = length(particle.velocity) > d->stiction_velocity;
+    if (moving)
     {
-      probe.min = particle.position - 0.5f * particle.scale;
-      probe.max = particle.position + 0.5f * particle.scale;
-      std::vector<Triangle_Normal> colliders = d->octree->test_all(probe, &counter);
+      vec3 full_step_ray = particle.position - unmodified_particle.position;
 
-      if (colliders.size() == 0)
-        break;
+      float32 largest_non_colliding_t = 0.f;
+      float32 t = 0.5f; //% of dt we collide at
+      float32 tt = 0.25f;
+      bool is_colliding = true;
+      AABB probe2(vec3(0));
 
-      for (Triangle_Normal &collider : colliders)
+      ////sponge:testing to see if the old particle was colliding:
+      // colliders.clear();
+      // if (d->static_geometry_collision && d->static_octree)
+      //  d->static_octree->test_all(probe, &counter, &colliders);
+      // if (d->dynamic_geometry_collision && d->dynamic_octree)
+      //  d->dynamic_octree->test_all(probe, &counter, &colliders);
+
+      // if(colliders.size() > 0)
+      //{
+      //  int a  = 3;
+      //}
+
+      for (uint32 i = 0; i < d->collision_binary_search_iterations; ++i)
       {
-        particle.position += 0.01f * collider.n;
+        // this probe is not completely correct if the size is increasing
+        vec3 new_pos = unmodified_particle.position + t * full_step_ray;
+        probe2.min = new_pos - half_probe_scale;
+        probe2.max = new_pos + half_probe_scale;
+        colliders.clear();
+
+        if (d->static_geometry_collision && d->static_octree)
+          d->static_octree->test_all(probe2, &counter, &colliders);
+        if (d->dynamic_geometry_collision && d->dynamic_octree)
+          d->dynamic_octree->test_all(probe2, &counter, &colliders);
+
+        is_colliding = colliders.size() > 0;
+
+        if (is_colliding)
+        {
+          t = t - tt;
+        }
+        else
+        {
+          t = t + tt;
+          largest_non_colliding_t = t;
+        }
+        tt = 0.5f * tt;
       }
+      float32 before_reflect_t = largest_non_colliding_t;
+      float32 after_reflect_t = 1.0f - largest_non_colliding_t;
+
+      // revert our state to before we stepped into colliding geometry
+      particle = unmodified_particle;
+      // time step forward until we hit the surface
+      particle.position = unmodified_particle.position + (before_reflect_t * dt * unmodified_particle.velocity);
+      particle.velocity += (before_reflect_t * dt * d->gravity);
+
+      // instantaneous surface interaction
+      particle.velocity = reflect(particle.velocity, reflection_normal);
+      float32 ndotv = clamp(dot(reflection_normal, particle.velocity), 0.f, 1.f);
+      vec3 bounce_loss = vec3(random_between(d->bounce_min, d->bounce_max));
+      bounce_loss = mix(bounce_loss, d->friction, 1.0f - ndotv);
+      particle.velocity = (bounce_loss * particle.velocity) + collider_velocity;
+      particle.billboard_rotation_velocity = bounce_loss.z * particle.billboard_rotation_velocity;
+      particle.angular_velocity = bounce_loss * particle.angular_velocity;
+
+      // time step forward after interaction
+      particle.position += (after_reflect_t * (dt)*particle.velocity);
+      particle.velocity += (after_reflect_t * dt * d->gravity);
+
+      // misc
+      // particle.velocity *= d->drag; // needs to scale with velocity squared
+      particle.velocity += wind;
+
+      // scale change etc
+      // this might enlarge the particle and make us intersect again...
+      misc_particle_attribute_iteration_step(particle, d, current_time);
+      if (particle.billboard)
+      {
+        physics_billboard_step(particle, d, current_time);
+      }
+
+#if 0
+      // final step, if we are still inside something, lets just push ourselves
+      // out in the direction of the normal
+      float32 offset = 0.105f;
+      for (uint32 i = 0; i < 1; ++i)
+      {
+        probe.min = particle.position - half_probe_scale;
+        probe.max = particle.position + half_probe_scale;
+
+        colliders.clear();
+        if (d->static_octree && d->static_geometry_collision)
+        {
+          // data->per_static_octree_test.start();
+          d->static_octree->test_all(probe, &counter, &colliders);
+          // data->per_static_octree_test.stop();
+        }
+        if (d->dynamic_octree && d->dynamic_geometry_collision)
+        {
+          // data->per_dynamic_octree_test.start();
+          d->dynamic_octree->test_all(probe, &counter, &colliders);
+          // data->per_dynamic_octree_test.stop();
+        }
+        if (colliders.size() == 0)
+          break;
+
+        for (Triangle_Normal &collider : colliders)
+        {
+          if (dot(-approach_velocity, collider.n) > 0.f)
+          {
+            particle.position += offset * collider.n;
+
+            //sponge
+            particle.position = vec3(0,0,4);
+            particle.velocity = vec3(0.f);
+          }
+        }
+        // offset = 2.f * offset;
+
+        // particle.position += dt * particle.velocity; no: we did it just above
+
+        ASSERT(!isnan(particle.velocity.x));
+        ASSERT(!isnan(particle.position.x));
+      }
+#endif
+    }
+    else
+    {
+      particle.velocity = vec3(0.f);
+      particle.billboard_rotation_velocity = 0.f;
+      particle.angular_velocity = vec3(0.f);
+      simple_physics_step(particle, d, current_time);
+      particle.velocity = vec3(0.f);
     }
   }
 }
-
-void Particle_Explosion_Emission::update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos,
-    vec3 vel, quat o, float32 time, float32 dt)
+float32 radicalInverse_VdC(uint32 bits)
 {
-  ASSERT(p);
-  ASSERT(d);
-  // todo: particle explosion
-  Particle new_particle;
-  p->particles.push_back(new_particle);
+  bits = (bits << 16u) | (bits >> 16u);
+  bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+  bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+  bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+  bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+  return float32(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+vec2 hammersley2d(uint32 i, uint32 N)
+{
+  return vec2(float32(i) / float32(N), radicalInverse_VdC(i));
 }
 
-void Particle_Stream_Emission::update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos,
-    vec3 vel, quat o, float32 time, float32 dt)
+vec3 hemisphere_sample_uniform(vec2 uv)
+{
+  float32 phi = uv.y * two_pi<float32>();
+  float32 cos_theta = 1.0f - uv.x;
+  float32 sin_theta = sqrt(1.0f - cos_theta * cos_theta);
+  return vec3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
+}
+
+vec3 hammersley_hemisphere(uint32 i, uint32 n)
+{
+  return hemisphere_sample_uniform(hammersley2d(i, n));
+}
+
+vec3 hammersley_sphere(uint32 i, uint32 n)
+{
+  uint32 extra_index = n % 2 != 0; // if n is odd, we do one extra on the top hemisphere
+  uint32 half_n = n / 2;
+  vec3 result;
+  if (i < half_n)
+    result = vec3(1, 1, -1) * hammersley_hemisphere(i, half_n); // bottom
+  else
+    result = hammersley_hemisphere(i - half_n, half_n + extra_index); // top
+
+  return result;
+}
+Particle misc_particle_emitter_step(
+    Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time, float32 dt)
+{
+  Particle new_particle;
+  new_particle.billboard = d->billboarding;
+  new_particle.billboard_lock_z = d->billboard_lock_z;
+  float32 extra_rotational_vel = random_between(0.f, d->initial_billboard_rotation_velocity_variance);
+  new_particle.billboard_rotation_velocity = d->billboard_rotation_velocity + extra_rotational_vel;
+  new_particle.billboard_angle = d->billboard_initial_angle;
+  vec3 pos_variance = random_within(d->initial_position_variance);
+  pos_variance = pos_variance - 0.5f * d->initial_position_variance;
+  new_particle.position = pos + pos_variance;
+
+  vec3 vel_variance = random_within(d->initial_velocity_variance);
+  vel_variance = vel_variance - 0.5f * d->initial_velocity_variance;
+  if (d->inherit_velocity != 0.f)
+    new_particle.velocity = o * (d->inherit_velocity * vel + d->initial_velocity + vel_variance);
+  else
+    new_particle.velocity = o * (d->initial_velocity + vel_variance);
+
+  vec3 av_variance = random_within(d->initial_angular_velocity_variance);
+  av_variance = av_variance - 0.5f * d->initial_angular_velocity_variance;
+  new_particle.angular_velocity = d->initial_angular_velocity + av_variance;
+
+  //// first generated orientation - use to orient within a cone or an entire unit sphere
+  //// these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
+  // glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
+  // float32 randomized_orientation_angle_variance = 0.f;
+
+  //// post-spawn - use to orient the model relative to the emitter:
+  // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
+  // float32 initial_orientation_angle = 0.0f;
+
+  const vec4 &ov = d->randomized_orientation_axis;
+  vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
+  float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
+  oav = oav - 0.5f * d->randomized_orientation_angle_variance;
+  quat first_orientation = angleAxis(oav, orientation_vector);
+  quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
+  new_particle.orientation = o * second_orientation * first_orientation;
+
+  vec3 extra_scale;
+  std::normal_distribution<float32> dist(0.f, d->initial_extra_scale_variance.x);
+  extra_scale.x = dist(generator);
+  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.y);
+  extra_scale.y = dist(generator);
+  dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.z);
+  extra_scale.z = dist(generator);
+  new_particle.scale = d->initial_scale + extra_scale;
+  new_particle.scale =
+      new_particle.scale + random_between(0.f, d->initial_extra_scale_uniform_variance) * d->initial_scale;
+
+  new_particle.lifespan = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
+
+  new_particle.time_left_to_live = new_particle.lifespan;
+
+  return new_particle;
+}
+void Particle_Explosion_Emission::update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
+    quat o, float32 time, float32 dt, Physics_Shared_Data *data)
 {
   ASSERT(p);
   ASSERT(d);
-  const uint32 particles_before_tick = (uint32)floor(d->particles_per_second * time);
-  const uint32 particles_after_tick = (uint32)floor(d->particles_per_second * (time + dt));
+  if (d->boom_t < dt)
+  {
+    return;
+  }
+
+  d->boom_t = d->boom_t - dt;
+
+  if (!d->generate_particles)
+  {
+    return;
+  }
+
+  // std::vector<uint32> shuffled_indices;
+  // if (d->low_discrepency_position_variance)
+  //{
+  //  shuffled_indices.resize(d->particle_count_per_tick);
+  //  std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
+  //  std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), std::mt19937{ std::random_device{}() });
+  //}
+  float32 epc = (float32)d->explosion_particle_count;
+#ifndef NDEBUG
+  epc = 0.1f * epc;
+#endif
+
+  for (uint32 i = 0; i < (uint32)epc; ++i)
+  {
+    Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
+
+    vec3 impulse_p = pos;
+
+    if (d->impulse_center_offset_min != vec3(0) || d->impulse_center_offset_max != vec3(0))
+    {
+      impulse_p += random_between(d->impulse_center_offset_min, d->impulse_center_offset_max);
+    }
+
+    if (d->low_discrepency_position_variance)
+    {
+      vec3 hammersley_pos;
+      if (d->hammersley_sphere)
+      {
+        hammersley_pos = hammersley_sphere(i, (uint32)epc);
+      }
+      else
+      {
+        hammersley_pos = hammersley_hemisphere(i, (uint32)epc);
+      }
+      // lets take the previously calculated random-offsetted position from the
+      // misc emitter step and use its length as the distance from emitter origin
+      float32 dist = length(new_particle.position - pos);
+      dist = length(new_particle.position - impulse_p);
+      // if (dist == 0)
+      {
+        dist = d->hammersley_radius;
+      }
+      new_particle.position = pos + dist * normalize(hammersley_pos);
+
+      vec3 dir = normalize(new_particle.position - impulse_p);
+      if (isnan(dir.x))
+      {
+        dir = vec3(0.f, 0.f, 0.0001f);
+      }
+      new_particle.velocity = new_particle.velocity + (d->power / glm::max(dist, 0.1f)) * dir;
+
+      if (d->enforce_velocity_position_offset_match)
+      {
+        new_particle.velocity = length(new_particle.velocity) * (new_particle.position - pos);
+      }
+      ASSERT(!isnan(new_particle.velocity.x));
+      p->particles.push_back(new_particle);
+    }
+    else
+    {
+      vec3 dir = normalize(new_particle.position - impulse_p);
+
+      if (new_particle.position == impulse_p)
+      {
+        new_particle.position += 0.1f * random_3D_unit_vector();
+      }
+      if (isnan(dir.x))
+      {
+        dir = vec3(0.f, 0.f, 0.0001f);
+      }
+
+      float32 dist = length(new_particle.position - impulse_p);
+      if (dist == 0)
+      {
+        dist = 0.01f;
+      }
+
+      new_particle.velocity = new_particle.velocity + (d->power / dist) * dir;
+      if (d->enforce_velocity_position_offset_match)
+      {
+        new_particle.velocity = length(new_particle.velocity) * normalize((new_particle.position - pos));
+      }
+      ASSERT(!isnan(new_particle.velocity.x));
+      ASSERT(!isnan(new_particle.position.x));
+    }
+    if (!d->allow_colliding_spawns)
+    {
+      AABB probe(vec3(0));
+      vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
+      probe.min = new_particle.position - half_probe_scale;
+      probe.max = new_particle.position + half_probe_scale;
+      thread_local static std::vector<Triangle_Normal> colliders;
+      colliders.clear();
+      uint32 counter = 0;
+      if (d->static_octree && d->static_geometry_collision)
+      {
+        d->static_octree->test_all(probe, &counter, &colliders);
+      }
+      if (d->dynamic_octree && d->dynamic_geometry_collision)
+      {
+        d->dynamic_octree->test_all(probe, &counter, &colliders);
+      }
+
+      if (colliders.size() != 0)
+      {
+        new_particle.time_left_to_live = 0.f;
+      }
+    }
+    p->particles.push_back(new_particle);
+  }
+}
+
+void Particle_Stream_Emission::update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
+    quat o, float32 time, float32 dt, Physics_Shared_Data *data)
+{
+  ASSERT(p);
+  ASSERT(d);
+
+  // do this better, accumulate time
+  // they should also be placed smoothly along the delta position of the
+  // emitter itself
+  // based on time between visits and expected spawn time per individual particle
+  // instead of all clumped at the current position
+
+  // perhaps a simple way would to be loop n times per dt and do the same thing here
+  // do this spawns loop "spawns per dt"+1 times per visit to this function
+  float32 sps = d->particles_per_second;
+#ifndef NDEBUG
+  sps = 0.1f * sps;
+#endif
+
+  const uint32 particles_before_tick = (uint32)floor(sps * time);
+  const uint32 particles_after_tick = (uint32)floor(sps * (time + dt));
   const uint32 spawns = particles_after_tick - particles_before_tick;
+
+  if (!d->generate_particles)
+  {
+    return;
+  }
 
   for (uint32 i = 0; i < spawns; ++i)
   {
-
     if (!(p->particles.size() < MAX_INSTANCE_COUNT))
     {
       return;
     }
-    Particle new_particle;
+    Particle new_particle = misc_particle_emitter_step(d, pos, vel, o, time, dt);
+    if (!d->allow_colliding_spawns)
+    {
+      AABB probe(vec3(0));
+      vec3 half_probe_scale = 0.5f * min(new_particle.scale, vec3(d->maximum_octree_probe_size));
+      probe.min = new_particle.position - half_probe_scale;
+      probe.max = new_particle.position + half_probe_scale;
+      thread_local static std::vector<Triangle_Normal> colliders;
+      colliders.clear();
+      uint32 counter = 0;
 
-    vec3 pos_variance = random_within(d->initial_position_variance);
-    pos_variance = pos_variance - 0.5f * d->initial_position_variance;
-    new_particle.position = pos + pos_variance;
+      if (d->static_octree && d->static_geometry_collision)
+      {
+        d->static_octree->test_all(probe, &counter, &colliders);
+      }
+      if (d->dynamic_octree && d->dynamic_geometry_collision)
+      {
+        d->dynamic_octree->test_all(probe, &counter, &colliders);
+      }
 
-    vec3 vel_variance = random_within(d->initial_velocity_variance);
-    vel_variance = vel_variance - 0.5f * d->initial_velocity_variance;
-    if (d->inherit_velocity)
-      new_particle.velocity = o * (vel + d->initial_velocity + vel_variance);
-    else
-      new_particle.velocity = o * (d->initial_velocity + vel_variance);
-
-    vec3 av_variance = random_within(d->initial_angular_velocity_variance);
-    av_variance = av_variance - 0.5f * d->initial_angular_velocity_variance;
-    new_particle.angular_velocity = d->initial_angular_velocity + av_variance;
-
-    //// first generated orientation - use to orient within a cone or an entire unit sphere
-    //// these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
-    // glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
-    // float32 randomized_orientation_angle_variance = 0.f;
-
-    //// post-spawn - use to orient the model relative to the emitter:
-    // glm::vec3 intitial_orientation_axis = glm::vec3(0, 0, 1);1
-    // float32 initial_orientation_angle = 0.0f;
-
-    const vec4 &ov = d->randomized_orientation_axis;
-    vec3 orientation_vector = random_3D_unit_vector(ov.x, ov.y, ov.z, ov.w);
-    float32 oav = random_between(0.f, d->randomized_orientation_angle_variance);
-    oav = oav - 0.5f * d->randomized_orientation_angle_variance;
-    quat first_orientation = angleAxis(oav, orientation_vector);
-    quat second_orientation = angleAxis(d->initial_orientation_angle, d->intitial_orientation_axis);
-    new_particle.orientation = o * second_orientation * first_orientation;
-
-    new_particle.scale = d->initial_scale + random_within(d->initial_extra_scale_variance);
-
-    new_particle.time_to_live = d->minimum_time_to_live + random_between(0.f, d->extra_time_to_live_variance);
-
-    new_particle.time_left_to_live = new_particle.time_to_live;
+      if (colliders.size() != 0)
+      {
+        new_particle.time_left_to_live = 0.f;
+      }
+    }
     p->particles.push_back(new_particle);
   }
 }
@@ -3581,7 +4548,9 @@ void Particle_Array::init()
   glGenBuffers(1, &instance_model_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(mat4), (void *)0, GL_DYNAMIC_DRAW);
-
+  glGenBuffers(1, &instance_billboard_location_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_billboard_location_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
   glGenBuffers(1, &instance_attribute0_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
@@ -3590,6 +4559,9 @@ void Particle_Array::init()
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
   glGenBuffers(1, &instance_attribute2_buffer);
   glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
+  glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
+  glGenBuffers(1, &instance_attribute3_buffer);
+  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute3_buffer);
   glBufferData(GL_ARRAY_BUFFER, MAX_INSTANCE_COUNT * sizeof(vec4), (void *)0, GL_DYNAMIC_DRAW);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -3600,36 +4572,108 @@ void Particle_Array::destroy()
 {
   glDeleteBuffers(1, &instance_mvp_buffer);
   glDeleteBuffers(1, &instance_model_buffer);
+  glDeleteBuffers(1, &instance_billboard_location_buffer);
   glDeleteBuffers(1, &instance_attribute0_buffer);
   glDeleteBuffers(1, &instance_attribute1_buffer);
   glDeleteBuffers(1, &instance_attribute2_buffer);
+  glDeleteBuffers(1, &instance_attribute3_buffer);
   initialized = false;
 }
 
 Particle_Array::Particle_Array(Particle_Array &&rhs) {}
 
-void Particle_Array::compute_attributes(mat4 projection, mat4 camera)
+void Particle_Array::compute_attributes(mat4 projection, mat4 view, Timer *active)
 {
   MVP_Matrices.clear();
   Model_Matrices.clear();
+  billboard_locations.clear();
   attributes0.clear();
   attributes1.clear();
   attributes2.clear();
-  // set_message("compute_attributes projection:", s(projection), 1.0f);
-  // set_message("compute_attributes camera:", s(camera), 1.0f);
-  mat4 PC = projection * camera;
-  for (auto &i : particles)
+  attributes3.clear();
+
+  mat4 VP = projection * view;
+
+  // vec3 camera_location = view[3];
+  // for (Particle &i : particles)
+  //{
+  //  vec3 p;
+  //  if (i.billboard)
+  //  {
+  //    p = view * vec4(i.position, 1);
+  //  }
+  //  else
+  //  {
+  //    p = i.position;
+  //  }
+  //  i.distance_to_camera = length(p-camera_location);
+  //}
+
+  // sort(particles.begin(),particles.end(),[](const Particle& p1, const Particle& p2){return p1.distance_to_camera
+  // > p2.distance_to_camera;});
+
+  for (Particle &i : particles)
   {
+    if (i.billboard)
+    {
+      use_billboarding = true;
+      const mat4 R = toMat4(i.orientation);
+      mat4 S = scale(i.scale);
+      Model_Matrices.push_back(R * S);
+      vec4 billboard_position = view * vec4(i.position, 1);
+      billboard_locations.push_back(billboard_position);
+
+      if (i.use_attribute0)
+      {
+        use_attribute0 = true;
+        attributes0.push_back(i.attribute0);
+      }
+      if (i.use_attribute1)
+      {
+        use_attribute1 = true;
+        attributes1.push_back(i.attribute1);
+      }
+      if (i.use_attribute2)
+      {
+        use_attribute2 = true;
+        attributes2.push_back(i.attribute2);
+      }
+      if (i.use_attribute3)
+      {
+        use_attribute3 = true;
+        attributes3.push_back(i.attribute3);
+      }
+      continue;
+    }
+
+    ASSERT(!use_billboarding); // all particles must use or not use
     const mat4 R = toMat4(i.orientation);
     const mat4 S = scale(i.scale);
     const mat4 T = translate(i.position);
     const mat4 model = T * R * S;
-    const mat4 MVP = PC * model;
+    const mat4 MVP = VP * model;
     MVP_Matrices.push_back(MVP);
     Model_Matrices.push_back(model);
-    attributes0.push_back(i.attribute0);
-    attributes1.push_back(i.attribute1);
-    attributes2.push_back(i.attribute2);
+    if (i.use_attribute0)
+    {
+      use_attribute0 = true;
+      attributes0.push_back(i.attribute0);
+    }
+    if (i.use_attribute1)
+    {
+      use_attribute1 = true;
+      attributes1.push_back(i.attribute1);
+    }
+    if (i.use_attribute2)
+    {
+      use_attribute2 = true;
+      attributes2.push_back(i.attribute2);
+    }
+    if (i.use_attribute3)
+    {
+      use_attribute3 = true;
+      attributes3.push_back(i.attribute3);
+    }
   }
 }
 
@@ -3642,30 +4686,58 @@ bool Particle_Array::prepare_instance(std::vector<Render_Instance> *accumulator)
   }
 
   Render_Instance result;
-  uint32 num_instances = MVP_Matrices.size();
+  // use model matrices size instead of particles
+  // because we might have early-outted from the compute attributes function
+  uint32 num_instances = Model_Matrices.size();
   if (num_instances == 0)
     return false;
 
   ASSERT(num_instances <= MAX_INSTANCE_COUNT);
 
-  glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
+  if (!use_billboarding)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_mvp_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &MVP_Matrices[0][0][0]);
+  }
   glBindBuffer(GL_ARRAY_BUFFER, instance_model_buffer);
   glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(mat4), &Model_Matrices[0][0][0]);
 
-  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes0[0]);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes1[0]);
-  glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes2[0]);
+  if (use_billboarding)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_billboard_location_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &billboard_locations[0]);
+  }
+
+  if (use_attribute0)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute0_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes0[0]);
+  }
+  if (use_attribute1)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute1_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes1[0]);
+  }
+  if (use_attribute2)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute2_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes2[0]);
+  }
+  if (use_attribute3)
+  {
+    glBindBuffer(GL_ARRAY_BUFFER, instance_attribute3_buffer);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, num_instances * sizeof(vec4), &attributes3[0]);
+  }
 
   result.mvp_buffer = instance_mvp_buffer;
   result.model_buffer = instance_model_buffer;
   result.attribute0_buffer = instance_attribute0_buffer;
   result.attribute1_buffer = instance_attribute1_buffer;
   result.attribute2_buffer = instance_attribute2_buffer;
+  result.attribute3_buffer = instance_attribute3_buffer;
+  result.instance_billboard_location_buffer = instance_billboard_location_buffer;
   result.size = num_instances;
+  result.use_billboarding = use_billboarding;
   accumulator->push_back(result);
   return true;
 }
@@ -3680,7 +4752,7 @@ Particle_Array &Particle_Array::operator=(Particle_Array &rhs)
   return *this;
 }
 
-Image::Image(string filename)
+Image2::Image2(string filename)
 {
   float *d = stbi_loadf(filename.c_str(), &width, &height, &n, 4);
   n = 4;
@@ -3702,11 +4774,11 @@ Image::Image(string filename)
   }
 }
 
-void Image::rotate90()
+void Image2::rotate90()
 {
   const int floats_per_pixel = 4;
   int32 size = width * height * floats_per_pixel;
-  Image result;
+  Image2 result;
   result.data.resize(size);
 
   for (int32 y = 0; y < height; ++y)
@@ -3732,14 +4804,15 @@ void Image::rotate90()
   data = result.data;
 }
 
-Texture Texture_Paint::create_new_texture(const char *name)
+Texture Texture_Paint::create_new_texture(ivec2 size, const char *name)
 {
   const char *tname = "Untitled";
   if (name)
   {
     tname = name;
   }
-  Texture t = Texture(tname, vec2(256), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR,GL_CLAMP_TO_EDGE,GL_CLAMP_TO_EDGE);
+  Texture t =
+      Texture(tname, vec2(size), 1, GL_RGBA32F, GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
   t.load();
   return t;
 }
@@ -3769,22 +4842,47 @@ void Texture_Paint::preset_pen2()
   brush_color = vec4(1);
 }
 
-void Texture_Paint::iterate(Texture *t, float32 current_time)
+void Texture_Paint::iterate(Texture *t, float32 current_time) {}
+
+Texture *Texture_Paint::change_texture_to(int32 index)
 {
+  ASSERT(textures.size() > index);
+  selected_texture = index;
+  Texture *surface = &textures[selected_texture];
+  while (!surface->texture || !surface->texture->texture)
+  {
+    surface->load();
+  }
+  Texture_Descriptor td;
+  td.size = surface->texture->size;
+  td.format = surface->texture->internalformat;
+  ASSERT(td.size != ivec2(0));
+  td.source = "generate";
 
-  liquid.run(current_time);
+  td.name = "display_surface of Texture_Paint";
+  display_surface = Texture(td);
+  display_surface.load();
+  fbo_display.color_attachments[0] = display_surface;
+  fbo_display.init();
+
+  td.name = "intermediate of Texture_Paint";
+  intermediate = Texture(td);
+  intermediate.load();
+  fbo_intermediate.color_attachments[0] = intermediate;
+  fbo_intermediate.init();
+
+  fbo_drawing.color_attachments[0] = *surface;
+  fbo_drawing.init();
+
+  return surface;
 }
-
-
-
 void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 {
-
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
   ASSERT(imgui_event_accumulator);
   if (!window_open)
     return;
-
-  float32 time = get_real_time();
+  float32 time = (float32)get_real_time();
   if (!initialized)
   {
     Mesh_Descriptor md(plane, "Texture_Paint's quad");
@@ -3792,35 +4890,34 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     drawing_shader = Shader("passthrough.vert", "paint.frag");
     copy = Shader("passthrough.vert", "passthrough.frag");
     postprocessing_shader = Shader("passthrough.vert", "paint_postprocessing.frag");
-
-    textures.push_back(create_new_texture());
-
-    display_surface = create_new_texture("display_surface");
-    intermediate = create_new_texture("texture_paint_intermediate");
-    preview = Texture("texture_paint_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    if (textures.size() == 0)
+    {
+      textures.push_back(create_new_texture(new_texture_size, "primary heightmap"));
+      display_surface = create_new_texture(new_texture_size, "display_surface");
+      intermediate = create_new_texture(new_texture_size, "texture_paint_intermediate");
+    }
+    change_texture_to(0);
+    preview = Texture("texture_paint_brush_preview", vec2(128), 1, GL_RGB32F, GL_LINEAR, GL_LINEAR);
+    fbo_preview.color_attachments[0] = preview;
     preview.load();
-
+    fbo_preview.init();
     initialized = true;
-
-    liquid.set_heightmap(textures[0]);
   }
 
-  ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
-  ImGui::Begin("Texture_Paint", &window_open, window_flags);
-
+  // ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+  // ImGui::Begin("Texture_Paint", &window_open, window_flags);
   imgui_visit_count += 1;
   const ImVec2 mouse = ImGui::GetMousePos();
   const ImVec2 windowp = ImGui::GetWindowPos();
   const ImVec2 window_size = ImGui::GetWindowSize();
-
-  ivec2 window_cursor_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
-
-  // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0 ||
+  ivec2 window_mouse_pos = ivec2(mouse.x - windowp.x, mouse.y - windowp.y);
+  // bool out_of_window = window_cursor_pos.x < 0 || window_cursor_pos.x > window_size.x || window_cursor_pos.y < 0
+  // ||
   //                    window_cursor_pos.y > window_size.y;
-  window_cursor_pos = clamp(window_cursor_pos, ivec2(0), ivec2(window_size.x, window_size.y));
+  window_mouse_pos = clamp(window_mouse_pos, ivec2(0), ivec2(window_size.x, window_size.y));
   Texture *surface = &textures[selected_texture];
 
-  if (!surface->texture || !surface->bind(0))
+  if (!surface->texture || !surface->bind_for_sampling_at(0))
   {
     ImGui::Text("Surface not ready");
     ImGui::End();
@@ -3829,33 +4926,19 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::BeginChild("asdgasda", ImVec2(240, 0), true);
   ImGui::Checkbox("HDR", &hdr);
   ImGui::SameLine();
-
   ImGui::Checkbox("Cursor", &draw_cursor);
-  if (ImGui::Button("Clear"))
-  {
-    liquid.zero_velocity();
-    clear = 1;
-  }
-
-  ImGui::SameLine();
   if (ImGui::Button("Clear Color"))
   {
-    liquid.zero_velocity();
     clear = 2;
   }
-
   ImGui::SameLine();
   ImGui::ColorEdit4("clearcolor", &clear_color[0], ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
   ImGui::InputFloat("Zoom", &zoom, 0.01);
-  ImGui::InputInt("Water Iterations", &liquid.iterations);
-  liquid.iterations = max(liquid.iterations,0);
-  const char *selected_blendmode = "";
+  Array_String selected_blendmode = "";
   if (blendmode == 0)
     selected_blendmode = "Mix";
-
   if (blendmode == 1)
     selected_blendmode = "Blend";
-
   if (blendmode == 2)
     selected_blendmode = "Add";
 
@@ -3871,13 +4954,22 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     }
     ImGui::EndCombo();
   }
+  ImGui::Text("Mask:");
+  ImGui::SameLine();
+  ImGui::Checkbox("R", (bool *)&mask.r);
+  ImGui::SameLine();
+  ImGui::Checkbox("G", (bool *)&mask.g);
+  ImGui::SameLine();
+  ImGui::Checkbox("B", (bool *)&mask.b);
+  ImGui::SameLine();
+  ImGui::Checkbox("A", (bool *)&mask.a);
+
   ImGui::PushID("blendmode");
-  if (ImGui::BeginCombo("", selected_blendmode))
+  if (ImGui::BeginCombo("", &selected_blendmode.str[0]))
   {
     if (ImGui::Selectable("Blend"))
     {
       blendmode = 1;
-      // put_imgui_texture_button(&preview, vec2(128));
     }
 
     if (ImGui::MenuItem("Mix"))
@@ -3898,8 +4990,6 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   ImGui::DragFloat("Exponent", &exponent, 0.001, 0.1, 25, "%.3f", 1.5f);
   ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Size", &size, 0.03, 0, 1000, "%.3f", 2.5f);
-
-  ImGui::Separator();
   ImGui::Separator();
   ImGui::SetNextItemWidth(60);
   ImGui::DragFloat("Exposure", &exposure_delta, 0.005, 0.0f, 3.0f);
@@ -3957,37 +5047,69 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   ImGui::Separator();
   ImGui::Separator();
-  if (ImGui::Button("Clone Texture"))
+  if (ImGui::Button("Load file"))
   {
-    Texture new_texture = create_new_texture(s(surface->t.name).c_str());
-    fbo_intermediate.color_attachments[0] = new_texture;
-    fbo_intermediate.init();
-    fbo_intermediate.bind_for_drawing_dst();
-    glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-    surface->bind(0);
-    copy.use();
-    copy.set_uniform("texture0_mod", vec4(1));
-    copy.set_uniform("transform", fullscreen_quad());
-    quad.draw();
-    textures.insert(textures.begin() + selected_texture, new_texture);
-    selected_texture += 1;
-    surface = &textures[selected_texture];
-
-    liquid.set_heightmap(*surface);
+    texture_picker.window_open = true;
   }
   ImGui::SameLine();
+  if (ImGui::Button("Paste Texture"))
+  {
+    Texture new_texture = COPIED_TEXTURE_HANDLE;
+    textures.insert(textures.begin() + selected_texture, new_texture);
+    surface = change_texture_to(selected_texture);
+
+    if (is_float_format(new_texture.texture->internalformat))
+      hdr = true;
+    else
+      hdr = false;
+  }
+  if (texture_picker.run())
+  {
+    std::string new_texture_name = texture_picker.get_result();
+    Texture_Descriptor td;
+    td.name = new_texture_name;
+    td.source = new_texture_name;
+    td.format = GL_RGBA32F;
+    Texture new_texture = td;
+    new_texture.load();
+    textures.insert(textures.begin() + selected_texture, new_texture);
+    surface = change_texture_to(selected_texture);
+  }
+  if (ImGui::Button("Clone Texture"))
+  {
+    Texture_Descriptor td;
+    td.source = "generate";
+    td.size = surface->texture->size;
+    td.format = surface->texture->internalformat;
+    Texture new_texture(td);
+    new_texture.load();
+    Texture last_intermediate = fbo_intermediate.color_attachments[0];
+    fbo_intermediate.color_attachments[0] = new_texture;
+    fbo_intermediate.init();
+    fbo_drawing.color_attachments[0] = *surface;
+    fbo_drawing.init();
+    blit_attachment(fbo_drawing, fbo_intermediate);
+    fbo_intermediate.color_attachments[0] = last_intermediate;
+    textures.insert(textures.begin() + selected_texture, new_texture);
+    // surface = &textures[selected_texture];
+    surface = change_texture_to(selected_texture);
+  }
+  ImGui::SameLine();
+
+  // green texture means its transparent i think
+  // should have the texture draw ui for the renderer split up
+  // alpha channel into a 2nd black/white image
+  // or just make a checkbox to swapto/use alpha
+
   if (ImGui::Button("Clear all"))
   {
     textures.clear();
-    textures.push_back(create_new_texture());
-    selected_texture = 0;
-    surface = &textures[selected_texture];
-    liquid.set_heightmap(*surface);
+    textures.push_back(create_new_texture(new_texture_size));
+    surface = change_texture_to(0);
   }
 
   for (uint32 i = 0; i < textures.size(); ++i)
   {
-
     Texture *this_texture = &textures[i];
     ImGui::PushID(s(i).c_str());
     bool green = selected_texture == i;
@@ -3999,7 +5121,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     if (put_imgui_texture_button(this_texture, vec2(160), false))
     {
       selected_texture = i;
-      liquid.set_heightmap(textures[selected_texture]);
+      surface = change_texture_to(selected_texture);
     }
     if (green)
     {
@@ -4019,10 +5141,10 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
         selected_texture = 0;
         if (textures.size() == 0)
         {
-          textures.push_back(create_new_texture());
+          textures.push_back(create_new_texture(new_texture_size));
         }
       }
-      surface = &textures[selected_texture];
+      surface = change_texture_to(selected_texture);
       this_texture = nullptr;
     }
     ImGui::PopStyleColor();
@@ -4031,7 +5153,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     if (ImGui::Button("S") && this_texture != nullptr)
     {
       ImGui::OpenPopup("Save Texture");
-      filename = this_texture->t.name;
+      filename = BASE_TEXTURE_PATH + this_texture->t.name;
     }
     ImGui::PopStyleColor();
     if (ImGui::BeginPopupModal("Save Texture", NULL, ImGuiWindowFlags_AlwaysAutoResize) && this_texture != nullptr)
@@ -4053,16 +5175,13 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
       {
         type = "hdr";
       }
-
       if (save_type_radio_button_state == 1)
       {
         type = "png";
       }
       std::string extension = s(".", type);
       bool file_exists = std::filesystem::exists(s(filename, extension));
-
       ImGui::Separator();
-
       if (file_exists)
       {
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 0, 0, 1));
@@ -4106,24 +5225,25 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   const ImVec2 childo = ImGui::GetCursorPos();
   ivec2 childoffset = vec2(childo.x, childo.y);
   // ImGuiWindowFlags childflags = ImGuiWindowFlags_HorizontalScrollbar;
-
   ImGuiWindowFlags childflags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-  ImGui::BeginChild("paintbox", ImVec2(0, 0), false, childflags);
 
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(1, 1, 1, .2));
+  ImGui::BeginChild("paintbox", ImVec2(0, 0), false, childflags);
+  ImGui::PopStyleColor();
   bool is_within = ImGui::IsWindowHovered();
-  ImGui::Dummy(ImVec2(0.0f, 120.0f));
-  ImGui::Dummy(ImVec2(120.0f, 0.f));
-  ImGui::SameLine();
+  // ImGui::Dummy(ImVec2(0.0f, 120.0f));
+  // ImGui::Dummy(ImVec2(120.0f, 0.f));
+  // ImGui::SameLine();
   ivec2 texture_size = zoom * vec2(surface->texture->size);
   const ImVec2 imgui_draw_cursor_pos = ImGui::GetCursorPos();
   ivec2 window_position_for_texture = ivec2(imgui_draw_cursor_pos.x, imgui_draw_cursor_pos.y);
   glGenerateTextureMipmap(display_surface.texture->texture);
-  
-  put_imgui_texture(&display_surface, texture_size);
 
-  ImGui::SameLine();
-  ImGui::Dummy(ImVec2(120.0f, 0.f));
-  ImGui::Dummy(ImVec2(0.0f, 120.0f));
+  put_imgui_texture(&display_surface, ivec2(texture_size), false, false);
+
+  // ImGui::SameLine();
+  // ImGui::Dummy(ImVec2(120.0f, 0.f));
+  // ImGui::Dummy(ImVec2(0.0f, 120.0f));
   if (imgui_visit_count == 2)
   {
     ImGui::SetScrollX(0.5f * ImGui::GetScrollMaxX());
@@ -4145,17 +5265,20 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
 
   zoom = clamp(zoom, 0.1f, 10.f);
 
-  const vec2 cursor_pos_within_texture = window_cursor_pos - window_position_for_texture - childoffset + scroll;
+  ivec2 texture_position_within_window = window_position_for_texture;
+  const vec2 cursor_pos_within_texture = window_mouse_pos - texture_position_within_window - childoffset + scroll;
+
+  // mat4 scroll = translate(vec3(cursor_pos_within_texture, 0));
 
   bool out_of_texture = cursor_pos_within_texture.x < 0 || cursor_pos_within_texture.x > texture_size.x ||
                         cursor_pos_within_texture.y < 0 || cursor_pos_within_texture.y > texture_size.y;
-  fbo_preview.color_attachments[0] = preview;
-  fbo_preview.init();
 
   // ImGui::Text(s(cursor_pos_within_texture.x, " ", cursor_pos_within_texture.y).c_str());
   vec2 ndc_cursor = cursor_pos_within_texture / vec2(texture_size);
   ndc_cursor = 2.0f * ndc_cursor;
   ndc_cursor = ndc_cursor - vec2(1);
+
+  ImGui::Text(s("ndc:", ndc_cursor).c_str());
 
   ImVec2 imouse_delta = ImGui::GetIO().MouseDelta;
   vec2 mouse_delta = vec2(imouse_delta.x, imouse_delta.y);
@@ -4175,40 +5298,30 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     ImGui::SetScrollY(scroll.y - mouse_delta.y);
   }
 
-  if (!intermediate.texture || intermediate.texture->size != surface->texture->size ||
-      intermediate.texture->internalformat != surface->texture->internalformat)
-  {
-    intermediate = surface->t;
-    intermediate.load();
-  }
-
   while (sim_time + dt < time)
   {
     // iterate(surface, sim_time);
     sim_time += dt;
   }
 
-  fbo_drawing.color_attachments[0] = *surface;
-  fbo_intermediate.color_attachments[0] = intermediate;
-  fbo_preview.color_attachments[0] = preview;
-  fbo_display.color_attachments[0] = display_surface;
+  blit_attachment(fbo_drawing, fbo_intermediate);
 
-  // todo: only init when attachments change
-  fbo_drawing.init();
-  fbo_intermediate.init();
-  fbo_display.init();
+  GLint p;
+  glGetNamedFramebufferAttachmentParameteriv(
+      fbo_drawing.fbo->fbo, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING, &p);
 
-  fbo_intermediate.bind_for_drawing_dst();
+  if (p == GL_LINEAR)
+  {
+    glDisable(GL_FRAMEBUFFER_SRGB);
+  }
+  if (p == GL_SRGB)
+  {
+    glEnable(GL_FRAMEBUFFER_SRGB);
+  }
+
   glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-  mat4 mat = fullscreen_quad();
-  surface->bind(0);
-  copy.use();
-  copy.set_uniform("texture0_mod", vec4(1));
-  copy.set_uniform("transform", mat);
-  quad.draw();
-
   fbo_drawing.bind_for_drawing_dst();
-  intermediate.bind(0);
+  intermediate.bind_for_sampling_at(0);
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", vec4(1));
   drawing_shader.set_uniform("transform", fullscreen_quad());
@@ -4222,22 +5335,9 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   drawing_shader.set_uniform("time", time);
   drawing_shader.set_uniform("blendmode", blendmode);
   drawing_shader.set_uniform("tonemap_pow", pow);
+  drawing_shader.set_uniform("aspect", float32(surface->texture->size.x) / float32(surface->texture->size.y));
+  drawing_shader.set_uniform("mask", vec4(mask));
 
-  if (clear)
-  {
-    if (clear == 1)
-      drawing_shader.set_uniform("mode", 0);
-    if (clear == 2)
-    {
-      drawing_shader.set_uniform("mode", 6);
-      drawing_shader.set_uniform("brush_color", clear_color);
-    }
-
-    quad.draw();
-    clear = 0;
-  }
-
-  // if (!out_of_texture && iswithin)
   if (is_within)
   {
     bool draw = false;
@@ -4275,9 +5375,9 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
         if (!is_new_click && !constant_density)
         {
           fbo_drawing.bind_for_drawing_dst();
-          intermediate.bind(0);
+          intermediate.bind_for_sampling_at(0);
 
-          uint32 smoothing_iterations = float32(smoothing_count) * d_curve;
+          uint32 smoothing_iterations = uint32(floor(float32(smoothing_count) * d_curve));
           smoothing_iterations = glm::max(smoothing_iterations, (uint32)1);
           set_message("smoothing_iterations", s(smoothing_iterations), 1.0f);
           for (uint32 i = 0; i < smoothing_iterations; ++i)
@@ -4286,7 +5386,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
               break;
 
             vec2 p = mix(last_drawn_ndc, ndc_cursor, float32(i + 1) / smoothing_iterations);
-            intermediate.bind(0);
+            intermediate.bind_for_sampling_at(0);
             fbo_drawing.bind_for_drawing_dst();
             drawing_shader.use();
             drawing_shader.set_uniform("mouse_pos", p);
@@ -4316,7 +5416,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
             {
               fbo_intermediate.bind_for_drawing_dst();
               glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-              surface->bind(0);
+              surface->bind_for_sampling_at(0);
               copy.use();
               quad.draw();
             }
@@ -4366,7 +5466,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
               break;
             }
             fbo_drawing.bind_for_drawing_dst();
-            intermediate.bind(0);
+            intermediate.bind_for_sampling_at(0);
             drawing_shader.use();
             // drawing_shader.set_uniform("brush_color", 4.f * accumulator * vec4(0, 1., 0, 1));
             drawing_shader.set_uniform("mouse_pos", draw_pos);
@@ -4386,7 +5486,7 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
             {
               fbo_intermediate.bind_for_drawing_dst();
               glViewport(0, 0, surface->texture->size.x, surface->texture->size.y);
-              surface->bind(0);
+              surface->bind_for_sampling_at(0);
               copy.use();
               quad.draw();
             }
@@ -4402,6 +5502,21 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   }
 
   last_seen_mouse_ndc = ndc_cursor;
+
+  if (clear)
+  {
+    if (clear == 1)
+      drawing_shader.set_uniform("mode", 0);
+    if (clear == 2)
+    {
+      drawing_shader.set_uniform("mode", 6);
+      drawing_shader.set_uniform("brush_color", clear_color);
+    }
+
+    quad.draw();
+    clear = 0;
+  }
+
   if (apply_exposure != 0)
   {
     drawing_shader.set_uniform("tonemap_x", 1.0f + (apply_exposure * exposure_delta));
@@ -4423,9 +5538,15 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
     quad.draw();
     apply_pow = 0;
   }
+  if (custom_draw_mode_set != 0)
+  {
+    drawing_shader.set_uniform("mode", custom_draw_mode_set);
+    quad.draw();
+    custom_draw_mode_set = 0;
+  }
 
   glViewport(0, 0, preview.texture->size.x, preview.texture->size.y);
-  WHITE_TEXTURE.bind(0);
+  WHITE_TEXTURE.bind_for_sampling_at(0);
   fbo_preview.bind_for_drawing_dst();
   drawing_shader.use();
   drawing_shader.set_uniform("texture0_mod", clear_color);
@@ -4433,126 +5554,496 @@ void Texture_Paint::run(std::vector<SDL_Event> *imgui_event_accumulator)
   drawing_shader.set_uniform("mouse_pos", vec2(0));
   drawing_shader.set_uniform("size", 450.f);
   drawing_shader.set_uniform("mode", 3);
+
+  drawing_shader.set_uniform("aspect", 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
 
   glViewport(0, 0, display_surface.texture->size.x, display_surface.texture->size.y);
-  surface->bind(0);
+  surface->bind_for_sampling_at(0);
   fbo_display.bind_for_drawing_dst();
   postprocessing_shader.use();
-  postprocessing_shader.set_uniform("transform", mat);
+  postprocessing_shader.set_uniform("transform", fullscreen_quad());
   postprocessing_shader.set_uniform("size", size);
   postprocessing_shader.set_uniform("zoom", zoom);
   postprocessing_shader.set_uniform("time", time);
   postprocessing_shader.set_uniform("tonemap_aces", (int32)postprocess_aces);
   postprocessing_shader.set_uniform("mouse_pos", draw_cursor ? ndc_cursor : vec2(-9999999));
+  postprocessing_shader.set_uniform("aspect", float32(surface->texture->size.x) / float32(surface->texture->size.y));
   glClear(GL_COLOR_BUFFER_BIT);
   quad.draw();
-  
-  glGenerateTextureMipmap(surface->texture->texture);
-  liquid.run(time);
 
+  glDisable(GL_FRAMEBUFFER_SRGB);
+
+  glGenerateTextureMipmap(surface->texture->texture);
   ImGui::EndChild();
-  ImGui::End();
+  // ImGui::End();
   last_run_visit_time = time;
+}
+
+void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolution)
+{
+  vec3 size = vec3(scale);
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  ASSERT(!initialized);
+  initialized = true;
+  liquid_shader = Shader("passthrough.vert", "liquid.frag");
+  Mesh_Descriptor md(plane, "Liquid_Surface's quad");
+  quad = Mesh(md);
+
+  Mesh_Descriptor mesh;
+  mesh.name = "Liquid_Surface generated grid";
+  mesh.mesh_data = generate_grid(resolution);
+  Material_Descriptor material;
+
+  material.emissive.mod = vec4(0, 0, 0.005, 1);
+  material.albedo.mod = vec4(.034, .215, .289, .367);
+  material.uv_scale = vec2(1);
+  material.roughness.source = "white";
+  material.roughness.mod = vec4(0.054);
+  material.metalness.mod = vec4(1);
+  material.vertex_shader = "displacement.vert";
+  material.frag_shader = "water.frag";
+  material.backface_culling = true;
+  material.translucent_pass = true;
+  material.ior = 1.2f;
+  material.uniform_set.bool_uniforms["ground"] = false;
+
+  water = state->scene.add_mesh("water", &mesh, &material);
+  state->scene.nodes[water].scale = size;
+  state->scene.nodes[water].position = pos - vec3(0, 0, 0.03);
+  material.frag_shader = "terrain.frag";
+  material.translucent_pass = false;
+  material.uniform_set.bool_uniforms["ground"] = true;
+  ground = state->scene.add_mesh("ground", &mesh, &material);
+  state->scene.nodes[ground].scale = size;
+  state->scene.nodes[ground].position = pos;
+
+  Material_Index mi = state->scene.nodes[ground].model[0].second;
+  Material_Descriptor *groundmat = &state->scene.resource_manager->material_pool[mi].descriptor;
+  if (groundmat->derivative_offset == 0.0)
+  {
+    set_message("Liquid_Surface::init bad offset after add", "", 330.f);
+  }
+
+  this->state = state;
+
+  heightmap_resolution = resolution;
+
+  painter.new_texture_size = resolution;
+  painter.textures.clear();
+  painter.textures.push_back(painter.create_new_texture(painter.new_texture_size));
+  painter.change_texture_to(0);
+  set_heightmap(painter.textures[0]);
+}
+
+Liquid_Surface::~Liquid_Surface()
+{
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  glDeleteBuffers(1, &heightmap_pbo);
+  glDeleteBuffers(1, &velocity_pbo);
+  glDeleteSync(read_sync);
+  state->scene.delete_node(water);
+  state->scene.delete_node(ground);
+}
+
+void Liquid_Surface::set_heightmap(Texture texture)
+{
+  while (!texture.texture || !texture.texture->texture)
+  {
+    texture.load();
+  }
+  ASSERT(texture.texture->size != ivec2(0));
+  ASSERT(texture.texture && texture.texture->texture);
+  heightmap_resolution = texture.texture->size;
+  heightmap = heightmap_fbo.color_attachments[0] = texture;
+  heightmap_fbo.init();
+
+  glDeleteSync(read_sync);
+  read_sync = 0;
+  glDeleteBuffers(1, &heightmap_pbo);
+  glDeleteBuffers(1, &velocity_pbo);
+  current_buffer_size = 0;
+
+  glCreateBuffers(1, &heightmap_pbo);
+  glCreateBuffers(1, &velocity_pbo);
+
+  velocity.t.size = texture.texture->size;
+  velocity.t.format = texture.texture->internalformat;
+  velocity.t.name = "Liquid_Surface::velocity";
+  velocity.t.source = "generate";
+  velocity = Texture(velocity.t);
+  velocity.load();
+  velocity_fbo.color_attachments[0] = velocity;
+  velocity_fbo.init();
+
+  heightmap_copy.t.size = texture.texture->size;
+  heightmap_copy.t.format = texture.texture->internalformat;
+  heightmap_copy.t.name = "Liquid_Surface::heightmap_copy";
+  heightmap_copy.t.source = "generate";
+  heightmap_copy = Texture(heightmap_copy.t);
+  heightmap_copy.load();
+  copy_heightmap_fbo.color_attachments[0] = heightmap_copy;
+  copy_heightmap_fbo.init();
+
+  velocity_copy.t.size = texture.texture->size;
+  velocity_copy.t.format = texture.texture->internalformat;
+  velocity_copy.t.name = "Liquid_Surface::velocity_copy";
+  velocity_copy.t.source = "generate";
+  velocity_copy = Texture(velocity_copy.t);
+  velocity_copy.load();
+  copy_velocity_fbo.color_attachments[0] = velocity_copy;
+  copy_velocity_fbo.init();
+
+  liquid_shader_fbo.color_attachments.resize(2);
+  liquid_shader_fbo.color_attachments[0] = heightmap;
+  liquid_shader_fbo.color_attachments[1] = velocity;
+  liquid_shader_fbo.init();
+
+  zero_velocity();
+  blit_attachment(heightmap_fbo, copy_heightmap_fbo);
+  blit_attachment(velocity_fbo, copy_velocity_fbo);
+
+  Texture_Descriptor td;
+  td.size = desired_download_resolution;
+  td.format = heightmap.texture->internalformat;
+  td.source = "generate";
+  td.name = "Liquid_Surface::height_dst";
+
+  height_dst = Texture(td);
+  height_dst.load();
+  heightmap_resize_fbo.color_attachments[0] = height_dst;
+  heightmap_resize_fbo.init();
+
+  td.name = "Liquid_Surface::velocity_dst";
+  velocity_dst = Texture(td);
+  velocity_dst.load();
+  velocity_resize_fbo.color_attachments[0] = velocity_dst;
+  velocity_resize_fbo.init();
+
+  Scene_Graph_Node *node = &state->scene.nodes[water];
+  Material_Index mi = node->model[0].second;
+  Material *mat = &state->scene.resource_manager->material_pool[mi];
+  if (mat->descriptor.derivative_offset == 0.0)
+  {
+    set_message("Liquid_Surface::set_heightmap bad offset", "", 330.f);
+  }
+  mat->load();
+  mat->displacement = heightmap;
+  mat->descriptor.uniform_set.texture_uniforms[water_velocity] = velocity_fbo.color_attachments[0];
+  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
+  node = &state->scene.nodes[ground];
+  mi = node->model[0].second;
+  mat = &state->scene.resource_manager->material_pool[mi];
+  mat->load();
+  mat->displacement = heightmap;
+  mat->descriptor.uniform_set.uint32_uniforms["displacement_map_size"] = heightmap_resolution.x;
+}
+
+void Liquid_Surface::generate_geometry_from_heightmap(vec4 *heightmap_pixel_array, vec4 *velocity_pixel_array)
+{
+  if (last_generated_terrain_geometry_resolution != desired_download_resolution)
+  {
+    terrain_geometry = {std::string("Liquid_Surface cpu terrain"), generate_grid(desired_download_resolution)};
+    last_generated_terrain_geometry_resolution = desired_download_resolution;
+  }
+  if (!heightmap_pixel_array)
+  {
+    ASSERT(heightmap_pixels.size() > 0);
+    heightmap_pixel_array = &heightmap_pixels[0];
+  }
+  if (!velocity_pixel_array)
+  {
+    ASSERT(velocity_pixels.size() > 0);
+    velocity_pixel_array = &velocity_pixels[0];
+  }
+
+  for (uint32 i = 0; i < terrain_geometry.mesh_data.positions.size(); ++i)
+  {
+    vec3 *pos = &terrain_geometry.mesh_data.positions[i];
+    vec2 uv = terrain_geometry.mesh_data.texture_coordinates[i];
+    ivec2 &size = desired_download_resolution;
+
+    float32 eps = 0.0001f;
+    vec2 sample_p = (vec2(size - 1) * uv) + vec2(eps);
+    sample_p = floor(sample_p);
+    sample_p = clamp(sample_p, vec2(0), vec2(size));
+
+    // p = [0,1]
+    // size = (3,3)
+    // samplep = [0,3]
+
+    // texture:
+    /*
+    x x x
+    x x x
+    0 x x
+    */
+
+    // reads into array as
+    /*
+    0 x x
+    x x x
+    x x x
+    */
+
+    // origin is the same at 0,0
+
+    /*
+    6 7 8
+    3 4 5
+    0 1 2
+    */
+    uint32 rows = (uint32)sample_p.y;
+    uint32 cols = (uint32)sample_p.x;
+
+    bool out_of_bounds = (cols > uint32(heightmap.t.size.x) - 1) || (rows > uint32(heightmap.t.size.y) - 1);
+
+    uint32 index = rows * uint32(size.x) + cols;
+
+    float32 ground_height = 0;
+    float32 water_height = 0;
+    float32 biome = 0;
+    vec4 vel_pack = vec4(0);
+    if (!out_of_bounds)
+    {
+      ground_height = heightmap_pixel_array[index].g;
+      water_height = heightmap_pixel_array[index].r;
+      biome = velocity_pixel_array[index].b;
+      vel_pack = velocity_pixel_array[index];
+    }
+    pos->z = ground_height;
+  }
+  last_generated_terrain_tick += 1;
 }
 
 void Liquid_Surface::zero_velocity()
 {
-  copy_fbo.color_attachments[0] = velocity;
-  copy_fbo.init();
-  copy_fbo.bind_for_drawing_dst();
-  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-  glClearColor(0, 0, 0, 0);
-  glClear(GL_COLOR_BUFFER_BIT);
-
-  copy_fbo.color_attachments[0] = velocity_copy;
-  copy_fbo.init();
-  copy_fbo.bind_for_drawing_dst();
-  glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  velocity_fbo.init();
+  velocity_fbo.bind_for_drawing_dst();
+  glViewport(
+      0, 0, velocity_fbo.color_attachments[0].texture->size.x, velocity_fbo.color_attachments[0].texture->size.y);
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
 }
-void Liquid_Surface::run(float32 current_time)
+bool Liquid_Surface::apply_geometry_to_octree_if_necessary(Scene_Graph *scene)
 {
 
-  if (!heightmap.texture || !heightmap.texture->texture)
+  if ((last_applied_terrain_tick < last_generated_terrain_tick))
+  {
+    scene->collision_octree.clear();
+    mat4 m = scene->build_transformation(ground);
+    scene->collision_octree.push(&terrain_geometry, &m);
+    last_applied_terrain_tick = last_generated_terrain_tick;
+    return true;
+  }
+  return false;
+}
+
+bool Liquid_Surface::finish_texture_download_and_generate_geometry()
+{
+  ASSERT(std::this_thread::get_id() == MAIN_THREAD_ID);
+  GLint ready;
+  glGetSynciv(read_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+  if (ready != GL_SIGNALED)
+  {
+    return false;
+  }
+  glDeleteSync(read_sync);
+  read_sync = 0;
+  float32 *heightmap_ptr = (float32 *)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
+  float32 *velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
+  generate_geometry_from_heightmap((vec4 *)heightmap_ptr, (vec4 *)velocity_ptr);
+  glUnmapNamedBuffer(heightmap_pbo);
+  glUnmapNamedBuffer(velocity_pbo);
+  return true;
+}
+
+bool Liquid_Surface::finish_texture_download()
+{
+  GLint ready;
+  glGetSynciv(read_sync, GL_SYNC_STATUS, 1, NULL, &ready);
+  if (ready != GL_SIGNALED)
+  {
+    return false;
+  }
+  glDeleteSync(read_sync);
+  read_sync = 0;
+  float32 *heightmap_ptr = (float32 *)glMapNamedBuffer(heightmap_pbo, GL_READ_ONLY);
+  float32 *velocity_ptr = (float32 *)glMapNamedBuffer(velocity_pbo, GL_READ_ONLY);
+  uint32 pixel_count = heightmap.t.size.x * heightmap.t.size.y;
+  uint32 subpixel_count = 4 * pixel_count;
+  heightmap_pixels.clear();
+  velocity_pixels.clear();
+  heightmap_pixels.reserve(pixel_count);
+  velocity_pixels.reserve(pixel_count);
+  for (uint32 i = 0; i < subpixel_count; i = i + 4)
+  {
+    heightmap_pixels.push_back(*(vec4 *)(&heightmap_ptr[i]));
+  }
+  for (uint32 i = 0; i < subpixel_count; i = i + 4)
+  {
+    velocity_pixels.push_back(*(vec4 *)(&velocity_ptr[i]));
+  }
+  glUnmapNamedBuffer(heightmap_pbo);
+  glUnmapNamedBuffer(velocity_pbo);
+  return true;
+}
+
+void Liquid_Surface::start_texture_download()
+{
+  bool resize_to_desired_resolution = true;
+  if (resize_to_desired_resolution)
+  {
+    heightmap_fbo.init();
+    blit_attachment(heightmap_fbo, heightmap_resize_fbo);
+    blit_attachment(velocity_fbo, velocity_resize_fbo);
+
+    ASSERT(read_sync == 0);
+    uint32 buff_size = heightmap_resize_fbo.color_attachments[0].t.size.x *
+                       heightmap_resize_fbo.color_attachments[0].t.size.y * 4 * sizeof(float32);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, heightmap_pbo);
+    if (current_buffer_size != buff_size)
+    {
+      glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+    }
+    glGetTextureImage(heightmap_resize_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, velocity_pbo);
+    if (current_buffer_size != buff_size)
+    {
+      glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+    }
+    glGetTextureImage(velocity_resize_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+    read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    current_buffer_size = buff_size;
+    return;
+  }
+
+  ASSERT(read_sync == 0);
+  uint32 buff_size =
+      heightmap_fbo.color_attachments[0].t.size.x * heightmap_fbo.color_attachments[0].t.size.y * 4 * sizeof(float32);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glBindBuffer(GL_PIXEL_PACK_BUFFER, heightmap_pbo);
+  if (current_buffer_size != buff_size)
+  {
+    glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+  }
+  glGetTextureImage(heightmap_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+  glBindBuffer(GL_PIXEL_PACK_BUFFER, velocity_pbo);
+  if (current_buffer_size != buff_size)
+  {
+    glBufferData(GL_PIXEL_PACK_BUFFER, buff_size, 0, GL_DYNAMIC_READ);
+  }
+  glGetTextureImage(velocity_fbo.color_attachments[0].texture->texture, 0, GL_RGBA, GL_FLOAT, buff_size, 0);
+  read_sync = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+  current_buffer_size = buff_size;
+}
+
+void Liquid_Surface::run(State *state)
+{
+  // painter.run(state->imgui_event_accumulator);
+  // return;
+
+  ImGuiWindowFlags window_flags = ImGuiWindowFlags_HorizontalScrollbar;
+  ImGui::Begin("Liquid_Surface", &window_open, window_flags);
+  if (ImGui::Button("Generate Terrain"))
+  {
+    painter.custom_draw_mode_set = 8;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Generate Water"))
+  {
+    painter.custom_draw_mode_set = 9;
+  }
+  if (ImGui::Button("Clear Water"))
+  {
+    painter.custom_draw_mode_set = 10;
+  }
+  if (ImGui::Button("Clear"))
+  {
+    zero_velocity();
+    painter.clear = 2;
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Generate Terrain Octree") || want_texture_download)
+  {
+    start_texture_download();
+    want_texture_download = false;
+  }
+  if (read_sync != 0)
+  { // if finish is successful, read_sync will be 0 until the next download request
+    bool success = finish_texture_download_and_generate_geometry();
+  }
+
+  // if the grid is smaller than the source heightmap
+  // we will resize the texture to the size of the grid
+  // and put that texture in the painter
+  // rather than leaving the oversized one in there
+  if (ImGui::Button("Set Heightmap To Downloaded"))
+  {
+    start_texture_download();
+    while (!finish_texture_download_and_generate_geometry())
+    {
+    }
+    painter.new_texture_size = heightmap_resize_fbo.color_attachments[0].t.size;
+    painter.textures.push_back(heightmap_resize_fbo.color_attachments[0]);
+    painter.change_texture_to(uint32(painter.textures.size()) - 1);
+    set_heightmap(heightmap_resize_fbo.color_attachments[0]);
+  }
+
+  ImGui::InputInt("Water Iterations", &iterations);
+  iterations = max(iterations, 0);
+  ImGui::DragFloat3("Ambient Waves", &ambient_wave_scale[0], 0.05f, 0.0f, 100.f, "%.3f", 1.5f);
+
+  if (!heightmap_fbo.color_attachments[0].texture || !heightmap_fbo.color_attachments[0].texture->texture)
   {
     return;
   }
-  if (!initialized)
+
+  bool automatically_swap_to_painter_selected_texture = true;
+  if (automatically_swap_to_painter_selected_texture)
   {
-    liquid_shader = Shader("passthrough.vert", "liquid.frag");
-    Mesh_Descriptor md(plane, "Texture_Paint's quad");
-    quad = Mesh(md);
-    copy = Shader("passthrough.vert", "passthrough.frag");
-    initialized = true;
+    if (painter.textures.size() > 0)
+    {
+      bool painter_has_valid_texture = painter.textures[painter.selected_texture].texture != nullptr;
+      if (painter_has_valid_texture)
+      {
+        bool painter_changed_texture =
+            heightmap.texture->texture != painter.textures[painter.selected_texture].texture->texture;
+        if (painter_changed_texture)
+        {
+          set_heightmap(painter.textures[painter.selected_texture]);
+        }
+      }
+    }
   }
-
-  if (invalidated)
+  for (int32 i = 0; i < iterations; ++i)
   {
-    if (!heightmap.texture)
-      return;
+    my_time = my_time + dt;
 
-    heightmap_copy.t = heightmap.t;
-    velocity.t = heightmap.t;
-    velocity_copy.t = heightmap.t;
+    blit_attachment(heightmap_fbo, copy_heightmap_fbo);
+    blit_attachment(velocity_fbo, copy_velocity_fbo);
 
-    heightmap_copy.t.name = "heightmap_copy";
-    velocity.t.name = "velocity";
-    velocity_copy.t.name = "velocity_copy";
-
-    heightmap_copy.load();
-    velocity.load();
-    velocity_copy.load();
-
-    copy_fbo.color_attachments[0] = heightmap_copy;
-    copy_fbo.init();
-
-    liquid_shader_fbo.color_attachments.resize(2);
-    liquid_shader_fbo.color_attachments[0] = heightmap;
-    liquid_shader_fbo.color_attachments[1] = velocity;
-    liquid_shader_fbo.init();
-
-    zero_velocity();
-
-    invalidated = false;
-  }
-
-  for (uint32 i = 0; i < iterations; ++i)
-  {
-    glDisable(GL_BLEND);
-    // copy heightmap
-    copy_fbo.color_attachments[0] = heightmap_copy;
-    copy_fbo.init();
-    copy_fbo.bind_for_drawing_dst();
-    glViewport(0, 0, heightmap.texture->size.x, heightmap.texture->size.y);
-    heightmap.bind(0);
-    copy.use();
-    copy.set_uniform("transform", fullscreen_quad());
-    quad.draw();
-
-    // copy velocity
-    copy_fbo.color_attachments[0] = velocity_copy;
-    copy_fbo.init();
-    copy_fbo.bind_for_drawing_dst();
-    glViewport(0, 0, velocity.texture->size.x, velocity.texture->size.y);
-    velocity.bind(0);
-    copy.use();
-    copy.set_uniform("transform", fullscreen_quad());
-    quad.draw();
-
-    // draw shader
     liquid_shader_fbo.bind_for_drawing_dst();
-    heightmap_copy.bind(0);
-    velocity_copy.bind(1);
+    copy_heightmap_fbo.color_attachments[0].bind_for_sampling_at(0);
+    copy_velocity_fbo.color_attachments[0].bind_for_sampling_at(1);
     liquid_shader.use();
     liquid_shader.set_uniform("transform", fullscreen_quad());
-    liquid_shader.set_uniform("time", current_time);
-    liquid_shader.set_uniform("size", heightmap.t.size);
+    liquid_shader.set_uniform("time", float32(my_time));
+    liquid_shader.set_uniform("size", vec2(copy_heightmap_fbo.color_attachments[0].t.size));
     liquid_shader.set_uniform("dt", dt);
+    liquid_shader.set_uniform(
+        "ambient_wave_scale", 0.001f * ambient_wave_scale.z * vec2(ambient_wave_scale.x, ambient_wave_scale.y));
     quad.draw();
   }
+
+  painter.run(state->imgui_event_accumulator);
+
+  ImGui::End();
 }
 
 /*
@@ -4631,7 +6122,8 @@ for(uint32 n = 0; n < 10000;++n)
 convolution:
 
 just as with the gaussian shader, we will have a look up table of values that are calculated
-and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and offsety
+and we use them just the same as the guass shader, where we iterate in two dimensions with iterators offsetx and
+offsety
 
 where p is this pixels position:
 vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
@@ -4639,8 +6131,8 @@ vertical_derivative_of_pixel = G(offsetx,offsety) * h(p.x+offsetx,p.y+offsety);
 the number of iterations on the offsets, which is the width of the kernel, affects the quality
 
 
-however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to save
-work
+however we need to sample in the full square kernel here, unlike the gauss shader that can do one axis at a time to
+save work
 
 
 

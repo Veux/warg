@@ -13,6 +13,120 @@ enum Mesh_Primitive
   plane,
   cube
 };
+
+//just the import data of a single bone - its name and offset matrix
+struct Bone
+{
+  //must be the unique assimp-given name because we have to search for it
+  std::string name;
+
+  mat4 offset; //model to bone
+};
+
+
+
+//not all the bones in the draw call - only for this specific vert
+#define MAX_BONES_PER_VERTEX 4
+struct Vertex_Bone_Data
+{
+  std::array<uint32, MAX_BONES_PER_VERTEX> indices = {0,0,0,0};
+  std::array<float32, MAX_BONES_PER_VERTEX> weights = {0.f,0.f,0.f,0.f};
+};
+
+typedef uint32 Skeletal_Animation_Keyframe_Index;
+typedef uint32 Bone_Index;
+
+
+//this is a named bone with keyframes 
+//is a constant - does not change - reference data
+struct Bone_Animation
+{
+  //this name must/will match the name in the node heirarchy
+  //not sure why exactly
+  
+  //our import_bone_data bones have names
+
+  //we search for it inside of animation_resolve
+  std::string bone_node_name;
+
+
+
+  //should the offset matrices be in here?
+  //no - we might have tons of animations
+  //yet we still only have a few bones per model
+
+
+  //all the keyframes
+  std::vector<vec3> translations;
+  std::vector<vec3> scales;
+  std::vector<quat> rotations;
+  std::vector<float32> timestamp;
+};
+
+//one for walk, one for jump, etc
+//is a constant - does not change - reference data
+struct Skeletal_Animation
+{
+  std::string animation_name;
+  float64 duration;
+  float64 ticks_per_sec;
+  std::vector<Bone_Animation> bone_animations;
+
+
+  //some bones are not animated, but have a set pose
+  //this mapping stores all the default transformations of all animation nodes
+  std::unordered_map<std::string, mat4> default_pose_for_nodes;
+
+
+
+};
+
+//a set of available animations that a model can use
+//is a constant - does not change - reference data
+struct Skeletal_Animation_Set
+{
+  std::vector<Skeletal_Animation> animation_set;
+};
+
+//specific for each entity in the game
+//points at an animation set, and contains the entity's
+//computed pose result
+struct Skeletal_Animation_State
+{
+  uint32 currently_playing_animation = 0;
+  float32 time = 0.f;
+
+
+  bool paused = false;
+  float32 time_scale = 1.0f;
+
+
+
+
+
+
+  //pointer to our available animations
+  uint32 animation_set_index = NODE_NULL;  
+
+  //pointer to our model's bones
+  uint32 model_bone_set_index = NODE_NULL;
+
+
+
+  //bone names to their completed transformations
+  std::unordered_map<std::string,mat4> final_bone_transforms;
+
+  //debug utility for now to manually pose bones
+  std::string name_of_manually_posed_bone = "";
+  float32 time_of_manually_posed_bone = 0.f;
+  std::unordered_map<std::string, float32> bone_pose_overrides;
+};
+ 
+struct Model_Bone_Set
+{
+  std::unordered_map<std::string, Bone> bones;
+};
+
 struct Mesh_Data
 {
   std::vector<vec3> positions;
@@ -21,6 +135,28 @@ struct Mesh_Data
   std::vector<vec3> tangents;
   std::vector<vec3> bitangents;
   std::vector<uint32> indices;
+  std::vector<Vertex_Bone_Data> bone_weights;
+
+  //store mapping from model bone indices to mesh bone indices here?
+  //find all the bones that affect this mesh and change the indices to be
+  //mesh specific rather than total bone set specific
+
+
+
+  void reserve(uint32 size)
+  {
+    positions.reserve(size);
+    normals.reserve(size);
+    texture_coordinates.reserve(size);
+    tangents.reserve(size);
+    bitangents.reserve(size);
+    indices.reserve(size);
+
+    //not reserving this because we use it as a flag to see
+    //if there are any bones
+    //it gets resized anyway on import
+    //bone_weights.reserve(size);
+  }
 
   std::string build_unique_identifier() const
   {
@@ -51,6 +187,11 @@ void copy_mesh_data(std::vector<vec2> &dst, aiVector3D *src, uint32 length);
 struct Mesh_Descriptor
 {
   Mesh_Descriptor() {}
+  Mesh_Descriptor(std::string name, Mesh_Data&& md)
+  {
+    this->name = name;
+    mesh_data = std::move(md);
+  }
   Mesh_Descriptor(Mesh_Primitive p, std::string name)
   {
     mesh_data = load_mesh(p);
@@ -58,6 +199,8 @@ struct Mesh_Descriptor
   }
   std::string name = "";
   Mesh_Data mesh_data;
+  std::vector<Bone> mesh_specific_bones;
+
   std::string unique_identifier = "";
   const std::string& get_unique_identifier()  {
     if (unique_identifier == "")
@@ -73,4 +216,3 @@ struct Mesh_Descriptor
  // }
 };
 
-Mesh_Descriptor build_mesh_descriptor(const aiScene *scene, uint32 i, std::string path);

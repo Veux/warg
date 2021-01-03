@@ -17,7 +17,7 @@ struct Map
 
 struct Blades_Edge : public Map
 {
-  Blades_Edge(Flat_Scene_Graph &scene);
+  Blades_Edge(Scene_Graph &scene);
 };
 
 enum Move_Status
@@ -166,7 +166,7 @@ struct Seed_of_Corruption
 struct Game_Static_Data
 {
   Map map;
-  Flat_Scene_Graph scene;
+  Scene_Graph scene;
 };
 
 struct Game_State
@@ -189,15 +189,16 @@ struct Game_State
 
 UID add_dummy(Game_State &game_state, Map &map, vec3 position);
 UID add_char(Game_State &game_state, Map &map, int team, std::string_view name);
-void move_char(Game_State &gs, Character &character, Input command, Flat_Scene_Graph &scene);
+void move_char(Game_State &gs, Character &character, Input command, Scene_Graph &scene);
 void collide_and_slide_char(
-    Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity, Flat_Scene_Graph &scene);
-void update_spell_objects(Game_State &game_state, Flat_Scene_Graph &scene);
+    Character_Physics &phys, vec3 &radius, const vec3 &vel, const vec3 &gravity, Scene_Graph &scene);
+void update_spell_objects(Game_State &game_state, Scene_Graph &scene);
 void update_buffs(std::vector<Character_Buff> &bs, Game_State &gs);
-void cast_spell(Game_State &game_state, Flat_Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id);
-void update_game(Game_State &game_state, Map &map, Flat_Scene_Graph &scene, std::map<UID, Input> &inputs);
+void cast_spell(Game_State &game_state, Scene_Graph &scene, UID caster_id, UID target_id, UID spell_id);
+void update_game(Game_State &game_state, Map &map, Scene_Graph &scene, std::map<UID, Input> &inputs);
 void damage_character(Game_State &gs, UID subject_id, UID object_id, float32 damage);
 void end_buff(Game_State &gs, Character_Buff &cb);
-Game_State predict(Game_State gs, Map &map, Flat_Scene_Graph &scene, UID character_id, Input input);
+Game_State predict(Game_State gs, Map &map, Scene_Graph &scene, UID character_id, Input input);
 bool verify_prediction(Game_State &a, Game_State &b, UID character_id);
+void merge_prediction(Game_State &dst, const Game_State &pred, UID character_id);
 void merge_prediction(Game_State &dst, const Game_State &pred, UID character_id);

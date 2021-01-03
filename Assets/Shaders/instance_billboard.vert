@@ -2,13 +2,9 @@
 uniform float time;
 uniform vec3 camera_position;
 uniform vec2 uv_scale;
+uniform mat4 txaa_jitter;
 uniform vec2 normal_uv_scale;
-uniform mat4 view;
-uniform mat4 project;
-uniform bool use_billboarding;
-uniform vec3 camera_forward;
-uniform vec3 camera_right;
-uniform vec3 camera_up;
+
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 uv;
@@ -16,10 +12,9 @@ layout(location = 3) in vec3 tangent;
 layout(location = 4) in vec3 bitangent;
 layout(location = 5) in mat4 instanced_MVP;
 layout(location = 9) in mat4 instanced_model;
-layout(location = 13) in vec4 billboard_position;
-layout(location = 14) in vec4 attribute0; // generic per-instance attributes
-layout(location = 15) in vec4 attribute1;
-layout(location = 16) in vec4 attribute2;
+layout(location = 13) in vec4 attribute0; // generic per-instance attributes
+layout(location = 14) in vec4 attribute1;
+layout(location = 15) in vec4 attribute2;
 
 out vec3 frag_world_position;
 out mat3 frag_TBN;
@@ -32,17 +27,9 @@ void main()
   vec3 n = normalize(instanced_model * vec4(normal, 0)).xyz;
   frag_TBN = mat3(t, b, n);
   frag_world_position = (instanced_model * vec4(position, 1)).xyz;
-  frag_uv = uv_scale * vec2(uv.x, -uv.y);
+  frag_uv = uv_scale * vec2(uv.x, uv.y);
   frag_normal_uv = normal_uv_scale * frag_uv;
   float s = sin(time);
-
-  //  if (use_billboarding)
-  //    gl_Position = project * (view * instanced_model * billboard_position + vec4(position.xy, 0, 0));
-  //  else
-  //    gl_Position = instanced_MVP * vec4(position, 1);
-
-  if (use_billboarding)
-    gl_Position = project * (billboard_position + instanced_model * vec4(position.xy, 0, 0));
-  else
-    gl_Position = instanced_MVP * vec4(position, 1);
+  gl_Position = txaa_jitter * instanced_MVP * vec4(position, 1);
+  // gl_Position = instanced_MVP * vec4(position, 1);
 }

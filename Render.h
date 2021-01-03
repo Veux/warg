@@ -7,10 +7,12 @@
 #include "Third_party/stb/stb_image.h"
 #include "Physics.h"
 #include "Globals.h"
+#include "Ui.h"
 
 using json = nlohmann::json;
 using namespace glm;
 
+void blit_attachment(Framebuffer &src, Framebuffer &dst);
 struct Conductor_Reflectivity
 {
   static const vec4 iron;
@@ -30,11 +32,13 @@ enum Texture_Location
   ambient_occlusion,
   environment,
   irradiance,
-
   brdf_ibl_lut,
   refraction,
-  t10,
+  depth_of_scene,
   displacement,
+  water_velocity,
+  depth_of_self,
+  t13,
   uv_grid,
 
   s0, // shadow maps
@@ -75,6 +79,7 @@ struct Texture_Handle
   }
   float imgui_mipmap_setting = 0.f;
   float imgui_size_scale = 1.0f;
+  bool imgui_use_alpha = true;
   GLuint texture = 0;
 
   // last bound dynamic state:
@@ -155,7 +160,7 @@ struct Texture_Descriptor
   std::string name = "default";
   std::string source = "default";
   std::string key;
-  uint8 levels = 6;
+  uint8 levels = 1;
   GLenum format = 0;
   glm::ivec2 size = ivec2(0);
   glm::vec4 mod = vec4(1);
@@ -169,6 +174,7 @@ struct Texture_Descriptor
 struct Texture
 {
   Texture() {}
+  Texture(std::shared_ptr<Texture_Handle> texture);
   Texture(Texture_Descriptor &td);
   Texture(const char *file_path);
 
@@ -180,7 +186,7 @@ struct Texture
   // a call to load guarantees we will have a Texture_Handle after it returns
   // but the texture will start loading asynchronously and may not yet be ready
   void load();
-  bool bind(GLuint texture_unit);
+  bool bind_for_sampling_at(GLuint texture_unit);
   bool is_ready();
   void check_set_parameters();
   GLuint get_handle();
@@ -188,10 +194,10 @@ struct Texture
 
 private:
 };
-struct Image
+struct Image2
 {
-  Image() {}
-  Image(std::string filename);
+  Image2() {}
+  Image2(std::string filename);
   void rotate90();
   std::string filename = "NULL";
   std::vector<float> data;
@@ -211,7 +217,7 @@ struct Cubemap
 private:
   void produce_cubemap_from_equirectangular_source();
   void produce_cubemap_from_texture_array();
-  std::array<Image, 6> sources;
+  std::array<Image2, 6> sources;
   bool is_equirectangular = true;
   bool is_gamma_encoded = false;
 };
@@ -281,6 +287,9 @@ struct Mesh_Handle
   GLuint bitangents_buffer = 0;
   GLuint indices_buffer = 0;
   GLuint indices_buffer_size = 0;
+
+  GLuint bone_indices_buffer = 0;
+  GLuint bone_weight_buffer = 0;
   void enable_assign_attributes();
   Mesh_Descriptor descriptor;
 };
@@ -320,6 +329,7 @@ struct Uniform_Set_Descriptor
   std::unordered_map<std::string, glm::vec3> vec3_uniforms;
   std::unordered_map<std::string, glm::vec4> vec4_uniforms;
   std::unordered_map<std::string, glm::mat4> mat4_uniforms;
+  std::unordered_map<GLint, Texture> texture_uniforms;
   void clear()
   {
     float32_uniforms.clear();
@@ -330,12 +340,57 @@ struct Uniform_Set_Descriptor
     vec3_uniforms.clear();
     vec4_uniforms.clear();
     mat4_uniforms.clear();
+    texture_uniforms.clear();
   }
 };
 
+
+
+
+//cases:
+
+
+//texture should have been premultiplied by its alpha channel but it isnt
+
+
+
+//render grass
+  //need no specular, so dst = a*src + (1-a)*dst after the lighting
+  //needs premultiplied alpha, for mipmapping
+
+//render glass
+  //needs specular, dst = src + (1-a)*dst, after lighting
+  //albedo texture is simply sampled directly
+  //mipmaps need premultiply alpha
+
+//if we mod by the constant, how does that interact
+  //grass:
+    //dim the grass entirely including specular - want
+      //no change - we just mod tex.a by constant
+    //dim just the leaves themselves, gives a 'glassy' transparent appearance - want
+      //not possible??
+      //pixelalpha = tex.a
+      //albedo = tex.rgba
+      //albedo.a = mod.a * albedo.a
+      //out = vec4(result,pixelalpha)
+      //whats different?
+      //we dont mul pixelalpha by mod.a
+      //lets just expose all  of these bools directly
+      
+
+
+enum struct Material_Blend_Mode
+{
+  blend,
+  add,
+  end
+};
+
+
+
 struct Material_Descriptor
 {
-  Material_Descriptor() {}
+  // Material_Descriptor() {}
   void mod_by(const Material_Descriptor *override);
   Texture_Descriptor albedo;
   Texture_Descriptor normal;
@@ -348,15 +403,25 @@ struct Material_Descriptor
   Uniform_Set_Descriptor uniform_set;
   std::string vertex_shader;
   std::string frag_shader;
+  float32 dielectric_reflectivity = 0.04f;
   vec2 uv_scale = vec2(1);
+  bool include_ao_in_uv_scale = true;
   vec2 normal_uv_scale = vec2(1);
-  float albedo_alpha_override = -1.f;
+  float32 derivative_offset = 0.008;
+  float32 ior = 0.f;
+  bool translucent_pass = false;
+  Material_Blend_Mode blendmode = Material_Blend_Mode::blend;
+  bool require_self_depth = true;
+  bool multiply_albedo_by_alpha = true;
+  bool multiply_result_by_alpha = false;
+  bool multiply_pixelalpha_by_moda = true;
   bool backface_culling = true;
-  bool uses_transparency = false;
-  bool discard_on_alpha = true;
+  bool discard_on_alpha = false;
+  float32 discard_threshold = 0.3f;
   bool casts_shadows = true;
   bool wireframe = false;
-  bool blending = false;
+  bool depth_test = true;
+  bool depth_mask = true;
 
   /*
 
@@ -511,10 +576,13 @@ struct Light_Array
 // this should eventually contain the necessary skeletal animation data
 struct Render_Entity
 {
-  Render_Entity(Array_String name, Mesh *mesh, Material *material, mat4 world_to_model, Node_Index node_index);
+  Render_Entity() {}
+  Render_Entity(Array_String name, Mesh *mesh, Material *material, Skeletal_Animation_State* animation, mat4 world_to_model, Node_Index node_index);
+  Render_Entity(Array_String name, Mesh* mesh, Material* material, mat4 world_to_model, Node_Index node_index);
   mat4 transformation;
-  Mesh *mesh;
-  Material *material;
+  Mesh *mesh = nullptr;
+  Material *material = nullptr;
+  Skeletal_Animation_State* animation = nullptr;
   Array_String name;
   uint32 ID;
   Node_Index node = NODE_NULL;
@@ -542,6 +610,13 @@ struct Render_Instance
   GLuint attribute0_buffer = 0;
   GLuint attribute1_buffer = 0;
   GLuint attribute2_buffer = 0;
+  GLuint attribute3_buffer = 0;
+  GLuint instance_billboard_location_buffer = 0;
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
+  bool use_billboarding = false;
   GLuint size = 0;
 };
 // struct Buffer_Handle
@@ -610,7 +685,7 @@ struct Framebuffer
   std::shared_ptr<Renderbuffer_Handle> depth;
   Texture depth_texture;
   glm::ivec2 depth_size = glm::ivec2(0);
-  GLenum depth_format = GL_DEPTH_COMPONENT;
+  GLenum depth_format = GL_DEPTH_COMPONENT24;
   bool depth_enabled = false;
   bool use_renderbuffer_depth = true;
   std::vector<GLenum> draw_buffers;
@@ -649,13 +724,27 @@ struct Particle
   glm::vec3 velocity;
   glm::vec3 angular_velocity;
   glm::vec3 scale;
-  float32 time_to_live;
+  float32 lifespan;
   float32 time_left_to_live;
+  bool billboard;
+  bool billboard_lock_z;
+  float32 billboard_angle;
+  float32 billboard_rotation_velocity;
+  float32 distance_to_camera;
+  glm::vec3 spawn_approach_velocity;
+  bool last_frame_collided = false;
+  vec3 last_frame_collision_normal = vec3(0);
+  uint32 last_frame_collision_count = 0;
 
   // generic shader-specific per-particle attributes
   glm::vec4 attribute0;
   glm::vec4 attribute1;
   glm::vec4 attribute2;
+  glm::vec4 attribute3;
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
 };
 struct Particle_Array
 {
@@ -673,21 +762,30 @@ struct Particle_Array
   Particle_Array &operator=(Particle_Array &rhs);
   Particle_Array &operator=(Particle_Array &&rhs);
 
-  void compute_attributes(mat4 projection, mat4 camera);
+  void compute_attributes(mat4 projection, mat4 camera, Timer *active);
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
   std::vector<Particle> particles;
-
   std::vector<mat4> MVP_Matrices;
   std::vector<mat4> Model_Matrices;
+  std::vector<vec4> billboard_locations;
   std::vector<vec4> attributes0;
   std::vector<vec4> attributes1;
   std::vector<vec4> attributes2;
+  std::vector<vec4> attributes3;
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
 
-  GLuint instance_mvp_buffer;
-  GLuint instance_model_buffer;
-  GLuint instance_attribute0_buffer;
-  GLuint instance_attribute1_buffer;
-  GLuint instance_attribute2_buffer;
+  bool use_billboarding = false;
+
+  GLuint instance_mvp_buffer = 0;
+  GLuint instance_model_buffer = 0;
+  GLuint instance_billboard_location_buffer = 0;
+  GLuint instance_attribute0_buffer = 0;
+  GLuint instance_attribute1_buffer = 0;
+  GLuint instance_attribute2_buffer = 0;
+  GLuint instance_attribute3_buffer = 0;
   bool initialized = false;
 };
 
@@ -732,23 +830,26 @@ enum Particle_Emission_Type
 
 struct Particle_Emission_Method_Descriptor
 {
-  Particle_Emission_Type type = stream;
+  Particle_Emission_Type type = Particle_Emission_Type::stream;
 
-  // available to all types:
-  bool snap_to_basis = false;   // particles 'follow' the emitter
-  bool inherit_velocity = true; // particles gain the velocity of the emitter when spawned
   bool static_geometry_collision = true;
   bool dynamic_geometry_collision = true;
-  float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
-                                              // when emitter is initialized, this is useful for things like fog or any
-                                              // object that constantly emits particles
+  bool allow_colliding_spawns = true;
+  Octree *static_octree = nullptr;
+  Octree *dynamic_octree = nullptr;
+  float32 maximum_octree_probe_size = 3.0;
+
+  // available to all types:
+  bool snap_to_basis = false;                 // particles 'follow' the emitter
+  float32 inherit_velocity = 1.0f;               // particles gain the velocity of the emitter when spawned
+
   float32 minimum_time_to_live = 4.0f;
   float32 extra_time_to_live_variance = 1.0f;
-  glm::vec3 initial_position_variance = glm::vec3(0);
+  vec3 initial_position_variance = vec3(0);
 
   // first generated orientation - use to orient within a cone or an entire unit sphere
   // these are args to random_3D_unit_vector: azimuth_min, azimuth_max, altitude_min, altitude_max
-  glm::vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
+  vec4 randomized_orientation_axis = vec4(0.f, two_pi<float32>(), -1.f, 1.f);
   float32 randomized_orientation_angle_variance = 0.f;
 
   // post-spawn - use to orient the model relative to the emitter:
@@ -757,66 +858,174 @@ struct Particle_Emission_Method_Descriptor
 
   glm::vec3 initial_scale = glm::vec3(1);
   glm::vec3 initial_extra_scale_variance = glm::vec3(0);
-  glm::vec3 initial_velocity = glm::vec3(0, 0, 1);
-  glm::vec3 initial_velocity_variance = glm::vec3(0.15, 0.15, 0);
+  float32 initial_extra_scale_uniform_variance = 0.0f;
+  glm::vec3 initial_velocity = glm::vec3(0, 0, 0);
+  glm::vec3 initial_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
   glm::vec3 initial_angular_velocity = glm::vec3(0);
   glm::vec3 initial_angular_velocity_variance = glm::vec3(0.15, 0.15, 0.15);
+
+  float32 billboard_initial_angle = 0.f;
+  float32 billboard_rotation_velocity = 0.f;                  // spin the billboard
+  float32 initial_billboard_rotation_velocity_variance = 0.f; // spin the billboard
+
+  bool billboard_lock_z = false;
+  bool billboarding = false;
+  uint32 particles_per_spawn = 1;
 
   // stream
   bool generate_particles = true;
   float32 particles_per_second = 10.f;
 
   // explosion
-  float32 particle_count = 1000.f;
+  uint32 explosion_particle_count = 100;
+  float32 boom_t = 0.f;
+  float32 power = 1.0f;
+  bool low_discrepency_position_variance = false;
+  bool hammersley_sphere = true;            // true for sphere, false for hemisphere
+  vec3 impulse_center_offset_min = vec3(0); // centered on emitter position
+  vec3 impulse_center_offset_max = vec3(0); // centered on emitter position
+  float32 hammersley_radius = 1.0f;
+  bool enforce_velocity_position_offset_match = false; // all particles will go 'exactly out' from emitter
+
+  // generics
+  bool use_attribute0 = false;
+  bool use_attribute1 = false;
+  bool use_attribute2 = false;
+  bool use_attribute3 = false;
+  vec4 initial_state_of_attribute0 = vec4(0);
+  vec4 initial_state_of_attribute1 = vec4(0);
+  vec4 initial_state_of_attribute2 = vec4(0);
+  vec4 initial_state_of_attribute3 = vec4(0);
+  void *data0 = nullptr;
+  uint32 size0 = 0;
+  void *data1 = nullptr;
+  uint32 size1 = 0;
 };
 struct Particle_Physics_Method_Descriptor
 {
-  Particle_Physics_Type type = simple;
+  Particle_Physics_Type type = Particle_Physics_Type::simple;
+
+
+  //all of these are overwritten by the emitter:
+  bool static_geometry_collision = true;
+  bool dynamic_geometry_collision = true;
+  Octree *static_octree = nullptr;
+  Octree *dynamic_octree = nullptr;
+  float32 maximum_octree_probe_size = 3.0;
+  uint32 collision_binary_search_iterations = 0;
+  // the probe size will match the scale of the particle up until this value
+  // you can set larger probes for larger collision geometry
+  // however it may touch many, many triangles per octree test
+  // larger probe sizes will necessitate a lower particle count
+  // in order to meet frame times
+
+
+
+  bool abort_when_late = true;
 
   // available to all types
   float32 mass = 1.0f;
   vec3 gravity = vec3(0, 0, -9.8);
-  bool oriented_towards_camera = false;
   float32 bounce_min = 0.45;
   float32 bounce_max = 0.75;
+  float32 size_multiply_uniform_min = 1.f;
+  float32 size_multiply_uniform_max = 1.f;
+  vec3 size_multiply_min = vec3(1);
+  vec3 size_multiply_max = vec3(1);
+  vec3 die_when_size_smaller_than = vec3(0);
+  vec3 friction = vec3(1);
+  float32 drag = 0.2f;
+  float32 stiction_velocity = 0.5f;
+  float32 billboard_rotation_velocity_multiply = 1.f; // should be good for growing smoke particles
+  float32 billboard_rotation_time_factor = 0.f; //adds time to the rotation
 
   // simple
 
   // wind
   vec3 direction = vec3(1, .4, .3);
-  float32 intensity = 1.0f;
+  float32 wind_intensity = 1.0f;
 
-  Octree *octree = nullptr;
+  // generics
+  vec4 iteration_of_attribute0 = vec4(0);
+  vec4 iteration_of_attribute1 = vec4(0);
+  vec4 iteration_of_attribute2 = vec4(0);
+  vec4 iteration_of_attribute3 = vec4(0);
+  void *data0 = nullptr;
+  uint32 size0 = 0;
+  void *data1 = nullptr;
+  uint32 size1 = 0;
+};
+// todo make an emission method "onto heightmap"
+// can spawn them all in one go, but then turn them on/off each frame based on dist?
+// alternatively deterministically spawn them each frame in a radius..
+// and a physics method that locks them in place but shears with wind
+// and fades/despawns at distance
+
+struct Particle_Emitter_Descriptor;
+struct Physics_Shared_Data
+{ // todo :proper rigid body physics algorithm
+  mat4 projection;
+  mat4 camera;
+  Timer idle = Timer(100u);
+  Timer active = Timer(100u);
+  Timer per_static_octree_test = Timer(1000);
+  Timer per_dynamic_octree_test = Timer(1000);
+  Timer time_allocations = Timer(100u);
+  Timer attribute_timer = Timer(100u);
+  float32 physics_percent_finished = 0.f;
+  float32 attributes_percent_finished = 0.f;
+
+  uint32 static_collider_count_max = 0;
+  uint32 static_collider_count_sum = 0;
+  uint32 static_collider_count_samples = 0;
+
+  uint32 dynamic_collider_count_max = 0;
+  uint32 dynamic_collider_count_sum = 0;
+  uint32 dynamic_collider_count_samples = 0;
+
+  Particle_Emitter_Descriptor *descriptor = nullptr; // thread reads/writes
+  std::atomic<bool> request_thread_exit = false;     // thread reads
+  std::atomic<uint64> requested_tick = 0;            // thread reads
+  std::atomic<uint64> completed_update = 0;          // thread reads/writes
+  Particle_Array particles;                          // thread reads/writes
 };
 
+// a warning about these - the methods are allowed to modify the descriptors themselves
+// however we should never modify the descriptors elsewhere if the emitter is not spun up to date
+// or else there will be race conditions on the descriptor values
+// only change values in the descriptors if you are certain that the emitter is up to date
+// for example, it is a new state update tick and you have yet to call update on the emitter - the
+// emitter would have been synchronized at the end of the update...?
 struct Particle_Emission_Method
 {
-  virtual void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel,
-      quat o, float32 time, float32 dt) = 0;
+  virtual void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
+      float32 time, float32 dt, Physics_Shared_Data *data) = 0;
 };
-
 struct Particle_Stream_Emission : Particle_Emission_Method
 {
-  void update(Particle_Array *particles, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
-      float32 time, float32 dt) final override;
+  void update(Particle_Array *particles, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o,
+      float32 time, float32 dt, Physics_Shared_Data *data) final override;
 };
 struct Particle_Explosion_Emission : Particle_Emission_Method
 {
-  void update(Particle_Array *p, const Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
-      float32 dt) final override;
+  void update(Particle_Array *p, Particle_Emission_Method_Descriptor *d, vec3 pos, vec3 vel, quat o, float32 time,
+      float32 dt, Physics_Shared_Data *data) final override;
 };
 
 struct Particle_Physics_Method
 {
-  virtual void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) = 0;
+  virtual void step(
+      Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt, Physics_Shared_Data *data) = 0;
 };
 struct Wind_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt,
+      Physics_Shared_Data *data) final override;
 };
 struct Simple_Particle_Physics : Particle_Physics_Method
 {
-  void step(Particle_Array *p, const Particle_Physics_Method_Descriptor *d, float32 t, float32 dt) final override;
+  void step(Particle_Array *p, Particle_Physics_Method_Descriptor *d, float32 t, float32 dt,
+      Physics_Shared_Data *data) final override;
 };
 
 struct Particle_Emitter_Descriptor
@@ -828,15 +1037,26 @@ struct Particle_Emitter_Descriptor
   glm::vec3 position = glm::vec3(0);
   glm::vec3 velocity = glm::vec3(0);
   glm::quat orientation = angleAxis(0.f, vec3(1, 0, 0)); // glm::quat(0, 0, 1, 0);
+
+  bool static_geometry_collision = true;
+  bool dynamic_geometry_collision = true;
+  Octree *static_octree = nullptr;
+  Octree *dynamic_octree = nullptr;
+  float32 maximum_octree_probe_size = 3.0;  
+  bool allow_colliding_spawns = true;
+
+  float32 simulate_for_n_secs_on_init = 0.0f; // particles will be generated as if the emitter has been on for n seconds
+                                              // when emitter is initialized, this is useful for things like fog or any
+                                              // object that constantly emits particles
 };
 
 struct Particle_Emitter
 {
   Particle_Emitter();
   Particle_Emitter(Particle_Emitter_Descriptor d, Mesh_Index m, Material_Index mat);
-  Particle_Emitter(const Particle_Emitter &rhs);
+  Particle_Emitter(Particle_Emitter &rhs);
   Particle_Emitter(Particle_Emitter &&rhs);
-  Particle_Emitter &operator=(const Particle_Emitter &rhs);
+  Particle_Emitter &operator=(Particle_Emitter &rhs);
   Particle_Emitter &operator=(Particle_Emitter &&rhs);
   void init()
   {
@@ -845,32 +1065,29 @@ struct Particle_Emitter
   void update(mat4 projection, mat4 camera, float32 dt);
   void clear();
   bool prepare_instance(std::vector<Render_Instance> *accumulator);
-  void spin_until_up_to_date() const;
-  Mesh_Index mesh_index;
-  Material_Index material_index;
+  void fence();
+  Mesh_Index mesh_index = NODE_NULL;
+  Material_Index material_index = NODE_NULL;
   Particle_Emitter_Descriptor descriptor;
+
+  // don't actually use these as timers directly, they are being overwritten by the thread's timers when we fence
+  Timer idle = Timer(100u);
+  Timer active = Timer(100u);
+  Timer time_allocations = Timer(100u);
+  Timer attribute_times = Timer(100u);
+  Timer per_static_octree_test = Timer(100000);
+  Timer per_dynamic_octree_test = Timer(100000);
+  uint32 static_collider_count_max = 0;
+  uint32 static_collider_count_sum = 0;
+  uint32 static_collider_count_samples = 0;
+  uint32 dynamic_collider_count_max = 0;
+  uint32 dynamic_collider_count_sum = 0;
+  uint32 dynamic_collider_count_samples = 0;
 
   // private:
   static std::unique_ptr<Particle_Physics_Method> construct_physics_method(Particle_Emitter_Descriptor d);
   static std::unique_ptr<Particle_Emission_Method> construct_emission_method(Particle_Emitter_Descriptor d);
 
-  struct Physics_Shared_Data
-  { // todo :
-
-    /*
-
-    proper rigid body physics algorithm
-
-
-    */
-    mat4 projection;
-    mat4 camera;
-    Particle_Emitter_Descriptor descriptor;        // thread reads
-    std::atomic<bool> request_thread_exit = false; // thread reads
-    std::atomic<uint64> requested_tick = 0;        // thread reads
-    std::atomic<uint64> completed_update = 0;      // thread reads/writes
-    Particle_Array particles;                      // thread reads/writes
-  };
   static void thread(std::shared_ptr<Physics_Shared_Data> shared_data);
   bool thread_launched = false;
   std::thread t;
@@ -881,79 +1098,38 @@ struct Particle_Emitter
   std::shared_ptr<Physics_Shared_Data> shared_data;
 };
 
-struct Liquid_Surface
-{
-  void run(float32 current_time);
-
-  void set_heightmap(Texture texture)
-  {
-    heightmap = texture;
-    invalidated = true;
-  }
-
-  void zero_velocity();
-
-  int32 iterations = 1;
-
-private:
-  Texture heightmap;
-  Shader liquid_shader;
-  Texture heightmap_copy;
-  //Texture previous_heightmap;
-  Texture velocity;
-  Texture velocity_copy;
-  
-  Framebuffer liquid_shader_fbo;
-  Framebuffer copy_fbo;
-  Shader copy;
-  Mesh quad;
-
-  bool invalidated = true;
-  bool initialized = false;
-
-  //my algo:
-  //bind current heightmap as input, and heightmap intermediate as output
-
-  //spill height data into adjacent pixels:
-  //use height difference to determine a delta velocity to add to a velocity texture for each pixel side
-
-  //the amount of height to spill away from this pixel in each direction is determined by the velocity texture
-  //this should allow for pixel perfect flow blocking, the heightmap can have a channel that is nonpassable
-
-  //we cant write out to any pixels but ourselves, so we need to invert this thinking and  read adjacent cells for how much we will get from them and add that to ours, if this pixel is higher than the adjacent pixel, then that means
-  //we will add a negative - subtracting our height
-
-  //this means that a wave can only propagate at a max speed of 1 pixel per draw..
-  //i think this is what the convolution was trying to do
-
-  
-
-
-  //if we define a height level that is to be considered the underlying hard ground
-  //water added can flow on terrain easily
+// todo:
+// browse file and load from disk
+// ability to select out of any texture in the cache to edit
+// put a door in blades edge and put it on the map
 
 
 
-
-
-
-
-
-
-
-  // lets store height information in alpha channel and color info in the rgb
-  // we will modify the painter to be able to paint the alpha channel too directly
-  // instead of using it as a blend operator
-
-  // when we iterate on velocity, we can also spread color along those vectors
-
-};
-
+//todo: painter: add these blend types
+//    /** T = T1 * T2 */
+//aiTextureOp_Multiply = 0x0,
+//
+///** T = T1 + T2 */
+//aiTextureOp_Add = 0x1,
+//
+///** T = T1 - T2 */
+//aiTextureOp_Subtract = 0x2,
+//
+///** T = T1 / T2 */
+//aiTextureOp_Divide = 0x3,
+//
+///** T = (T1 + T2) - (T1 * T2) */
+//aiTextureOp_SmoothAdd = 0x4,
+//
+///** T = T1 + (T2-0.5) */
+//aiTextureOp_SignedAdd = 0x5,
 struct Texture_Paint
 {
   Texture_Paint() {}
   void run(std::vector<SDL_Event> *imgui_event_accumulator);
-
+  void iterate(Texture *t, float32 time);
+  Texture create_new_texture(glm::ivec2 size, const char *name = nullptr);
+  Texture *change_texture_to(int32 index);
   bool window_open = true;
   Shader drawing_shader;
   Texture display_surface;
@@ -961,8 +1137,7 @@ struct Texture_Paint
   Shader postprocessing_shader;
   void preset_pen();
   void preset_pen2();
-  Liquid_Surface liquid;
-//private:
+  // private:
   Framebuffer fbo_drawing;
   Framebuffer fbo_intermediate;
   Framebuffer fbo_preview;
@@ -984,7 +1159,7 @@ struct Texture_Paint
   vec4 clear_color = vec4(0.05);
   float32 intensity = 1.0f;
   float32 exponent = 1.0f;
-  float32 size = 5.0f;
+  float32 size = 155.0f;
   float32 exposure_delta = 0.1f;
   vec2 last_drawn_ndc = vec2(0, 0);
   vec2 last_seen_mouse_ndc = vec2(0);
@@ -1003,20 +1178,109 @@ struct Texture_Paint
   int32 save_type_radio_button_state = 0;
   std::string filename;
   float32 sim_time = 0.f;
-  bool draw_cursor = false;
-
-  void iterate(Texture *t, float32 time);
-
-  Texture create_new_texture(const char *name = nullptr);
+  ivec4 mask = ivec4(1);
+  bool draw_cursor = true;
+  ivec2 new_texture_size = ivec2(1024);
+  int32 custom_draw_mode_set = 0;
+  File_Picker texture_picker = File_Picker(".");
 };
+
+struct Liquid_Surface
+{
+  Liquid_Surface() {}
+  void init(State *state, vec3 pos, float32 scale, ivec2 resolution);
+  void run(State *state);
+  ~Liquid_Surface();
+  void set_heightmap(Texture texture);
+  void generate_geometry_from_heightmap(vec4 *heightmap_pixel_array = nullptr, vec4 *velocity_pixel_array = nullptr);
+  bool finish_texture_download_and_generate_geometry(); // version without the pixel copy
+  void start_texture_download();
+  bool finish_texture_download();
+  void zero_velocity();
+  bool apply_geometry_to_octree_if_necessary(Scene_Graph *scene);
+  Texture_Paint painter;
+  Node_Index ground = NODE_NULL;
+  Node_Index water = NODE_NULL;
+  int32 iterations = 0;
+  float64 my_time = 0.f;
+  vec3 ambient_wave_scale = vec3(30.f, 3.f, 1.0f);
+  // private:
+  GLuint heightmap_pbo = 0;
+  GLuint velocity_pbo = 0;
+  GLsync read_sync = 0;
+  std::vector<vec4> heightmap_pixels;
+  std::vector<vec4> velocity_pixels;
+  bool generate_terrain_from_heightmap = false;
+  Mesh_Descriptor terrain_geometry;
+  uint32 last_applied_terrain_tick = 0;
+  uint32 last_generated_terrain_tick = 0;
+  ivec2 last_generated_terrain_geometry_resolution;
+  Shader liquid_shader;
+  Framebuffer heightmap_fbo;
+  Framebuffer velocity_fbo;
+  Framebuffer copy_heightmap_fbo;
+  Framebuffer copy_velocity_fbo;
+  Framebuffer liquid_shader_fbo;
+
+  // for resized downloading:
+  Framebuffer heightmap_resize_fbo;
+  Framebuffer velocity_resize_fbo;
+  Texture height_dst;
+  Texture velocity_dst;
+  ivec2 desired_download_resolution = ivec2(HEIGHTMAP_RESOLUTION);
+
+  Texture heightmap;
+  Texture velocity;
+  Texture velocity_copy;
+  Texture heightmap_copy;
+  Mesh quad;
+  uint32 frames_until_check = 33;
+  State *state = nullptr;
+  ivec2 heightmap_resolution;
+  uint32 current_buffer_size = 0;
+
+  bool window_open = false;
+  bool want_texture_download = true;
+  bool invalidated = true;
+  bool initialized = false;
+};
+
 mat4 fullscreen_quad();
 struct Renderer
 {
+
+  // todo: forward+ rendering
+
+  // the way it seems to work is that lights themselves are placed into a voxelized frustrum
+  // strong lights will touch more than 1 voxel, but each light will only be placed
+  // into the voxels it is likely to affect
+  // and then the pixels in the pixel shader only ask for the lights in the voxel it actually
+  // occupies and instead of the actual light data being duplicated, its an index into a
+  // buffer array, a 'pointer' to the light data it wants
+
+  // if you have a hundred teeny tiny lights in the distance, and one big sun that touches all
+  // pixels, almost all pixels will do only 1 light computation, and only the ones close to the lights will do 2 or very
+  // rarely more
+
+  //alternatively just do traditional deferred rendering - a lot easier
+  
+  //fxaa should probably be done after the scene is resized to the screen
+  //when dragging the render scale, going higher can sometimes make it look worse
+
+  //todo: exposure before bloom, not after, a high exposure isnt affecting the bloom result at all
+
   // todo: irradiance map generation
   // todo: skeletal animation
-  // todo: deferred rendering
   // todo: screen space reflections
   // todo: parallax mapping
+  // todo: procedural raymarched volumetric effects
+  // todo: godrays
+  // todo: fbm noise in water depth
+  // todo: rain particles
+  // todo: spawn object gui - manual entry for new node and its resource indices
+  // todo: dithering in tonemapper
+  // todo: instanced grass, use same heightmap to displace - can resize biome to 1/2 res and draw jittered grass at each
+  // grass pixel
   Renderer() {}
   Renderer(SDL_Window *window, ivec2 window_size, std::string name);
   ~Renderer();
@@ -1055,6 +1319,9 @@ struct Renderer
   vec3 clear_color = vec3(1, 0, 0);
   float32 blur_radius = 0.0021;
   float32 blur_factor = 2.12f;
+  bool show_tonemap = false;
+  float exposure = 1.0f;
+  vec3 exposure_color = vec3(1);
   uint32 draw_calls_last_frame = 0;
 
   Environment_Map environment;
@@ -1070,6 +1337,7 @@ struct Renderer
   Shader passthrough = Shader("passthrough.vert", "passthrough.frag");
   Shader tonemapping = Shader("passthrough.vert", "tonemapping.frag");
   Shader variance_shadow_map = Shader("passthrough.vert", "variance_shadow_map.frag");
+  Shader variance_shadow_map_displacement = Shader("passthrough_displacement.vert", "variance_shadow_map.frag");
   Shader gamma_correction = Shader("passthrough.vert", "gamma_correction.frag");
   Shader fxaa = Shader("passthrough.vert", "fxaa.frag");
   Shader equi_to_cube = Shader("equi_to_cube.vert", "equi_to_cube.frag");
@@ -1083,6 +1351,7 @@ struct Renderer
   Shader water = Shader("vertex_shader.vert", "water.frag");
   void bind_white_to_all_textures();
 
+  int selected_tonemap_function = 1;
   Texture uv_map_grid;
   Texture brdf_integration_lut;
 
@@ -1096,12 +1365,14 @@ struct Renderer
   std::vector<Render_Entity> translucent_entities;
   void set_uniform_shadowmaps(Shader &shader);
   void build_shadow_maps();
-  void opaque_pass(float32 time);
-  void instance_pass(float32 time);
-  void translucent_pass(float32 time);
-  void postprocess_pass(float32 time);
-  void skybox_pass(float32 time);
-  void copy_to_primary_framebuffer_and_txaa(float32 time);
+  void opaque_pass(float64 time);
+  void instance_pass(float64 time);
+  void translucent_pass(float64 time);
+  void pbr_specular_volumetric_pass(float64 time);
+  void postprocess_pass(float64 time);
+  void skybox_pass(float64 time);
+  void copy_to_primary_framebuffer_and_txaa(float64 time);
+  void use_fxaa_shader(float64 state_time);
   Texture bloom_target;
   Texture bloom_result;
   Texture bloom_intermediate;
@@ -1112,8 +1383,8 @@ struct Renderer
   void dynamic_framerate_target();
   mat4 get_next_TXAA_sample();
   float32 render_scale = CONFIG.render_scale;
-  ivec2 window_size; // actual window size
-  ivec2 size;        // render target size
+  ivec2 window_size;        // actual window size
+  ivec2 render_target_size; // render target size
   float32 vfov = CONFIG.fov;
   mat4 camera;
   mat4 previous_camera;
@@ -1126,13 +1397,15 @@ struct Renderer
   vec3 prev_camera_position = vec3(0);
   bool jitter_switch = false;
   mat4 txaa_jitter = mat4(1);
-
+  bool do_depth_prepass = false;
   Framebuffer previous_draw_target; // full render scaled, float linear
 
   // in order:
-  Framebuffer draw_target;              // full render scaled, float linear
-  Framebuffer tonemapping_target_srgb8; // full render scaled, srgb
-  Framebuffer fxaa_target_srgb8;        // full render scaled. srgb
+  Framebuffer draw_target;
+  Framebuffer tonemapping_target_srgb8;
+  Framebuffer fxaa_target_srgb8;
+  Framebuffer translucent_sample_source;
+  Framebuffer self_object_depth;
 
   // instance attribute buffers
   // GLuint instance_mvp_buffer = 0;

@@ -192,5 +192,5 @@ private:
     if (write_ptr)
       memcpy(write_ptr, &data[peek_index], size);
   }
-  uint32 read_index = 0;
+  size_t read_index = 0;
 };

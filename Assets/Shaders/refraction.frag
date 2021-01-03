@@ -9,8 +9,8 @@ uniform sampler2D texture5; // ambient occlusion
 uniform samplerCube texture6; // environment
 uniform samplerCube texture7; // irradiance
 uniform sampler2D texture8;   // brdf_ibl_lut
-uniform sampler2D texture9; // refraction source
-uniform sampler2D texture10; // uv map grid
+uniform sampler2D texture9;   // refraction source
+uniform sampler2D texture10;  // uv map grid
 
 uniform vec4 texture0_mod;
 uniform vec4 texture1_mod;
@@ -33,9 +33,12 @@ uniform mat4 projection;
 uniform vec3 additional_ambient;
 uniform float time;
 uniform vec3 camera_position;
+uniform float dielectric_reflectivity;
 uniform vec2 uv_scale;
 uniform bool discard_on_alpha;
-uniform float alpha_albedo_override;
+uniform float discard_threshold;
+uniform bool multiply_albedo_by_a;
+uniform bool multiply_result_by_a;
 uniform vec2 viewport_size;
 uniform float aspect_ratio;
 uniform float index_of_refraction;
@@ -76,7 +79,10 @@ float linearize_depth(float z)
   return (2.0 * near * far) / (far + near - depth * (far - near));
 }
 
-float saturate(float x) { return clamp(x, 0, 1); }
+float saturate(float x)
+{
+  return clamp(x, 0, 1);
+}
 struct Material
 {
   vec3 albedo;
@@ -101,46 +107,26 @@ float chebyshevUpperBound(vec2 moments, float distance, float max_variance)
 
 void gather_shadow_moments()
 {
-  frag_in_shadow_space_postw[0] =
-      vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
-  variance_depth[0] =
-      texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
-  frag_in_shadow_space_postw[1] =
-      vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
-  variance_depth[1] =
-      texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
-  frag_in_shadow_space_postw[2] =
-      vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
-  variance_depth[2] =
-      texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
-  frag_in_shadow_space_postw[3] =
-      vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
-  variance_depth[3] =
-      texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
-  frag_in_shadow_space_postw[4] =
-      vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
-  variance_depth[4] =
-      texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
-  frag_in_shadow_space_postw[5] =
-      vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
-  variance_depth[5] =
-      texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
-  frag_in_shadow_space_postw[6] =
-      vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
-  variance_depth[6] =
-      texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
-  frag_in_shadow_space_postw[7] =
-      vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
-  variance_depth[7] =
-      texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
-  frag_in_shadow_space_postw[8] =
-      vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
-  variance_depth[8] =
-      texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
-  frag_in_shadow_space_postw[9] =
-      vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
-  variance_depth[9] =
-      texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
+  frag_in_shadow_space_postw[0] = vec3(frag_in_shadow_space[0].xyz / frag_in_shadow_space[0].w);
+  variance_depth[0] = texture2D(shadow_maps[0], frag_in_shadow_space_postw[0].xy).rg;
+  frag_in_shadow_space_postw[1] = vec3(frag_in_shadow_space[1].xyz / frag_in_shadow_space[1].w);
+  variance_depth[1] = texture2D(shadow_maps[1], frag_in_shadow_space_postw[1].xy).rg;
+  frag_in_shadow_space_postw[2] = vec3(frag_in_shadow_space[2].xyz / frag_in_shadow_space[2].w);
+  variance_depth[2] = texture2D(shadow_maps[2], frag_in_shadow_space_postw[2].xy).rg;
+  frag_in_shadow_space_postw[3] = vec3(frag_in_shadow_space[3].xyz / frag_in_shadow_space[3].w);
+  variance_depth[3] = texture2D(shadow_maps[3], frag_in_shadow_space_postw[3].xy).rg;
+  frag_in_shadow_space_postw[4] = vec3(frag_in_shadow_space[4].xyz / frag_in_shadow_space[4].w);
+  variance_depth[4] = texture2D(shadow_maps[4], frag_in_shadow_space_postw[4].xy).rg;
+  frag_in_shadow_space_postw[5] = vec3(frag_in_shadow_space[5].xyz / frag_in_shadow_space[5].w);
+  variance_depth[5] = texture2D(shadow_maps[5], frag_in_shadow_space_postw[5].xy).rg;
+  frag_in_shadow_space_postw[6] = vec3(frag_in_shadow_space[6].xyz / frag_in_shadow_space[6].w);
+  variance_depth[6] = texture2D(shadow_maps[6], frag_in_shadow_space_postw[6].xy).rg;
+  frag_in_shadow_space_postw[7] = vec3(frag_in_shadow_space[7].xyz / frag_in_shadow_space[7].w);
+  variance_depth[7] = texture2D(shadow_maps[7], frag_in_shadow_space_postw[7].xy).rg;
+  frag_in_shadow_space_postw[8] = vec3(frag_in_shadow_space[8].xyz / frag_in_shadow_space[8].w);
+  variance_depth[8] = texture2D(shadow_maps[8], frag_in_shadow_space_postw[8].xy).rg;
+  frag_in_shadow_space_postw[9] = vec3(frag_in_shadow_space[9].xyz / frag_in_shadow_space[9].w);
+  variance_depth[9] = texture2D(shadow_maps[9], frag_in_shadow_space_postw[9].xy).rg;
 }
 
 /*
@@ -277,7 +263,6 @@ float D_GGX(float a, float ndoth)
   return a2 / (PI * x * x);
 }
 
-
 // Microfacet Models for Refraction through Rough Surfaces
 // Walter et al.
 // http://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.html
@@ -328,17 +313,17 @@ vec2 hammersley2d(uint i, uint N)
 
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
 {
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
-} 
+  return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
+}
 void main()
 {
   vec3 result = vec3(0);
   vec4 debug = vec4(-1);
 
-  vec4 albedo_tex = texture2D(texture0, frag_uv).rgba;
+  vec4 albedo_tex = texture0_mod * texture2D(texture0, frag_uv);
   if (discard_on_alpha)
   {
-    if (albedo_tex.a < 0.3)
+    if (albedo_tex.a < discard_threshold)
       discard;
   }
   gather_shadow_moments();
@@ -363,8 +348,9 @@ void main()
     a low diffuse value won't affect the specularity at all on nonconductors, and transparent conductors
     don't exist irl
 
-    so the diffuse component can be thought of as 'the amount of the (non-specular) light that is reflected back out to see' 
-    and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or reflected back out
+    so the diffuse component can be thought of as 'the amount of the (non-specular) light that is reflected back out to
+    see' and alpha is "how much of the (non-specular) radiant light passes through the object rather than absorbed or
+    reflected back out
 
     if we want to do refraction, we do not use opengls blending
 
@@ -374,15 +360,16 @@ void main()
     the object will look traditionally transparent
 
   */
-  float premultiply_alpha = albedo_tex.a*texture0_mod.a;
-  if (alpha_albedo_override != -1.0f)
+  float alpha = albedo_tex.a;
+  if (multiply_albedo_by_a)
   {
-    premultiply_alpha = alpha_albedo_override;
+    m.albedo = alpha * albedo_tex.rgb;
   }
-  //premultiply_alpha *= texture0_mod.a;
-
-  m.albedo = premultiply_alpha * texture0_mod.rgb * albedo_tex.rgb;
-  m.normal = TBN * normalize(texture3_mod.rgb*texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
+  else
+  {
+    m.albedo = albedo_tex.rgb;
+  }
+  m.normal = TBN * normalize(texture3_mod.rgb * texture2D(texture3, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.emissive = texture1_mod.rgb * texture2D(texture1, frag_uv).rgb;
   m.roughness = texture2_mod.r * texture2D(texture2, frag_uv).r;
   m.metalness = texture4_mod.r * texture2D(texture4, frag_uv).r;
@@ -392,25 +379,10 @@ void main()
   vec3 p = frag_world_position;
   vec3 v = normalize(camera_position - p);
   vec3 r = reflect(v, m.normal);
-  vec3 F0 = vec3(0.02); // default dielectrics
-  //todo: could put dielectric reflectivity in a uniform
-  //this would let us specify more light absorbant materials
+  vec3 F0 = vec3(dielectric_reflectivity);
   F0 = mix(F0, m.albedo, m.metalness);
-
-  float ndotv = clamp(dot(m.normal, v),0,1);
-
+  float ndotv = clamp(dot(m.normal, v), 0, 1);
   float roughnessclamp = clamp(m.roughness, 0.00, 1);
-
-  /*
-  metal should mul specular by albedo because albedo map means F0
-
-  plastic should not mul specular by albedo
-
-
-
-
-  */
-
   vec3 direct_ambient = vec3(0);
   for (int i = 0; i < number_of_lights; ++i)
   {
@@ -446,18 +418,17 @@ void main()
       }
       if (shadow_map_enabled)
       {
-        float light_visibility = chebyshevUpperBound(
-            shadow_moments, shadow_space_postw.z, max_variance[i]);
+        float light_visibility = chebyshevUpperBound(shadow_moments, shadow_space_postw.z, max_variance[i]);
         visibility = visibility * light_visibility;
       }
     }
     // direct light
     float ndotl = saturate(dot(m.normal, l));
-    //we want to let light through the opposite side
-    //for diffuse component, but if we use ndotl, we get a seam
-    //at 90 degrees, so we use average of ndotl: 0.5
-    //but since the light is going through both sides
-    //we halve that again for conservation of energy
+    // we want to let light through the opposite side
+    // for diffuse component, but if we use ndotl, we get a seam
+    // at 90 degrees, so we use average of ndotl: 0.5
+    // but since the light is going through both sides
+    // we halve that again for conservation of energy
     float diffuse_ndotl = 0.25;
 
     float ndoth = saturate(dot(m.normal, h));
@@ -465,98 +436,102 @@ void main()
     // float G = G_smith_GGX_denom(a,ndotv,ndotl);
     // specular brdf
     vec3 F = F_schlick(F0, ndoth);
-    if(dot(m.normal, l) <0.0)
+    if (dot(m.normal, l) < 0.0)
     {
-       // F = 0.1 + (F*0.9);
-
+      // F = 0.1 + (F*0.9);
     }
     float G = G_smith_schlick_GGX_direct(roughnessclamp, ndotv, ndotl);
     float D = D_ggx(roughnessclamp, ndoth);
     float denominator = max(4.0f * ndotl * ndotv, 0.000001);
     vec3 specular = (F * G * D) / denominator;
     vec3 radiance = lights[i].flux * at;
-    // specular result
     vec3 specular_result = radiance * specular;
+
+
     // diffuse result
     vec3 fakeF = F0;
     vec3 Kd = (1.0f - fakeF) * (1 - m.metalness); // Ks = F
-    //vec3 Kd = (1.0f - F) * (1 - m.metalness); // Ks = F
+    // vec3 Kd = (1.0f - F) * (1 - m.metalness); // Ks = F
     vec3 diffuse = Kd * m.albedo / PI;
     vec3 diffuse_result = radiance * diffuse;
 
-    //this is where we used the special diffuse ndotl
-    //specular is occluded on the back, and diffuse is let through
-    
-    result += specular_result*ndotl* visibility;
-    result += diffuse_result*diffuse_ndotl* visibility;
+    // this is where we used the special diffuse ndotl
+    // specular is occluded on the back, and diffuse is let through
 
-    //result += (specular_result + diffuse_result) * visibility * ndotl;
+    result += specular_result * ndotl * visibility;
+    result += diffuse_result * diffuse_ndotl * visibility;
+
+    // result += (specular_result + diffuse_result) * visibility * ndotl;
     // ambient
-    direct_ambient += lights[i].ambient * at;
+    direct_ambient += lights[i].ambient * at * m.albedo;
   }
-
+  vec3 direct = result;
   // ambient light
 
   // ambient specular
   vec3 Ks = fresnelSchlickRoughness(ndotv, F0, m.roughness);
-  const float MAX_REFLECTION_LOD = 5.0;
-  vec3 prefilteredColor = textureLod(texture6, r, m.roughness*MAX_REFLECTION_LOD).rgb;
+  const float MAX_REFLECTION_LOD = 6.0;
+  vec3 prefilteredColor = textureLod(texture6, r, m.roughness * MAX_REFLECTION_LOD).rgb;
   vec2 envBRDF = texture2D(texture8, vec2(ndotv, m.roughness)).xy;
-  vec3 ambient_specular = mix(vec3(1),F0,m.metalness)*prefilteredColor * (mix(vec3(1),Ks,1-m.metalness)*envBRDF.x + envBRDF.y);
+  vec3 ambient_specular =
+      mix(vec3(1), F0, m.metalness) * prefilteredColor * (mix(vec3(1), Ks, 1 - m.metalness) * envBRDF.x + envBRDF.y);
 
   // ambient diffuse
 
-  //as with direct diffuse, we want to let it bleed through
-  //and we want to keep conservation of energy
-  //lets sample both sides of the normal into the cubemap
-  //and average them
+  // as with direct diffuse, we want to let it bleed through
+  // and we want to keep conservation of energy
+  // lets sample both sides of the normal into the cubemap
+  // and average them
   vec3 Kd = vec3(1 - m.metalness) * (1.0 - Ks);
   vec3 irradiance1 = texture(texture7, -m.normal).rgb;
   vec3 irradiance2 = texture(texture7, m.normal).rgb;
-  vec3 irradiance = 0.5f*(irradiance1 + irradiance2); 
-  vec3 ambient_diffuse = Kd * irradiance * m.albedo / PI;
+  vec3 irradiance = 0.5f * (irradiance1 + irradiance2);
+  vec3 ambient_diffuse = Kd * irradiance * m.albedo;
   // ambient result;
   vec3 ambient = (ambient_specular + ambient_diffuse);
 
   result += m.ambient_occlusion * (ambient + max(direct_ambient, 0));
   result += m.emissive;
-  
-  //refraction sampling
-  vec3 refracted_view = normalize(refract(v,m.normal,index_of_refraction).xyz);
 
-  vec2 offset = vec2(dot(refracted_view,camera_right),dot(refracted_view,camera_up));
-  float inv_aspect = viewport_size.y/viewport_size.x;
-  offset.x = offset.x*inv_aspect;
-  //offset = refraction_offset_factor*offset;
+  // refraction sampling
+  vec3 refracted_view = normalize(refract(v, -m.normal, index_of_refraction).xyz);
+
+  vec2 offset = vec2(dot(refracted_view, camera_right), dot(refracted_view, camera_up));
+  float inv_aspect = viewport_size.y / viewport_size.x;
+  offset.x = offset.x * inv_aspect;
+  // offset = refraction_offset_factor*offset;
   offset = 0.541f * offset;
 
-
-  vec2 this_pixel = gl_FragCoord.xy/viewport_size;
+  vec2 this_pixel = gl_FragCoord.xy / viewport_size;
   vec2 ref_sample_loc = this_pixel + offset;
-  //ref_sample_loc = ref_sample_loc;
-  if(ref_sample_loc.x < 0 || ref_sample_loc.x > 1)
+  // ref_sample_loc = ref_sample_loc;
+  if (ref_sample_loc.x < 0 || ref_sample_loc.x > 1)
   {
     ref_sample_loc.x = this_pixel.x;
-  }  
-  if(ref_sample_loc.y < 0 || ref_sample_loc.y > 1)
+  }
+  if (ref_sample_loc.y < 0 || ref_sample_loc.y > 1)
   {
     ref_sample_loc.y = this_pixel.y;
   }
 
-  vec4 refraction_src = texture2D(texture9,ref_sample_loc);
+  vec4 refraction_src = texture2D(texture9, ref_sample_loc);
 
-  //result = vec3(0,1,0);
-  if(length(offset) > 0.00001)
+  // result = vec3(0,1,0);
+  if (length(offset) > 0.00001)
   {
-    result = result + ((1.0-premultiply_alpha)*refraction_src.rgb);
-    //result = vec3(1,0,0);
+    result = result + ((1.0 - alpha) * refraction_src.rgb);
   }
   else
   {
-  //result = result + ((1.0-premultiply_alpha)*refraction_src.rgb);
-   //result = Ks;
+    // result = result + ((1.0-palpha)*refraction_src.rgb);
   }
-  //result = refraction_src.rgb;
 
-  out0 = vec4(result, premultiply_alpha);
+  //result = vec3(refraction_src);
+
+  if (multiply_result_by_a)
+  {
+    result = alpha * result;
+  }
+
+  out0 = vec4(result, 1);
 }

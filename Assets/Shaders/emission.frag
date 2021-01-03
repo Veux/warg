@@ -1,6 +1,6 @@
 #version 330
 uniform sampler2D texture1;
-uniform vec4 texture1_mod = vec4(1,1,1,1);
+uniform vec4 texture1_mod = vec4(1, 1, 1, 1);
 
 in vec2 frag_uv;
 in vec3 frag_world_position;

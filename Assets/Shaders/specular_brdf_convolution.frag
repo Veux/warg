@@ -1,6 +1,7 @@
 #version 330
 uniform samplerCube texture6; // environment
 in vec3 direction;
+uniform float size;
 uniform float roughness;
 
 layout(location = 0) out vec4 out0;
@@ -22,7 +23,7 @@ vec2 hammersley2d(uint i, uint N)
 vec3 ImportanceSampleGGX(vec2 Xi, vec3 n, float roughness)
 {
   float a = roughness * roughness;
-  
+
   float phi = 2.0 * PI * Xi.x;
   float c = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
   float s = sqrt(1.0 - c * c);
@@ -53,7 +54,7 @@ void main()
   vec3 r = n;
   vec3 v = r;
 
-  const uint SAMPLE_COUNT = 2000u;
+  const uint SAMPLE_COUNT = 512u;
   float weight = 0.0;
   vec3 result = vec3(0.0);
   for (uint i = 0u; i < SAMPLE_COUNT; ++i)
@@ -67,12 +68,12 @@ void main()
     float D = D_ggx(roughness, ndoth);
     float hdotv = dot(h, v);
     float pdf = (D * ndoth / (4.0 * hdotv)) + 0.0001;
-    float resolution = 2048.0; // resolution of source cubemap
+    float resolution = size; // mip 0 resolution of source cubemap
     float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
     float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 0.0001);
 
     float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
-
+    // mipLevel = 0;
     float ndotl = max(dot(n, l), 0.0);
     if (ndotl > 0.0)
     {

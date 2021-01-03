@@ -22,10 +22,9 @@ void main()
   vec4 color = vec4(0.0);
   for (int i = 0; i < kernel_width; i++)
   {
-    vec2 offset =
-        vec2(gauss[i].x * gauss_axis_scale.x, gauss[i].x * gauss_axis_scale.y);
+    vec2 offset = vec2(gauss[i].x * gauss_axis_scale.x, gauss[i].x * gauss_axis_scale.y);
     vec2 sample_uv = frag_uv + offset;
-    color += textureLod(texture0, sample_uv,lod) * gauss[i].y;
+    color += textureLod(texture0, sample_uv, lod) * gauss[i].y;
   }
   out0 = color;
 }

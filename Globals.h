@@ -11,6 +11,7 @@
 #define MAX_INSTANCE_COUNT 40000
 #define UNIFORM_LIGHT_LOCATION 20
 #define MAX_LIGHTS 10 // reminder to change the Texture_Location::s1...sn shadow map enums
+#define MAX_BONES 216
 #define DYNAMIC_TEXTURE_RELOADING 0
 #define DYNAMIC_FRAMERATE_TARGET 0
 #define ENABLE_ASSERTS 1
@@ -19,11 +20,10 @@
 #define MAX_TEXTURE_SAMPLERS 20
 #define MAX_ANISOTROPY 8
 #define FRAMEBUFFER_FORMAT GL_RGBA16F
-#define SHOW_UV_TEST_GRID 0
 #define POSTPROCESSING 1
 #define NODE_NULL uint32(-1)
-#define MAX_MESHES_PER_NODE uint32(10)
-#define MAX_CHILDREN uint32(30)
+#define MAX_MESHES_PER_NODE uint32(50)
+#define MAX_CHILDREN uint32(330)
 #define MAX_NODES uint32(10000)
 #define INPUT_BUFFER_SIZE 100
 #define MAX_CHARACTERS 100
@@ -37,13 +37,28 @@
 #define WARGSPY_PORT 1234
 #define GAME_PORT 1234
 
+#define imgui_red ImVec4(1.0, 0.0, 0.0, 1.0)
+#define imgui_green ImVec4(0.0, 1.0, 0.0, 1.0)
+#define imgui_blue ImVec4(0.0, 0.0, 1.0, 1.0)
+#define imgui_yellow ImVec4(1.0, 1.0, 0.0, 1.0)
+#define imgui_teal ImVec4(0.0, 1.0, 1.0, 1.0)
+#define imgui_purple ImVec4(1.0, 0.0, 1.0, 1.0)
+#define imgui_white ImVec4(1.0, 1.0, 1.0, 1.0)
+#define imgui_black ImVec4(0.0, 0.0, 0.0, 1.0)
+
+#ifdef NDEBUG
+#define HEIGHTMAP_RESOLUTION 256
+#else
+#define HEIGHTMAP_RESOLUTION 32
+#endif
+
+
 #ifdef __linux__
 #define ROOT_PATH std::string("../")
 #elif _WIN32
 #define ROOT_PATH std::string("")
 #endif
 
-#define MAX_ARRAY_STRING_LENGTH 64
 
 
 template <typename T> std::string s(T value)
@@ -75,12 +90,15 @@ extern const std::string BASE_MODEL_PATH;
 extern const std::string ERROR_TEXTURE_PATH;
 extern Timer PERF_TIMER;
 extern Timer FRAME_TIMER;
+extern std::atomic<float64> TICK_START_TIME;
+float64 get_time_left_in_this_tick();
 extern Timer SWAP_TIMER;
 extern Config CONFIG;
 extern Image_Loader IMAGE_LOADER;
 extern bool WARG_SERVER;
 extern bool WARG_RUNNING;
 extern bool PROCESS_USES_SDL_AND_OPENGL;
+extern std::atomic<bool> SPIRAL_OF_DEATH;
 extern std::thread::id MAIN_THREAD_ID;
 extern std::mutex IMGUI_MUTEX;
 extern SDL_Imgui_State IMGUI;

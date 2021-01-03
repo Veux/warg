@@ -24,11 +24,18 @@ struct Timer
   // resets the timer
   void clear_all();
 
+  // manually inserts a time as if we did a start->stop sequence that resulted in this time
+  void insert_time(float64 new_time);
+
+  // returns the elapsed time of the current ongoing timer
+  float64 get_current();
+
   // returns the time between the latest (start->stop)
   float64 get_last();
 
   // returns the average of all the samples taken
   float64 moving_average();
+  float64 average();
 
   // returns the current number of samples taken so far
   uint32 sample_count();
@@ -38,18 +45,30 @@ struct Timer
 
   // returns the longest (start->stop) time out of all samples taken
   float64 longest();
+  float64 moving_longest();
 
   // returns the shortest (start->stop) time out of all samples taken
   float64 shortest();
+  float64 moving_shortest();
 
   // returns longest - shortest
-  float64 jitter() { return longest() - shortest(); }
+  float64 jitter()
+  {
+    return longest() - shortest();
+  }
+  float64 moving_jitter()
+  {
+    return moving_longest() - moving_shortest();
+  }
 
   // constructs a string providing all the above data
   std::string string_report();
 
   // get all of the active samples that have completed
   std::vector<float64> get_times();
+
+  // get all of the samples recorded sorted with latest at the front
+  std::vector<float64> get_ordered_times();
 
   // get the timestamp of the last call to start()
   uint64 get_begin();
@@ -63,7 +82,11 @@ private:
   uint64 begin;
   uint64 end;
   bool stopped = true;
-  uint32 num_samples = 0;
+  float64 shortest_sample = std::numeric_limits<float64>::infinity();
+  float64 longest_sample = 0.0;
+  float64 sum = 0;
+  uint32 sample_counter = 0;
+  uint32 max_valid_index = 0;
   uint32 last_index = -1;
   uint32 current_index = 0;
   std::vector<float64> times;

@@ -53,6 +53,10 @@ struct Shader
   void set_uniform(const char *name, const vec3 &v);
   void set_uniform(const char *name, const vec4 &v);
   void set_uniform(const char *name, const mat4 &m);
+  void set_uniform_array(const char* name, const mat4* matrices, uint32 count);
+
+
+
 
   void use() const;
   std::shared_ptr<Shader_Handle> program;
@@ -60,7 +64,7 @@ struct Shader
   std::string fs;
 
 private:
-  void check_err(GLint loc, const char *name);
+  bool check_err(GLint loc, const char *name);
   // todo: create create every uniform as an int =-1 and assign their binding
   // locations to avoid get_uniform_location spam
 };

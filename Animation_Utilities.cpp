@@ -1,16 +1,16 @@
-#pragma once
+
 #include "stdafx.h"
 #include "Animation_Utilities.h"
 #include "Warg_Common.h"
 
-template <typename V, typename T> V lerp(V &v1, V &v2, T &t)
-{
-  return v1 + t * (v2 - v1);
-}
-float lerp(float v1, float v2, float t)
-{
-  return v1 + t * (v2 - v1);
-}
+//template <typename V, typename T> V lerp(V &v1, V &v2, T &t)
+//{
+//  return v1 + t * (v2 - v1);
+//}
+//float lerp(float v1, float v2, float t)
+//{
+//  return v1 + t * (v2 - v1);
+//}
 
 // struct Bezier_Curve
 //{
@@ -70,7 +70,7 @@ void fire_emitter(Renderer *renderer, Particle_Emitter *pe, Light *l, vec3 pos, 
 
   ped->emission_descriptor.initial_velocity_variance = vec3(2, 2, 2);
 
-  ped->physics_descriptor.intensity = random_between(11.f, 25.f);
+  ped->physics_descriptor.wind_intensity = random_between(11.f, 25.f);
   static vec3 wind_dir;
   if (fract(sin(time)) > .5)
     wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
@@ -81,7 +81,7 @@ void fire_emitter(Renderer *renderer, Particle_Emitter *pe, Light *l, vec3 pos, 
   pe->update(renderer->projection, renderer->camera, dt);
 }
 
-void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size)
+void fire_emitter2(Renderer *renderer, Scene_Graph *scene, Particle_Emitter *pe, Light *l, vec3 pos, vec2 size)
 {
   Particle_Emitter_Descriptor *ped = &pe->descriptor;
   const float32 time = (float32)get_real_time();
@@ -109,7 +109,7 @@ void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter
 
   ped->emission_descriptor.initial_velocity_variance = vec3(1, 1, 00.1);
 
-  ped->physics_descriptor.intensity = random_between(21.f, 55.f);
+  ped->physics_descriptor.wind_intensity = random_between(21.f, 55.f);
   static vec3 wind_dir;
   if (fract(sin(time)) > .5)
     wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
@@ -123,7 +123,7 @@ void fire_emitter2(Renderer *renderer, Flat_Scene_Graph *scene, Particle_Emitter
   l->brightness = area * random_between(13.f, 16.f);
   l->position = pos;
 
-  pe->descriptor.physics_descriptor.octree = &scene->collision_octree;
+  pe->descriptor.physics_descriptor.static_octree = &scene->collision_octree;
 
   pe->update(renderer->projection, renderer->camera, dt);
 
