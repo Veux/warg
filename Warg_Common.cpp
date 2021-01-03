@@ -105,18 +105,18 @@ UID add_char(Game_State &gs, Map &map, int team, std::string_view name)
 
 void move_char(Game_State &gs, Character &character, Input command, Scene_Graph &scene)
 {
-  if (command.m & Move_Status::Forwards)
-  {
-    character.physics.position.y += 10 *dt;
-    character.physics.velocity = vec3(10000);//ebinj
-  }
-  else
-  {
-    character.physics.velocity = vec3(0);//ebinj
-  }
-  if (command.m & Move_Status::Backwards)
-    character.physics.position.y -= 10 *dt;
-  return;
+  //if (command.m & Move_Status::Forwards)
+  //{
+  //  character.physics.position.y += 10 *dt;
+  //  character.physics.velocity = vec3(10000);//ebinj
+  //}
+  //else
+  //{
+  //  character.physics.velocity = vec3(0);//ebinj
+  //}
+  //if (command.m & Move_Status::Backwards)
+  //  character.physics.position.y -= 10 *dt;
+  //return;
 
   vec3 &pos = character.physics.position;
   character.physics.orientation = command.orientation;
