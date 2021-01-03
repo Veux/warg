@@ -18,6 +18,12 @@ Blades_Edge::Blades_Edge(Scene_Graph &scene)
     material.albedo.mod = vec4(0.4f);
 
   node = scene.add_aiscene_new("Blades_Edge/bea2.fbx", "Blades Edge");
+  Node_Index arena = scene.nodes[node].children[0];
+  Node_Index arena_collider = scene.nodes[arena].collider;
+  Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
+  Mesh* meshptr = &scene.resource_manager->mesh_pool[meshindex];
+  Mesh_Descriptor* blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
+  scene.collision_octree.push(blades_edge_mesh_descriptor);
 }
 
 UID add_dummy(Game_State &game_state, Map &map, vec3 position)

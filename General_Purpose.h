@@ -68,7 +68,7 @@ template <typename T> void _errr(T t, const char *file, uint32 line)
     //}
     //std::cout << end_of_log << std::endl;
     //SDL_Delay(500);
-    throw;
+m    throw;
   }
 #endif
 }

@@ -624,23 +624,7 @@ int main(int argc, char *argv[])
       SDL_Event e;
 
       while (SDL_PollEvent(&e))
-      {
-        if (e.type == SDL_TEXTINPUT)
-        {
-          int a = 3;
-        }
-        if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_RETURN)
-        {
-          if (!IMGUI.context->IO.WantTextInput)
-          {
-            int a = 3;
-          }
-        }
-
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_RETURN)
-        {
-          int a = 3;
-        }
+      {        
         input_preprocess(e, &rendered_state, states, IMGUI.context->IO.WantTextInput,
             IMGUI.context->IO.WantCaptureMouse, &imgui_event_accumulator, &state_keyboard_events, &state_mouse_events);
       }

@@ -82,6 +82,8 @@ struct Warg_State : protected State
 
   Interface_State interface_state;
 
+  Liquid_Surface terrain;
+
   std::string character_name;
   int32 team;
 };

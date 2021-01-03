@@ -523,14 +523,14 @@ void Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   ImGui::SameLine();
   ImGui::Text("]");
 
-  // ImGui::Text("Collider:[");
-  // ImGui::SameLine();
-  // if (node->collider == NODE_NULL)
-  //  ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
-  // else
-  //  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->collider).c_str());
-  // ImGui::SameLine();
-  // ImGui::Text("]");
+   ImGui::Text("Collider:[");
+   ImGui::SameLine();
+   if (node->collider == NODE_NULL)
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
+   else
+    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->collider).c_str());
+   ImGui::SameLine();
+   ImGui::Text("]");
 
   if (!showing_model)
   {
@@ -2010,6 +2010,9 @@ Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Sce
     {
       child_ptr->visible = false;
       child_ptr->propagate_visibility = false;
+
+      //only working for a single colliding node
+      node->collider = child_index;
     }
   }
   return node_index;

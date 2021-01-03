@@ -969,20 +969,20 @@ void Warg_State::update()
 
   //if (terrain.apply_geometry_to_octree_if_necessary(&scene))
   //{
-  //  mat4 M = scene.build_transformation(map->node);
-  //  //scene.collision_octree.push(blades_edge_mesh_descriptor, &M);
-  // 
-  //  M = scene.build_transformation(terrain.ground);
-  //  scene.collision_octree.push(&terrain.terrain_geometry, &M);
-  //  
-  //  for (Node_Index node : spawned_nodes)
-  //  {
-  //    M = scene.build_transformation(node);
-  //    Mesh_Descriptor *newmesh =
-  //        &scene.resource_manager->mesh_pool[scene.nodes[node].model[0].first]
-  //             .mesh->descriptor;
-  //    scene.collision_octree.push(newmesh, &M);
-  //  }
+   // mat4 M_blades_edge = scene.build_transformation(map->node);
+    //scene.collision_octree.push(blades_edge_mesh_descriptor, &M_blades_edge);
+   
+   // mat4 M_terrain = scene.build_transformation(terrain.ground);
+    //scene.collision_octree.push(&terrain.terrain_geometry, &M_terrain);
+    
+    //for (Node_Index node : spawned_nodes)
+    //{
+    //  mat4  M = scene.build_transformation(node);
+    //  Mesh_Descriptor *newmesh =
+    //      &scene.resource_manager->mesh_pool[scene.nodes[node].model[0].first]
+    //           .mesh->descriptor;
+    //  scene.collision_octree.push(newmesh, &M);
+    //}
 
   //  //this is bad: we can't just copy an octree like this because it ruins the pointers
   //  //however it works if we dont push to it again and only do tests...

@@ -377,6 +377,7 @@ struct Scene_Graph_Node
 
   std::array<Node_Index, MAX_CHILDREN> children;
   Node_Index parent = NODE_NULL;
+  Node_Index collider = NODE_NULL;
   bool exists = false;
   bool visible = true;
   bool propagate_visibility = true;
