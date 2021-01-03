@@ -1053,7 +1053,7 @@ void main()
 
   //i think this is incorrect anyway
   //i believe physically based is /d rather than pow^d
-  float A = pow(1 - density, pow(250.f*this_object_thickness, 0.85f));
+  float A = pow(1 - density, pow(450.f*this_object_thickness, 0.85f));
   
 
   //this looked wrong before, why?

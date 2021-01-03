@@ -1201,7 +1201,7 @@ struct Liquid_Surface
   Texture_Paint painter;
   Node_Index ground = NODE_NULL;
   Node_Index water = NODE_NULL;
-  int32 iterations = 0;
+  int32 iterations = 15;
   float64 my_time = 0.f;
   vec3 ambient_wave_scale = vec3(30.f, 3.f, 1.0f);
   // private:

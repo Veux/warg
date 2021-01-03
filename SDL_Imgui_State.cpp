@@ -151,7 +151,8 @@ void SDL_Imgui_State::render()
           if ((int32(IMGUI_TEXTURE_DRAWS.size()) - 1) < int32(index))
             continue;
           Imgui_Texture_Descriptor itd = IMGUI_TEXTURE_DRAWS[index];
-
+          if (!itd.ptr)
+            continue;
           GLenum format = itd.ptr->internalformat;
           bool gamma_flag = format == GL_SRGB8_ALPHA8 || format == GL_SRGB || format == GL_RGBA16F || format == GL_RGBA32F ||
             format == GL_RG16F || format == GL_RG32F || format == GL_RGB16F;
@@ -752,8 +753,8 @@ bool put_imgui_texture_button(Imgui_Texture_Descriptor *descriptor)
   uint32 data = (uint32)(IMGUI_TEXTURE_DRAWS.size() - 1) | 0xf0000000;
 
   float32 aspect = 0.0f;
-  if (descriptor->ptr);
-  aspect = (float32)descriptor->ptr->size.x / (float32)descriptor->ptr->size.y;
+  if (descriptor->ptr)
+    aspect = (float32)descriptor->ptr->size.x / (float32)descriptor->ptr->size.y;
 
   if (descriptor->y_invert)
     return ImGui::ImageButton((ImTextureID)data, ImVec2(descriptor->size.x, descriptor->size.y / aspect),
