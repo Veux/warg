@@ -44,6 +44,9 @@ void game_server(const char *wargspy_address)
     float64 current_time = 0.0;
     float64 last_time = get_real_time() - dt;
     float64 elapsed_time = 0.0;
+
+    float64 wargspy_frequency = 1.0f;
+    float64 time_of_last_wargspy_packet = 0.0f;
     while (true)
     {
       const float64 time = get_real_time();
@@ -53,7 +56,9 @@ void game_server(const char *wargspy_address)
       {
         current_time += dt;
 
+        if(time > time_of_last_wargspy_packet + wargspy_frequency)
         {
+          time_of_last_wargspy_packet = time;
           uint8 byte = 1;
           ENetPacket *packet = enet_packet_create(&byte, 1, 0);
           enet_peer_send(wargspy, 0, packet);

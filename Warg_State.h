@@ -47,8 +47,8 @@ struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size, std::string_view character_name, int32 team);
   ~Warg_State();
-  void set_session(Session *session);
   void session_swapper();
+  void initialize_warg_state();
   void update();
   void draw_gui();
   virtual void handle_input_events() final;

@@ -35,11 +35,8 @@ Warg_State::~Warg_State()
   delete map;
 }
 
-void Warg_State::set_session(Session *session)
+void Warg_State::initialize_warg_state()
 {
-  if (this->session) delete this->session;
-  this->session = session;
-
   player_character_id = 0;
   target_id = 0;
   character_nodes.clear();
@@ -59,13 +56,17 @@ void Warg_State::set_session(Session *session)
   scene.particle_emitters.push_back({});
 }
 
+
+
 void Warg_State::session_swapper()
 {
   ImGui::Begin("Session swapper");
 
   if (ImGui::Button("Local"))
   {
-    set_session((Session *)new Local_Session());
+    if (session) delete session;
+    session = (Session*)new Local_Session();
+    initialize_warg_state();
   }
 
   ImGui::Text("Server:");
@@ -78,7 +79,9 @@ void Warg_State::session_swapper()
     {
       Network_Session *network_session = new Network_Session();
       network_session->connect(wargspy_state.game_server_address);
-      set_session((Session *)network_session);
+      if (session) delete session;
+      session = (Session*)new Network_Session();
+      initialize_warg_state();
     }
   }
   else

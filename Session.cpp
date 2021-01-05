@@ -66,20 +66,20 @@ Network_Session::Network_Session() : scene(&resource_manager)
 
 Network_Session::~Network_Session()
 {
-  enet_host_destroy(client);
+  enet_host_destroy(warg_client_host);
 }
 
 void Network_Session::connect(uint32 server_address)
 {
-  client = enet_host_create(NULL, 1, 2, 0, 0);
-  ASSERT(client);
+  warg_client_host = enet_host_create(NULL, 1, 2, 0, 0);
+  ASSERT(warg_client_host);
 
   ENetAddress addr = { .host = server_address, .port = GAME_PORT };
-  server = enet_host_connect(client, &addr, 2, 0);
+  server = enet_host_connect(warg_client_host, &addr, 2, 0);
   ASSERT(server);
 
   ENetEvent event;
-  int res = enet_host_service(client, &event, 5000);
+  int res = enet_host_service(warg_client_host, &event, 5000);
   //res == 0
   ASSERT(res > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
 }
@@ -88,20 +88,20 @@ void Network_Session::send_reliable(Buffer &b)
 {
   ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_RELIABLE);
   enet_peer_send(server, 0, packet);
-  enet_host_flush(client);
+  enet_host_flush(warg_client_host);
 }
 
 void Network_Session::send_unreliable(Buffer &b)
 {
   ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
   enet_peer_send(server, 0, packet);
-  enet_host_flush(client);
+  enet_host_flush(warg_client_host);
 }
 
 void Network_Session::get_state(Game_State &gs, UID &pc)
 {
   ENetEvent event;
-  while (enet_host_service(client, &event, 0) > 0)
+  while (enet_host_service(warg_client_host, &event, 0) > 0)
   {
     switch (event.type)
     {

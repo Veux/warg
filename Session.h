@@ -71,7 +71,7 @@ public:
   void send_chat_message(std::string_view chat_message);
 
 private:
-  ENetHost *client = nullptr;
+  ENetHost *warg_client_host = nullptr;
   ENetPeer *server = nullptr;
   State_Update server_state = {0};
   std::list<State_Prediction> predicted_states;
