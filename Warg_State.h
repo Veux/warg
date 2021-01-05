@@ -52,8 +52,7 @@ struct Warg_State : protected State
   void update();
   void draw_gui();
   virtual void handle_input_events() final;
-  void add_character_mesh(UID character_id);
-  void add_girl_character_mesh(UID character_id);
+  Node_Index add_character_mesh(UID character_id);
   void set_camera_geometry();
   void update_character_nodes();
   void update_prediction_ghost();
