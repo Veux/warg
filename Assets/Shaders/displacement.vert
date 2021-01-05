@@ -28,6 +28,7 @@ out mat3 frag_TBN;
 out vec2 frag_uv;
 out vec2 frag_normal_uv;
 out vec4 frag_in_shadow_space[MAX_LIGHTS];
+out vec3 model_space_position;
 out float ground_height;
 out float water_depth;
 flat out float biome;
@@ -258,6 +259,6 @@ void main()
   water_depth = max(height - height_sample.g, 0);
 
   // indebug = vec4(texture2D(texture11, uv).a);
-
+  model_space_position = position + displacement_offset;
   gl_Position = txaa_jitter * MVP * vec4(position + displacement_offset, 1);
 }

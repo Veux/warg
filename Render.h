@@ -1189,6 +1189,7 @@ struct Liquid_Surface
 {
   Liquid_Surface() {}
   void init(State *state, vec3 pos, float32 scale, ivec2 resolution);
+  
   void run(State *state);
   ~Liquid_Surface();
   void set_heightmap(Texture texture);

@@ -28,7 +28,7 @@ uniform vec4 texture10_mod;
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
 uniform bool shadow_map_enabled[MAX_LIGHTS];
-uniform mat4 model;
+uniform mat4 Model;
 uniform vec3 camera_forward;
 uniform vec3 camera_right;
 uniform vec3 camera_up;
@@ -61,6 +61,7 @@ uniform float height_scale2;
 uniform float water_time2;
 uniform float surfdotv_exp;
 uniform bool water_use_uv;
+uniform float max_radius;
 
 struct Light
 {
@@ -81,6 +82,7 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
+in vec3 model_space_position;
 in float water_depth;
 in float height_variance;
 
@@ -478,10 +480,9 @@ float fbm_h_n(vec2 x, float H, int n)
   return t;
 }
 
-float fbm_h_n_dist_fade(vec2 x, float H, int n)
+float fbm_h_n_dist_fade(vec2 x, float H, int n, float lenpd)
 {
-  vec3 partial_d = dFdy(frag_world_position);
-  float lenpd = 1 - length(partial_d);
+
   float G = exp2(-H);
   float f = 1.0;
   float a = 1.0;
@@ -592,15 +593,15 @@ float waterheight(vec2 uv, float time)
   return f;
 }
 
-float ambient_waves(vec2 p, float timescale, int i)
+float ambient_waves(vec2 p, float timescale, int i,float lenpd)
 {
   // turb style:
   return turb(p, timescale * 6 * time);
 
   // fbm style:
   float water_height = 0.f;
-  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(.9 * time, -.7 * time), .825960248501f, i);
-  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(-.85 * time, .8 * time), .825930248501f, i);
+  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(.9 * time, -.7 * time), .825960248501f, i, lenpd);
+  water_height = water_height + fbm_h_n_dist_fade(p + timescale * vec2(-.85 * time, .8 * time), .825930248501f, i,lenpd);
   return water_height;
 }
 
@@ -717,41 +718,71 @@ vec3 getNormal2(vec3 p, float eps)
   return normalize(n);
 }
 
-vec3 get_water_normal()
+
+vec3 get_water_normal2()
 {
-  // newer not-really-working ambient waves:
+
+  //the model space is [-.5,.5]
+  //so if we use that space directly, we scale the water detail with the model properly
+  vec2 waterp = 27.2f * model_space_position.xy;
+
   float eps = 0.00004f;
   vec3 partial_d = dFdx(frag_world_position);
   float lenpd = length(partial_d);
 
-  vec2 waterp = 55.f * frag_world_position.xy;
-  float h = ambient_waves(waterp, 1.7310f, 4);
-  float hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), 1.7310f, 4);
-  float hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), 1.7310f, 4);
+  float h = ambient_waves(waterp, .12350f, 11,1-lenpd);
+  float hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .12350f, 11,1-lenpd);
+  float hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .12350f, 11,1-lenpd);
   float dx = hdx - h;
   float dy = hdy - h;
-  vec3 waternormalfine = normalize(vec3(dx, dy, lenpd * 5.f));
-
-  waterp = 3.1f * frag_world_position.xy;
-  h = ambient_waves(waterp, .2350f, 5);
-  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 5);
-  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .2350f, 5);
-  dx = hdx - h;
-  dy = hdy - h;
-  vec3 waternormallarge = normalize(vec3(dx, dy, lenpd * 3.75f));
-
-  vec3 waternormal = normalize(waternormalfine + waternormallarge);
-
-  waterp = .63231f * frag_world_position.xy;
-
-  h = ambient_waves(waterp, .12350f, 11);
-  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .12350f, 11);
-  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .12350f, 11);
-  dx = hdx - h;
-  dy = hdy - h;
   vec3 waternormaltest = normalize(vec3(dx, dy, eps));
-  waternormaltest.z *= max(lenpd * 81121.f, .025251);
+
+  //makes the partial derivative based noise reduction scale somewhat well
+  //with the size of the model
+  //maybe there is a better way still...
+  float scale_of_model = Model[0][0];
+  waternormaltest.z *= max((lenpd *   5551121.f) /scale_of_model, .025251);
   return normalize(waternormaltest);
+}
+
+vec3 get_water_normal()
+{
+    return get_water_normal2();
+
+
+//  // newer not-really-working ambient waves:
+//  float eps = 0.00004f;
+//  vec3 partial_d = dFdx(frag_world_position);
+//  float lenpd = length(partial_d);
+//
+//  vec2 waterp = 55.f * scaled_model_space_position_xy;
+//  float h = ambient_waves(waterp, 1.7310f, 4);
+//  float hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), 1.7310f, 4);
+//  float hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), 1.7310f, 4);
+//  float dx = hdx - h;
+//  float dy = hdy - h;
+//  vec3 waternormalfine = normalize(vec3(dx, dy, lenpd * 5.f));
+//
+//  waterp = 3.1f * scaled_model_space_position_xy;
+//  h = ambient_waves(waterp, .2350f, 5);
+//  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .2350f, 5);
+//  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .2350f, 5);
+//  dx = hdx - h;
+//  dy = hdy - h;
+//  vec3 waternormallarge = normalize(vec3(dx, dy, lenpd * 3.75f));
+//
+//  vec3 waternormal = normalize(waternormalfine + waternormallarge);
+//
+//  waterp = .63231f * scaled_model_space_position_xy;
+//
+//  h = ambient_waves(waterp, .12350f, 11);
+//  hdy = ambient_waves(vec2(waterp.x, waterp.y + eps), .12350f, 11);
+//  hdx = ambient_waves(vec2(waterp.x + eps, waterp.y), .12350f, 11);
+//  dx = hdx - h;
+//  dy = hdy - h;
+//  vec3 waternormaltest = normalize(vec3(dx, dy, eps));
+//  waternormaltest.z *= max(lenpd * 81121.f, .025251);
+//  return normalize(waternormaltest);
 }
 
 void main()
@@ -765,6 +796,14 @@ void main()
       //discard;
     }
   }
+
+  if(length(model_space_position.xy) > 0.5f)
+  {
+    discard;
+  }
+  
+
+
   gather_shadow_moments();
 
   mat3 TBN;

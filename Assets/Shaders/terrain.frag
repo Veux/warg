@@ -29,7 +29,7 @@ uniform vec4 texture11_mod;
 uniform sampler2D shadow_maps[MAX_LIGHTS];
 uniform float max_variance[MAX_LIGHTS];
 uniform bool shadow_map_enabled[MAX_LIGHTS];
-uniform mat4 model;
+uniform mat4 Model;
 uniform mat4 view;
 uniform mat4 projection;
 uniform vec3 additional_ambient;
@@ -60,6 +60,7 @@ in mat3 frag_TBN;
 in vec2 frag_uv;
 in vec2 frag_normal_uv;
 in vec4 frag_in_shadow_space[MAX_LIGHTS];
+in vec3 model_space_position;
 uniform bool ground;
 in float water_depth;
 in float ground_height;
@@ -475,6 +476,15 @@ void main()
     // if (texture0_mod.a*albedo_tex.a < 0.3)
     // discard;
   }
+
+  if(length(model_space_position.xy) > 0.5f)
+  {
+    discard;
+  }
+  
+  float scale_of_world = 15;
+  vec2 scaled_model_space_position_xy = scale_of_world*model_space_position.xy;
+
   gather_shadow_moments();
 
   mat3 TBN;
@@ -527,12 +537,12 @@ void main()
   float is_heavy_grass = in_range(biome, 2.5f, 4.f);
   float on_fire = in_range(biome, 4.f, 5.f); // timenoise mod red color
   // float fire_is_fading = in_range(biome,5.f,6.f);//fade to char but add blinking dots of embers
-
+  
   float fire_f = 1.0f;
   vec3 fire = 30.f * fire_f * vec3(4.5, 2.1, .1);
-  vec3 grass = 0.255f * fbm_h_n(5.15101f * frag_world_position.xy, .41f, 9) * vec3(0.18, .433, .08);
-  grass = grass * fbm_h_n(.1515101f * frag_world_position.xy, .71f, 3);
-  vec3 snow = 0.55f * fbm_h_n(.5101f * frag_world_position.xy, .41f, 9) * vec3(1);
+  vec3 grass = 0.255f * fbm_h_n(5.15101f * scaled_model_space_position_xy, .41f, 9) * vec3(0.18, .433, .08);
+  grass = grass * fbm_h_n(.1515101f * scaled_model_space_position_xy, .71f, 3);
+  vec3 snow = 0.55f * fbm_h_n(.5101f * scaled_model_space_position_xy, .41f, 9) * vec3(1);
   // grass =;
 
   // i will be assigning the snow color to the grass variable because thats whats actually getting rendered, jank
@@ -541,27 +551,27 @@ void main()
   float snow_t = smoothstep(11. * snow_fbm, 14. * snow_fbm, 95 * ground_height);
   grass = grass * (1 - snow_t) + snow_t * vec3(1);
 
-  vec3 soil = fbm_h_n(10.f * frag_world_position.xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);
-  float rock_t = fbm_h_n(20.f * frag_world_position.xy, .01f, 1);
-  float rock_t2 = fbm_h_n(50.f * frag_world_position.xy, .501f, 1);
-  float rock_t3 = fbm_h_n(660.f * frag_world_position.xy, .501f, 2);
+  vec3 soil = fbm_h_n(10.f * scaled_model_space_position_xy, .01f, 7) * 0.35845f * vec3(0.3, .13, .036);
+  float rock_t = fbm_h_n(20.f * scaled_model_space_position_xy, .01f, 1);
+  float rock_t2 = fbm_h_n(50.f * scaled_model_space_position_xy, .501f, 1);
+  float rock_t3 = fbm_h_n(660.f * scaled_model_space_position_xy, .501f, 2);
   vec3 rock_color =
       rock_t3 * (mix(vec3(0), vec3(.3, .15, 0), 0.523f * rock_t) + mix(vec3(0), vec3(1), 0.12f * rock_t2));
-  soil = soil + (step(.9515, fbm_h_n(550.f * frag_world_position.xy, .01f, 1)) *
-                    fbm_h_n(55.f * frag_world_position.xy, .701f, 1) * grass);
+  soil = soil + (step(.9515, fbm_h_n(550.f * scaled_model_space_position_xy, .01f, 1)) *
+                    fbm_h_n(55.f * scaled_model_space_position_xy, .701f, 1) * grass);
   // soil = soil + (smoothstep(4.155,4.156,fbm_h_n(50.f*frag_world_position.xy,.01f,7))*rock_color);
-  float rock_location = smoothstep(0.852871115814, .980f, fbm_h_n(15.f * frag_world_position.xy, .01f, 1));
+  float rock_location = smoothstep(0.852871115814, .980f, fbm_h_n(15.f * scaled_model_space_position_xy, .01f, 1));
   soil = mix(soil, rock_color, rock_location);
   // soil = vec3(rock_location);
   vec3 wet_soil = 0.32f * soil;
 
   vec3 c = hsv2rgb(
-      vec3(saturate(noise(21.1f * frag_world_position.xy) * fbm_h_n(31.f * frag_world_position.xy, .501f, 4)), 1, 1));
+      vec3(saturate(noise(21.1f * scaled_model_space_position_xy) * fbm_h_n(31.f * scaled_model_space_position_xy, .501f, 4)), 1, 1));
 
   vec3 flower_color = c;
 
-  float flower_location = (1 - 1.512f * fbm_h_n(2.7595f * frag_world_position.xy, .101f, 2)) +
-                          (1 - 1.12f * fbm_h_n(25.5f * frag_world_position.xy, .101f, 3));
+  float flower_location = (1 - 1.512f * fbm_h_n(2.7595f * scaled_model_space_position_xy, .101f, 2)) +
+                          (1 - 1.12f * fbm_h_n(25.5f * scaled_model_space_position_xy, .101f, 3));
 
   vec3 charred = 0.135f * vec3(length(soil));
   // only one of these will be nonzero
@@ -594,7 +604,7 @@ void main()
 
   
   //sponge textures
-  float fbm_texture_mix =  pow(saturate(fbm_h_n(1.4*frag_world_position.xy,1.51,4)),1);
+  float fbm_texture_mix =  pow(saturate(fbm_h_n(1.4*scaled_model_space_position_xy,1.51,4)),1);
   //low/left is rocks, high/right is grass
   m.albedo = mix(texture(texture0,frag_uv).rgb,m.albedo,fbm_texture_mix);
   m.roughness = mix(texture(texture2,frag_uv).r,m.roughness,fbm_texture_mix);
