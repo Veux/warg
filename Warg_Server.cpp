@@ -20,10 +20,7 @@ void game_server(const char *wargspy_address)
 
   {
     map = std::make_unique<Map>(Blades_Edge(*scene));
-
-
-    for (int i = 0; i < 1; i++)
-      add_dummy(game_state, *map, {1, i, 5});
+    add_dummy(game_state, *map, {1, 0, 5});
   }
 
   {

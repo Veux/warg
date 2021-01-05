@@ -33,6 +33,16 @@ struct Interface_State
   bool focus_chat = false;
 };
 
+struct WargSpy_State
+{
+  ENetHost *host = nullptr;
+  ENetPeer *wargspy = nullptr;
+  uint32 game_server_address = 0;
+  bool connecting = false;
+  bool asking = false;
+  double time_till_next_ask = 0;
+};
+
 struct Warg_State : protected State
 {
   Warg_State(std::string name, SDL_Window *window, ivec2 window_size, std::string_view character_name, int32 team);
@@ -42,7 +52,6 @@ struct Warg_State : protected State
   void update();
   void draw_gui();
   virtual void handle_input_events() final;
-  void process_messages();
   void add_character_mesh(UID character_id);
   void add_girl_character_mesh(UID character_id);
   void set_camera_geometry();
@@ -62,6 +71,8 @@ struct Warg_State : protected State
   void update_icons();
   void update_buff_indicators();
   void draw_chat_box();
+  void update_wargspy();
+  void send_wargspy_request();
 
   Session *session = nullptr;
 
@@ -81,6 +92,7 @@ struct Warg_State : protected State
   vec4 character_to_camera;
 
   Interface_State interface_state;
+  WargSpy_State wargspy_state;
 
   Liquid_Surface terrain;
 

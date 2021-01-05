@@ -60,7 +60,7 @@ public:
   Network_Session();
   ~Network_Session();
 
-  void connect(const char *wargspy_address);
+  void connect(uint32 server_address);
   void send_reliable(Buffer &b);
   void send_unreliable(Buffer &b);
 

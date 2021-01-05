@@ -19,22 +19,6 @@ bool WANT_CLEAR_OCTREE = false;
 extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
 extern void spawn_grabbyarm(Scene_Graph* scene, vec3 position);
 extern void update_grabbyarm(Scene_Graph* scene, float64 current_time);
-//{
-//  dst->float32_uniforms["index_of_refraction"] = 1.15f;
-//  dst->float32_uniforms["refraction_offset_factor"] = 0.02501;
-//  dst->float32_uniforms["water_eps"] = 0.0001;
-//  dst->float32_uniforms["water_scale"] = 4.87;
-//  dst->float32_uniforms["water_speed"] = 0.201;
-//  dst->float32_uniforms["water_dist_scale"] = .81;
-//  dst->float32_uniforms["water_dist_exp"] = 1.67;
-//  dst->float32_uniforms["water_height_scale"] = 3.0;
-//  dst->float32_uniforms["water_dist_min"] = 5.;
-//  dst->float32_uniforms["water_scale2"] = 1.52;
-//  dst->float32_uniforms["height_scale2"] = 3.0;
-//  dst->float32_uniforms["water_time2"] = 0.0192;
-//  dst->float32_uniforms["surfdotv_exp"] = 2.35f;
-//  dst->bool_uniforms["water_use_uv"] = true;
-//}
 
 Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
     std::string_view character_name, int32 team)
@@ -73,8 +57,6 @@ void Warg_State::set_session(Session *session)
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
   scene.particle_emitters.push_back({});
-
-
 }
 
 void Warg_State::session_swapper()
@@ -86,12 +68,24 @@ void Warg_State::session_swapper()
     set_session((Session *)new Local_Session());
   }
 
-  if (ImGui::Button("Cyber"))
+  ImGui::Text("Server:");
+  ImGui::SameLine();
+  if (wargspy_state.game_server_address)
   {
-    Network_Session *network_session = new Network_Session();
-    network_session->connect(CONFIG.wargspy_address.c_str());
-    set_session((Session *)network_session);
+    ImGui::TextColored(imgui_green, "%s", ip_address_string(wargspy_state.game_server_address).c_str());
+    ImGui::SameLine();
+    if (ImGui::Button("Connect"))
+    {
+      Network_Session *network_session = new Network_Session();
+      network_session->connect(wargspy_state.game_server_address);
+      set_session((Session *)network_session);
+    }
   }
+  else
+  {
+    ImGui::TextColored(imgui_red, "offline");
+  }
+
 
   ImGui::Checkbox("Enable prediction", &session->prediction_enabled);
 
@@ -361,14 +355,6 @@ void Warg_State::handle_input_events()
     session->move_command(m, orientation, target_id);
   }
   previous_mouse_state = mouse_state;
-}
-
-void Warg_State::process_messages()
-{
-  // std::vector<unique_ptr<Message>> messages = session->pull();
-  // set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
-  // for (unique_ptr<Message> &message : messages)
-  //  message->handle(*this);
 }
 
 void Warg_State::set_camera_geometry()
@@ -750,6 +736,69 @@ void Warg_State::update_animation_objects()
   }
 }
 
+void Warg_State::send_wargspy_request()
+{
+  ASSERT(wargspy_state.host);
+  ASSERT(wargspy_state.wargspy);
+  ASSERT(!wargspy_state.connecting);
+
+  uint8 byte = 2;
+  ENetPacket *packet = enet_packet_create(&byte, 1, 0);
+  enet_peer_send(wargspy_state.wargspy, 0, packet);
+  enet_host_flush(wargspy_state.host);
+  wargspy_state.asking = true;
+}
+
+void Warg_State::update_wargspy()
+{
+  if (wargspy_state.host == nullptr)
+  {
+    wargspy_state.host = enet_host_create(NULL, 1, 2, 0, 0);
+    if (wargspy_state.host == nullptr)
+      return;
+  }
+
+  if (wargspy_state.wargspy == nullptr)
+  {
+    ENetAddress addr;
+    enet_address_set_host(&addr, CONFIG.wargspy_address.c_str());
+    addr.port = WARGSPY_PORT;
+    wargspy_state.wargspy = enet_host_connect(wargspy_state.host, &addr, 2, 0);
+    wargspy_state.connecting = true;
+  }
+
+  if (wargspy_state.wargspy && !wargspy_state.connecting && (wargspy_state.time_till_next_ask -= dt) < 0)
+  {
+    send_wargspy_request();
+    wargspy_state.time_till_next_ask = 3;
+  }
+
+  ENetEvent e;
+  while (enet_host_service(wargspy_state.host, &e, 0) > 0)
+  {
+    if (e.type == ENET_EVENT_TYPE_CONNECT)
+    {
+      wargspy_state.connecting = false;
+    }
+
+    if (e.type == ENET_EVENT_TYPE_RECEIVE)
+    {
+      Buffer b;
+      b.insert(e.packet->data, e.packet->dataLength);
+
+      uint8 type;
+      deserialize(b, type);
+      wargspy_state.game_server_address = 0;
+      if (type == 1)
+      {
+        uint32 game_server_ip_address;
+        deserialize(b, wargspy_state.game_server_address);
+      }
+      wargspy_state.asking = false;
+    }
+  }
+}
+
 void Warg_State::update()
 {
 
@@ -771,6 +820,7 @@ void Warg_State::update()
   update_prediction_ghost();
   update_spell_object_nodes();
   // update_animation_objects();
+  update_wargspy();
 
   // camera must be set before render entities, or they get a 1 frame lag
 
@@ -778,6 +828,7 @@ void Warg_State::update()
 
   // scene.collision_octree.clear();
 
+  {
   Node_Index arena = scene.nodes[map->node].children[0];
   //Node_Index arena_collider = scene.nodes[arena].collider;
   //Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
@@ -1012,6 +1063,7 @@ void Warg_State::update()
   {
     frostbolt_effect2.position = 31.f*random_3D_unit_vector();
     frostbolt_effect2.position.z = abs(frostbolt_effect2.position.z);
+  }
   }
 }
 

@@ -283,3 +283,4 @@ void check_gl_error();
 float64 get_real_time();
 typedef uint32_t UID;
 UID uid();
+std::string ip_address_string(uint32 ip_address);
