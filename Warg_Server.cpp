@@ -8,7 +8,8 @@ UID uid_of(const ENetPeer const *peer)
 
 void game_server(const char *wargspy_address)
 {
-  ENetHost *server;
+  ENetHost* game_server_host;
+  ENetHost* wargspy_host;
   ENetPeer *wargspy;
   Game_State game_state;
   std::vector<Chat_Message> chat_log;
@@ -23,22 +24,21 @@ void game_server(const char *wargspy_address)
     add_dummy(game_state, *map, {1, 0, 5});
   }
 
-  {
+  {//game server listen
     ENetAddress addr = {.host = ENET_HOST_ANY, .port = GAME_PORT};
-    server = enet_host_create(&addr, 32, 2, 0, 0);
+    game_server_host = enet_host_create(&addr, 32, 2, 0, 0);
   }
 
-  {
+  {//wargspy connection
     ENetAddress addr = {.port = WARGSPY_PORT};
     enet_address_set_host(&addr, wargspy_address);
-    wargspy = enet_host_connect(server, &addr, 2, 0);
+    wargspy = enet_host_connect(game_server_host, &addr, 2, 0);
+    ENetEvent event;
+    int r = enet_host_service(wargspy_host, &event, 5000);
+    ASSERT(r && event.type == ENET_EVENT_TYPE_CONNECT);
+    
   }
 
-  {
-    ENetEvent event;
-    enet_host_service(server, &event, 5000);
-    // > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
-  }
 
   {
     float64 current_time = 0.0;
@@ -61,7 +61,7 @@ void game_server(const char *wargspy_address)
 
         {
           ENetEvent event;
-          while (enet_host_service(server, &event, 0) > 0)
+          while (enet_host_service(game_server_host, &event, 0) > 0)
           {
             switch (event.type)
             {

@@ -79,7 +79,8 @@ void Network_Session::connect(uint32 server_address)
   ASSERT(server);
 
   ENetEvent event;
-  int res = enet_host_service(client, &event, 100000);
+  int res = enet_host_service(client, &event, 5000);
+  //res == 0
   ASSERT(res > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
 }
 
