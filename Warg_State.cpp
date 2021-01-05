@@ -20,8 +20,8 @@ extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
 extern void spawn_grabbyarm(Scene_Graph *scene, vec3 position);
 extern void update_grabbyarm(Scene_Graph *scene, float64 current_time);
 
-Node_Index add_boi_character_mesh(Scene_Graph& scene);
-Node_Index add_girl_character_mesh(Scene_Graph& scene);
+Node_Index add_boi_character_mesh(Scene_Graph &scene);
+Node_Index add_girl_character_mesh(Scene_Graph &scene);
 
 Warg_State::Warg_State(
     std::string name, SDL_Window *window, ivec2 window_size, std::string_view character_name, int32 team)
@@ -45,7 +45,7 @@ void Warg_State::initialize_warg_state()
   spell_object_nodes.clear();
   animation_objects.clear();
   scene.clear();
-  // resource_manager.clear();
+  resource_manager.clear();
   if (map)
     delete map;
   map = new Blades_Edge(scene);
@@ -53,47 +53,79 @@ void Warg_State::initialize_warg_state()
       "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
   session->request_spawn(character_name, team);
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
 }
 
 void Warg_State::session_swapper()
 {
   ImGui::Begin("Session swapper");
 
-  if (ImGui::Button("Local"))
+  if (session)
   {
-    if (session)
-      delete session;
-    session = (Session *)new Local_Session();
-    initialize_warg_state();
-  }
-
-  ImGui::Text("Server:");
-  ImGui::SameLine();
-  if (wargspy_state.game_server_address)
-  {
-    ImGui::TextColored(imgui_green, "%s", ip_address_string(wargspy_state.game_server_address).c_str());
-    ImGui::SameLine();
-    if (ImGui::Button("Connect"))
+    ImGui::Checkbox("Enable prediction", &session->prediction_enabled);
+    if (ImGui::Button("Disconnect"))
     {
-      Network_Session *network_session = new Network_Session();
-      network_session->connect(wargspy_state.game_server_address);
-      if (session)
-        delete session;
-      session = (Session *)new Network_Session();
-      initialize_warg_state();
+      session->disconnect();
+      delete session;
+      session = nullptr;
+      scene.clear();
+      resource_manager.clear();
+      renderer.render_entities.clear();
+      renderer.render_instances.clear();
+      want_set_intro_scene = true;
+      frostbolt_effect2 = nullptr;
     }
   }
   else
   {
-    ImGui::TextColored(imgui_red, "offline");
-  }
 
-  if (session)
-    ImGui::Checkbox("Enable prediction", &session->prediction_enabled);
+    if (ImGui::Button("Local"))
+    {
+      if (session)
+        delete session;
+
+      //the wargspy thing seems to not even attempt to check the server until we 
+      //click the button, it probably should start as soon as the game is running
+      //if you comment out the 'else' on line 78, you can see it change green when
+      //you click local, meaning wargspy_state.wargspy is null until we try to connect
+
+
+      session = (Session *)new Local_Session();
+      initialize_warg_state();
+    }
+
+    ImGui::Text(s("Wargspy IP:", CONFIG.wargspy_address, " -").c_str());
+    if (wargspy_state.wargspy)
+    {
+      ImGui::SameLine();
+      ImGui::TextColored(imgui_green, "online");
+    }
+    else
+    {
+      ImGui::SameLine();
+      ImGui::TextColored(imgui_red, "offline");
+    }
+
+    ImGui::Text("Server:");
+    ImGui::SameLine();
+    if (wargspy_state.game_server_address)
+    {
+      ImGui::TextColored(imgui_green, "%s", ip_address_string(wargspy_state.game_server_address).c_str());
+      ImGui::SameLine();
+      if (ImGui::Button("Connect"))
+      {
+        if (session)
+          delete session;
+        Network_Session *network_session = new Network_Session();
+        network_session->connect(wargspy_state.game_server_address);
+        session = (Session *)network_session;
+        initialize_warg_state();
+      }
+    }
+    else
+    {
+      ImGui::TextColored(imgui_red, "offline");
+    }
+  }
 
   ImGui::End();
 }
@@ -358,7 +390,8 @@ void Warg_State::handle_input_events()
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
 
-    session->move_command(m, orientation, target_id);
+    if (session)
+      session->move_command(m, orientation, target_id);
   }
   previous_mouse_state = mouse_state;
 }
@@ -807,36 +840,89 @@ void Warg_State::update_wargspy()
 
 void Warg_State::update()
 {
-  static bool init_into = true;
   if (!session)
   {
-    Node_Index boi = scene.find_by_name(NODE_NULL, "cubeboi");
-    Node_Index girl = scene.find_by_name(NODE_NULL, "cubegirl");
-    if (init_into)
+    static bool first = true;
+    static Resource_Manager *cached_rm = new Resource_Manager();
+    static Scene_Graph *cached_scene = new Scene_Graph(cached_rm);
+    static Node_Index boi = add_boi_character_mesh(*cached_scene);
+    static Node_Index girl = add_girl_character_mesh(*cached_scene);
+    static std::vector<Node_Index> cuber_things;
+#ifdef NDEBUG
+    uint32 max = 12;
+#else
+    uint32 max = 3;
+#endif
+    if (first)
     {
-      boi = add_boi_character_mesh(scene);
-      girl = add_girl_character_mesh(scene);
-      scene.nodes[boi].scale = vec3(.39, 0.30, 1.61);
-      scene.nodes[girl].scale = vec3(.39, 0.30, 1.61);
+      cached_scene->nodes[boi].scale = vec3(.39, 0.30, 1.61);
+      cached_scene->nodes[girl].scale = vec3(0.61, .68, 0.97) * vec3(.39, 0.30, 1.61);
+      cached_scene->initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr",
+          "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+      cached_scene->nodes[girl].position = vec3(.7, 0, 0);
+      cached_scene->nodes[boi].position = vec3(-.7, 0, 0);
+      cached_scene->lights.light_count = 1;
+      Light *light0 = &cached_scene->lights.lights[0];
+      light0->position = vec3(0.00000, -4.00000, 2.00000);
+      light0->direction = vec3(0.00000, 0.00000, 0.00000);
+      light0->brightness = 66.00000;
+      light0->color = vec3(1.00000, 1.00000, 0.99999);
+      light0->attenuation = vec3(1.00000, 0.22000, 0.00000);
+      light0->ambient = 0.00000;
+      light0->radius = -0.33000;
+      light0->cone_angle = 0.13200;
+      light0->type = Light_Type::spot;
+      light0->casts_shadows = 1;
+      light0->shadow_blur_iterations = 4;
+      light0->shadow_blur_radius = 0.051010999829;
+      light0->shadow_near_plane = 2.400000095367;
+      light0->shadow_far_plane = 8.000000000000;
+      light0->max_variance = 0.000000000000;
+      light0->shadow_fov = 1.592529296875;
+      light0->shadow_map_resolution = ivec2(2048, 2048);
 
-      scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr",
-        "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
-      scene.nodes[girl].position = vec3(1, 0, 0);
-      scene.nodes[boi].position = vec3(-1, 0, 0);
-      init_into = false;
+      Material_Descriptor mat;
+      mat.albedo.mod = vec4(.1);
+      Node_Index cube_ref = cached_scene->add_mesh(cube, s("cuberthingref"), &mat);
+      cached_scene->nodes[cube_ref].visible = false;
+      for (uint32 x = 0; x < max; ++x)
+      {
+        for (uint32 y = 0; y < max; ++y)
+        {
+          Node_Index node = cached_scene->new_node();
+          cached_scene->nodes[node].model = cached_scene->nodes[cube_ref].model;
+          cuber_things.push_back(node);
+        }
+      }
+      first = false;
     }
-    camera.pos = vec3(0,3,.5) + vec3(cos(.2f*current_time), sin(.2f * current_time), 0);
-    camera.dir = -camera.pos + vec3(0,0,.5f);
+    if (want_set_intro_scene)
+    {
+      scene.resource_manager = cached_rm;
+      scene.nodes = cached_scene->nodes;
+      scene.lights = cached_scene->lights;
+      scene.highest_allocated_node = cached_scene->highest_allocated_node;
+      want_set_intro_scene = false;
+    }
+    camera.pos = vec3(0, 5, .5) + vec3(cos(.2f * current_time), sin(.2f * current_time), 0);
+    camera.dir = -camera.pos + vec3(0, 0, .5f);
+    uint32 i = 0;
+    for (uint32 x = 0; x < max; ++x)
+    {
+      for (uint32 y = 0; y < max; ++y)
+      {
+        Node_Index node = cuber_things[i];
+        float32 z = .4f * (cos(x + 1.f * current_time) + sin(y + 1.f * current_time));
+        vec3 pos = .3f * vec3(x, y, z) - 0.5f * .3f * vec3(max, max, 0);
+        pos = pos - vec3(0, 0, 1.f);
+        scene.nodes[node].position = pos;
+        scene.nodes[node].scale = vec3(.3f);
+        ++i;
+      }
+    }
     renderer.set_camera(camera.pos, camera.dir);
     return;
   }
-  else
-  {
-    init_into = true;
-  }
-
-
-
 
   session->get_state(current_game_state, player_character_id);
 
@@ -853,8 +939,6 @@ void Warg_State::update()
   update_spell_object_nodes();
   // update_animation_objects();
   update_wargspy();
-
-  // camera must be set before render entities, or they get a 1 frame lag
 
   renderer.set_camera(camera.pos, camera.dir);
 
@@ -1070,15 +1154,29 @@ void Warg_State::update()
     //  server_ptr->server->scene.collision_octree = scene.collision_octree;
     //}
 
-    static uint32 light_index = scene.lights.light_count + 1;
-    static bool firstt = true;
-    if (firstt)
+    // bug:
+
+    // when we make this frostbolt effect, we pass in the state
+    // inside, it creates a new node
+    // this node is being written to by some warg game code somewhere else that's assuming it
+    // has this index
+
+    // it appears that something is writing a warg character scale to it, but not a name
+    // this is probably related to the bug of the flying characters
+    // it can probably be found by checking for a specific name before u write to the scale/position
+    // "frostbolt crystal" is the name i created this node with, try breaking on a match for that
+
+    // you cant assume that scene graph node indices are the same for both the game client and game server
+    // you can't create a node on the server, and then pass that node index to the client for it to use
+    // a node index is only valid for the scene that created it
+    // a local scene might have 30 little widgets that get rendered and initialized that the server doesnt
+    // care about
+
+    if (!frostbolt_effect2)
     {
-      firstt = false;
-      scene.lights.light_count = light_index;
+      uint32 light_index = scene.lights.light_count + 1;
+      frostbolt_effect2 = std::make_unique<Frostbolt_Effect_2>((State *)this, light_index);
     }
-    // static Frostbolt_Effect frostbolt_effect(this, light_index);
-    static Frostbolt_Effect_2 frostbolt_effect2(this, light_index);
 
     vec3 ray = renderer.ray_from_screen_pixel(this->cursor_position);
     vec3 intersect_result;
@@ -1088,11 +1186,10 @@ void Warg_State::update()
     {
       frostbolt_dst = intersect_result;
     }
-    // frostbolt_effect.update(this, frostbolt_dst);
-    if (!frostbolt_effect2.update(this, frostbolt_dst))
+    if (!frostbolt_effect2->update(this, frostbolt_dst))
     {
-      frostbolt_effect2.position = 31.f * random_3D_unit_vector();
-      frostbolt_effect2.position.z = abs(frostbolt_effect2.position.z);
+      frostbolt_effect2->position = 31.f * random_3D_unit_vector();
+      frostbolt_effect2->position.z = abs(frostbolt_effect2->position.z);
     }
   }
 }

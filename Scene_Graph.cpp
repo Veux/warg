@@ -206,7 +206,7 @@ void Scene_Graph::draw_imgui_specific_material(Material_Index material_index)
   ImGui::Checkbox("Discard On Alpha", &ptr->descriptor.discard_on_alpha);
   ImGui::DragFloat("Discard Threshold", &ptr->descriptor.discard_threshold, 0.01f, 0.f, 1.f);
   ImGui::Checkbox("include_AO_in_uv_scale", &ptr->descriptor.include_ao_in_uv_scale);
-  ImGui::SliderFloat("index of refraction", &ptr->descriptor.ior, 0.0, 2.0,"%.4f");
+  ImGui::SliderFloat("index of refraction", &ptr->descriptor.ior, 0.0, 2.0, "%.4f");
   ImGui::Checkbox("require_self_depth", &ptr->descriptor.require_self_depth);
   ImGui::Checkbox("multiply_albedo_by_alpha", &ptr->descriptor.multiply_albedo_by_alpha);
   ImGui::Checkbox("multiply_result_by_alpha", &ptr->descriptor.multiply_result_by_alpha);
@@ -414,6 +414,7 @@ void Scene_Graph::draw_imgui_light_array()
       {
         ss << "spot;\n";
       }
+      ss << setprecision(12);
       ss << "light" << i << "->casts_shadows = " << light->casts_shadows << ";\n";
       ss << "light" << i << "->shadow_blur_iterations = " << light->shadow_blur_iterations << ";\n";
       ss << "light" << i << "->shadow_blur_radius = " << light->shadow_blur_radius << ";\n";
@@ -523,14 +524,14 @@ void Scene_Graph::draw_imgui_specific_node(Node_Index node_index)
   ImGui::SameLine();
   ImGui::Text("]");
 
-   ImGui::Text("Collider:[");
-   ImGui::SameLine();
-   if (node->collider == NODE_NULL)
+  ImGui::Text("Collider:[");
+  ImGui::SameLine();
+  if (node->collider == NODE_NULL)
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 1.0f, 1.0f), "NODE_NULL");
-   else
+  else
     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), s(node->collider).c_str());
-   ImGui::SameLine();
-   ImGui::Text("]");
+  ImGui::SameLine();
+  ImGui::Text("]");
 
   if (!showing_model)
   {
@@ -1849,6 +1850,7 @@ void Scene_Graph::clear()
     nodes[i] = Scene_Graph_Node();
   }
   lights = Light_Array();
+  particle_emitters.clear();
 }
 
 unordered_map<string, pair<Mesh_Index, Material_Index>> create_import_pool_data(
@@ -2011,7 +2013,7 @@ Node_Index Scene_Graph::add_import_node(Imported_Scene_Data *scene, Imported_Sce
       child_ptr->visible = false;
       child_ptr->propagate_visibility = false;
 
-      //only working for a single colliding node
+      // only working for a single colliding node
       node->collider = child_index;
     }
   }
@@ -2273,14 +2275,13 @@ std::vector<Render_Entity> Scene_Graph::visit_nodes_start()
     if (node->parent == NODE_NULL)
     { // node is visible and its parent is the null node, add its branch
 
-
-      //sponge clenaup
+      // sponge clenaup
       mat4 inverse_root;
       mat4 global_parent;
       if (node->is_root_of_wow_import)
       {
-        inverse_root = inverse(__build_transformation(i));// *get_wow_asset_import_transformation());
-        //global_parent = get_wow_asset_import_transformation();
+        inverse_root = inverse(__build_transformation(i)); // *get_wow_asset_import_transformation());
+        // global_parent = get_wow_asset_import_transformation();
         global_parent = mat4(1);
       }
       else
@@ -2314,7 +2315,7 @@ glm::mat4 Scene_Graph::__build_transformation(Node_Index node_index)
 
   if (node->is_root_of_wow_import)
   {
-    //STACK = STACK * get_wow_asset_import_transformation();
+    // STACK = STACK * get_wow_asset_import_transformation();
   }
   return STACK;
 }
@@ -2545,20 +2546,18 @@ mat4 animation_resolve(Skeletal_Animation_State *anim_state, Skeletal_Animation_
 void Scene_Graph::set_wow_asset_import_transformation(Node_Index ni)
 {
   Scene_Graph_Node *node = &nodes[ni];
-  //node->is_root_of_wow_import = true;
+  // node->is_root_of_wow_import = true;
 
-  //sponge match better here or do it on import
-  //cleanup the member
+  // sponge match better here or do it on import
+  // cleanup the member
   node = &nodes[node->children[0]];
-
 
   quat a = angleAxis(half_pi<float32>(), vec3(1, 0, 0));
   quat b = angleAxis(half_pi<float32>(), vec3(0, 0, 1));
 
-  node->orientation = b*a;
+  node->orientation = b * a;
   node->scale = vec3(.017);
-  //static mat4 result = toMat4(a) * toMat4(b) * scale(vec3(.13f));
-
+  // static mat4 result = toMat4(a) * toMat4(b) * scale(vec3(.13f));
 }
 mat4 get_wow_asset_import_transformation()
 {
@@ -2581,7 +2580,6 @@ void Scene_Graph::visit_nodes(
   if ((!entity->visible) && entity->propagate_visibility && entity->animation_state_pool_index == NODE_NULL)
     return;
   assert_valid_parent_ptr(node_index);
-
 
   const mat4 T = translate(entity->position);
   const mat4 S_o = scale(entity->oriented_scale);
@@ -2617,7 +2615,7 @@ void Scene_Graph::visit_nodes(
 
     if (posed_bone != mat4(1))
     {
-      //this node's bone, posed only in bone space
+      // this node's bone, posed only in bone space
       TSRS = posed_bone;
     }
     else
@@ -2631,10 +2629,10 @@ void Scene_Graph::visit_nodes(
   if (entity->is_a_bone)
   {
     // data that is bound in the uniform array in the vertex shader
-    //the shader expects no transforms by the root node, aka model matrix - but the PTSRS has it inside
-    //the P for parent
-    //so the inverse root must be the complete inverse of the transformation of the root node
-    //to this node
+    // the shader expects no transforms by the root node, aka model matrix - but the PTSRS has it inside
+    // the P for parent
+    // so the inverse root must be the complete inverse of the transformation of the root node
+    // to this node
     anim_state->final_bone_transforms[s(entity->name)] = INVERSE_ROOT * PTSRS * bone->offset;
   }
 
@@ -2671,16 +2669,12 @@ void Scene_Graph::visit_nodes(
       accumulator.emplace_back(entity->name, mesh_ptr, material_ptr, animation_ptr, BASIS, node_index);
   }
 
-
   if (false && entity->is_a_bone)
   {
     static Mesh bone_cube = Mesh_Descriptor(cube, "some bone");
     static Material bone_mat;
 
     accumulator.emplace_back(entity->name, &bone_cube, &bone_mat, nullptr, BASIS, node_index);
-
-
-
   }
 
   for (uint32 i = 0; i < entity->children.size(); ++i)
@@ -3492,6 +3486,37 @@ Mesh_Index Resource_Manager::push_mesh(Mesh_Descriptor *d)
   ASSERT(result < MAX_POOL_SIZE);
   mesh_pool[result] = Mesh(*d);
   return result;
+}
+
+void Resource_Manager::clear()
+{
+  for (auto &e : mesh_pool)
+  {
+    e = {};
+  }
+  for (auto &e : material_pool)
+  {
+    e = {};
+  }
+  for (auto &e : animation_set_pool)
+  {
+    e = {};
+  }
+  for (auto &e : model_bone_set_pool)
+  {
+    e = {};
+  }
+  for (auto &e : animation_state_pool)
+  {
+    e = {};
+  }
+  current_mesh_pool_size = 0;
+  current_material_pool_size = 0;
+  current_animation_set_pool_size = 0;
+  current_model_bone_set_pool_size = 0;
+  current_animation_state_pool_size = 0;
+  // import_thread.join();
+  // thread_active = false;
 }
 
 // todo: not the best, refactor these so they construct in place

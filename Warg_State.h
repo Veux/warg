@@ -7,7 +7,7 @@
 #include "Warg_Event.h"
 #include "Warg_Server.h"
 #include <deque>
-
+struct Frostbolt_Effect_2;
 struct HP_Bar_Nodes
 {
   Node_Index max;
@@ -97,4 +97,9 @@ struct Warg_State : protected State
 
   std::string character_name;
   int32 team;
+
+
+  bool want_set_intro_scene = true;
+  std::unique_ptr<Frostbolt_Effect_2> frostbolt_effect2;
+
 };

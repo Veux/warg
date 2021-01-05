@@ -976,7 +976,6 @@ void Mesh_Handle::enable_assign_attributes()
     glBindBuffer(GL_ARRAY_BUFFER, bone_weight_buffer);
     glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, 0, 0);
 
-
     ASSERT(6 < GL_MAX_VERTEX_ATTRIBS);
     // glEnableVertexAttribArray(5);
     // glVertexAttribPointer(5, 4, GL_INT, GL_FALSE, stride, 0);
@@ -984,26 +983,28 @@ void Mesh_Handle::enable_assign_attributes()
     // glEnableVertexAttribArray(6);
     // glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, stride, (void *)(4 * sizeof(int32)));
 
-
     /*
-    
-    
-    
-    
-    
-    When an array indexing expression, including struct field member accesses, results in an opaque types, the standard has special requirements on those array indices. Under GLSL version 3.30, Sampler arrays (the only opaque type 3.30 provides) can be declared, but they can only be accessed by compile-time integral Constant Expressions. So you cannot loop over an array of samplers, no matter what the array initializer, offset and comparison expressions are.
 
-Under GLSL 4.00 and above, array indices leading to an opaque value can be accessed by non-compile-time constants, but these index values must be dynamically uniform. The value of those indices must be the same value, in the same execution order, regardless of any non-uniform parameter values, for all shader invocations in the invocation group.
 
-For example, in 4.00, it is legal to loop over an array of samplers, so long as the loop index is based on constants and uniforms. So this is legal: 
-    
-    
-    
-    
+
+
+
+    When an array indexing expression, including struct field member accesses, results in an opaque types, the standard
+has special requirements on those array indices. Under GLSL version 3.30, Sampler arrays (the only opaque type 3.30
+provides) can be declared, but they can only be accessed by compile-time integral Constant Expressions. So you cannot
+loop over an array of samplers, no matter what the array initializer, offset and comparison expressions are.
+
+Under GLSL 4.00 and above, array indices leading to an opaque value can be accessed by non-compile-time constants, but
+these index values must be dynamically uniform. The value of those indices must be the same value, in the same execution
+order, regardless of any non-uniform parameter values, for all shader invocations in the invocation group.
+
+For example, in 4.00, it is legal to loop over an array of samplers, so long as the loop index is based on constants and
+uniforms. So this is legal:
+
+
+
+
     */
-
-
-
   }
 }
 
@@ -1078,7 +1079,6 @@ void Mesh_Handle::upload_data()
 
     size_t vertex_count = mesh_data.bone_weights.size();
 
-
     ASSERT(vertex_count == mesh_data.positions.size());
 
     buffer_size = vertex_count * sizeof(Vertex_Bone_Data);
@@ -1116,13 +1116,11 @@ void Mesh_Handle::upload_data()
       float32 sum = weight_v.x + weight_v.y + weight_v.z + weight_v.w;
       ASSERT(sum < 1.1f || sum > -0.1f);
 
-
-      //the shader says its reading values out of range of max bones..............
-      //yet we upload them right here
+      // the shader says its reading values out of range of max bones..............
+      // yet we upload them right here
 
       temp2[i] = weight_v;
     }
-
 
     int a = sizeof(uvec4);
     int b = sizeof(vec4);
@@ -1764,6 +1762,11 @@ void Renderer::draw_imgui()
 }
 void Renderer::build_shadow_maps()
 {
+  Mesh *previous_mesh = nullptr;
+  Shader *previous_shader = nullptr;
+  int32 previous_light_index = -1;
+  uint32 mesh_saves = 0;
+
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
     spotlight_shadow_maps[i].enabled = false;
@@ -1771,7 +1774,7 @@ void Renderer::build_shadow_maps()
   for (uint32 i = 0; i < MAX_LIGHTS; ++i)
   {
     if (!(i < lights.light_count))
-      return;
+      break;
 
     const Light *light = &lights.lights[i];
     Spotlight_Shadow_Map *shadow_map = &spotlight_shadow_maps[i];
@@ -1807,7 +1810,6 @@ void Renderer::build_shadow_maps()
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
-
     glBindFramebuffer(GL_FRAMEBUFFER, shadow_map->pre_blur.fbo->fbo);
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1815,13 +1817,18 @@ void Renderer::build_shadow_maps()
     const mat4 camera = lookAt(light->position, light->direction, vec3(0, 0, 1));
     const mat4 projection = perspective(light->shadow_fov, 1.0f, light->shadow_near_plane, light->shadow_far_plane);
     shadow_map->projection_camera = projection * camera;
+
     for (Render_Entity &entity : render_entities)
     {
       if (entity.material->descriptor.casts_shadows)
       {
         if (entity.material->displacement.t.source != "default")
         {
-          variance_shadow_map_displacement.use();
+          if (previous_shader != &variance_shadow_map)
+          {
+            variance_shadow_map_displacement.use();
+            previous_shader = &variance_shadow_map_displacement;
+          }
           bool displacement_success =
               entity.material->displacement.bind_for_sampling_at(Texture_Location::displacement);
           variance_shadow_map_displacement.set_uniform(
@@ -1833,14 +1840,52 @@ void Renderer::build_shadow_maps()
           // variance_shadow_map_displacement.set_uniform("texture11_mod",
           // entity.material->descriptor.displacement.mod);
           // entity.material->displacement.bind_for_sampling_at(displacement);
-          ASSERT(entity.mesh);
-          entity.mesh->draw();
-          continue;
+
+          if (entity.mesh != previous_mesh)
+          {
+            entity.mesh->load();
+            entity.mesh->mesh->enable_assign_attributes(); // also binds vao
+            if (!entity.mesh->mesh->vao)
+            {
+              set_message("warning: draw called on mesh with no vao", "", 5.f);
+              continue;
+            }
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->mesh->indices_buffer);
+            previous_mesh = entity.mesh;
+          }
+          else
+          {
+            mesh_saves += 1;
+          }
+          glDrawElements(GL_TRIANGLES, entity.mesh->mesh->indices_buffer_size, GL_UNSIGNED_INT, nullptr);
         }
-        variance_shadow_map.use();
-        variance_shadow_map.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
-        ASSERT(entity.mesh);
-        entity.mesh->draw();
+        else
+        {
+          if (previous_shader != &variance_shadow_map)
+          {
+            variance_shadow_map.use();
+            previous_shader = &variance_shadow_map;
+          }
+          variance_shadow_map.set_uniform("transform", shadow_map->projection_camera * entity.transformation);
+          ASSERT(entity.mesh);
+          if (entity.mesh != previous_mesh)
+          {
+            entity.mesh->load();
+            entity.mesh->mesh->enable_assign_attributes();
+            if (!entity.mesh->mesh->vao)
+            {
+              set_message("warning: draw called on mesh with no vao", "", 5.f);
+              continue;
+            }
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->mesh->indices_buffer);
+            previous_mesh = entity.mesh;
+          }
+          else
+          {
+            mesh_saves += 1;
+          }
+          glDrawElements(GL_TRIANGLES, entity.mesh->mesh->indices_buffer_size, GL_UNSIGNED_INT, nullptr);
+        }
       }
     }
 
@@ -1853,6 +1898,7 @@ void Renderer::build_shadow_maps()
     glBindTexture(GL_TEXTURE_2D, 0);
   }
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  set_message("shadow map mesh bind saves:", s(mesh_saves), 1.0f);
 }
 
 void run_pixel_shader(Shader *shader, vector<Texture> *src_textures, Framebuffer *dst, bool clear_dst)
@@ -1902,10 +1948,10 @@ void run_pixel_shader(Shader *shader, vector<Texture *> *src_textures, Framebuff
 
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_BLEND);
-  glDisable(GL_CULL_FACE);/*
-  glFrontFace(GL_CCW);
-  glCullFace(GL_BACK);*/
-  
+  glDisable(GL_CULL_FACE); /*
+   glFrontFace(GL_CCW);
+   glCullFace(GL_BACK);*/
+
   // glBindVertexArray(quad.get_vao());
   shader->use();
   shader->set_uniform("transform", fullscreen_quad());
@@ -1972,20 +2018,62 @@ void Renderer::opaque_pass(float64 time)
     glDrawBuffers((uint32)draw_target.draw_buffers.size(), &draw_target.draw_buffers[0]);
     glDepthFunc(GL_EQUAL);
   }
+
+  Material *previous_material = nullptr;
+  Mesh *previous_mesh = nullptr;
+
+  uint32 mat_saves = 0;
+  uint32 mesh_saves = 0;
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
+  brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
   for (Render_Entity &entity : render_entities)
   {
-    bind_white_to_all_textures();
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
-    brdf_integration_lut.bind_for_sampling_at(brdf_ibl_lut);
     ASSERT(entity.mesh);
-    entity.material->bind();
-
     Shader &shader = entity.material->shader;
-    shader.set_uniform("time", (float32)time);
-    shader.set_uniform("txaa_jitter", txaa_jitter);
-    shader.set_uniform("camera_position", camera_position);
-    shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
-    shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
+
+    if ( entity.material != previous_material)
+    {
+      entity.material->bind();
+      previous_material = entity.material;
+      shader.set_uniform("time", (float32)time);
+      shader.set_uniform("txaa_jitter", txaa_jitter);
+      shader.set_uniform("camera_position", camera_position);
+      shader.set_uniform("uv_scale", entity.material->descriptor.uv_scale);
+      shader.set_uniform("normal_uv_scale", entity.material->descriptor.normal_uv_scale);
+      lights.bind(shader);
+      set_uniform_shadowmaps(shader);
+      if (entity.material->descriptor.depth_test)
+      {
+        glEnable(GL_DEPTH_TEST);
+      }
+      else
+      {
+        glDisable(GL_DEPTH_TEST);
+      }
+
+      if (entity.material->descriptor.depth_mask)
+      {
+        glDepthMask(GL_TRUE);
+      }
+      else
+      {
+        glDepthMask(GL_FALSE);
+      }
+      if (entity.material->descriptor.wireframe)
+      {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      }
+      else
+      {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      }
+    }
+    else
+    {
+      mat_saves += 1;
+
+    }
+
     if (entity.material->shader.vs == "skeletal_animation.vert")
     {
       ASSERT(entity.animation);
@@ -1996,23 +2084,21 @@ void Renderer::opaque_pass(float64 time)
       shader.set_uniform("MVP", projection * camera * entity.transformation);
     }
     shader.set_uniform("Model", entity.transformation);
-    shader.set_uniform("alpha_albedo_override", -1.0f); //-1 is disabled
 
-    
     if (entity.animation)
     {
-       ASSERT(shader.vs == "skeletal_animation.vert");
-       Skeletal_Animation_State *animation = entity.animation;
-       std::vector<Bone>* bones = &entity.mesh->mesh->descriptor.mesh_specific_bones;
-       ASSERT(bones->size() < MAX_BONES);
-       for (size_t i = 0; i < bones->size(); ++i)
-       {
-         Bone* to_bind = &(*bones)[i];
-         mat4* pose = &animation->final_bone_transforms[to_bind->name];
-         //*pose = mat4(1);
-         std::string bone_uniform_name = s("bones", "[", i, "]");
-         shader.set_uniform(bone_uniform_name.c_str(), *pose);
-       }
+      ASSERT(shader.vs == "skeletal_animation.vert");
+      Skeletal_Animation_State *animation = entity.animation;
+      std::vector<Bone> *bones = &entity.mesh->mesh->descriptor.mesh_specific_bones;
+      ASSERT(bones->size() < MAX_BONES);
+      for (size_t i = 0; i < bones->size(); ++i)
+      {
+        Bone *to_bind = &(*bones)[i];
+        mat4 *pose = &animation->final_bone_transforms[to_bind->name];
+        //*pose = mat4(1);
+        std::string bone_uniform_name = s("bones", "[", i, "]");
+        shader.set_uniform(bone_uniform_name.c_str(), *pose);
+      }
     }
     else
     {
@@ -2023,37 +2109,25 @@ void Renderer::opaque_pass(float64 time)
       }
     }
 
-    lights.bind(shader);
-    set_uniform_shadowmaps(shader);
     // environment.bind(Texture_Location::environment, Texture_Location::irradiance, time, render_target_size);
 
-    if (entity.material->descriptor.depth_test)
+    if (entity.mesh != previous_mesh)
     {
-      glEnable(GL_DEPTH_TEST);
+      entity.mesh->load();
+      entity.mesh->mesh->enable_assign_attributes(); // also binds vao
+      if (!entity.mesh->mesh->vao)
+      {
+        set_message("warning: draw called on mesh with no vao", "", 5.f);
+        continue;
+      }
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, entity.mesh->mesh->indices_buffer);
+      previous_mesh = entity.mesh;
     }
     else
     {
-      glDisable(GL_DEPTH_TEST);
+      mesh_saves += 1;
     }
-
-    if (entity.material->descriptor.depth_mask)
-    {
-      glDepthMask(GL_TRUE);
-    }
-    else
-    {
-      glDepthMask(GL_FALSE);
-    }
-    if (entity.material->descriptor.wireframe)
-    {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    }
-    else
-    {
-      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-
-    entity.mesh->draw();
+    glDrawElements(GL_TRIANGLES, entity.mesh->mesh->indices_buffer_size, GL_UNSIGNED_INT, nullptr);
   }
 
   glEnable(GL_DEPTH_TEST);
@@ -2061,6 +2135,9 @@ void Renderer::opaque_pass(float64 time)
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glDepthFunc(GL_LESS);
   bind_white_to_all_textures();
+
+  set_message("material bind saves:", s(mat_saves), 1.0f);
+  set_message("mesh bind saves:", s(mesh_saves), 1.0f);
 }
 
 void Renderer::instance_pass(float64 time)
@@ -2070,9 +2147,9 @@ void Renderer::instance_pass(float64 time)
   vec3 right_v = normalize(cross(forward_v, {0, 0, 1}));
   vec3 up_v = -normalize(cross(forward_v, right_v));
 
-  //set_message("forward_v", s(forward_v), 1.0f);
-  //set_message("right_v", s(right_v), 1.0f);
-  //set_message("up_v", s(up_v), 1.0f);
+  // set_message("forward_v", s(forward_v), 1.0f);
+  // set_message("right_v", s(right_v), 1.0f);
+  // set_message("up_v", s(up_v), 1.0f);
 
   if (!use_txaa)
   {
@@ -2093,6 +2170,7 @@ void Renderer::instance_pass(float64 time)
   glActiveTexture(GL_TEXTURE0 + Texture_Location::refraction);
   glBindTexture(GL_TEXTURE_2D, previous_draw_target.color_attachments[0].get_handle());
 
+  environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
   for (Render_Instance &entity : render_instances)
   {
     entity.material->bind();
@@ -2114,7 +2192,6 @@ void Renderer::instance_pass(float64 time)
     shader->set_uniform("use_billboarding", entity.use_billboarding);
     lights.bind(*shader);
     set_uniform_shadowmaps(*shader);
-    environment.bind(Texture_Location::environment, Texture_Location::irradiance, float32(time), render_target_size);
     entity.mesh->load();
 
     glBindVertexArray(entity.mesh->get_vao());
@@ -2407,7 +2484,7 @@ void Renderer::translucent_pass(float64 time)
 
     glDepthMask(GL_FALSE);
     if (entity.material->descriptor.require_self_depth)
-    {// depth info for this object's back faces
+    { // depth info for this object's back faces
       glDepthMask(GL_TRUE);
       self_object_depth.bind_for_drawing_dst();
       glCullFace(GL_FRONT);
@@ -2423,14 +2500,10 @@ void Renderer::translucent_pass(float64 time)
     // depth of the world will be in translucent sample source - dont need to render to it
     // depth of closest back face is in self_object_depth
 
+    // the translucent sample source does NOT have the depth info for other translucent objects, even their
+    // front faces...
 
-    //the translucent sample source does NOT have the depth info for other translucent objects, even their
-    //front faces...
-
-
-    //if the depth of the front face is close to the back face we can blend towards green
-
-
+    // if the depth of the front face is close to the back face we can blend towards green
 
     draw_target.bind_for_drawing_dst();
     translucent_sample_source.color_attachments[0].bind_for_sampling_at(Texture_Location::refraction);
@@ -2467,11 +2540,11 @@ void Renderer::translucent_pass(float64 time)
     entity.mesh->draw();
 
     if (true)
-    {//this will copy back the result into the scene so there can be multi layers of refraction-enabled objects
-      //might be too slow
+    { // this will copy back the result into the scene so there can be multi layers of refraction-enabled objects
+      // might be too slow
       glBlitNamedFramebuffer(draw_target.fbo->fbo, translucent_sample_source.fbo->fbo, 0, 0, render_target_size.x,
-        render_target_size.y, 0, 0, render_target_size.x, render_target_size.y, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
-        GL_NEAREST);
+          render_target_size.y, 0, 0, render_target_size.x, render_target_size.y,
+          GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     }
   }
   self_object_depth.bind_for_drawing_dst();
@@ -2914,6 +2987,9 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
       render_entities.push_back((*new_entities)[i.first]);
     }
   }
+
+  sort(render_entities.begin(), render_entities.end(),
+      [](Render_Entity &left, Render_Entity &right) { return left.material < right.material; });
 }
 
 /*Light diameter guideline for deferred rendering (not yet used)
@@ -2941,36 +3017,36 @@ void check_FBO_status(GLuint fbo)
   string str;
   switch (result)
   {
-  case GL_FRAMEBUFFER_UNDEFINED:
-    str = "GL_FRAMEBUFFER_UNDEFINED";
-    break;
-  case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-    str = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
-    break;
-  case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-    str = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
-    break;
-  case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-    str = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
-    break;
-  case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-    str = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
-    break;
-  case GL_FRAMEBUFFER_UNSUPPORTED:
-    str = "GL_FRAMEBUFFER_UNSUPPORTED";
-    break;
-  case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
-    str = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
-    break;
-  case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
-    str = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
-    break;
-  case GL_FRAMEBUFFER_COMPLETE:
-    str = "GL_FRAMEBUFFER_COMPLETE";
-    break;
-  case GL_FRAMEBUFFER_DEFAULT:
-    str = "GL_FRAMEBUFFER_DEFAULT";
-    break;
+    case GL_FRAMEBUFFER_UNDEFINED:
+      str = "GL_FRAMEBUFFER_UNDEFINED";
+      break;
+    case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+      str = "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
+      break;
+    case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+      str = "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT";
+      break;
+    case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+      str = "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER";
+      break;
+    case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+      str = "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER";
+      break;
+    case GL_FRAMEBUFFER_UNSUPPORTED:
+      str = "GL_FRAMEBUFFER_UNSUPPORTED";
+      break;
+    case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+      str = "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE";
+      break;
+    case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+      str = "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS";
+      break;
+    case GL_FRAMEBUFFER_COMPLETE:
+      str = "GL_FRAMEBUFFER_COMPLETE";
+      break;
+    case GL_FRAMEBUFFER_DEFAULT:
+      str = "GL_FRAMEBUFFER_DEFAULT";
+      break;
   }
 
   if (str != "GL_FRAMEBUFFER_COMPLETE" && str != "")
@@ -4324,7 +4400,7 @@ Particle misc_particle_emitter_step(
   new_particle.orientation = o * second_orientation * first_orientation;
 
   vec3 extra_scale;
-  std::normal_distribution<float32> dist(0.f, d->initial_extra_scale_variance.x+.00001);
+  std::normal_distribution<float32> dist(0.f, d->initial_extra_scale_variance.x + .00001);
   extra_scale.x = dist(generator);
   dist = std::normal_distribution<float32>(0.f, d->initial_extra_scale_variance.y + .00001);
   extra_scale.y = dist(generator);
@@ -5591,7 +5667,6 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   mesh.mesh_data = generate_grid(resolution);
   Material_Descriptor material;
 
-
   material.emissive.mod = vec4(0, 0, 0.005, 1);
   material.albedo.mod = vec4(.034, .215, .289, .75351);
   material.uv_scale = vec2(1);
@@ -5610,7 +5685,7 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   state->scene.nodes[water].position = pos - vec3(0, 0, 0.1);
   material.frag_shader = "terrain.frag";
 
-  //specific for terrain shader
+  // specific for terrain shader
   material.albedo.source = "grass_albedo.png";
   material.normal.source = "ground1_normal.png";
   material.emissive.source = "Snow006_2K_Normal.jpg";

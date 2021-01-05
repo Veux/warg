@@ -54,6 +54,10 @@ void Local_Session::send_chat_message(std::string_view chat_message)
   chat_log.push_back(cm);
 }
 
+void Local_Session::disconnect()
+{
+}
+
 std::vector<Chat_Message> Session::get_chat_log()
 {
   return chat_log;
@@ -96,6 +100,11 @@ void Network_Session::send_unreliable(Buffer &b)
   ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
   enet_peer_send(server, 0, packet);
   enet_host_flush(warg_client_host);
+}
+
+void Network_Session::disconnect()
+{
+
 }
 
 void Network_Session::get_state(Game_State &gs, UID &pc)

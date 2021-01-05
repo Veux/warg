@@ -39,7 +39,6 @@ void game_server(const char *wargspy_address)
     ASSERT(r && event.type == ENET_EVENT_TYPE_CONNECT);
   }
 
-
   {
     float64 current_time = 0.0;
     float64 last_time = get_real_time() - dt;
