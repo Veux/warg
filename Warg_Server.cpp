@@ -30,13 +30,13 @@ void game_server(const char *wargspy_address)
   }
 
   {//wargspy connection
+    wargspy_host = enet_host_create(nullptr, 32, 2, 0, 0);
     ENetAddress addr = {.port = WARGSPY_PORT};
     enet_address_set_host(&addr, wargspy_address);
-    wargspy = enet_host_connect(game_server_host, &addr, 2, 0);
+    wargspy = enet_host_connect(wargspy_host, &addr, 2, 0);
     ENetEvent event;
-    int r = enet_host_service(wargspy_host, &event, 5000);
+    int r = enet_host_service(wargspy_host, &event, 15000);
     ASSERT(r && event.type == ENET_EVENT_TYPE_CONNECT);
-    
   }
 
 
@@ -57,6 +57,7 @@ void game_server(const char *wargspy_address)
           uint8 byte = 1;
           ENetPacket *packet = enet_packet_create(&byte, 1, 0);
           enet_peer_send(wargspy, 0, packet);
+          enet_host_flush(wargspy_host);
         }
 
         {
@@ -188,13 +189,15 @@ void game_server(const char *wargspy_address)
           ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
           enet_peer_send(p.second.peer, 0, packet);
         }
-        enet_host_flush(server);
+        enet_host_flush(game_server_host);
       }
       SDL_Delay(5);
     }
   }
 
-  enet_host_destroy(server);
+  enet_host_destroy(game_server_host);
+  enet_host_destroy(wargspy_host);
+  
   delete scene;
   delete resource_manager;
 }
