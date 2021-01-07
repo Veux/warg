@@ -83,12 +83,6 @@ void Warg_State::session_swapper()
       if (session)
         delete session;
 
-      //the wargspy thing seems to not even attempt to check the server until we 
-      //click the button, it probably should start as soon as the game is running
-      //if you comment out the 'else' on line 78, you can see it change green when
-      //you click local, meaning wargspy_state.wargspy is null until we try to connect
-
-
       session = (Session *)new Local_Session();
       initialize_warg_state();
     }
@@ -840,6 +834,8 @@ void Warg_State::update_wargspy()
 
 void Warg_State::update()
 {
+  update_wargspy();
+
   if (!session)
   {
     static bool first = true;
@@ -938,7 +934,6 @@ void Warg_State::update()
   update_prediction_ghost();
   update_spell_object_nodes();
   // update_animation_objects();
-  update_wargspy();
 
   renderer.set_camera(camera.pos, camera.dir);
 
