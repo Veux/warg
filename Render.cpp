@@ -2989,7 +2989,13 @@ void Renderer::set_render_entities(vector<Render_Entity> *new_entities)
   }
 
   sort(render_entities.begin(), render_entities.end(),
-      [](Render_Entity &left, Render_Entity &right) { return left.material < right.material; });
+      [](Render_Entity &left, Render_Entity &right) { 
+      
+      if (left.material == right.material)
+      {
+        return left.mesh < right.mesh;
+      }      
+      return left.material < right.material; });
 }
 
 /*Light diameter guideline for deferred rendering (not yet used)
