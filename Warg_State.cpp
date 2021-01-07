@@ -83,12 +83,6 @@ void Warg_State::session_swapper()
       if (session)
         delete session;
 
-      //the wargspy thing seems to not even attempt to check the server until we 
-      //click the button, it probably should start as soon as the game is running
-      //if you comment out the 'else' on line 78, you can see it change green when
-      //you click local, meaning wargspy_state.wargspy is null until we try to connect
-
-
       session = (Session *)new Local_Session();
       initialize_warg_state();
     }
@@ -503,30 +497,6 @@ void Warg_State::update_character_nodes()
   }
 }
 
-void Warg_State::update_prediction_ghost()
-{
-  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
-  if (player_character == current_game_state.characters.end())
-    return;
-
-  Character_Physics *physics = &player_character->physics;
-
-  static Material_Descriptor material;
-  material.albedo = "crate_diffuse.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
-  material.translucent_pass = true;
-  material.albedo.mod = vec4(1, 1, 1, 0.5);
-
-  static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);
-  scene.nodes[ghost_mesh].position = physics->position;
-  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2);
-  scene.nodes[ghost_mesh].velocity = physics->velocity;
-  scene.nodes[ghost_mesh].orientation = physics->orientation;
-}
-
 void Warg_State::update_stats_bar()
 {
 
@@ -840,6 +810,8 @@ void Warg_State::update_wargspy()
 
 void Warg_State::update()
 {
+  update_wargspy();
+
   if (!session)
   {
     static bool first = true;
@@ -935,10 +907,8 @@ void Warg_State::update()
   set_camera_geometry();
   update_meshes();
   update_character_nodes();
-  update_prediction_ghost();
   update_spell_object_nodes();
   // update_animation_objects();
-  update_wargspy();
 
   renderer.set_camera(camera.pos, camera.dir);
 
