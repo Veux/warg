@@ -12,3 +12,5 @@ Third_party/
 cmake-build-debug
 config.json
 imgui.ini
+brdflut.hdr
+warg_crash_log.txt
