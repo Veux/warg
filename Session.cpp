@@ -63,6 +63,11 @@ std::vector<Chat_Message> Session::get_chat_log()
   return chat_log;
 }
 
+std::vector<std::pair<UID, float64>> Session::get_connected_players()
+{
+  return connected_players;
+}
+
 Network_Session::Network_Session() : scene(&resource_manager)
 {  
   map = std::make_unique<Map>(Blades_Edge(scene));
@@ -129,6 +134,15 @@ void Network_Session::get_state(Game_State &gs, UID &pc)
             deserialize(b, su.gs);
             deserialize(b, su.character);
             deserialize(b, su.input_number);
+
+            uint32 n_players;
+            deserialize(b, n_players);
+            connected_players.resize(n_players);
+            for (auto &[id, ts] : connected_players)
+            {
+              deserialize(b, id);
+              deserialize(b, ts);
+            }
 
             server_state = su;
 

@@ -69,7 +69,7 @@ void serialize_(Buffer &b, float32_t a)
   b.insert(&a, sizeof(a));
 }
 
-void serialize_(Buffer &b, float64_t a)
+void serialize_(Buffer &b, float64 a)
 {
   b.insert(&a, sizeof(a));
 }

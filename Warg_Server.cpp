@@ -75,6 +75,7 @@ void game_server(const char *wargspy_address)
                 UID peer_id = uid();
                 event.peer->data = (void *)peer_id;
                 peers[peer_id].peer = event.peer;
+                peers[peer_id].last_time = current_time;
                 break;
               }
 
@@ -115,6 +116,7 @@ void game_server(const char *wargspy_address)
                     command.orientation = orientation;
                     command.m = m;
                     Peer &peer = peers[uid_of(event.peer)];
+                    peer.last_time = current_time;
                     if (peer.last_input.sequence_number < command.sequence_number)
                     {
                       UID character = peer.character;
@@ -182,16 +184,22 @@ void game_server(const char *wargspy_address)
           update_game(game_state, *map, *scene, inputs);
         }
 
-        for (auto &p : peers)
+        for (auto &[k, p] : peers)
         {
           Buffer b;
           serialize_(b, STATE_MESSAGE);
           serialize_(b, game_state);
-          serialize_(b, p.second.character);
-          serialize_(b, p.second.last_input.sequence_number);
+          serialize_(b, p.character);
+          serialize_(b, p.last_input.sequence_number);
+          serialize_(b, (uint32)peers.size());
+          for (auto &[k_, p_] : peers)
+          {
+            serialize_(b, p_.character);
+            serialize_(b, last_time - p_.last_time);
+          }
 
           ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
-          enet_peer_send(p.second.peer, 0, packet);
+          enet_peer_send(p.peer, 0, packet);
         }
         enet_host_flush(game_server_host);
       }

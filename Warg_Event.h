@@ -27,6 +27,7 @@ struct Buffer
 void serialize_(Buffer &b, std::string &s);
 void serialize_(Buffer &b, int32_t n);
 void serialize_(Buffer &b, uint32_t n);
+void serialize_(Buffer &b, float64 a);
 void serialize_(Buffer &b, std::string_view s);
 void serialize_(Buffer &b, quat q);
 void serialize_(Buffer &b, Game_State &gs);
@@ -37,3 +38,4 @@ void deserialize(Buffer &b, int32 &n);
 void deserialize(Buffer &b, std::string &s);
 void deserialize(Buffer &b, quat &q);
 void deserialize(Buffer &b, uint32 &n);
+void deserialize(Buffer &b, float64 &x);

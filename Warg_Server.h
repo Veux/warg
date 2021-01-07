@@ -13,6 +13,7 @@ struct Peer
 {
   UID character = 0;
   Input last_input = {0};
+  float64 last_time = 0;
   ENetPeer *peer = nullptr;
 };
 

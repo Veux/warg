@@ -17,10 +17,12 @@ public:
   virtual void send_chat_message(std::string_view chat_message) = 0;
   virtual void disconnect() = 0;
   std::vector<Chat_Message> get_chat_log();
+  std::vector<std::pair<UID, float64>> get_connected_players();
 
   bool prediction_enabled = true;
 protected:
   std::vector<Chat_Message> chat_log;
+  std::vector<std::pair<UID, float64>> connected_players;
 };
 
 class Local_Session : Session

@@ -74,6 +74,20 @@ void Warg_State::session_swapper()
       want_set_intro_scene = true;
       frostbolt_effect2 = nullptr;
     }
+
+    auto connected_players = session->get_connected_players();
+    for (auto [c_id, time_since] : connected_players)
+    {
+      auto c_it = find_if(current_game_state.characters, [c_id](auto &c) { return c.id == c_id; });
+      if (time_since < 0.5) {
+        ImGui::Text("%s", c_it->name.c_str());
+      } else if (time_since < 3.0) {
+        ImGui::TextColored(imgui_orange, "%s", c_it->name.c_str());
+      } else {
+        ImGui::TextColored(imgui_red, "%s (%d)", c_it->name.c_str(), (int)round(time_since));
+
+      }
+    }
   }
   else
   {

@@ -41,6 +41,7 @@
 #define imgui_green ImVec4(0.0, 1.0, 0.0, 1.0)
 #define imgui_blue ImVec4(0.0, 0.0, 1.0, 1.0)
 #define imgui_yellow ImVec4(1.0, 1.0, 0.0, 1.0)
+#define imgui_orange ImVec4(1.0, 0.5, 0.0, 1.0)
 #define imgui_teal ImVec4(0.0, 1.0, 1.0, 1.0)
 #define imgui_purple ImVec4(1.0, 0.0, 1.0, 1.0)
 #define imgui_white ImVec4(1.0, 1.0, 1.0, 1.0)
