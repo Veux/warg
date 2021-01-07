@@ -55,7 +55,6 @@ struct Warg_State : protected State
   Node_Index add_character_mesh(UID character_id);
   void set_camera_geometry();
   void update_character_nodes();
-  void update_prediction_ghost();
   void update_stats_bar();
   void predict_state();
   void update_meshes();
