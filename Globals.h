@@ -35,7 +35,7 @@
 #define MAX_SPELLS 16
 #define MAX_FILENAME_LENGTH 128
 #define WARGSPY_PORT 1234
-#define GAME_PORT 1235
+#define GAME_PORT 1234
 
 #define imgui_red ImVec4(1.0, 0.0, 0.0, 1.0)
 #define imgui_green ImVec4(0.0, 1.0, 0.0, 1.0)
