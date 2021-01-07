@@ -21,7 +21,6 @@ void State::_update(State *this_state)
 {
   while (this_state->running)
   {
-
     if (this_state->tick_block)
     {
       SDL_Delay(1);

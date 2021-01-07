@@ -15,6 +15,7 @@ public:
   virtual void move_command(int m, quat orientation, UID target_id) = 0;
   virtual void try_cast_spell(UID target, UID spell) = 0;
   virtual void send_chat_message(std::string_view chat_message) = 0;
+  virtual void disconnect() = 0;
   std::vector<Chat_Message> get_chat_log();
 
   bool prediction_enabled = true;
@@ -32,6 +33,7 @@ public:
   void move_command(int m, quat orientation, UID target_id);
   void try_cast_spell(UID target, UID spell);
   void send_chat_message(std::string_view chat_message);
+  void disconnect();
 
   UID character = 0;
   Input last_input;
@@ -60,9 +62,10 @@ public:
   Network_Session();
   ~Network_Session();
 
-  void connect(const char *wargspy_address);
+  void connect(uint32 server_address);
   void send_reliable(Buffer &b);
   void send_unreliable(Buffer &b);
+  void disconnect();
 
   void get_state(Game_State &gs, UID &pc);
   void request_spawn(std::string_view name, int32 team);
@@ -71,7 +74,7 @@ public:
   void send_chat_message(std::string_view chat_message);
 
 private:
-  ENetHost *client = nullptr;
+  ENetHost *warg_client_host = nullptr;
   ENetPeer *server = nullptr;
   State_Update server_state = {0};
   std::list<State_Prediction> predicted_states;

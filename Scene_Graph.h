@@ -300,6 +300,8 @@ struct Resource_Manager
   Material_Index push_material(Material_Descriptor *d);
   Mesh_Index push_mesh(Mesh_Descriptor *d);
 
+  void clear();
+
   // todo: not the best, refactor these so they construct in place
   uint32 push_bone_set(std::unordered_map<std::string, Bone> *bones);
   uint32 push_animation_set(std::vector<Skeletal_Animation> *animation_set);
@@ -484,8 +486,8 @@ struct Scene_Graph
   void draw_imgui(std::string name);
   bool file_type = false; // true for radiance, false for irradiance
 
-private:
   uint32 highest_allocated_node = 0;
+private:
   std::vector<Render_Entity> accumulator;
   std::vector<World_Object> accumulator1;
   void visit_nodes(Node_Index Node_Index, const mat4 &M, mat4 &ROOT, std::vector<Render_Entity> &accumulator);

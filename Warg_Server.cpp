@@ -8,7 +8,8 @@ UID uid_of(const ENetPeer const *peer)
 
 void game_server(const char *wargspy_address)
 {
-  ENetHost *server;
+  ENetHost* game_server_host;
+  ENetHost* wargspy_host;
   ENetPeer *wargspy;
   Game_State game_state;
   std::vector<Chat_Message> chat_log;
@@ -20,33 +21,31 @@ void game_server(const char *wargspy_address)
 
   {
     map = std::make_unique<Map>(Blades_Edge(*scene));
-
-
-    for (int i = 0; i < 1; i++)
-      add_dummy(game_state, *map, {1, i, 5});
+    add_dummy(game_state, *map, {1, 0, 5});
   }
 
-  {
+  {//game server listen
     ENetAddress addr = {.host = ENET_HOST_ANY, .port = GAME_PORT};
-    server = enet_host_create(&addr, 32, 2, 0, 0);
+    game_server_host = enet_host_create(&addr, 32, 2, 0, 0);
   }
 
-  {
+  {//wargspy connection
+    wargspy_host = enet_host_create(nullptr, 32, 2, 0, 0);
     ENetAddress addr = {.port = WARGSPY_PORT};
     enet_address_set_host(&addr, wargspy_address);
-    wargspy = enet_host_connect(server, &addr, 2, 0);
-  }
-
-  {
+    wargspy = enet_host_connect(wargspy_host, &addr, 2, 0);
     ENetEvent event;
-    enet_host_service(server, &event, 5000);
-    // > 0 && event.type == ENET_EVENT_TYPE_CONNECT);
+    int r = enet_host_service(wargspy_host, &event, 15000);
+    ASSERT(r && event.type == ENET_EVENT_TYPE_CONNECT);
   }
 
   {
     float64 current_time = 0.0;
     float64 last_time = get_real_time() - dt;
     float64 elapsed_time = 0.0;
+
+    float64 wargspy_frequency = 1.0f;
+    float64 time_of_last_wargspy_packet = 0.0f;
     while (true)
     {
       const float64 time = get_real_time();
@@ -56,15 +55,18 @@ void game_server(const char *wargspy_address)
       {
         current_time += dt;
 
+        if(time > time_of_last_wargspy_packet + wargspy_frequency)
         {
+          time_of_last_wargspy_packet = time;
           uint8 byte = 1;
           ENetPacket *packet = enet_packet_create(&byte, 1, 0);
           enet_peer_send(wargspy, 0, packet);
+          enet_host_flush(wargspy_host);
         }
 
         {
           ENetEvent event;
-          while (enet_host_service(server, &event, 0) > 0)
+          while (enet_host_service(game_server_host, &event, 0) > 0)
           {
             switch (event.type)
             {
@@ -191,13 +193,15 @@ void game_server(const char *wargspy_address)
           ENetPacket *packet = enet_packet_create(b.data.data(), b.data.size(), ENET_PACKET_FLAG_UNSEQUENCED);
           enet_peer_send(p.second.peer, 0, packet);
         }
-        enet_host_flush(server);
+        enet_host_flush(game_server_host);
       }
       SDL_Delay(5);
     }
   }
 
-  enet_host_destroy(server);
+  enet_host_destroy(game_server_host);
+  enet_host_destroy(wargspy_host);
+  
   delete scene;
   delete resource_manager;
 }

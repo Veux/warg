@@ -1054,3 +1054,9 @@ vec3 random_3D_unit_vector(float32 azimuth_min, float32 azimuth_max, float32 alt
   float plane_scale = sqrt(1.f - (z * z));
   return vec3(plane_scale * plane, z);
 }
+std::string ip_address_string(uint32 ip_address)
+{
+  uint8 addr[4];
+  *(uint32 *)&addr = ip_address;
+  return s((int)addr[0], ".", (int)addr[1], ".", (int)addr[2], ".", (int)addr[3]);
+}

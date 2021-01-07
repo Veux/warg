@@ -1054,7 +1054,10 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   crystal_node = state->scene.add_aiscene_new("sphere-1.fbx", "frostbolt crystal");
   Scene_Graph_Node *crystal_node_ptr = &state->scene.nodes[crystal_node];
   crystal_node_ptr->position = position;
-  crystal_node_ptr->scale = vec3(.5);
+
+  //todo find why this scale changed:
+  
+  crystal_node_ptr->scale = vec3(.005);
   Node_Index crystalchild = state->scene.nodes[crystal_node].children[0];
   Material_Descriptor *crystal_material = state->scene.get_modifiable_material_pointer_for(crystalchild, 0);
 
@@ -1072,7 +1075,7 @@ Frostbolt_Effect_2::Frostbolt_Effect_2(State *state, uint32 light_index)
   //////////////////////////////////////////////////
   // light
   this->light_index = light_index;
-  Light *light6 = &state->scene.lights.lights[6];
+  Light *light6 = &state->scene.lights.lights[light_index];
   light6->position = vec3(-4.89832, -18.04270, 2.22558);
   light6->direction = vec3(0.00000, 0.00000, 0.00000);
   light6->brightness = 4753.80762;

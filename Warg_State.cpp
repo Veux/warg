@@ -17,33 +17,19 @@ bool WANT_SPAWN_OCTREE_BOX = false;
 bool WANT_CLEAR_OCTREE = false;
 
 extern void small_object_water_settings(Uniform_Set_Descriptor *dst);
-extern void spawn_grabbyarm(Scene_Graph* scene, vec3 position);
-extern void update_grabbyarm(Scene_Graph* scene, float64 current_time);
-//{
-//  dst->float32_uniforms["index_of_refraction"] = 1.15f;
-//  dst->float32_uniforms["refraction_offset_factor"] = 0.02501;
-//  dst->float32_uniforms["water_eps"] = 0.0001;
-//  dst->float32_uniforms["water_scale"] = 4.87;
-//  dst->float32_uniforms["water_speed"] = 0.201;
-//  dst->float32_uniforms["water_dist_scale"] = .81;
-//  dst->float32_uniforms["water_dist_exp"] = 1.67;
-//  dst->float32_uniforms["water_height_scale"] = 3.0;
-//  dst->float32_uniforms["water_dist_min"] = 5.;
-//  dst->float32_uniforms["water_scale2"] = 1.52;
-//  dst->float32_uniforms["height_scale2"] = 3.0;
-//  dst->float32_uniforms["water_time2"] = 0.0192;
-//  dst->float32_uniforms["surfdotv_exp"] = 2.35f;
-//  dst->bool_uniforms["water_use_uv"] = true;
-//}
+extern void spawn_grabbyarm(Scene_Graph *scene, vec3 position);
+extern void update_grabbyarm(Scene_Graph *scene, float64 current_time);
 
-Warg_State::Warg_State(std::string name, SDL_Window *window, ivec2 window_size,
-    std::string_view character_name, int32 team)
+Node_Index add_boi_character_mesh(Scene_Graph &scene);
+Node_Index add_girl_character_mesh(Scene_Graph &scene);
+
+Warg_State::Warg_State(
+    std::string name, SDL_Window *window, ivec2 window_size, std::string_view character_name, int32 team)
     : State(name, window, window_size), character_name(character_name), team(team)
 {
-  //session = session_;
+  // session = session_;
 
-  set_session((Session *)new Local_Session());
-
+  // set_session((Session *)new Local_Session());
 }
 
 Warg_State::~Warg_State()
@@ -51,49 +37,89 @@ Warg_State::~Warg_State()
   delete map;
 }
 
-void Warg_State::set_session(Session *session)
+void Warg_State::initialize_warg_state()
 {
-  if (this->session) delete this->session;
-  this->session = session;
-
   player_character_id = 0;
   target_id = 0;
   character_nodes.clear();
   spell_object_nodes.clear();
   animation_objects.clear();
   scene.clear();
-  //resource_manager.clear();
-  if (map) delete map;
+  resource_manager.clear();
+  if (map)
+    delete map;
   map = new Blades_Edge(scene);
   scene.initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/radiance.hdr",
-    "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+      "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
 
   session->request_spawn(character_name, team);
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-  scene.particle_emitters.push_back({});
-
-
 }
 
 void Warg_State::session_swapper()
 {
   ImGui::Begin("Session swapper");
 
-  if (ImGui::Button("Local"))
+  if (session)
   {
-    set_session((Session *)new Local_Session());
+    ImGui::Checkbox("Enable prediction", &session->prediction_enabled);
+    if (ImGui::Button("Disconnect"))
+    {
+      session->disconnect();
+      delete session;
+      session = nullptr;
+      scene.clear();
+      resource_manager.clear();
+      renderer.render_entities.clear();
+      renderer.render_instances.clear();
+      want_set_intro_scene = true;
+      frostbolt_effect2 = nullptr;
+    }
   }
-
-  if (ImGui::Button("Cyber"))
+  else
   {
-    Network_Session *network_session = new Network_Session();
-    network_session->connect(CONFIG.wargspy_address.c_str());
-    set_session((Session *)network_session);
-  }
 
-  ImGui::Checkbox("Enable prediction", &session->prediction_enabled);
+    if (ImGui::Button("Local"))
+    {
+      if (session)
+        delete session;
+
+      session = (Session *)new Local_Session();
+      initialize_warg_state();
+    }
+
+    ImGui::Text(s("Wargspy IP:", CONFIG.wargspy_address, " -").c_str());
+    if (wargspy_state.wargspy)
+    {
+      ImGui::SameLine();
+      ImGui::TextColored(imgui_green, "online");
+    }
+    else
+    {
+      ImGui::SameLine();
+      ImGui::TextColored(imgui_red, "offline");
+    }
+
+    ImGui::Text("Server:");
+    ImGui::SameLine();
+    if (wargspy_state.game_server_address)
+    {
+      ImGui::TextColored(imgui_green, "%s", ip_address_string(wargspy_state.game_server_address).c_str());
+      ImGui::SameLine();
+      if (ImGui::Button("Connect"))
+      {
+        if (session)
+          delete session;
+        Network_Session *network_session = new Network_Session();
+        network_session->connect(wargspy_state.game_server_address);
+        session = (Session *)network_session;
+        initialize_warg_state();
+      }
+    }
+    else
+    {
+      ImGui::TextColored(imgui_red, "offline");
+    }
+  }
 
   ImGui::End();
 }
@@ -253,7 +279,7 @@ void Warg_State::handle_input_events()
     { // currently holding
       if (!mouse_grabbed)
       { // first hold
-        //set_message("mouse grab event", "", 1.0f);
+        // set_message("mouse grab event", "", 1.0f);
         mouse_grabbed = true;
         last_grabbed_cursor_position = cursor_position;
         mouse_relative_mode = true;
@@ -264,22 +290,22 @@ void Warg_State::handle_input_events()
         IMGUI.ignore_all_input = true;
       }
       draw_cursor = false;
-     // set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
+      // set_message("mouse delta: ", s(mouse_delta.x, " ", mouse_delta.y), 1.0f);
       camera.theta += mouse_delta.x * MOUSE_X_SENS;
       camera.phi += mouse_delta.y * MOUSE_Y_SENS;
-     // set_message("mouse is grabbed", "", 1.0f);
+      // set_message("mouse is grabbed", "", 1.0f);
     }
     else
     { // not holding button
-      //set_message("mouse is free", "", 1.0f);
+      // set_message("mouse is free", "", 1.0f);
       if (mouse_grabbed)
       { // first unhold
-        //set_message("mouse release event", "", 1.0f);
+        // set_message("mouse release event", "", 1.0f);
         mouse_grabbed = false;
-        //set_message("mouse warp:",
-           // s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
-            //    last_grabbed_cursor_position.y),
-          //  1.0f);
+        // set_message("mouse warp:",
+        // s("from:", cursor_position.x, " ", cursor_position.y, " to:", last_grabbed_cursor_position.x, " ",
+        //    last_grabbed_cursor_position.y),
+        //  1.0f);
         mouse_relative_mode = false;
         request_cursor_warp_to = last_grabbed_cursor_position;
       }
@@ -330,7 +356,7 @@ void Warg_State::handle_input_events()
     character_to_camera = normalize(ry * character_to_camera);
 
     ASSERT(player_character_id);
-    //auto player_character =
+    // auto player_character =
     //    find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
     auto player_character = find_by(current_game_state.characters, &Character::id, player_character_id);
     ASSERT(player_character != current_game_state.characters.end());
@@ -358,17 +384,10 @@ void Warg_State::handle_input_events()
     if (is_pressed(SDL_SCANCODE_SPACE))
       m |= Move_Status::Jumping;
 
-    session->move_command(m, orientation, target_id);
+    if (session)
+      session->move_command(m, orientation, target_id);
   }
   previous_mouse_state = mouse_state;
-}
-
-void Warg_State::process_messages()
-{
-  // std::vector<unique_ptr<Message>> messages = session->pull();
-  // set_message("process_messages(): recieved:", s(messages.size(), " messages"), 1.0f);
-  // for (unique_ptr<Message> &message : messages)
-  //  message->handle(*this);
 }
 
 void Warg_State::set_camera_geometry()
@@ -380,7 +399,7 @@ void Warg_State::set_camera_geometry()
 
   float effective_zoom = camera.zoom;
 
-  //todo: fix camera collision
+  // todo: fix camera collision
   // for (Triangle &surface : collider_cache)
   //{
   //  break;
@@ -476,30 +495,6 @@ void Warg_State::update_character_nodes()
 
     animate_character(character.id);
   }
-}
-
-void Warg_State::update_prediction_ghost()
-{
-  auto player_character = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
-  if (player_character == current_game_state.characters.end())
-    return;
-
-  Character_Physics *physics = &player_character->physics;
-
-  static Material_Descriptor material;
-  material.albedo = "crate_diffuse.png";
-  material.normal = "test_normal.png";
-  material.roughness = "crate_roughness.png";
-  material.vertex_shader = "vertex_shader.vert";
-  material.frag_shader = "fragment_shader.frag";
-  material.translucent_pass = true;
-  material.albedo.mod = vec4(1, 1, 1, 0.5);
-
-  static Node_Index ghost_mesh = scene.add_mesh(cube, "ghost_mesh", &material);
-  scene.nodes[ghost_mesh].position = physics->position;
-  scene.nodes[ghost_mesh].scale = player_character->radius * vec3(2);
-  scene.nodes[ghost_mesh].velocity = physics->velocity;
-  scene.nodes[ghost_mesh].orientation = physics->orientation;
 }
 
 void Warg_State::update_stats_bar()
@@ -750,12 +745,156 @@ void Warg_State::update_animation_objects()
   }
 }
 
+void Warg_State::send_wargspy_request()
+{
+  ASSERT(wargspy_state.host);
+  ASSERT(wargspy_state.wargspy);
+  ASSERT(!wargspy_state.connecting);
+
+  uint8 byte = 2;
+  ENetPacket *packet = enet_packet_create(&byte, 1, 0);
+  enet_peer_send(wargspy_state.wargspy, 0, packet);
+  enet_host_flush(wargspy_state.host);
+  wargspy_state.asking = true;
+}
+
+void Warg_State::update_wargspy()
+{
+  if (wargspy_state.host == nullptr)
+  {
+    wargspy_state.host = enet_host_create(NULL, 1, 2, 0, 0);
+    if (wargspy_state.host == nullptr)
+      return;
+  }
+
+  if (wargspy_state.wargspy == nullptr)
+  {
+    ENetAddress addr;
+    enet_address_set_host(&addr, CONFIG.wargspy_address.c_str());
+    addr.port = WARGSPY_PORT;
+    wargspy_state.wargspy = enet_host_connect(wargspy_state.host, &addr, 2, 0);
+    wargspy_state.connecting = true;
+  }
+
+  if (wargspy_state.wargspy && !wargspy_state.connecting && (wargspy_state.time_till_next_ask -= dt) < 0)
+  {
+    send_wargspy_request();
+    wargspy_state.time_till_next_ask = 3;
+  }
+
+  ENetEvent e;
+  while (enet_host_service(wargspy_state.host, &e, 0) > 0)
+  {
+    if (e.type == ENET_EVENT_TYPE_CONNECT)
+    {
+      wargspy_state.connecting = false;
+    }
+
+    if (e.type == ENET_EVENT_TYPE_RECEIVE)
+    {
+      Buffer b;
+      b.insert(e.packet->data, e.packet->dataLength);
+
+      uint8 type;
+      deserialize(b, type);
+      wargspy_state.game_server_address = 0;
+      if (type == 1)
+      {
+        uint32 game_server_ip_address;
+        deserialize(b, wargspy_state.game_server_address);
+      }
+      wargspy_state.asking = false;
+    }
+  }
+}
+
 void Warg_State::update()
 {
+  update_wargspy();
 
-  // set_message("Warg update. Time:", s(current_time), 1.0f);
-  // set_message("Warg time/dt:", s(current_time / dt), 1.0f);
-  //update_grabbyarm(&scene, 3*current_time);
+  if (!session)
+  {
+    static bool first = true;
+    static Resource_Manager *cached_rm = new Resource_Manager();
+    static Scene_Graph *cached_scene = new Scene_Graph(cached_rm);
+    static Node_Index boi = add_boi_character_mesh(*cached_scene);
+    static Node_Index girl = add_girl_character_mesh(*cached_scene);
+    static std::vector<Node_Index> cuber_things;
+#ifdef NDEBUG
+    uint32 max = 12;
+#else
+    uint32 max = 3;
+#endif
+    if (first)
+    {
+      cached_scene->nodes[boi].scale = vec3(.39, 0.30, 1.61);
+      cached_scene->nodes[girl].scale = vec3(0.61, .68, 0.97) * vec3(.39, 0.30, 1.61);
+      cached_scene->initialize_lighting("Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr",
+          "Assets/Textures/Environment_Maps/GrandCanyon_C_YumaPoint/irradiance.hdr");
+      cached_scene->nodes[girl].position = vec3(.7, 0, 0);
+      cached_scene->nodes[boi].position = vec3(-.7, 0, 0);
+      cached_scene->lights.light_count = 1;
+      Light *light0 = &cached_scene->lights.lights[0];
+      light0->position = vec3(0.00000, -4.00000, 2.00000);
+      light0->direction = vec3(0.00000, 0.00000, 0.00000);
+      light0->brightness = 66.00000;
+      light0->color = vec3(1.00000, 1.00000, 0.99999);
+      light0->attenuation = vec3(1.00000, 0.22000, 0.00000);
+      light0->ambient = 0.00000;
+      light0->radius = -0.33000;
+      light0->cone_angle = 0.13200;
+      light0->type = Light_Type::spot;
+      light0->casts_shadows = 1;
+      light0->shadow_blur_iterations = 4;
+      light0->shadow_blur_radius = 0.051010999829;
+      light0->shadow_near_plane = 2.400000095367;
+      light0->shadow_far_plane = 8.000000000000;
+      light0->max_variance = 0.000000000000;
+      light0->shadow_fov = 1.592529296875;
+      light0->shadow_map_resolution = ivec2(2048, 2048);
+
+      Material_Descriptor mat;
+      mat.albedo.mod = vec4(.1);
+      Node_Index cube_ref = cached_scene->add_mesh(cube, s("cuberthingref"), &mat);
+      cached_scene->nodes[cube_ref].visible = false;
+      for (uint32 x = 0; x < max; ++x)
+      {
+        for (uint32 y = 0; y < max; ++y)
+        {
+          Node_Index node = cached_scene->new_node();
+          cached_scene->nodes[node].model = cached_scene->nodes[cube_ref].model;
+          cuber_things.push_back(node);
+        }
+      }
+      first = false;
+    }
+    if (want_set_intro_scene)
+    {
+      scene.resource_manager = cached_rm;
+      scene.nodes = cached_scene->nodes;
+      scene.lights = cached_scene->lights;
+      scene.highest_allocated_node = cached_scene->highest_allocated_node;
+      want_set_intro_scene = false;
+    }
+    camera.pos = vec3(0, 5, .5) + vec3(cos(.2f * current_time), sin(.2f * current_time), 0);
+    camera.dir = -camera.pos + vec3(0, 0, .5f);
+    uint32 i = 0;
+    for (uint32 x = 0; x < max; ++x)
+    {
+      for (uint32 y = 0; y < max; ++y)
+      {
+        Node_Index node = cuber_things[i];
+        float32 z = .4f * (cos(x + 1.f * current_time) + sin(y + 1.f * current_time));
+        vec3 pos = .3f * vec3(x, y, z) - 0.5f * .3f * vec3(max, max, 0);
+        pos = pos - vec3(0, 0, 1.f);
+        scene.nodes[node].position = pos;
+        scene.nodes[node].scale = vec3(.3f);
+        ++i;
+      }
+    }
+    renderer.set_camera(camera.pos, camera.dir);
+    return;
+  }
 
   session->get_state(current_game_state, player_character_id);
 
@@ -768,143 +907,140 @@ void Warg_State::update()
   set_camera_geometry();
   update_meshes();
   update_character_nodes();
-  update_prediction_ghost();
   update_spell_object_nodes();
   // update_animation_objects();
-
-  // camera must be set before render entities, or they get a 1 frame lag
 
   renderer.set_camera(camera.pos, camera.dir);
 
   // scene.collision_octree.clear();
 
-  Node_Index arena = scene.nodes[map->node].children[0];
-  //Node_Index arena_collider = scene.nodes[arena].collider;
-  //Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
- //Mesh *meshptr = &scene.resource_manager->mesh_pool[meshindex];
-  //Mesh_Descriptor *blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
-
-  // scene.collision_octree.push(blades_edge_mesh_descriptor);
-
-  // set_message("octree timer:", beatimer.string_report(), 1.0f);
-
-  auto me = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
-  if (me == current_game_state.characters.end())
-    return;
-  Mesh_Descriptor mesh(cube, "spawnedcube");
-  mat4 transform = scene.build_transformation(character_nodes[player_character_id]);
-  AABB probe(me->physics.position);
-  vec3 size = me->radius;
-
-  float32 epsilon = 0.05;
-  probe.min = me->physics.position - size;
-  probe.max = me->physics.position + size;
-
-  transform[0][0] = size.x * 2.f;
-  transform[1][1] = size.y * 2.f;
-  transform[2][2] = size.z * 2.f;
-
-  const Triangle_Normal *result = nullptr;
-
-  static vec3 last_position = me->physics.position;
-  vec3 velocity = me->physics.position - last_position;
-  last_position = me->physics.position;
-
-  static std::vector<Node_Index> spawned_nodes;
-
-  // if (WANT_SPAWN_OCTREE_BOX)
-  //{
-  //  WANT_SPAWN_OCTREE_BOX = false;
-  //  Material_Descriptor mat;
-  //  mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
-  //  mat.normal = "3D_pattern_62/pattern_335/normal.png";
-  //  mat.roughness.mod.x = 1.0f;
-  //  mat.metalness.mod.x = 0.f;
-
-  //  Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
-  //  Local_Session *ptr = (Local_Session *)this->session;
-  //  Node_Index servernode = ptr->scene.add_mesh(cube, "spawned box", &mat);
-
-  //  spawned_nodes.push_back(newnode);
-  //  spawned_server_nodes.push_back(servernode);
-  //  vec3 dir = normalize(camera.dir);
-  //  vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
-  //  float32 angle2 = atan2(dir.y, dir.x);
-  //  scene.nodes[newnode].position = camera.pos + 12.f * dir;
-  //  scene.nodes[newnode].scale = vec3(2);
-  //  scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
-
-  //  ptr->scene.nodes[servernode].position = camera.pos + 12.f * dir;
-  //  ptr->scene.nodes[servernode].scale = vec3(2);
-  //  ptr->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
-  //}
-  // Local_Session *ptr = (Local_Session *)this->session;
-  // ptr->scene.collision_octree.clear();
-
-  // ptr->scene.collision_octree.push(md);
-  //for (Node_Index node : spawned_nodes)
-  //{
-  //  mat4 M = scene.build_transformation(node);
-  //  scene.collision_octree.push(&mesh, &M);
-  //  AABB prober(scene.nodes[node].position);
-  //  push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
-  //  push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
-  //  uint32 counter;
-  //  scene.collision_octree.test(prober, &counter);
-  //}
-  //for (Node_Index node : spawned_server_nodes)
-  //{
-  //  Local_Session *ptr = (Local_Session *)this->session;
-  //  mat4 M = ptr->scene.build_transformation(node);
-  //  ptr->scene.collision_octree.push(&mesh, &M);
-  //}
-
-
-  if (WANT_CLEAR_OCTREE)
   {
-    ASSERT(0);
-    WANT_CLEAR_OCTREE = false;
-    for (Node_Index node : spawned_nodes)
+    Node_Index arena = scene.nodes[map->node].children[0];
+    // Node_Index arena_collider = scene.nodes[arena].collider;
+    // Mesh_Index meshindex = scene.nodes[arena_collider].model[0].first;
+    // Mesh *meshptr = &scene.resource_manager->mesh_pool[meshindex];
+    // Mesh_Descriptor *blades_edge_mesh_descriptor = &meshptr->mesh->descriptor;
+
+    // scene.collision_octree.push(blades_edge_mesh_descriptor);
+
+    // set_message("octree timer:", beatimer.string_report(), 1.0f);
+
+    auto me = find_if(current_game_state.characters, [&](auto &c) { return c.id == player_character_id; });
+    if (me == current_game_state.characters.end())
+      return;
+    Mesh_Descriptor mesh(cube, "spawnedcube");
+    mat4 transform = scene.build_transformation(character_nodes[player_character_id]);
+    AABB probe(me->physics.position);
+    vec3 size = me->radius;
+
+    float32 epsilon = 0.05;
+    probe.min = me->physics.position - size;
+    probe.max = me->physics.position + size;
+
+    transform[0][0] = size.x * 2.f;
+    transform[1][1] = size.y * 2.f;
+    transform[2][2] = size.z * 2.f;
+
+    const Triangle_Normal *result = nullptr;
+
+    static vec3 last_position = me->physics.position;
+    vec3 velocity = me->physics.position - last_position;
+    last_position = me->physics.position;
+
+    static std::vector<Node_Index> spawned_nodes;
+
+    // if (WANT_SPAWN_OCTREE_BOX)
+    //{
+    //  WANT_SPAWN_OCTREE_BOX = false;
+    //  Material_Descriptor mat;
+    //  mat.albedo = "Assets/Textures/3D_pattern_62/pattern_335/diffuse.png";
+    //  mat.normal = "3D_pattern_62/pattern_335/normal.png";
+    //  mat.roughness.mod.x = 1.0f;
+    //  mat.metalness.mod.x = 0.f;
+
+    //  Node_Index newnode = scene.add_mesh(cube, "spawned box", &mat);
+    //  Local_Session *ptr = (Local_Session *)this->session;
+    //  Node_Index servernode = ptr->scene.add_mesh(cube, "spawned box", &mat);
+
+    //  spawned_nodes.push_back(newnode);
+    //  spawned_server_nodes.push_back(servernode);
+    //  vec3 dir = normalize(camera.dir);
+    //  vec3 axis = normalize(cross(dir, vec3(0, 0, 1)));
+    //  float32 angle2 = atan2(dir.y, dir.x);
+    //  scene.nodes[newnode].position = camera.pos + 12.f * dir;
+    //  scene.nodes[newnode].scale = vec3(2);
+    //  scene.nodes[newnode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+
+    //  ptr->scene.nodes[servernode].position = camera.pos + 12.f * dir;
+    //  ptr->scene.nodes[servernode].scale = vec3(2);
+    //  ptr->scene.nodes[servernode].orientation = angleAxis(-camera.phi, axis) * angleAxis(angle2, vec3(0, 0, 1));
+    //}
+    // Local_Session *ptr = (Local_Session *)this->session;
+    // ptr->scene.collision_octree.clear();
+
+    // ptr->scene.collision_octree.push(md);
+    // for (Node_Index node : spawned_nodes)
+    //{
+    //  mat4 M = scene.build_transformation(node);
+    //  scene.collision_octree.push(&mesh, &M);
+    //  AABB prober(scene.nodes[node].position);
+    //  push_aabb(prober, scene.nodes[node].position + 0.5f * scene.nodes[node].scale);
+    //  push_aabb(prober, scene.nodes[node].position - 0.5f * scene.nodes[node].scale);
+    //  uint32 counter;
+    //  scene.collision_octree.test(prober, &counter);
+    //}
+    // for (Node_Index node : spawned_server_nodes)
+    //{
+    //  Local_Session *ptr = (Local_Session *)this->session;
+    //  mat4 M = ptr->scene.build_transformation(node);
+    //  ptr->scene.collision_octree.push(&mesh, &M);
+    //}
+
+    if (WANT_CLEAR_OCTREE)
     {
-      scene.delete_node(node);
+      ASSERT(0);
+      WANT_CLEAR_OCTREE = false;
+      for (Node_Index node : spawned_nodes)
+      {
+        scene.delete_node(node);
+      }
+      spawned_nodes.clear();
+
+      //  for (Node_Index servernode : spawned_server_nodes)
+      //  {
+      //    Local_Session *ptr = (Local_Session *)this->session;
+      //    ptr->scene.delete_node(servernode);
+      //  }
+      //  spawned_server_nodes.clear();
     }
-    spawned_nodes.clear();
+    velocity = 300.f * (velocity + vec3(0., 0., .02));
+    // scene.collision_octree.push(&mesh, &transform, &velocity);
 
-  //  for (Node_Index servernode : spawned_server_nodes)
-  //  {
-  //    Local_Session *ptr = (Local_Session *)this->session;
-  //    ptr->scene.delete_node(servernode);
-  //  }
-  //  spawned_server_nodes.clear();
-  }
-  velocity = 300.f * (velocity + vec3(0., 0., .02));
-  // scene.collision_octree.push(&mesh, &transform, &velocity);
+    Material_Descriptor material;
+    // static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
 
-  Material_Descriptor material;
-  // static Node_Index dynamic_collider_node = scene.add_mesh(cube, "dynamic_collider_node", &material);
+    // scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
+    // transform = scene.build_transformation(dynamic_collider_node);
+    // scene.collision_octree.push(&mesh, &transform, &velocity);
 
-  // scene.nodes[dynamic_collider_node].position = probe.min + (0.5f * (probe.max - probe.min));
-  // transform = scene.build_transformation(dynamic_collider_node);
-  // scene.collision_octree.push(&mesh, &transform, &velocity);
+    // fire_emitter2(
+    //   &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
+    // fire_emitter2(
+    //  &renderer, &scene, &scene.particle_emitters[1], &scene.lights.lights[1], vec3(5.15, -17.5, 8.6), vec2(.5));
+    // fire_emitter2(&renderer, &scene, &scene.particle_emitters[2], &scene.lights.lights[2], vec3(0, 0, 10), vec2(.5));
+    // fire_emitter2(
+    // &renderer, &scene, &scene.particle_emitters[3], &scene.lights.lights[3], vec3(5.15, 17.5, 8.6), vec2(.5));
+    static vec3 wind_dir;
+    if (fract(sin(current_time)) > .85)
+      wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  // fire_emitter2(
-  //   &renderer, &scene, &scene.particle_emitters[0], &scene.lights.lights[0], vec3(-5.15, -17.5, 8.6), vec2(.5));
-  // fire_emitter2(
-  //  &renderer, &scene, &scene.particle_emitters[1], &scene.lights.lights[1], vec3(5.15, -17.5, 8.6), vec2(.5));
-  // fire_emitter2(&renderer, &scene, &scene.particle_emitters[2], &scene.lights.lights[2], vec3(0, 0, 10), vec2(.5));
-  // fire_emitter2(
-  // &renderer, &scene, &scene.particle_emitters[3], &scene.lights.lights[3], vec3(5.15, 17.5, 8.6), vec2(.5));
-  static vec3 wind_dir;
-  if (fract(sin(current_time)) > .85)
-    wind_dir = vec3(.575, .575, .325) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
+    if (fract(sin(current_time)) > .85)
+      wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
 
-  if (fract(sin(current_time)) > .85)
-    wind_dir = vec3(.575, .575, 0) * random_3D_unit_vector(0, glm::two_pi<float32>(), 0.9f, 1.0f);
-
-  //Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
-  //Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
-  //Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
-  //Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
+      // Node_Index p0 = scene.find_by_name(NODE_NULL, "particle0");
+      // Node_Index p1 = scene.find_by_name(NODE_NULL, "particle1");
+      // Node_Index p2 = scene.find_by_name(NODE_NULL, "particle2");
+      // Node_Index p3 = scene.find_by_name(NODE_NULL, "particle3");
 
 #if 0
   scene.particle_emitters[1].descriptor.position = scene.nodes[p1].position;
@@ -964,18 +1100,17 @@ void Warg_State::update()
   scene.particle_emitters[0].descriptor.physics_descriptor.bounce_max = 0.95;
 #endif
 
+    uint32 i = sizeof(Octree);
 
-  uint32 i = sizeof(Octree);
+    // if (terrain.apply_geometry_to_octree_if_necessary(&scene))
+    //{
+    // mat4 M_blades_edge = scene.build_transformation(map->node);
+    // scene.collision_octree.push(blades_edge_mesh_descriptor, &M_blades_edge);
 
-  //if (terrain.apply_geometry_to_octree_if_necessary(&scene))
-  //{
-   // mat4 M_blades_edge = scene.build_transformation(map->node);
-    //scene.collision_octree.push(blades_edge_mesh_descriptor, &M_blades_edge);
-   
-   // mat4 M_terrain = scene.build_transformation(terrain.ground);
-    //scene.collision_octree.push(&terrain.terrain_geometry, &M_terrain);
-    
-    //for (Node_Index node : spawned_nodes)
+    // mat4 M_terrain = scene.build_transformation(terrain.ground);
+    // scene.collision_octree.push(&terrain.terrain_geometry, &M_terrain);
+
+    // for (Node_Index node : spawned_nodes)
     //{
     //  mat4  M = scene.build_transformation(node);
     //  Mesh_Descriptor *newmesh =
@@ -984,34 +1119,48 @@ void Warg_State::update()
     //  scene.collision_octree.push(newmesh, &M);
     //}
 
-  //  //this is bad: we can't just copy an octree like this because it ruins the pointers
-  //  //however it works if we dont push to it again and only do tests...
-  //  server_ptr->server->scene.collision_octree = scene.collision_octree;
-  //}
+    //  //this is bad: we can't just copy an octree like this because it ruins the pointers
+    //  //however it works if we dont push to it again and only do tests...
+    //  server_ptr->server->scene.collision_octree = scene.collision_octree;
+    //}
 
-  static uint32 light_index = scene.lights.light_count + 1;
-  static bool firstt = true;
-  if (firstt)
-  {
-    firstt = false;
-    scene.lights.light_count = light_index;
-  }
-  //static Frostbolt_Effect frostbolt_effect(this, light_index);
-  static Frostbolt_Effect_2 frostbolt_effect2(this, light_index);
+    // bug:
 
-  vec3 ray = renderer.ray_from_screen_pixel(this->cursor_position);
-  vec3 intersect_result;
-  Node_Index node_result =  scene.ray_intersects_node(renderer.camera_position,ray, arena,intersect_result);
-  vec3 frostbolt_dst = vec3(0,0,1);
-  if (node_result == arena)
-  {
-   frostbolt_dst =  intersect_result;
-  }
-  //frostbolt_effect.update(this, frostbolt_dst);
-  if (!frostbolt_effect2.update(this, frostbolt_dst))
-  {
-    frostbolt_effect2.position = 31.f*random_3D_unit_vector();
-    frostbolt_effect2.position.z = abs(frostbolt_effect2.position.z);
+    // when we make this frostbolt effect, we pass in the state
+    // inside, it creates a new node
+    // this node is being written to by some warg game code somewhere else that's assuming it
+    // has this index
+
+    // it appears that something is writing a warg character scale to it, but not a name
+    // this is probably related to the bug of the flying characters
+    // it can probably be found by checking for a specific name before u write to the scale/position
+    // "frostbolt crystal" is the name i created this node with, try breaking on a match for that
+
+    // you cant assume that scene graph node indices are the same for both the game client and game server
+    // you can't create a node on the server, and then pass that node index to the client for it to use
+    // a node index is only valid for the scene that created it
+    // a local scene might have 30 little widgets that get rendered and initialized that the server doesnt
+    // care about
+
+    if (!frostbolt_effect2)
+    {
+      uint32 light_index = scene.lights.light_count + 1;
+      frostbolt_effect2 = std::make_unique<Frostbolt_Effect_2>((State *)this, light_index);
+    }
+
+    vec3 ray = renderer.ray_from_screen_pixel(this->cursor_position);
+    vec3 intersect_result;
+    Node_Index node_result = scene.ray_intersects_node(renderer.camera_position, ray, arena, intersect_result);
+    vec3 frostbolt_dst = vec3(0, 0, 1);
+    if (node_result == arena)
+    {
+      frostbolt_dst = intersect_result;
+    }
+    if (!frostbolt_effect2->update(this, frostbolt_dst))
+    {
+      frostbolt_effect2->position = 31.f * random_3D_unit_vector();
+      frostbolt_effect2->position.z = abs(frostbolt_effect2->position.z);
+    }
   }
 }
 
@@ -1037,48 +1186,46 @@ void Warg_State::draw_gui()
   }
 
   update_game_interface();
-  //terrain.window_open = true;
-
-
+  // terrain.window_open = true;
 
   scene.draw_imgui(state_name);
 
   ImGui::Begin("warg state test");
   ImGui::Text("blah1");
   ImGui::Text("blah2");
-  //terrain.run(this);
+  // terrain.run(this);
   ImGui::End();
-  draw_chat_box();
   session_swapper();
+
+  if (session)
+    draw_chat_box();
 }
 
 void Warg_State::draw_chat_box()
 {
+
   std::vector<Chat_Message> chat_log = session->get_chat_log();
 
   const int w = 500, h = 250;
 
   vec2 resolution = CONFIG.resolution;
   bool display = true;
-  //ImGui::SetNextWindowPos(position);
-  ImGui::SetNextWindowPos(ImVec2(
-    10,
-    resolution.y - h - 40
-  ));
-  ImGui::SetNextWindowSize(ImVec2(w, h+30));
+  // ImGui::SetNextWindowPos(position);
+  ImGui::SetNextWindowPos(ImVec2(10, resolution.y - h - 40));
+  ImGui::SetNextWindowSize(ImVec2(w, h + 30));
   ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(10, 10));
   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
   ImGui::Begin("chatbox", &display,
-    ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
-    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
+      ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
+          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoFocusOnAppearing);
 
-  //ImGui::SetCursorPos(v(grid.get_position(0, 0)));
-  //ImGui::ProgressBar(progress, v(grid.get_section_size(1, 1)), "");
+  // ImGui::SetCursorPos(v(grid.get_position(0, 0)));
+  // ImGui::ProgressBar(progress, v(grid.get_section_size(1, 1)), "");
 
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
 
-  static int  want_scroll_down = 0;
+  static int want_scroll_down = 0;
 
   ImGuiWindowFlags childflags = ImGuiWindowFlags_None;
   ImGui::BeginChild("Console_Log:", ImVec2(w, h), true, childflags);
@@ -1087,14 +1234,13 @@ void Warg_State::draw_chat_box()
   {
     ImGui::TextWrapped("%s: %s", m.name.c_str(), m.message.c_str());
   }
-  //ImGui::TextWrapped(graph_console_log.c_str());
+  // ImGui::TextWrapped(graph_console_log.c_str());
   if (want_scroll_down > 0)
   {
     ImGui::SetScrollY(ImGui::GetScrollMaxY());
     want_scroll_down = want_scroll_down - 1;
   }
   ImGui::EndChild();
-
 
   ImGui::BeginChild("Console_Cmd:");
   static std::string buf;
@@ -1129,10 +1275,8 @@ void Warg_State::draw_chat_box()
   ImGui::PopStyleVar(3);
 }
 
-void Warg_State::add_girl_character_mesh(UID character_id)
+Node_Index add_girl_character_mesh(Scene_Graph &scene)
 {
-  character_nodes[character_id];
-
   // Material_Descriptor hp_bar_material;
   // Node_Index hp_bar = scene.add_mesh(cube, "hp_bar", &hp_bar_material);
   // scene.set_parent(hp_bar, character_node);
@@ -1185,7 +1329,7 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   // proper way to do this after we define the materials we want to use:
 
   // make a cube
-  Mesh_Descriptor md(cube, "some generic cube");
+  Mesh_Descriptor md(cube, "girl's cube");
 
   // add it as a referencable object to the resource manager
   Mesh_Index cube_mesh_index = scene.resource_manager->push_mesh(&md);
@@ -1231,18 +1375,13 @@ void Warg_State::add_girl_character_mesh(UID character_id)
   std::pair<Mesh_Index, Material_Index> shoe_pair = {cube_mesh_index, shoe_material_index};
   std::pair<Mesh_Index, Material_Index> hair_pair = {cube_mesh_index, hair_material_index};
 
-  // youre overwriting the scale and stuff in there so ill hijack the character root
-  Node_Index fake_character_node = scene.new_node();
-
-  Node_Index character_node = scene.new_node(s("character_id:", character_id), skin_pair, fake_character_node);
+  Node_Index character_node = scene.new_node("cubegirl", skin_pair);
   scene.nodes[character_node].position = vec3(0, 0, -0.01);
   scene.nodes[character_node].scale = vec3(0.61, .68, 0.97);
   scene.nodes[character_node].scale_vertex = vec3(0.5, .7, 1.);
-  character_nodes[character_id] = fake_character_node;
 
   {
     // shirt
-
     Node_Index shirt = scene.new_node("shirt", shirt_pair, character_node);
     scene.nodes[shirt].position = vec3(0.f, 0.0f, 0.15f);
     scene.nodes[shirt].scale = vec3(1.05f, 1.05f, 0.3f);
@@ -1419,27 +1558,11 @@ void Warg_State::add_girl_character_mesh(UID character_id)
     scene.nodes[lips].position = vec3(0.f, 0.5f, -0.25f);
     scene.nodes[lips].scale = vec3(0.3f, 0.05f, 0.1f);
   }
+  return character_node;
 }
 
-void Warg_State::add_character_mesh(UID character_id)
+Node_Index add_boi_character_mesh(Scene_Graph &scene)
 {
-  if (character_id == 3)
-  {
-    add_girl_character_mesh(character_id);
-    return;
-  }
-
-  {
-    const auto &character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
-    if (character != current_game_state.characters.end() && character->name == "Veux")
-    {
-      add_girl_character_mesh(character_id);
-      return;
-    }
-  }
-
-  character_nodes[character_id];
-
   Material_Descriptor skin_material;
   skin_material.albedo.mod = rgb_vec4(253, 228, 200);
   skin_material.metalness.mod = vec4(0);
@@ -1471,7 +1594,7 @@ void Warg_State::add_character_mesh(UID character_id)
   shirt_material.uv_scale = vec2(1.);
   Material_Descriptor solid_material = shirt_material;
 
-  Mesh_Descriptor md(cube, "girl's cube");
+  Mesh_Descriptor md(cube, "boi's cube");
   Mesh_Index cube_mesh_index = scene.resource_manager->push_mesh(&md);
   Material_Index skin_material_index = scene.resource_manager->push_material(&skin_material);
   Material_Index suit_material_index = scene.resource_manager->push_material(&suit_material);
@@ -1485,14 +1608,7 @@ void Warg_State::add_character_mesh(UID character_id)
   std::pair<Mesh_Index, Material_Index> shoe_pair = {cube_mesh_index, shoe_material_index};
   std::pair<Mesh_Index, Material_Index> hair_pair = {cube_mesh_index, hair_material_index};
 
-  // youre overwriting the scale and stuff in there so ill hijack the character root
-  Node_Index fake_character_node = scene.new_node();
-
-  Node_Index character_node = scene.new_node(s("character_id:", character_id), skin_pair, fake_character_node);
-  // scene.nodes[character_node].scale = vec3(0.7, 1, 0.9);
-  scene.nodes[character_node].scale_vertex = vec3(1);
-  character_nodes[character_id] = fake_character_node;
-
+  Node_Index character_node = scene.new_node("cubeboi", skin_pair);
   {
     // shirt
 
@@ -1672,6 +1788,25 @@ void Warg_State::add_character_mesh(UID character_id)
     scene.nodes[lips].position = vec3(0.f, 0.5f, -0.25f);
     scene.nodes[lips].scale = vec3(0.3f, 0.05f, 0.1f);
   }
+  return character_node;
+}
+
+Node_Index Warg_State::add_character_mesh(UID character_id)
+{
+  Node_Index spawned = NODE_NULL;
+  const auto &character = find_if(current_game_state.characters, [&](auto &c) { return c.id == character_id; });
+  if (character != current_game_state.characters.end() && character->name == "Veux")
+  {
+    spawned = add_girl_character_mesh(scene);
+  }
+  else
+  {
+    spawned = add_boi_character_mesh(scene);
+  }
+  Node_Index result = scene.new_node();
+  scene.set_parent(spawned, result);
+  character_nodes[character_id] = result;
+  return result;
 }
 
 void create_cast_bar(const char *name, float32 progress, ImVec2 position, ImVec2 size)
@@ -1833,7 +1968,6 @@ void Warg_State::update_icons()
   {
     if (shader->fs == "")
       *shader = Shader("passthrough.vert", "duration_spiral.frag");
-    
 
     if (!interface_state.icon_setup_complete)
     {
@@ -1916,10 +2050,9 @@ void Warg_State::update_icons()
 
     std::string uniform_str = s("progress", i);
 
-    
-    //std::string msg_id = s("setting spiral i:", i);
-    //std::string msg = s("uniform slot: ", uniform_str, "value:", cooldown_percent);
-    //set_message(msg_id, msg, 1.0f);
+    // std::string msg_id = s("setting spiral i:", i);
+    // std::string msg = s("uniform slot: ", uniform_str, "value:", cooldown_percent);
+    // set_message(msg_id, msg, 1.0f);
 
     shader->set_uniform(uniform_str.c_str(), cooldown_percent);
     i++;
@@ -1975,8 +2108,7 @@ void Warg_State::update_buff_indicators()
 
   const vec2 resolution = CONFIG.resolution;
 
-  auto create_indicator = [&](vec2 position, vec2 size, Texture *icon, float64 duration, bool debuff,
-                              size_t i) {
+  auto create_indicator = [&](vec2 position, vec2 size, Texture *icon, float64 duration, bool debuff, size_t i) {
     Layout_Grid grid(size, vec2(2), vec2(1), vec2(1, 3), vec2(1, 2), 1);
 
     std::string countdown_string = duration_string(duration);
