@@ -604,6 +604,10 @@ void main()
 
   
   //sponge textures
+  //texture1 is emissive
+  //texture2 is roughness
+  //texture3 is normal
+
   float fbm_texture_mix =  pow(saturate(fbm_h_n(1.4*scaled_model_space_position_xy,1.51,4)),1);
   //low/left is rocks, high/right is grass
   m.albedo = mix(texture(texture0,frag_uv).rgb,m.albedo,fbm_texture_mix);
@@ -613,6 +617,7 @@ void main()
   vec3 normal2 = TBN * normalize(texture2D(texture1, frag_normal_uv).rgb * 2.0f - 1.0f);
   m.normal = normalize(mix(m.normal,normal2,snow_t));
   m.normal = normalize(mix(m.normal,normal2,fbm_texture_mix));
+
   //m.albedo = vec3(fbm_texture_mix);
   // /sponge
 

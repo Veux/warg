@@ -1149,12 +1149,20 @@ Material::Material(Material_Descriptor &m)
   descriptor = m;
 
   static const Material_Descriptor default_md;
+
+  if(m.albedo.format==0)
   descriptor.albedo.format = GL_SRGB8_ALPHA8;
+  if (m.normal.format == 0)
   descriptor.normal.format = GL_RGBA8;
+  if (m.emissive.format == 0)
   descriptor.emissive.format = GL_SRGB8_ALPHA8;
+  if (m.roughness.format == 0)
   descriptor.roughness.format = GL_R8;
+  if (m.metalness.format == 0)
   descriptor.metalness.format = GL_R8;
+  if (m.ambient_occlusion.format == 0)
   descriptor.ambient_occlusion.format = GL_R8;
+  if (m.displacement.format == 0)
   descriptor.displacement.format = GL_R8;
 
   albedo = Texture(descriptor.albedo);
@@ -1212,13 +1220,20 @@ void Material::load()
 
   static const Material_Descriptor default_md;
 
-  descriptor.albedo.format = GL_SRGB8_ALPHA8;
-  descriptor.normal.format = GL_RGBA8;
-  descriptor.emissive.format = GL_SRGB8_ALPHA8;
-  descriptor.roughness.format = GL_R8;
-  descriptor.metalness.format = GL_R8;
-  descriptor.ambient_occlusion.format = GL_R8;
-  descriptor.displacement.format = GL_R8;
+  if (descriptor.albedo.format == 0)
+    descriptor.albedo.format = GL_SRGB8_ALPHA8;
+  if (descriptor.normal.format == 0)
+    descriptor.normal.format = GL_RGBA8;
+  if (descriptor.emissive.format == 0)
+    descriptor.emissive.format = GL_SRGB8_ALPHA8;
+  if (descriptor.roughness.format == 0)
+    descriptor.roughness.format = GL_R8;
+  if (descriptor.metalness.format == 0)
+    descriptor.metalness.format = GL_R8;
+  if (descriptor.ambient_occlusion.format == 0)
+    descriptor.ambient_occlusion.format = GL_R8;
+  if (descriptor.displacement.format == 0)
+    descriptor.displacement.format = GL_R8;
 
   Texture newalbedo(descriptor.albedo);
   newalbedo.load();
@@ -5695,6 +5710,7 @@ void Liquid_Surface::init(State *state, vec3 pos, float32 scale, ivec2 resolutio
   material.albedo.source = "grass_albedo.png";
   material.normal.source = "ground1_normal.png";
   material.emissive.source = "Snow006_2K_Normal.jpg";
+  material.emissive.format = GL_RGB8;
   material.uv_scale = vec2(85);
   material.translucent_pass = false;
   material.uniform_set.bool_uniforms["ground"] = true;

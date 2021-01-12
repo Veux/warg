@@ -181,7 +181,8 @@ void SDL_Imgui_State::render()
             {
 
               //why exactly do we ever want this?
-             // glDisable(GL_FRAMEBUFFER_SRGB);
+              //normal maps - they arent
+             glDisable(GL_FRAMEBUFFER_SRGB);
             }
             // glUniform1i(gamma_location, itd.gamma_encode);
             glUniform1i(gamma_location, false);
